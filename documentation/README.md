@@ -10,7 +10,7 @@
 |---|---|
 | [`../README.md`](../README.md) | Platform overview, quick start, CI/CD workflows, security summary |
 | [`deployment-guide.md`](deployment-guide.md) | Step-by-step first deployment (local setup → cloud permissions → secrets → tag → first engagement) |
-| [`architecture/deployment-state.md`](architecture/deployment-state.md) | **Live status** — what is deployed, what is pending, what is not yet created |
+| [`architecture/deployment-map.md`](architecture/deployment-map.md) | **Deployment status map** — what is deployed vs pending, CNA vs CNA-client boundary, remote connection map |
 | [`secrets-reference.md`](secrets-reference.md) | Every environment variable and GitHub Secret explained |
 | [`secrets-architecture.md`](secrets-architecture.md) | Three-tier secrets model, Key Vault, SSM, OIDC, rotation policy |
 
@@ -20,12 +20,12 @@
 
 | Document | Purpose |
 |---|---|
-| [`architecture/overview.md`](architecture/overview.md) | Platform architecture overview, two-environment model (vendor vs. client) |
+| [`architecture/overview.md`](architecture/overview.md) | Five-engine platform overview, three core guarantees |
 | [`architecture/repo-structure.md`](architecture/repo-structure.md) | Full directory tree with descriptions |
-| [`architecture/discovery-engine.md`](architecture/discovery-engine.md) | Discovery engine design — AWS multi-account, Azure multi-subscription, checkpointing |
-| [`architecture/analysis-engine.md`](architecture/analysis-engine.md) | Analysis engine design — finding rules, observed state enforcement, MCP router, escalation |
-| [`architecture/report-generation.md`](architecture/report-generation.md) | Report generation design — templates, review gate, JA gate, output paths |
-| [`architecture/delivery-portal.md`](architecture/delivery-portal.md) | Delivery portal design — S3/Azure Blob, pre-signed URLs, CORS, retention |
+| [`architecture/discovery-engine.md`](architecture/discovery-engine.md) | AWS + Azure discovery flows, IAM/RBAC, checkpoint format, resume |
+| [`architecture/ai-analysis-engine.md`](architecture/ai-analysis-engine.md) | Finding rules, MCP recommendation engine, DD-003 separation boundary |
+| [`architecture/report-generation.md`](architecture/report-generation.md) | Review gate, PDF/PPTX deliverables, JA translation protocol |
+| [`architecture/delivery-portal.md`](architecture/delivery-portal.md) | Publish flow, S3/Blob, pre-signed URLs, retention |
 
 ---
 
@@ -33,7 +33,7 @@
 
 | Document | Purpose |
 |---|---|
-| [`design/design-decisions.md`](design/design-decisions.md) | All 19 design decisions (DD-001 – DD-019) with rationale and status |
+| [`design/design-decisions.md`](design/design-decisions.md) | All 19 design decisions (DD-001 – DD-019) with status |
 
 ---
 
@@ -43,7 +43,7 @@
 |---|---|
 | [`workflows-guide.md`](workflows-guide.md) | ci.yml, release.yml, cd-publish.yml — triggers, jobs, inputs |
 | [`cicd-iac-report.md`](cicd-iac-report.md) | 18-gap CI/CD + IaC audit report |
-| [`policies/secret-rotation-runbook.md`](policies/secret-rotation-runbook.md) | Step-by-step rotation for all platform secrets |
+| [`policies/secret-rotation-runbook.md`](policies/secret-rotation-runbook.md) | Step-by-step secret rotation for all platform secrets |
 
 ---
 
@@ -72,5 +72,5 @@
 | Document | Purpose |
 |---|---|
 | [`development/module-guide.md`](development/module-guide.md) | How to build and register a new assessment module |
-| [`development/diagram-generation.md`](development/diagram-generation.md) | Diagram types and diagram generation implementation guide |
-| [`phase-completion-log.md`](phase-completion-log.md) | Canonical archive of all completed work items and sign-offs |
+| [`development/diagram-generation.md`](development/diagram-generation.md) | Diagram types and generation guide |
+| [`phase-completion-log.md`](phase-completion-log.md) | Canonical record of all completed work (replaces root TODO files) |
