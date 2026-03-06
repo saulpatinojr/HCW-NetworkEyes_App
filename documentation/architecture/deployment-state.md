@@ -1,121 +1,103 @@
 # CNA Platform — Deployment State
 
-> Version: 1.0.0 | Date: 2026-03-05
-> This document is the live record of what is deployed, what is pending, and
-> what has never been created. Update this when infrastructure is provisioned.
+> Version: 1.1.0 | Date: 2026-03-05
+> This document is the authoritative status of what is and is not deployed
+> across all four platform planes.
 
 ---
 
-## Status Legend
+## The Four Planes
 
-| Symbol | Meaning |
-|---|---|
-| ✅ | Deployed and running |
-| ⚠ | Code/config complete — requires manual provisioning or secret setup |
-| ✗ | Not yet created — no infrastructure exists |
-| 🔵 | Client-owned infrastructure (read-only discovery target — CNA does not deploy this) |
+The CNA platform spans two distinct concerns:
 
----
-
-## CNA VENDOR — GitHub (saulpatinojr/MVP-Cloud_Network_Assessment)
-
-| Resource | Status | Blocker |
+| Plane | What It Is | Owner |
 |---|---|---|
-| Source code + documentation | ✅ | — |
-| `ci.yml` — lint + test + secret scan | ✅ | — |
-| `release.yml` — build + push image | ⚠ | Needs: first `git tag v0.1.0` push |
-| `cd-publish.yml` — deploy to cloud | ⚠ | Needs: GitHub Secrets configured (see below) |
-| Branch protection rules (main, develop) | ⚠ | Needs: manual setup in repo Settings → Branches |
+| **CNA Platform** | The tool itself — code, CI/CD, container image | You (saulpatinojr) |
+| **Vendor Cloud** | AWS/Azure infra you own that hosts secrets and deliverables | You |
+| **CNA-Client** | The customer’s cloud environment being assessed | Customer |
+
+The CNA platform and Vendor Cloud are your responsibility to stand up.
+The CNA-Client environment is granted to you per-engagement by the customer.
 
 ---
 
-## CNA VENDOR — GitHub Container Registry (ghcr.io)
+## Deployment Status by Surface
 
-| Resource | Status | Blocker |
+### ✅ Fully Deployed
+
+| Resource | Location | Notes |
 |---|---|---|
-| `ghcr.io/saulpatinojr/cna:0.1.0` image | ✗ | `release.yml` has never run (no git tag yet) |
+| Source code | `main` branch | All engines implemented |
+| Documentation | `documentation/` | All policies, arch docs, secrets arch |
+| CI workflow (`ci.yml`) | GitHub Actions | Runs on every push: scan → lint → test → docker |
+| `develop` branch | GitHub | Protected; CI required |
+| Pre-commit hooks | Operator workstation | gitleaks, detect-secrets, ruff |
+| `.secrets.baseline` | Repo root | Baseline set |
 
----
+### ⚠️ Configured, Not Yet Triggered
 
-## CNA VENDOR — Operator Workstation (Local)
-
-| Resource | Status | Notes |
+| Resource | Blocker | Action Needed |
 |---|---|---|
-| `cna` CLI (`pip install -e .[dev]`) | ✅ | Working locally |
-| `.env` file | ⚠ | Template exists (`.env.example`); cloud creds not yet filled |
+| `release.yml` | No git tag exists | `git tag v0.1.0 && git push --tags` |
+| `cd-publish.yml` | GitHub Secrets not set | Set secrets (see below) |
+| GHCR image | No release tag | Triggered automatically on first tag |
 
----
+### ❌ Not Yet Created
 
-## CNA VENDOR — Vendor Azure Subscription
-
-| Resource | Status | Blocker |
+#### Vendor AWS
+| Resource | Why Needed | Setup Doc |
 |---|---|---|
-| Azure Key Vault (`cna-secrets-prod`) | ✗ | Not provisioned — see `documentation/secrets-architecture.md` for setup |
-| Azure Storage Account (delivery portal) | ✗ | Not provisioned — needed for `cna publish --azure` |
-| Managed Identity or App Registration | ✗ | Not created — optional for local dev; required for CD publish to Azure |
+| OIDC Provider | `cd-publish.yml` OIDC auth | `secrets-architecture.md` |
+| IAM Role: `CNA-Publish` | S3 upload from CI | `secrets-architecture.md` |
+| S3 Bucket: `cna-deliverables` | Delivery portal | `delivery-portal.md` |
+| SSM Parameter Store `/cna/prod/*` | Optional secrets store | `secrets-architecture.md` |
 
----
-
-## CNA VENDOR — Vendor AWS Account
-
-| Resource | Status | Blocker |
+#### Vendor Azure
+| Resource | Why Needed | Setup Doc |
 |---|---|---|
-| S3 Bucket (`cna-deliverables-prod`) | ✗ | Not provisioned — needed for `cna publish --aws` |
-| IAM Role `CNA-Publish` + OIDC Trust Policy | ✗ | Not created — needed for `cd-publish.yml` to push to S3 |
+| App Registration (Federated OIDC) | `cd-publish.yml` Azure auth | `secrets-architecture.md` |
+| Key Vault: `cna-secrets-prod` | Secrets at runtime | `secrets-architecture.md` |
+| Storage Account: `cna-deliverables` | Delivery portal | `delivery-portal.md` |
 
----
-
-## GitHub Secrets Required for CD
-
-| Secret | Status | Purpose |
+#### GitHub
+| Secret | Needed By | Notes |
 |---|---|---|
-| `CNA_AWS_ROLE_ARN` | ✗ Not set | OIDC role ARN for S3 publish |
-| `CNA_PUBLISH_BUCKET` | ✗ Not set | S3 bucket name |
-| `CNA_AZURE_CLIENT_ID` | ✗ Not set | OIDC federated identity for Azure publish |
-| `CNA_AZURE_TENANT_ID` | ✗ Not set | Azure tenant for CD |
-| `CNA_AZURE_SUBSCRIPTION_ID` | ✗ Not set | Azure subscription for storage account |
-| `GITHUB_TOKEN` | ✅ Auto-issued | No setup needed |
+| `CNA_AWS_ROLE_ARN` | `cd-publish.yml` | Set after IAM Role created |
+| `CNA_PUBLISH_BUCKET` | `cd-publish.yml` | S3 bucket name |
+| `CNA_AZURE_CLIENT_ID` | `cd-publish.yml` | App Registration client ID |
+| `CNA_AZURE_TENANT_ID` | `cd-publish.yml` | Azure AD tenant ID |
+| `CNA_AZURE_SUBSCRIPTION_ID` | `cd-publish.yml` | Azure subscription |
+
+#### CNA-Client (per engagement)
+| Resource | Platform | Who Creates | Notes |
+|---|---|---|---|
+| IAM Role: `CNA-ReadOnly` | AWS (each member acct) | Customer | See `permission-grant-guide.md` |
+| Management Group Reader | Azure (root MG) | Customer | See `permission-grant-guide.md` |
+| Reader (root MG) | Azure | Customer | Subscription-level traverse |
 
 ---
 
-## CNA-CLIENT — Azure Tenant (Customer)
+## Minimum to Run First Engagement
 
-> CNA does not deploy anything into the customer environment.
-> All resources below are pre-existing client infrastructure that CNA reads.
+To run a single local engagement right now (no CI/CD, no portal):
 
-| Resource | Status | Notes |
-|---|---|---|
-| Azure AD Tenant | 🔵 Client-owned | Provided by client |
-| Management Group hierarchy | 🔵 Client-owned | CNA traverses root MG |
-| Subscriptions (1..N) | 🔵 Client-owned | Enumerated via `Subscriptions.list()` |
-| VNets / Subnets / NSGs / Route Tables | 🔵 Client-owned | Read via Azure Network APIs |
-| ExpressRoute / VPN Gateway | 🔵 Client-owned | Read via `express_route_circuits.list_all()` |
-| Azure Firewall / DDoS Protection | 🔵 Client-owned | Read via `azure_firewalls.list_all()` |
-| **Reader RBAC at Root MG** | **⚠ Not yet assigned** | **Client must grant before `cna discover azure` can run** |
+```bash
+# Azure
+az login
+cna discover azure --engagement-id <slug>-$(date +%Y%m%d)-0000 --tenant-id <TENANT_ID>
+cna analyze     --engagement-id <slug>-...
+cna review complete --engagement-id <slug>-...
+cna report generate --engagement-id <slug>-...
+# Reports written to ~/.cna/engagements/<id>/reports/
 
----
+# AWS
+aws sso login
+cna discover aws --engagement-id <slug>-$(date +%Y%m%d)-0000 \
+  --org-role arn:aws:iam::<MGMT_ACCT>:role/CNA-ReadOnly
+cna analyze     --engagement-id <slug>-...
+cna review complete --engagement-id <slug>-...
+cna report generate --engagement-id <slug>-...
+```
 
-## CNA-CLIENT — AWS Organization (Customer)
-
-> CNA does not deploy anything into the customer environment.
-> All resources below are pre-existing client infrastructure that CNA reads.
-
-| Resource | Status | Notes |
-|---|---|---|
-| AWS Organization (management account) | 🔵 Client-owned | Provided by client |
-| Member accounts (1..N) | 🔵 Client-owned | Enumerated via `organizations:ListAccounts` |
-| VPCs / Subnets / Security Groups | 🔵 Client-owned | Read via EC2 describe APIs |
-| Transit Gateway / Direct Connect | 🔵 Client-owned | Read via EC2 + DC APIs |
-| **IAM Role `CNA-ReadOnly` in each member account** | **✗ Not deployed** | **Client must deploy before `cna discover aws` can run** |
-
----
-
-## Next Actions to Reach First Engagement
-
-1. **Push `v0.1.0` tag** → triggers `release.yml` → GHCR image published
-2. **Configure GitHub Secrets** (5 secrets above) → unblocks `cd-publish.yml`
-3. **Provision Azure Key Vault** (`az keyvault create ...`) — see `documentation/secrets-architecture.md`
-4. **Provision S3 + IAM Role** for CD publish — see `documentation/secrets-architecture.md`
-5. **Send client `permission-grant-guide.md`** → client assigns Reader RBAC (Azure) + deploys `CNA-ReadOnly` IAM Role (AWS)
-6. **Fill `.env`** with local dev credentials
-7. **Run first engagement**: `cna init && cna discover aws|azure && cna analyze && cna review complete && cna report && cna publish`
+No vendor cloud resources required for local engagement — reports stay on disk.
+Portal publish requires S3 or Azure Storage (set those up before first client delivery).
