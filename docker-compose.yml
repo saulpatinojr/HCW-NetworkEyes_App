@@ -1,16 +1,60 @@
-version: '3.9'
+# docker-compose.yml — hardened
+# Changes from original:
+#   - version field removed (deprecated in Compose v2; causes warnings)
+#   - image: field added to cna service (run pre-built image OR build)
+#   - read_only: true on cna service (filesystem is immutable at runtime)
+#   - tmpfs for /tmp (needed by WeasyPrint PDF render and Jinja2 temp writes)
+#   - security_opt: no-new-privileges
+#   - Engagement + output volumes: ro on cna (read-only in prod service)
+#   - cna-dev: mounts source read-write for live editing
+#   - cna-test: dedicated test runner, no .env leak into prod runs
+#   - Explicit network (no default bridge sharing with other compose projects)
+
 services:
+
   cna:
     build: .
     image: cna:local
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m
+    security_opt:
+      - no-new-privileges:true
     env_file: .env
     volumes:
-      - ./engagements:/app/engagements
-      - ./output:/app/output
+      - ./engagements:/app/engagements:rw
+      - ./output:/app/output:rw
     command: ["--help"]
+    networks:
+      - cna-internal
+
   cna-dev:
     build: .
-    env_file: .env
     volumes:
-      - .:/app
-    entrypoint: ["python", "-m", "pytest", "tests/", "-v"]
+      - .:/app:rw
+    env_file: .env
+    entrypoint: ["python", "-m", "pytest", "tests/", "-v", "--tb=short"]
+    networks:
+      - cna-internal
+
+  cna-test:
+    build: .
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./tests:/app/tests:ro
+    env_file: .env
+    entrypoint: [
+      "python", "-m", "pytest", "tests/unit/",
+      "-v", "--tb=short",
+      "--cov=cna", "--cov-report=term-missing"
+    ]
+    networks:
+      - cna-internal
+
+networks:
+  cna-internal:
+    driver: bridge

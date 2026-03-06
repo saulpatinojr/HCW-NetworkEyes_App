@@ -15,6 +15,7 @@ dependencies = [
     "azure-mgmt-network>=25.0",
     "azure-mgmt-resource>=23.0",
     "azure-mgmt-subscription>=3.0",
+    "azure-storage-blob>=12.19",       # Phase F: Azure Blob Storage deployer
     "openai>=1.30",
     "diagrams>=0.24",
     "n2g>=0.3",
@@ -22,6 +23,7 @@ dependencies = [
     "python-docx>=1.1",
     "python-pptx>=0.6",
     "jinja2>=3.1",
+    "weasyprint>=61.0",                # Phase E: PDF generation
     "markdown>=3.6",
     "pandas>=2.1",
     "pydantic>=2.5",
@@ -37,12 +39,54 @@ cna = "cna.cli.main:cli"
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "pytest-cov>=5.0",               # coverage plugin (was missing from dev deps)
     "ruff>=0.3",
+    "pre-commit>=3.7",               # pre-commit itself as a dev dep
+    "detect-secrets>=1.5",           # used by pre-commit hook
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-ra -q"
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "S",   # flake8-bandit (security)
+    "N",   # pep8-naming
+]
+ignore = [
+    "E501",   # line too long (ruff format handles this)
+    "S101",   # use of assert (acceptable in tests)
+    "S603",   # subprocess call (needed for diagram export)
+    "S607",   # partial executable path (needed for diagram export)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S", "N"]   # relax security + naming rules in tests
+
+[tool.coverage.run]
+source = ["cna"]
+omit = [
+    "cna/cli/*",           # CLI entry points tested via integration tests
+    "*/migrations/*",
+    "*/__init__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "@overload",
+]

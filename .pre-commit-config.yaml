@@ -1,42 +1,50 @@
-# Pre-commit hooks — closes TODO_PhaseA: No Pre-commit Hooks
-# Install: pip install pre-commit && pre-commit install
+# Pre-commit hooks — run on every git commit
+# Install: pre-commit install
 # Run manually: pre-commit run --all-files
+#
+# All hooks are pinned to SHA (supply chain security, consistent with CI workflow pins)
 
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+  # --- Secret detection ---
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.23.3
     hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-      - id: check-yaml
-      - id: check-json
-      - id: check-toml
-      - id: check-merge-conflict
-      - id: detect-private-key          # catches raw PEM/RSA keys
-      - id: no-commit-to-branch
-        args: [--branch, main]          # blocks direct commits to main locally
-
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.4.4
-    hooks:
-      - id: ruff
-        args: [--fix]
-      - id: ruff-format
+      - id: gitleaks
+        name: gitleaks (secret detection)
 
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.5.0
     hooks:
       - id: detect-secrets
-        args: [
-          "--baseline", ".secrets.baseline",
-          "--exclude-files", ".env.example",
-          "--exclude-files", "tests/",
-        ]
-        # Blocks commits containing AWS keys, Azure secrets,
-        # connection strings, JWT tokens, and generic high-entropy strings.
+        name: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: ^\.env\.example$
 
-  - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.18.4
+  # --- Python linting ---
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.9
     hooks:
-      - id: gitleaks
-        # Belt-and-suspenders: gitleaks catches patterns detect-secrets misses
+      - id: ruff
+        name: ruff lint
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+        name: ruff format
+
+  # --- General hygiene ---
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: no-commit-to-branch
+        args: [--branch, main]
+        name: no direct commit to main

@@ -1,0 +1,71 @@
+# Dependabot — automated dependency updates
+# Covers: Python packages (pip), GitHub Actions, Docker base images
+#
+# PR strategy:
+#   - Python: weekly, grouped by ecosystem, auto-assign to saulpatinojr
+#   - Actions: weekly, grouped — keeps CI action SHAs current
+#   - Docker: weekly — keeps base image digest current
+
+version: 2
+updates:
+
+  # Python dependencies
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Chicago
+    assignees:
+      - saulpatinojr
+    reviewers:
+      - saulpatinojr
+    labels:
+      - dependencies
+      - python
+    groups:
+      azure-sdk:
+        patterns:
+          - "azure-*"
+      aws-sdk:
+        patterns:
+          - "boto3"
+          - "botocore"
+      testing:
+        patterns:
+          - "pytest*"
+          - "ruff"
+          - "coverage"
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Chicago
+    assignees:
+      - saulpatinojr
+    labels:
+      - dependencies
+      - github-actions
+    groups:
+      all-actions:
+        patterns:
+          - "*"
+
+  # Docker
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Chicago
+    assignees:
+      - saulpatinojr
+    labels:
+      - dependencies
+      - docker
