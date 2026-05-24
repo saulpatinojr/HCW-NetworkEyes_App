@@ -104,7 +104,7 @@ jobs:
           echo "Generated .env.${{ inputs.environment }}"
 
       - name: Upload .env artifact (1-day retention)
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: env-${{ inputs.environment }}-${{ github.run_id }}
           path: .env.${{ inputs.environment }}
