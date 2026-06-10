@@ -12,6 +12,8 @@ import {
   type Finding,
 } from "./_lib/metrics";
 import { getMergedTopology } from "./_lib/get-merged-topology";
+import { RiskGauge } from "@/components/charts/risk-gauge";
+import { MaturityRadar } from "@/components/charts/maturity-radar";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -19,131 +21,6 @@ interface PageProps {
 
 const styleKey = "style";
 const makeStyle = (props: Record<string, string>) => ({ [styleKey]: props }) as any;
-
-// ── Risk Gauge SVG ─────────────────────────────────────────────────────────────
-function RiskGauge({ score, color }: { score: number; color: string }) {
-  const r = 68;
-  const circ = 2 * Math.PI * r;            // ≈ 427.3
-  const arcLen = (270 / 360) * circ;       // ≈ 320.5  (270° sweep)
-  const filled = (score / 100) * arcLen;
-
-  return (
-    <svg viewBox="0 0 180 180" className="h-44 w-44">
-      {/* Track */}
-      <circle
-        cx="90" cy="90" r={r}
-        fill="none"
-        stroke="#1e2d3d"
-        strokeWidth="14"
-        strokeLinecap="round"
-        strokeDasharray={`${arcLen} ${circ}`}
-        transform="rotate(-135 90 90)"
-      />
-      {/* Value arc */}
-      <circle
-        cx="90" cy="90" r={r}
-        fill="none"
-        stroke={color}
-        strokeWidth="14"
-        strokeLinecap="round"
-        strokeDasharray={`${filled} ${circ}`}
-        transform="rotate(-135 90 90)"
-      />
-      {/* Score */}
-      <text
-        x="90" y="88"
-        textAnchor="middle"
-        fontSize="38"
-        fontWeight="900"
-        fill="white"
-        fontFamily="sans-serif"
-      >
-        {score}
-      </text>
-      <text
-        x="90" y="110"
-        textAnchor="middle"
-        fontSize="9"
-        fill="#64748b"
-        fontFamily="sans-serif"
-        letterSpacing="1"
-      >
-        RISK SCORE
-      </text>
-    </svg>
-  );
-}
-
-// ── Maturity Radar SVG ─────────────────────────────────────────────────────────
-function MaturityRadar({ dims }: { dims: { label: string; score: number }[] }) {
-  const cx = 110, cy = 110, R = 72;
-  const n = dims.length;
-
-  const angleFor = (i: number) => (i * 2 * Math.PI) / n - Math.PI / 2;
-
-  // Axis end-points
-  const axes = dims.map((d, i) => ({
-    x: cx + R * Math.cos(angleFor(i)),
-    y: cy + R * Math.sin(angleFor(i)),
-    lx: cx + (R + 22) * Math.cos(angleFor(i)),
-    ly: cy + (R + 22) * Math.sin(angleFor(i)),
-    label: d.label,
-    score: d.score,
-  }));
-
-  // Grid rings at 20 / 40 / 60 / 80 / 100 % of R
-  const gridRings = [2, 4, 6, 8, 10].map((level) => {
-    const rr = (level / 10) * R;
-    return dims
-      .map((_, i) => `${cx + rr * Math.cos(angleFor(i))},${cy + rr * Math.sin(angleFor(i))}`)
-      .join(" ");
-  });
-
-  // Data polygon
-  const dataPolygon = dims
-    .map((d, i) => {
-      const rr = (d.score / 10) * R;
-      return `${cx + rr * Math.cos(angleFor(i))},${cy + rr * Math.sin(angleFor(i))}`;
-    })
-    .join(" ");
-
-  return (
-    <svg viewBox="0 0 220 220" className="h-48 w-48">
-      {/* Grid rings */}
-      {gridRings.map((pts, i) => (
-        <polygon key={i} points={pts} fill="none" stroke="#1e2d3d" strokeWidth="0.75" />
-      ))}
-      {/* Axes */}
-      {axes.map((ax, i) => (
-        <line key={i} x1={cx} y1={cy} x2={ax.x} y2={ax.y} stroke="#1e2d3d" strokeWidth="0.75" />
-      ))}
-      {/* Data fill */}
-      <polygon points={dataPolygon} fill="rgba(20,184,166,0.18)" stroke="#14b8a6" strokeWidth="2" />
-      {/* Axis labels */}
-      {axes.map((ax, i) => (
-        <text
-          key={i}
-          x={ax.lx}
-          y={ax.ly}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fontSize="7.5"
-          fill="#94a3b8"
-          fontFamily="sans-serif"
-        >
-          {ax.label}
-        </text>
-      ))}
-      {/* Score dots */}
-      {dims.map((d, i) => {
-        const rr = (d.score / 10) * R;
-        const sx = cx + rr * Math.cos(angleFor(i));
-        const sy = cy + rr * Math.sin(angleFor(i));
-        return <circle key={i} cx={sx} cy={sy} r="3" fill="#14b8a6" />;
-      })}
-    </svg>
-  );
-}
 
 // ── Nav Card ───────────────────────────────────────────────────────────────────
 function NavCard({

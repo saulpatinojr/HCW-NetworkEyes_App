@@ -1,0 +1,211 @@
+/* Encyclopedia report — WeasyPrint paged media (Phase D).
+   CBTS palette: navy #012638, dark teal #004E3D, warm gray #F2F1ED,
+   bright teal #00E9BB, orange #FFAC00. */
+
+@font-face {
+  font-family: "Aeonik";
+  src: url("assets/fonts/Aeonik-Regular.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+}
+
+@page {
+  size: A4;
+  margin: 2.2cm 2cm 2.4cm 2cm;
+  @bottom-left {
+    content: "CBTS";
+    font-family: "Aeonik", sans-serif;
+    font-size: 9pt;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: #004E3D;
+  }
+  @bottom-center {
+    content: "Cloud Network Assessment";
+    font-family: "Aeonik", sans-serif;
+    font-size: 8pt;
+    color: #8A8985;
+  }
+  @bottom-right {
+    content: counter(page);
+    font-family: "Aeonik", sans-serif;
+    font-size: 9pt;
+    color: #012638;
+  }
+}
+
+@page cover {
+  background: #012638;
+  margin: 0;
+  @bottom-left { content: none; }
+  @bottom-center { content: none; }
+  @bottom-right { content: none; }
+}
+
+body {
+  font-family: "Aeonik", "Segoe UI", Arial, sans-serif;
+  color: #012638;
+  font-size: 10pt;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ── Cover ─────────────────────────────────────────────────────────── */
+.cover {
+  page: cover;
+  height: 100%;
+  color: #F2F1ED;
+  padding: 4cm 2.5cm;
+  box-sizing: border-box;
+}
+.cover .logo { width: 6cm; margin-bottom: 3cm; }
+.cover h1 {
+  font-size: 30pt;
+  color: #00E9BB;
+  border: none;
+  margin: 0 0 0.4cm 0;
+  line-height: 1.15;
+}
+.cover .subtitle { font-size: 15pt; color: #F2F1ED; margin-bottom: 2cm; }
+.cover .edition-tag {
+  display: inline-block;
+  background: #00E9BB;
+  color: #012638;
+  font-weight: 700;
+  font-size: 10pt;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.15cm 0.5cm;
+  border-radius: 4px;
+}
+.cover .meta { color: #B9C4C9; font-size: 10pt; margin-top: 2.5cm; }
+
+/* ── Table of contents ────────────────────────────────────────────── */
+.toc { page-break-after: always; }
+.toc h2 { margin-top: 0; }
+.toc ol { list-style: none; padding: 0; margin: 0; }
+.toc li {
+  font-size: 12pt;
+  padding: 0.18cm 0;
+  border-bottom: 1px solid #E4E2DB;
+}
+.toc a { color: #012638; text-decoration: none; }
+.toc a::after {
+  content: target-counter(attr(href), page);
+  float: right;
+  color: #004E3D;
+  font-weight: 700;
+}
+
+/* ── Chapters & headings ──────────────────────────────────────────── */
+.chapter { page-break-before: always; }
+h1 {
+  font-size: 21pt;
+  color: #012638;
+  border-bottom: 3px solid #00E9BB;
+  padding-bottom: 0.15cm;
+  margin: 0 0 0.5cm 0;
+}
+h2 { font-size: 14pt; color: #004E3D; margin: 0.8cm 0 0.3cm 0; }
+h3 { font-size: 11pt; color: #012638; margin: 0.5cm 0 0.2cm 0; }
+.kicker {
+  font-size: 9pt;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #004E3D;
+  margin-bottom: 0.1cm;
+}
+
+/* ── Tables ───────────────────────────────────────────────────────── */
+table { border-collapse: collapse; width: 100%; margin: 0.3cm 0 0.6cm 0; }
+th {
+  background: #012638;
+  color: #F2F1ED;
+  padding: 0.14cm 0.3cm;
+  text-align: left;
+  font-size: 8.5pt;
+  letter-spacing: 0.04em;
+}
+td {
+  padding: 0.12cm 0.3cm;
+  border-bottom: 1px solid #E4E2DB;
+  font-size: 8.5pt;
+  vertical-align: top;
+}
+tr:nth-child(even) td { background: #F2F1ED; }
+table { page-break-inside: auto; }
+tr { page-break-inside: avoid; }
+
+/* ── Severity badges ──────────────────────────────────────────────── */
+.badge {
+  display: inline-block;
+  padding: 0.04cm 0.22cm;
+  border-radius: 4px;
+  font-size: 7.5pt;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #FFFFFF;
+}
+.badge-CRITICAL { background: #D32F2F; }
+.badge-HIGH { background: #FFAC00; color: #012638; }
+.badge-MEDIUM { background: #C8A23C; color: #012638; }
+.badge-LOW { background: #6B7A80; }
+.badge-INFORMATIONAL { background: #B9C4C9; color: #012638; }
+
+/* ── Finding domain sections ──────────────────────────────────────── */
+.domain-section {
+  border-left: 4px solid #E4E2DB;
+  padding: 0.1cm 0 0.1cm 0.4cm;
+  margin: 0 0 0.55cm 0;
+  page-break-inside: avoid;
+}
+.domain-section.sev-CRITICAL { border-left-color: #D32F2F; }
+.domain-section.sev-HIGH { border-left-color: #FFAC00; }
+.domain-section .fact {
+  background: #F2F1ED;
+  border-radius: 4px;
+  padding: 0.16cm 0.3cm;
+  font-style: italic;
+  font-size: 9pt;
+  margin: 0.15cm 0;
+}
+.domain-section .resource-line { font-size: 8.5pt; color: #4A5A60; }
+.steps { margin: 0.15cm 0 0 0.5cm; padding: 0; font-size: 9pt; }
+.steps li { margin-bottom: 0.08cm; }
+.fw-list { margin: 0.1cm 0 0 0.5cm; padding: 0; font-size: 8.5pt; color: #4A5A60; }
+
+/* ── Critical callouts (orange) ───────────────────────────────────── */
+.callout-critical {
+  background: rgba(255, 172, 0, 0.12);
+  border-left: 4px solid #FFAC00;
+  padding: 0.25cm 0.4cm;
+  margin: 0.4cm 0;
+  font-size: 9.5pt;
+  page-break-inside: avoid;
+}
+.callout-critical strong { color: #012638; }
+
+/* ── Stat cards / key metrics ─────────────────────────────────────── */
+.stat-row { width: 100%; margin: 0.4cm 0; }
+.stat-card {
+  display: inline-block;
+  width: 3.4cm;
+  background: #F2F1ED;
+  border-radius: 6px;
+  padding: 0.25cm 0.3cm;
+  margin-right: 0.25cm;
+  vertical-align: top;
+}
+.stat-card .value { font-size: 17pt; font-weight: 700; color: #004E3D; }
+.stat-card .value.alert { color: #D32F2F; }
+.stat-card .label { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.08em; color: #4A5A60; }
+
+/* ── Diagrams & radar ─────────────────────────────────────────────── */
+.diagram { margin: 0.4cm 0; page-break-inside: avoid; text-align: center; }
+.diagram svg { max-width: 100%; height: auto; }
+.diagram .caption { font-size: 8pt; color: #8A8985; margin-top: 0.1cm; }
+.radar-wrap { text-align: center; margin: 0.3cm 0; page-break-inside: avoid; }
+
+.verify { color: #B25800; font-weight: 700; font-size: 8pt; }
+.muted { color: #8A8985; font-size: 8.5pt; }

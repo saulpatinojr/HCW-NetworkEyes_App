@@ -1,0 +1,73 @@
+<div class="chapter" id="ch4">
+<p class="kicker">Chapter 4</p>
+<h1>FinOps Cost Matrix</h1>
+
+<p>
+  Network resources accrue cost whether or not they carry traffic: orphaned
+  public IPs, idle gateways, and oversized SKUs are pure waste. This chapter
+  quantifies the estimated monthly cost impact of {{ cost_findings | length }}
+  FinOps finding(s). All figures are static-price estimates and must be
+  validated against the tenant's actual invoice and negotiated rates —
+  every figure is flagged <span class="verify">[VERIFY]</span>.
+</p>
+
+<div class="stat-row">
+  <span class="stat-card"><span class="value">${{ "%.0f" | format(total_est_monthly_cost) }}</span><br><span class="label">Est. monthly impact <span class="verify">[VERIFY]</span></span></span>
+  <span class="stat-card"><span class="value">{{ cost_findings | length }}</span><br><span class="label">FinOps findings</span></span>
+  <span class="stat-card"><span class="value">${{ "%.0f" | format(total_est_monthly_cost * 12) }}</span><br><span class="label">Est. annualized <span class="verify">[VERIFY]</span></span></span>
+</div>
+
+{% if total_est_monthly_cost > 0 %}
+<div class="callout-critical">
+  <strong>Estimated ${{ "%.2f" | format(total_est_monthly_cost) }}/month
+  <span class="verify">[VERIFY]</span> of avoidable network spend</strong> was
+  identified. Remediation of FinOps findings is typically low-risk and
+  immediately cash-positive.
+</div>
+{% endif %}
+
+{% if cost_matrix %}
+<h2>Cost matrix (stat masters)</h2>
+<table>
+  <tr><th>Rule</th><th>Plane</th><th>Severity</th><th>Region</th><th>Resource type</th><th>Findings</th><th>Resources</th><th>Est. monthly cost</th></tr>
+  {% for r in cost_matrix %}
+  <tr>
+    <td>{{ r.rule_id }}</td>
+    <td>{{ r.traffic_direction | replace("_", "-") }}</td>
+    <td><span class="badge badge-{{ r.severity }}">{{ r.severity }}</span></td>
+    <td>{{ r.region }}</td>
+    <td>{{ r.resource_type }}</td>
+    <td>{{ r.finding_count }}</td>
+    <td>{{ r.resource_count }}</td>
+    <td>${{ "%.2f" | format(r.est_monthly_cost_impact) }} <span class="verify">[VERIFY]</span></td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+{% if cost_findings %}
+<h2>Cost findings by resource</h2>
+<table>
+  <tr><th>Rule</th><th>Finding</th><th>Resource</th><th>Region</th><th>Est. monthly cost</th></tr>
+  {% for f in cost_findings %}
+  <tr>
+    <td>{{ f.rule_id }}</td>
+    <td>{{ f.title }}</td>
+    <td>{{ f.resource_id }}</td>
+    <td>{{ f.region }}</td>
+    <td>{% if f.est_monthly_cost_usd is not none %}${{ "%.2f" | format(f.est_monthly_cost_usd) }} <span class="verify">[VERIFY]</span>{% else %}—{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+{% if not is_condensed %}
+<h2>FinOps findings detail</h2>
+{% for f in cost_findings %}
+  {% include "encyclopedia/_domain_section.j2" %}
+{% endfor %}
+{% endif %}
+{% else %}
+<p>No FinOps (AZ-COST) findings were identified — no avoidable network spend
+was detected from the discovered inventory and 24-hour metrics.</p>
+{% endif %}
+</div>

@@ -1,0 +1,92 @@
+<div class="chapter" id="ch3">
+<p class="kicker">Chapter 3</p>
+<h1>North-South Perimeter Audit</h1>
+
+<p>
+  North-south traffic crosses the perimeter: public endpoints, firewalls,
+  WAF/application delivery, NAT, and hybrid connectivity (VPN/ExpressRoute).
+  Every public endpoint widens the attack surface; every uninspected egress
+  path is a data-exfiltration channel. The assessment discovered
+  {{ topology_tables.public_ips | length }} public IP(s),
+  {{ topology_tables.firewalls | length }} Azure Firewall(s),
+  {{ topology_tables.app_gateways | length }} Application Gateway(s), and
+  {{ topology_tables.gateways | length }} virtual network gateway(s).
+  {{ north_south_findings | length }} perimeter finding(s) were identified.
+</p>
+
+{% if topology_tables.public_ips %}
+<h2>Public endpoint inventory</h2>
+<table>
+  <tr><th>Name</th><th>IP address</th><th>SKU</th><th>Associated</th><th>Attached to</th><th>Region</th></tr>
+  {% for ip in topology_tables.public_ips %}
+  <tr>
+    <td>{{ ip.name }}</td><td>{{ ip.ip or "—" }}</td><td>{{ ip.sku }}</td>
+    <td>{{ "yes" if ip.associated else "ORPHANED" }}</td>
+    <td>{{ ip.associated_type or "—" }}</td><td>{{ ip.region }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+{% if topology_tables.firewalls %}
+<h2>Firewall posture</h2>
+<table>
+  <tr><th>Firewall</th><th>SKU</th><th>Threat intel mode</th><th>Zones</th><th>Region</th></tr>
+  {% for fw in topology_tables.firewalls %}
+  <tr>
+    <td>{{ fw.name }}</td><td>{{ fw.sku }}</td><td>{{ fw.threat_intel }}</td>
+    <td>{{ fw.zones }}</td><td>{{ fw.region }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+{% if topology_tables.app_gateways or topology_tables.front_door_waf %}
+<h2>WAF coverage</h2>
+{% if topology_tables.app_gateways %}
+<table>
+  <tr><th>Application Gateway</th><th>SKU</th><th>WAF enabled</th><th>WAF mode</th><th>Zones</th><th>Region</th></tr>
+  {% for agw in topology_tables.app_gateways %}
+  <tr>
+    <td>{{ agw.name }}</td><td>{{ agw.sku }}</td>
+    <td>{{ "yes" if agw.waf_enabled else "NO" }}</td><td>{{ agw.waf_mode or "—" }}</td>
+    <td>{{ agw.zones }}</td><td>{{ agw.region }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% if topology_tables.front_door_waf %}
+<table>
+  <tr><th>Front Door WAF policy</th><th>Mode</th><th>State</th><th>Custom rules</th></tr>
+  {% for waf in topology_tables.front_door_waf %}
+  <tr><td>{{ waf.name }}</td><td>{{ waf.mode }}</td><td>{{ waf.state }}</td><td>{{ waf.custom_rules }}</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endif %}
+
+{% if not is_condensed and topology_tables.gateways %}
+<h2>Hybrid connectivity gateways</h2>
+<table>
+  <tr><th>Gateway</th><th>Type</th><th>SKU</th><th>Active-active</th><th>BGP</th><th>Connections</th><th>Region</th></tr>
+  {% for gw in topology_tables.gateways %}
+  <tr>
+    <td>{{ gw.name }}</td><td>{{ gw.type }}</td><td>{{ gw.sku }}</td>
+    <td>{{ "yes" if gw.active_active else "NO" }}</td><td>{{ "yes" if gw.bgp else "no" }}</td>
+    <td>{{ gw.connections }}</td><td>{{ gw.region }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<h2>North-south findings</h2>
+{% if north_south_findings %}
+  {% for f in north_south_findings if not is_condensed or f.severity in ["CRITICAL", "HIGH"] %}
+    {% include "encyclopedia/_domain_section.j2" %}
+  {% else %}
+    <p>No {{ "critical or high severity " if is_condensed else "" }}perimeter findings to report.</p>
+  {% endfor %}
+{% else %}
+<p>No north-south findings were identified in this assessment.</p>
+{% endif %}
+</div>

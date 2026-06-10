@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Networking Encyclopedia — {{ engagement.client_org or engagement.engagement_id }}</title>
+<style>
+{% include "encyclopedia/encyclopedia.css" %}
+</style>
+</head>
+<body>
+
+{# ── Cover ──────────────────────────────────────────────────────────── #}
+<div class="cover">
+  <img class="logo" src="assets/logos/CBTS%20Logo%20Bright%20Teal.svg" alt="CBTS">
+  <h1>Cloud Networking<br>Encyclopedia</h1>
+  <div class="subtitle">{{ engagement.engagement_name }}{% if engagement.client_org %} — {{ engagement.client_org }}{% endif %}</div>
+  <span class="edition-tag">{{ "Condensed Edition" if is_condensed else "Expanded Edition" }}</span>
+  <div class="meta">
+    Engagement: {{ engagement.engagement_id }}<br>
+    {% if engagement.generated_at %}Generated: {{ engagement.generated_at }}<br>{% endif %}
+    Prepared by {{ engagement.prepared_by }}
+  </div>
+</div>
+
+{# ── Table of contents ─────────────────────────────────────────────── #}
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#ch1">1. Executive Summary &amp; Maturity</a></li>
+    <li><a href="#ch2">2. East-West Traffic Deep Dive</a></li>
+    <li><a href="#ch3">3. North-South Perimeter Audit</a></li>
+    <li><a href="#ch4">4. FinOps Cost Matrix</a></li>
+    <li><a href="#ch5">5. Observability &amp; Resilience</a></li>
+    <li><a href="#ch6">6. Future State &amp; Roadmap</a></li>
+  </ol>
+</div>
+
+{% include "encyclopedia/ch1_executive.j2" %}
+{% include "encyclopedia/ch2_east_west.j2" %}
+{% include "encyclopedia/ch3_north_south.j2" %}
+{% include "encyclopedia/ch4_finops.j2" %}
+{% include "encyclopedia/ch5_resilience.j2" %}
+{% include "encyclopedia/ch6_future_state.j2" %}
+
+</body>
+</html>

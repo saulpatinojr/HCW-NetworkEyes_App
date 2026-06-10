@@ -25,7 +25,12 @@ from pydantic import BaseModel
 # Ensure the repo root is on the path so `cna` package is importable.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from cna.core.finding_taxonomy import classify_traffic_direction
 from cna.core.persistence import EngagementStore
+from cna.modules.network.analysis import (
+    generate_bcdr_findings,
+    generate_finops_findings,
+)
 from cna.modules.network.discovery.azure_discovery import (
     AzureDiscovery,
     AzureDiscoveryOptions,
@@ -34,9 +39,16 @@ from cna.modules.network.discovery.azure_discovery import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("cna-api")
 
+from routers.chat import router as chat_router  # noqa: E402
+from routers.metrics import rebuild_metrics, router as metrics_router  # noqa: E402
+from routers.reports import router as reports_router  # noqa: E402
+
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 app = FastAPI(title="CNA API", version="0.2.0")
+app.include_router(metrics_router)
+app.include_router(chat_router)
+app.include_router(reports_router)
 
 
 # ─── DB helpers ───────────────────────────────────────────────────────────────
@@ -83,7 +95,9 @@ def _replace_discovery_findings(
                     cur,
                     """INSERT INTO "Finding"
                          (id, "engagementId", "credentialId", title, severity, category,
-                          description, recommendation, "aiGenerated", "createdAt", "updatedAt")
+                          description, recommendation, "aiGenerated",
+                          "trafficDirection", region, "resourceType", "estCostImpact",
+                          "createdAt", "updatedAt")
                        VALUES %s""",
                     [
                         (
@@ -96,6 +110,10 @@ def _replace_discovery_findings(
                             f["description"],
                             f.get("recommendation", ""),
                             False,
+                            f.get("traffic_direction") or None,
+                            f.get("region") or None,
+                            f.get("resource_type") or None,
+                            f.get("est_cost_impact"),
                             datetime.now(UTC),
                             datetime.now(UTC),
                         )
@@ -1182,6 +1200,24 @@ def _topology_to_findings(sub_topo: dict) -> list[dict]:  # noqa: C901
     return findings
 
 
+def _finding_model_to_dict(finding: Any) -> dict:
+    """Map a cna.core.findings_schema.Finding to the flat dict shape used by
+    _replace_discovery_findings (Prisma Finding columns)."""
+    return {
+        "rule_id": finding.rule_id or "",
+        "title": finding.title,
+        "severity": str(finding.severity.value).upper(),
+        "category": finding.category or "General",
+        "description": finding.description or finding.observed_state.fact,
+        "recommendation": finding.recommendation
+        or (finding.recommendations[0].text if finding.recommendations else ""),
+        "traffic_direction": finding.traffic_direction,
+        "region": finding.region or "",
+        "resource_type": finding.resource_type or "",
+        "est_cost_impact": finding.est_monthly_cost_usd,
+    }
+
+
 # ─── Routes ───────────────────────────────────────────────────────────────────
 
 
@@ -1321,6 +1357,24 @@ def _run_azure_discovery(request: DiscoveryStartRequest) -> None:
                 f"→ {len(sub_findings)} finding(s)"
             )
 
+        # Phase B: FinOps + BC/DR generators from the cna package
+        try:
+            enriched = generate_finops_findings(topology) + generate_bcdr_findings(topology)
+            all_findings.extend(_finding_model_to_dict(f) for f in enriched)
+            _log(f"FinOps/BC-DR analysis → {len(enriched)} additional finding(s).")
+        except Exception as exc:  # analysis must never fail the discovery run
+            logger.exception("[job:%s] finops/bcdr analysis failed", job_id)
+            _log(f"FinOps/BC-DR analysis skipped: {exc}")
+
+        # Tag ALL findings (existing + new) with a traffic-direction plane
+        for f in all_findings:
+            if not f.get("traffic_direction"):
+                f["traffic_direction"] = classify_traffic_direction(
+                    f.get("rule_id", ""),
+                    f.get("category", ""),
+                    f.get("resource_type", ""),
+                )
+
         _log(f"Writing {len(all_findings)} finding(s) to database…")
         _replace_discovery_findings(engagement_id, request.credential_id, all_findings)
         _advance_engagement_status(engagement_id)
@@ -1334,6 +1388,13 @@ def _run_azure_discovery(request: DiscoveryStartRequest) -> None:
             topologyJson=topology_json,
             progressLog=json.dumps(progress + ["Done."]),
         )
+
+        # Phase C: materialize stat-master records (best effort — never fail the job)
+        try:
+            count = rebuild_metrics(engagement_id)
+            logger.info("[job:%s] rebuilt %d stat-master record(s)", job_id, count)
+        except Exception:
+            logger.exception("[job:%s] stat-master rebuild failed", job_id)
 
     except Exception as exc:
         logger.exception("[job:%s] discovery failed", job_id)

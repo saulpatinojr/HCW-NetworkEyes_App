@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Technical Report — {{ engagement_id }}</title>
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #212121; margin: 3rem; }
+  h1 { font-size: 2rem; color: #004E3D; border-bottom: 3px solid #004E3D;
+       padding-bottom: 0.5rem; margin-bottom: 0.5rem; }
+  h2 { font-size: 1.3rem; color: #004E3D; margin-top: 2rem; margin-bottom: 0.75rem; }
+  h3 { font-size: 1rem; margin-top: 1.25rem; }
+  .meta { color: #757575; font-size: 0.85rem; margin-bottom: 2rem; }
+  table { border-collapse: collapse; width: 100%; margin-bottom: 1.5rem; }
+  th { background: #012638; color: white; padding: 0.5rem 1rem;
+       text-align: left; font-size: 0.85rem; }
+  td { padding: 0.5rem 1rem; border-bottom: 1px solid #E0E0E0; font-size: 0.85rem; }
+  .badge { color: white; padding: 0.15rem 0.5rem; border-radius: 4px;
+           font-size: 0.75rem; font-weight: 700; }
+  .badge-CRITICAL { background: #D32F2F; }
+  .badge-HIGH     { background: #FFAC00; color: #012638; }
+  .badge-MEDIUM   { background: #F9A825; color: #012638; }
+  .badge-LOW      { background: #757575; }
+  .finding-block  { border-left: 4px solid #E0E0E0; padding-left: 1rem;
+                    margin-bottom: 1.5rem; page-break-inside: avoid; }
+  .finding-block.CRITICAL { border-left-color: #D32F2F; }
+  .finding-block.HIGH     { border-left-color: #FFAC00; }
+  .fact { background: #F2F1ED; padding: 0.5rem 0.75rem; border-radius: 4px;
+          font-style: italic; font-size: 0.9rem; margin: 0.5rem 0; }
+  .rec-list { margin: 0.5rem 0 0 1rem; font-size: 0.9rem; }
+  .fw-list { margin: 0.25rem 0 0 1rem; font-size: 0.85rem; color: #424242; }
+  @page { size: A4; margin: 2cm; }
+  @media print { body { margin: 0; } }
+</style>
+</head>
+<body>
+<h1>Cloud Network Assessment — Technical Report</h1>
+<p class="meta">Engagement: {{ engagement_id }} &nbsp;|&nbsp; Generated: {{ generated_at }} &nbsp;|&nbsp; Schema: {{ schema_version }}</p>
+
+<h2>1. Findings Summary</h2>
+<table>
+  <tr><th>Severity</th><th>Count</th></tr>
+  <tr><td><span class="badge badge-CRITICAL">CRITICAL</span></td><td>{{ critical_count }}</td></tr>
+  <tr><td><span class="badge badge-HIGH">HIGH</span></td><td>{{ high_count }}</td></tr>
+  <tr><td><span class="badge badge-MEDIUM">MEDIUM</span></td><td>{{ medium_count }}</td></tr>
+  <tr><td><span class="badge badge-LOW">LOW</span></td><td>{{ low_count }}</td></tr>
+  <tr><td><strong>TOTAL</strong></td><td><strong>{{ total_count }}</strong></td></tr>
+</table>
+
+<h2>2. Discovery Coverage</h2>
+{% if aws_accounts %}
+<h3>AWS Accounts</h3>
+<table>
+  <tr><th>Account ID</th></tr>
+  {% for account in aws_accounts %}<tr><td>{{ account }}</td></tr>{% endfor %}
+</table>
+{% endif %}
+{% if azure_subscriptions %}
+<h3>Azure Subscriptions</h3>
+<table>
+  <tr><th>Subscription ID</th></tr>
+  {% for sub in azure_subscriptions %}<tr><td>{{ sub }}</td></tr>{% endfor %}
+</table>
+{% endif %}
+{% if not aws_accounts and not azure_subscriptions %}
+<p>No account or subscription coverage data available in this findings set.</p>
+{% endif %}
+
+<h2>3. Findings Detail</h2>
+{% for severity in ["CRITICAL", "HIGH", "MEDIUM", "LOW"] %}
+{% set group = findings_by_severity[severity] %}
+{% if group %}
+<h3>{{ severity }} — {{ group | length }} finding(s)</h3>
+{% for f in group %}
+<div class="finding-block {{ severity }}">
+  <h3><span class="badge badge-{{ severity }}">{{ severity }}</span> [{{ f.rule_id }}] {{ f.title }}</h3>
+  {% if f.description %}<p>{{ f.description }}</p>{% endif %}
+  <div class="fact">{{ f.observed_state.fact }}
+    {% if f.observed_state.evidence_ref %}<br><small>Evidence: {{ f.observed_state.evidence_ref }}</small>{% endif %}
+  </div>
+  <strong>Resource:</strong> {{ f.resource_id }} ({{ f.resource_type }})<br>
+  <strong>Account/Sub:</strong> {{ f.account_id }} | <strong>Region:</strong> {{ f.region }}
+  {% if f.framework_mappings %}
+  <ul class="fw-list">
+    {% for m in f.framework_mappings %}
+    <li>{{ m.framework }}{% if m.control_id %} — {{ m.control_id }}{% endif %}{% if m.control_name %}: {{ m.control_name }}{% endif %}{% if m.alignment %} ({{ m.alignment }}){% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if f.recommendations %}
+  <ul class="rec-list">
+    {% for r in f.recommendations %}
+    <li>{{ r.text }} <em>({{ r.source }})</em></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</div>
+{% endfor %}
+{% endif %}
+{% endfor %}
+
+<h2>Appendix — Full Finding Index</h2>
+<table>
+  <tr><th>Rule</th><th>Severity</th><th>Title</th><th>Resource</th><th>Region</th></tr>
+  {% for f in all_findings %}
+  <tr>
+    <td>{{ f.rule_id }}</td>
+    <td>{{ f.severity.value | upper }}</td>
+    <td>{{ f.title }}</td>
+    <td>{{ f.resource_id }}</td>
+    <td>{{ f.region }}</td>
+  </tr>
+  {% endfor %}
+</table>
+</body>
+</html>

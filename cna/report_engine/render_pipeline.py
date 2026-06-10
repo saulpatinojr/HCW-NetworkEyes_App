@@ -49,6 +49,8 @@ class RenderOptions:
     render_html_preview: bool = True
     render_regional_en: bool = True
     render_regional_ja: bool = False  # requires ja_review_complete=True
+    render_encyclopedia: bool = False  # six-chapter encyclopedia report (Phase D)
+    encyclopedia_edition: str = "expanded"  # "condensed" | "expanded"
     ja_review_complete: bool = False
     skip_pdf: bool = False  # HTML-only mode, no PDF toolchain required
     output_dir: Path | None = None  # defaults to store deliverables dir
@@ -172,6 +174,30 @@ class RenderPipeline:
                 )
             )
             logger.info("[%s] PPTX deck written: %s", engagement_id, pptx_path)
+
+        if self.opts.render_encyclopedia and not self.opts.skip_pdf:
+            from cna.report_engine.encyclopedia_report import EncyclopediaReportRenderer
+
+            edition = self.opts.encyclopedia_edition
+            renderer = EncyclopediaReportRenderer(edition=edition)
+            pdf_path = out / self._filename(f"encyclopedia_{edition}", "pdf")
+            renderer.render(
+                findings=report.findings,
+                output_path=pdf_path,
+                engagement={
+                    "engagement_id": report.engagement_id,
+                    "generated_at": report.generated_at,
+                },
+            )
+            self._manifest.add(
+                DeliverableRecord(
+                    label=f"Encyclopedia {edition.capitalize()} (PDF)",
+                    path=str(pdf_path),
+                    format="pdf",
+                    lang="en",
+                )
+            )
+            logger.info("[%s] Encyclopedia %s written: %s", engagement_id, edition, pdf_path)
 
         if self.opts.render_regional_en and not self.opts.skip_pdf:
             from cna.report_engine.regional_report import RegionalReportRenderer

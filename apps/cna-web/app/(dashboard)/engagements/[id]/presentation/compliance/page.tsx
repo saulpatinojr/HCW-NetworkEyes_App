@@ -6,9 +6,9 @@ import {
   getTopologyStats,
   SEV_COLORS,
   type Finding,
-  type MaturityDimension,
 } from "../_lib/metrics";
 import { getMergedTopology } from "../_lib/get-merged-topology";
+import { MaturityRadar } from "@/components/charts/maturity-radar";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -16,99 +16,6 @@ interface PageProps {
 
 const styleKey = "style";
 const makeStyle = (props: Record<string, string>) => ({ [styleKey]: props }) as any;
-
-// ── Maturity Radar SVG ─────────────────────────────────────────────────────────
-function RadarChart({ dims }: { dims: MaturityDimension[] }) {
-  const cx = 120, cy = 120, R = 88;
-  const n = dims.length;
-  const angleFor = (i: number) => (i * 2 * Math.PI) / n - Math.PI / 2;
-
-  const gridPts = (level: number) =>
-    dims
-      .map((_, i) => {
-        const rr = (level / 10) * R;
-        return `${cx + rr * Math.cos(angleFor(i))},${cy + rr * Math.sin(angleFor(i))}`;
-      })
-      .join(" ");
-
-  const dataPolygon = dims
-    .map((d, i) => {
-      const rr = (d.score / 10) * R;
-      return `${cx + rr * Math.cos(angleFor(i))},${cy + rr * Math.sin(angleFor(i))}`;
-    })
-    .join(" ");
-
-  const axes = dims.map((d, i) => ({
-    ax: cx + R * Math.cos(angleFor(i)),
-    ay: cy + R * Math.sin(angleFor(i)),
-    lx: cx + (R + 28) * Math.cos(angleFor(i)),
-    ly: cy + (R + 28) * Math.sin(angleFor(i)),
-    sx: cx + ((d.score / 10) * R * 0.5 + R * 0.1) * Math.cos(angleFor(i)) + cx * 0,
-    sy: cy + ((d.score / 10) * R * 0.5 + R * 0.1) * Math.sin(angleFor(i)) + cy * 0,
-    label: d.label,
-    score: d.score,
-  }));
-
-  return (
-    <svg role="img" aria-label="Maturity Radar Chart" viewBox="0 0 240 240" className="h-56 w-56">
-      {/* Grid rings */}
-      {[2, 4, 6, 8, 10].map((level) => (
-        <polygon
-          key={level}
-          points={gridPts(level)}
-          fill="none"
-          stroke="#1e2d3d"
-          strokeWidth={level === 10 ? 1 : 0.5}
-        />
-      ))}
-      {/* Axes */}
-      {axes.map((ax, i) => (
-        <line key={i} x1={cx} y1={cy} x2={ax.ax} y2={ax.ay} stroke="#1e2d3d" strokeWidth="0.75" />
-      ))}
-      {/* Data fill */}
-      <polygon
-        points={dataPolygon}
-        fill="rgba(20,184,166,0.2)"
-        stroke="#14b8a6"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-      {/* Score dots */}
-      {dims.map((d, i) => {
-        const rr = (d.score / 10) * R;
-        return (
-          <circle
-            key={i}
-            cx={cx + rr * Math.cos(angleFor(i))}
-            cy={cy + rr * Math.sin(angleFor(i))}
-            r="4"
-            fill="#14b8a6"
-          />
-        );
-      })}
-      {/* Axis labels */}
-      {axes.map((ax, i) => (
-        <text
-          key={i}
-          x={ax.lx}
-          y={ax.ly}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fontSize="8"
-          fontWeight="600"
-          fill="#94a3b8"
-          fontFamily="sans-serif"
-        >
-          {ax.label}
-        </text>
-      ))}
-      {/* Center label */}
-      <text x={cx} y={cy - 4} textAnchor="middle" fontSize="9" fill="#64748b" fontFamily="sans-serif">
-        Maturity
-      </text>
-    </svg>
-  );
-}
 
 // ── Framework mapping ──────────────────────────────────────────────────────────
 const FRAMEWORKS = [
@@ -190,7 +97,7 @@ export default async function CompliancePage({ params }: PageProps) {
       {/* ── Overall Score ── */}
       <div className="glass rounded-xl p-5">
         <div className="flex flex-col items-center gap-6 sm:flex-row">
-          <RadarChart dims={dims} />
+          <MaturityRadar dims={dims} size="lg" />
           <div className="flex-1 space-y-3">
             <div>
               <h2 className="label-caps text-navy-500">Overall Security Maturity</h2>

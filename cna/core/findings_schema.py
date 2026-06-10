@@ -79,6 +79,12 @@ class Finding(BaseModel):
     data_confidence: str = "HIGH"  # HIGH | MEDIUM | LOW
     recommendation_source: str | None = None  # MCP server reference URL (legacy)
     recommendation: str | None = None  # From MCP — not our opinion (legacy flat field)
+    # Traffic plane: "east_west" | "north_south" | "management" | "" (unclassified).
+    # Populated by cna.core.finding_taxonomy.classify_traffic_direction.
+    traffic_direction: str = ""
+    # Estimated monthly cost impact in USD (FinOps findings). Static-price
+    # estimate — must be marked [VERIFY] wherever it is rendered.
+    est_monthly_cost_usd: float | None = None
     human_reviewed: bool = False  # DD-009: must be True before report
     human_notes: str | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)

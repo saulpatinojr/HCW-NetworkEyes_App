@@ -100,6 +100,7 @@ model Engagement {
   deliverables     Deliverable[]
   cloudCredentials CloudCredential[]
   discoveryJobs    DiscoveryJob[]
+  metricRecords    MetricRecord[]
 }
 
 enum EngagementStatus {
@@ -159,6 +160,10 @@ model Finding {
   description  String         @db.Text
   recommendation String?      @db.Text
   aiGenerated  Boolean        @default(true)
+  trafficDirection String?    // east_west | north_south | management (finding taxonomy)
+  region       String?
+  resourceType String?
+  estCostImpact Float?        // estimated monthly cost impact (USD) — [VERIFY] estimate
   reviewedBy   String?        // userId of reviewer
   reviewedAt   DateTime?
   createdAt    DateTime       @default(now())
@@ -237,6 +242,36 @@ model DiscoveryJob {
   credential    CloudCredential?   @relation(fields: [credentialId], references: [id], onDelete: SetNull)
 }
 
+// ─── Stat Masters (Phase C) ───────────────────────────────────────────────────
+// Pre-aggregated fact rows built by cna/core/stat_masters.py via the cna-api
+// metrics router. One row per unique dimension tuple per engagement.
+
+model MetricRecord {
+  id           String   @id @default(cuid())
+  engagementId String
+
+  // Dimensions (nullable — "" / fallback labels normalized by the API)
+  trafficDirection String?
+  severity         String?
+  framework        String?
+  region           String?
+  subscriptionId   String?
+  resourceType     String?
+  category         String?
+  ruleId           String?
+
+  // Measures
+  findingCount         Int   @default(0)
+  resourceCount        Int   @default(0)
+  estMonthlyCostImpact Float @default(0) // USD — static-price [VERIFY] estimate
+
+  createdAt DateTime @default(now())
+
+  engagement Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+
+  @@index([engagementId])
+}
+
 // ─── Deliverables ─────────────────────────────────────────────────────────────
 
 model Deliverable {
@@ -261,4 +296,6 @@ enum DeliverableType {
   REMEDIATION_PLAN
   COMPREHENSIVE_ASSESSMENT
   INTERACTIVE_ASSESSMENT
+  ENCYCLOPEDIA_CONDENSED
+  ENCYCLOPEDIA_EXPANDED
 }

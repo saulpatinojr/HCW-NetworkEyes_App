@@ -64,6 +64,15 @@ const TYPE_LABELS: Record<string, string> = {
   TECHNICAL_FINDINGS: "Technical Findings",
   REMEDIATION_PLAN: "Remediation Plan",
   SPECIALIZATION_REPORT: "Specialization Report",
+  ENCYCLOPEDIA_CONDENSED: "Networking Encyclopedia (Condensed)",
+  ENCYCLOPEDIA_EXPANDED: "Networking Encyclopedia (Expanded)",
+};
+
+// Encyclopedia editions are rendered by the Python report engine via cna-api
+// (not the OpenAI deliverable prompts).
+const ENCYCLOPEDIA_EDITIONS: Record<string, "condensed" | "expanded"> = {
+  ENCYCLOPEDIA_CONDENSED: "condensed",
+  ENCYCLOPEDIA_EXPANDED: "expanded",
 };
 
 const ALL_TYPES: OpenAIDeliverableType[] = [
@@ -160,6 +169,44 @@ export async function generateDeliverable(
   const title = buildTitle(type, engagement.clientOrg, existingDeliverables.length + 1);
 
   let content: string;
+  if (type in ENCYCLOPEDIA_EDITIONS) {
+    const apiUrl = process.env.CNA_API_INTERNAL_URL;
+    if (!apiUrl) return { error: "Report API is not configured (CNA_API_INTERNAL_URL unset)." };
+    try {
+      const res = await fetch(`${apiUrl}/reports/${engagementId}/encyclopedia`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          edition: ENCYCLOPEDIA_EDITIONS[type],
+          client_org: engagement.clientOrg,
+          engagement_name: engagement.name,
+          generated_at: new Date().toISOString(),
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        console.error("[generateDeliverable][encyclopedia]", res.status, body.slice(0, 500));
+        return { error: `Encyclopedia generation failed (API error ${res.status}).` };
+      }
+      content = (await res.json()).content as string;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[generateDeliverable][encyclopedia][error]", err);
+      return { error: `Could not reach report API: ${msg}` };
+    }
+
+    const fileName = `${type.toLowerCase()}-${Date.now()}.html`;
+    const blobPath = await uploadDeliverable(engagementId, fileName, content);
+    await prisma.deliverable.create({
+      data: { engagementId, title, type: type as DeliverableType, blobPath, content },
+    });
+    await prisma.engagement.update({
+      where: { id: engagementId },
+      data: { status: "REVIEW" },
+    });
+    revalidatePath(`/engagements/${engagementId}`);
+    return { success: true };
+  }
   try {
     content = await generateDeliverableContent({
       type: type as OpenAIDeliverableType,

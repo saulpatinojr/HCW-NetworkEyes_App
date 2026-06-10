@@ -8,9 +8,12 @@ export default function SignInPage() {
         {/* Logo */}
         {/* W3C-01 / W3C-12: picture tag with prefers-color-scheme prevents duplicate downloads and CLS */}
         <picture>
-          <source srcSet="/cbts_dark.png" media="(prefers-color-scheme: dark)" />
+          <source
+            srcSet="/cbts-logo-bright-teal.svg"
+            media="(prefers-color-scheme: dark)"
+          />
           <img
-            src="/cbts_light.png"
+            src="/cbts-logo-dark-teal.svg"
             alt="CBTS"
             className="mb-6 h-9 w-auto"
             width={108}

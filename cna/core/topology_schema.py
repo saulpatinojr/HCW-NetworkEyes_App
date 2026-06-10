@@ -1,5 +1,12 @@
 """Topology data contracts — bridge between discovery (Phase C) and diagram engine (Phase B).
 
+Version 1.3.0 — Phase E discovery gap-fill.
+  Added Azure: AzureRouteServerBgpConnection, AzureRouteServer
+  Expanded: AzureSubscriptionTopology (route_servers),
+            ObservabilityData (metric_alert_count, activity_log_alert_count,
+            appgw_with_diagnostics/appgw_total, lb_with_diagnostics/lb_total)
+  All new fields are Optional with defaults so v1.2.x data remains valid.
+
 Version 1.2.0 — Comprehensive Azure network data expansion.
   Added Azure: NSGSecurityRule, AzureNSG, AzurePublicIP, AzureLBFrontendIP,
                AzureLBRule, AzureLoadBalancer, AzureGatewayConnection,
@@ -22,7 +29,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
-TOPOLOGY_SCHEMA_VERSION = "1.2.0"
+TOPOLOGY_SCHEMA_VERSION = "1.3.0"
 
 
 # ── Enums ──────────────────────────────────────────────────────────────────
@@ -609,6 +616,39 @@ class AzureBastionHost(BaseModel):
     tags: dict = Field(default_factory=dict)
 
 
+# ── NEW (v1.3.0): Azure Route Server ──────────────────────────────────────
+
+
+class AzureRouteServerBgpConnection(BaseModel):
+    """A BGP peering between an Azure Route Server and an NVA."""
+
+    id: str
+    name: str
+    peer_ip: str | None = None
+    peer_asn: int | None = None
+    provisioning_state: str = "Succeeded"
+    connection_state: str | None = None  # "Connected" | "NotConnected" | None
+
+
+class AzureRouteServer(BaseModel):
+    """Azure Route Server — a virtual hub with kind == 'RouteServer'."""
+
+    id: str
+    name: str
+    location: str
+    resource_group: str
+    # RouteServerSubnet that hosts the route server (embeds the VNet id)
+    hosted_subnet_id: str | None = None
+    vnet_id: str | None = None
+    virtual_router_asn: int | None = None
+    virtual_router_ips: list[str] = Field(default_factory=list)
+    allow_branch_to_branch_traffic: bool = False
+    hub_routing_preference: str | None = None  # "ExpressRoute" | "VpnGateway" | "ASPath"
+    bgp_connections: list[AzureRouteServerBgpConnection] = Field(default_factory=list)
+    provisioning_state: str = "Succeeded"
+    tags: dict = Field(default_factory=dict)
+
+
 # ── Core VNet / VNet models (expanded) ────────────────────────────────────
 
 
@@ -779,6 +819,14 @@ class ObservabilityData(BaseModel):
     # Firewalls: how many Azure Firewalls have a Log Analytics diagnostic sink
     firewalls_with_diagnostics: int = 0
     firewalls_total: int = 0
+    # v1.3.0 — per-resource-type diagnostic coverage for AppGW and LB
+    appgw_with_diagnostics: int = 0
+    appgw_total: int = 0
+    lb_with_diagnostics: int = 0
+    lb_total: int = 0
+    # v1.3.0 — Azure Monitor alert-rule coverage (subscription-wide counts)
+    metric_alert_count: int = 0
+    activity_log_alert_count: int = 0
 
 
 class GatewayMetric(BaseModel):
@@ -905,6 +953,7 @@ class AzureSubscriptionTopology(BaseModel):
     nat_gateways: list[AzureNatGateway] = Field(default_factory=list)
     bastion_hosts: list[AzureBastionHost] = Field(default_factory=list)
     virtual_wans: list[AzureVWan] = Field(default_factory=list)
+    route_servers: list[AzureRouteServer] = Field(default_factory=list)
     firewalls: list[AzureFirewall] = Field(default_factory=list)
     application_gateways: list[ApplicationGateway] = Field(default_factory=list)
     private_dns_zones: list[PrivateDnsZone] = Field(default_factory=list)

@@ -48,3 +48,9 @@ payload*.json
 # Terraform plan files — contain sensitive variable values
 *.tfplan
 tfplan
+
+# Local pip junk from broken system Python (used as local test env)
+/Lib/
+apps/cna-web/lib/site-packages/
+apps/cna-web/scripts/*.exe
+scripts/*.exe

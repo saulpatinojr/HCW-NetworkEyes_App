@@ -1,0 +1,83 @@
+<div class="chapter" id="ch1">
+<p class="kicker">Chapter 1</p>
+<h1>Executive Summary &amp; Maturity</h1>
+
+<p>
+  This assessment evaluated the cloud network estate of
+  {{ engagement.client_org or "the client organization" }} across
+  {{ topology_tables.subscriptions | length or "the in-scope" }} subscription(s)
+  and {{ topology_tables.vnet_count }} virtual network(s).
+  Discovery identified <strong>{{ total_count }} finding(s)</strong>:
+  {{ severity_counts.CRITICAL }} critical, {{ severity_counts.HIGH }} high,
+  {{ severity_counts.MEDIUM }} medium, and {{ severity_counts.LOW }} low severity.
+  {% if classification %}
+  The network topology was classified as
+  <strong>{{ classification.pattern | replace("_", "-") }}</strong> —
+  {{ classification.rationale }}
+  {% endif %}
+</p>
+
+{% if severity_counts.CRITICAL > 0 %}
+<div class="callout-critical">
+  <strong>{{ severity_counts.CRITICAL }} critical finding(s) require immediate attention.</strong>
+  Critical items expose the environment to direct compromise, outage, or
+  unbounded cost and are listed first in each chapter.
+</div>
+{% endif %}
+
+<div class="stat-row">
+  <span class="stat-card"><span class="value{{ " alert" if severity_counts.CRITICAL else "" }}">{{ severity_counts.CRITICAL }}</span><br><span class="label">Critical</span></span>
+  <span class="stat-card"><span class="value">{{ severity_counts.HIGH }}</span><br><span class="label">High</span></span>
+  <span class="stat-card"><span class="value">{{ total_count }}</span><br><span class="label">Total findings</span></span>
+  <span class="stat-card"><span class="value">${{ "%.0f" | format(total_est_monthly_cost) }}</span><br><span class="label">Est. monthly impact <span class="verify">[VERIFY]</span></span></span>
+</div>
+
+<h2>Network maturity radar</h2>
+<p>
+  Five maturity dimensions scored 0–100 from severity-weighted findings:
+  higher is better. Scores are deterministic and reproducible from the
+  findings inventory in this report.
+</p>
+<div class="radar-wrap">{{ radar_svg | safe }}</div>
+
+<h2>Findings by severity and traffic plane</h2>
+{% if severity_direction %}
+<table>
+  <tr><th>Traffic plane</th>{% for sev in severity_order %}<th>{{ sev }}</th>{% endfor %}</tr>
+  {% for direction, row in severity_direction.items() %}
+  <tr>
+    <td>{{ direction | replace("_", "-") }}</td>
+    {% for sev in severity_order %}<td>{{ row.get(sev, 0) }}</td>{% endfor %}
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<table>
+  <tr><th>Traffic plane</th>{% for sev in severity_order %}<th>{{ sev }}</th>{% endfor %}</tr>
+  {% for direction, items in findings_by_direction.items() %}
+  <tr>
+    <td>{{ direction | replace("_", "-") }}</td>
+    {% for sev in severity_order %}<td>{{ items | selectattr("severity", "equalto", sev) | list | length }}</td>{% endfor %}
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<h2>Top-priority findings</h2>
+{% if top_findings %}
+<table>
+  <tr><th>#</th><th>Severity</th><th>Rule</th><th>Finding</th><th>Plane</th></tr>
+  {% for f in top_findings[:(10 if is_condensed else 25)] %}
+  <tr>
+    <td>{{ loop.index }}</td>
+    <td><span class="badge badge-{{ f.severity }}">{{ f.severity }}</span></td>
+    <td>{{ f.rule_id }}</td>
+    <td>{{ f.title }}</td>
+    <td>{{ f.traffic_direction | replace("_", "-") }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p>No critical or high severity findings were identified.</p>
+{% endif %}
+</div>

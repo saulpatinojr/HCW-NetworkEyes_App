@@ -1,88 +1,109 @@
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   CBTS Design System  ·  Brand: Navy #0A1E3C  ·  Teal #3EC9B8
+   CBTS Design System · Official brand palette (Marketing Guidelines)
+   Navy #012638 · Dark Teal #004E3D · Bright Teal #00E9BB · Warm Gray #F2F1ED
+   Accent Orange #FFAC00 · Logo Teal #00FFD2 · Typeface: Aeonik
 ───────────────────────────────────────────────────────────────────────────── */
 
 @theme {
   /* Typography */
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-sans: "Aeonik", "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
 
-  /* CBTS Navy scale */
-  --color-navy-950: #030b17;
-  --color-navy-900: #06101e;
-  --color-navy-800: #0a1e3c;
-  --color-navy-700: #142d52;
-  --color-navy-600: #1a3a68;
-  --color-navy-500: #2a5298;
+  /* CBTS Navy scale — anchored on brand navy #012638 */
+  --color-navy-950: #000d14;
+  --color-navy-900: #011a26;
+  --color-navy-800: #012638;
+  --color-navy-700: #0a3a50;
+  --color-navy-600: #134e68;
+  --color-navy-500: #1f6a8a;
   --color-navy-400: var(--navy-400);
-  --color-navy-300: #6a93c8;
-  --color-navy-200: #a0bedd;
-  --color-navy-100: #d1e2f0;
-  --color-navy-50:  #eef4fb;
+  --color-navy-300: #5f93ad;
+  --color-navy-200: #9fc2d2;
+  --color-navy-100: #d3e5ec;
+  --color-navy-50:  #eef6fa;
 
-  /* CBTS Teal scale */
-  --color-teal-900: #0d4e46;
-  --color-teal-800: #1a7169;
-  --color-teal-700: #229186;
-  --color-teal-600: #2ba898;
-  --color-teal-500: #3ec9b8;   /* ← primary accent */
-  --color-teal-400: #5dd8c9;
-  --color-teal-300: #7be0d5;
-  --color-teal-200: #a8ece7;
-  --color-teal-100: #d4f6f2;
-  --color-teal-50:  #edfcfa;
+  /* CBTS Teal scale — dark teal #004E3D → bright teal #00E9BB */
+  --color-teal-900: #00332a;
+  --color-teal-800: #004e3d;
+  --color-teal-700: #00705c;
+  --color-teal-600: #00a385;
+  --color-teal-500: #00e9bb;   /* ← primary accent (brand bright teal) */
+  --color-teal-400: #33eec9;
+  --color-teal-300: #66f2d6;
+  --color-teal-200: #a3f7e3;
+  --color-teal-100: #d1fbf1;
+  --color-teal-50:  #e8fdf8;
+
+  /* CBTS Warm Gray scale — brand light #F2F1ED */
+  --color-warmgray-50:  #fbfaf8;
+  --color-warmgray-100: #f2f1ed;
+  --color-warmgray-200: #e5e3dc;
+  --color-warmgray-300: #d4d1c6;
+  --color-warmgray-400: #b3afa0;
+
+  /* CBTS Accent Orange — alerts / highlights */
+  --color-orange-600: #d99200;
+  --color-orange-500: #ffac00;
+  --color-orange-100: #fff1d1;
+
+  /* CBTS logo glow teal — decorative accents only (not text) */
+  --color-brand-glow: #00ffd2;
 }
 
 /* ── Design tokens — light mode ───────────────────────────────────────────── */
 
 :root {
-  --mesh-a: rgba(62, 201, 184, 0.18);
-  --mesh-b: rgba(10, 30, 60, 0.05);
+  --mesh-a: rgba(0, 233, 187, 0.16);
+  --mesh-b: rgba(1, 38, 56, 0.05);
 
   --glass-bg:          rgba(255, 255, 255, 0.72);
   --glass-fallback-bg: #ffffff;
   --glass-border:      rgba(255, 255, 255, 0.90);
-  --glass-shadow:      0 2px 20px rgba(10, 30, 60, 0.07), 0 1px 0 rgba(255, 255, 255, 0.65) inset;
-  --glass-shadow-md:   0 6px 32px rgba(10, 30, 60, 0.12), 0 1px 0 rgba(255, 255, 255, 0.85) inset;
-  --glass-shadow-lg:   0 12px 48px rgba(10, 30, 60, 0.16), 0 1px 0 rgba(255, 255, 255, 1.00) inset;
+  --glass-shadow:      0 2px 20px rgba(1, 38, 56, 0.07), 0 1px 0 rgba(255, 255, 255, 0.65) inset;
+  --glass-shadow-md:   0 6px 32px rgba(1, 38, 56, 0.12), 0 1px 0 rgba(255, 255, 255, 0.85) inset;
+  --glass-shadow-lg:   0 12px 48px rgba(1, 38, 56, 0.16), 0 1px 0 rgba(255, 255, 255, 1.00) inset;
 
   --header-bg:         rgba(255, 255, 255, 0.84);
-  --header-border:     rgba(10, 30, 60, 0.08);
+  --header-border:     rgba(1, 38, 56, 0.08);
 
-  --accent:            #3ec9b8;
-  --accent-hover:      #2ba898;
-  --accent-glow:       rgba(62, 201, 184, 0.32);
-  --accent-subtle:     rgba(62, 201, 184, 0.10);
-  --accent-subtle-border: rgba(62, 201, 184, 0.30);
+  --accent:            #00e9bb;
+  --accent-hover:      #00c9a2;
+  --accent-glow:       rgba(0, 233, 187, 0.32);
+  --accent-subtle:     rgba(0, 233, 187, 0.10);
+  --accent-subtle-border: rgba(0, 233, 187, 0.30);
+  /* WCAG-safe teal for text on light backgrounds (bright teal fails contrast) */
+  --accent-text:       #00604e;
 
   /* WAI-09: Contrast-compliant navy-400 for light mode */
-  --navy-400: #254b8c;
+  --navy-400: #1c5874;
 }
 
 /* ── Design tokens — dark mode ────────────────────────────────────────────── */
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --mesh-a: rgba(62, 201, 184, 0.09);
-    --mesh-b: rgba(62, 201, 184, 0.04);
+    --mesh-a: rgba(0, 233, 187, 0.09);
+    --mesh-b: rgba(0, 233, 187, 0.04);
 
     --glass-bg:          rgba(255, 255, 255, 0.055);
-    --glass-fallback-bg: #0a1e3c;
+    --glass-fallback-bg: #012638;
     --glass-border:      rgba(255, 255, 255, 0.11);
     --glass-shadow:      0 2px 20px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 255, 255, 0.06) inset;
     --glass-shadow-md:   0 6px 32px rgba(0, 0, 0, 0.58), 0 1px 0 rgba(255, 255, 255, 0.09) inset;
     --glass-shadow-lg:   0 12px 48px rgba(0, 0, 0, 0.70), 0 1px 0 rgba(255, 255, 255, 0.12) inset;
 
-    --header-bg:         rgba(6, 16, 30, 0.88);
+    --header-bg:         rgba(1, 26, 38, 0.88);
     --header-border:     rgba(255, 255, 255, 0.07);
 
     /* WAI-09: Contrast-compliant navy-400 for dark mode */
-    --navy-400: #79a2d6;
+    --navy-400: #7fb4cf;
 
-    --accent-subtle:     rgba(62, 201, 184, 0.12);
-    --accent-subtle-border: rgba(62, 201, 184, 0.25);
+    --accent-subtle:     rgba(0, 233, 187, 0.12);
+    --accent-subtle-border: rgba(0, 233, 187, 0.25);
+    /* Bright teal is contrast-safe as text on dark navy */
+    --accent-text:       #2ef0c8;
   }
 }
 
@@ -98,7 +119,7 @@
 }
 
 body {
-  background-color: #eef4fb;
+  background-color: #f2f1ed;
   background-image:
     radial-gradient(ellipse 80% 55% at 16% 62%, var(--mesh-a) 0%, transparent 62%),
     radial-gradient(ellipse 55% 45% at 84% 8%,  var(--mesh-b) 0%, transparent 55%),
@@ -108,7 +129,7 @@ body {
 
 @media (prefers-color-scheme: dark) {
   body {
-    background-color: #06101e;
+    background-color: #011a26;
   }
 }
 
@@ -176,7 +197,7 @@ body {
   gap:             0.375rem;
   padding:         0.5rem 1.25rem;
   background:      var(--accent);
-  color:           #0a1e3c;
+  color:           #012638;
   font-weight:     700;
   font-size:       0.875rem;
   border-radius:   0.625rem;
@@ -204,7 +225,7 @@ body {
 .pill-teal {
   background:    var(--accent-subtle);
   border:        1px solid var(--accent-subtle-border);
-  color:         var(--accent-hover);
+  color:         var(--accent-text);
   border-radius: 9999px;
   font-weight:   600;
   font-size:     0.7rem;
@@ -216,7 +237,7 @@ body {
 
 .nav-active {
   background:   var(--accent-subtle);
-  color:        var(--accent-hover);
+  color:        var(--accent-text);
   border-left:  2px solid var(--accent);
   padding-left: calc(0.5rem - 2px);
 }
@@ -249,6 +270,26 @@ body {
 ::-webkit-scrollbar-track        { background: transparent; }
 ::-webkit-scrollbar-thumb        { background: var(--accent); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover  { background: var(--accent-hover); }
+
+/* ── Print / Book Mode (Phase F) ──────────────────────────────────────────── */
+
+.page-break { break-after: page; }
+
+@media print {
+  /* Hide app chrome so only page content prints (sidebar, header, toolbars) */
+  header,
+  aside { display: none !important; }
+
+  body { background: white !important; }
+
+  /* Flatten glass panels for paper */
+  .glass {
+    background: white !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    border: 1px solid #d6d3cd !important;
+  }
+}
 
 /* WAI-10: Global focus-visible baseline — ensures ALL interactive elements have
    a visible keyboard focus indicator. Component-level focus-visible rings take

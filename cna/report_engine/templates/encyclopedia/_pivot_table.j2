@@ -1,0 +1,15 @@
+{# Generic pivot table. Expects in the enclosing context:
+     pivot_title   — heading string (optional)
+     pivot_columns — list of column header strings
+     pivot_rows    — list of cell-value lists (already formatted) #}
+{% if pivot_title %}<h3>{{ pivot_title }}</h3>{% endif %}
+{% if pivot_rows %}
+<table>
+  <tr>{% for col in pivot_columns %}<th>{{ col }}</th>{% endfor %}</tr>
+  {% for row in pivot_rows %}
+  <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">No data available for this table.</p>
+{% endif %}

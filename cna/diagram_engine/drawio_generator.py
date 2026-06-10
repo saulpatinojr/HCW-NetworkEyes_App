@@ -11,6 +11,7 @@ Supported diagram types:
   - vwan_topology      : Azure Virtual WAN hub-and-spoke
   - account_hierarchy  : AWS org tree (Mermaid, see mermaid_generator.py)
   - mg_hierarchy       : Azure management group tree (Mermaid)
+  - future_state       : Recommended future-state topology (Phase E)
 
 Export pipeline:
   XML string -> .drawio file -> export_pipeline.py -> .svg -> .png -> .pdf
@@ -25,11 +26,18 @@ import uuid
 from cna.core.topology_schema import (
     AWSRegionTopology,
     AzureSubscriptionTopology,
+    AzureTopology,
     AzureVWan,
     SubnetType,
     TransitGateway,
 )
+from cna.diagram_engine.future_state import (
+    FutureStateModel,
+    FutureStateNode,
+    build_future_state,
+)
 from cna.diagram_engine.shape_catalog import shape_style
+from cna.modules.network.analysis.topology_classifier import TopologyClassification
 
 # ── Draw.io style constants ─────────────────────────────────────────────────
 #
@@ -85,7 +93,34 @@ STYLE_VWAN_HUB = shape_style(
     "shape=mxgraph.azure2.virtual_hub;"
     "fillColor=#0078D4;strokeColor=#ffffff;fontStyle=1;fontSize=10;",
 )
+STYLE_FIREWALL = shape_style(
+    "azure2",
+    "firewall",
+    "shape=mxgraph.azure2.firewalls;"
+    "fillColor=#0078D4;strokeColor=#ffffff;fontStyle=1;fontSize=10;",
+)
+STYLE_VNET_GATEWAY = shape_style(
+    "azure2",
+    "vnet_gateway",
+    "shape=mxgraph.azure2.virtual_network_gateways;"
+    "fillColor=#0078D4;strokeColor=#ffffff;fontStyle=1;fontSize=10;",
+)
+STYLE_ROUTE_SERVER = shape_style(
+    "azure2",
+    "route_server",
+    "shape=mxgraph.azure2.virtual_router;"
+    "fillColor=#0078D4;strokeColor=#ffffff;fontStyle=1;fontSize=10;",
+)
 STYLE_EDGE = "edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=0.5;"
+
+# Phase E: net-new (recommended) resources in future-state diagrams get a
+# dashed bright-teal border (CBTS accent #00E9BB) and a "(recommended)" suffix.
+RECOMMENDED_SUFFIX = " (recommended)"
+
+
+def _recommended_style(style: str) -> str:
+    """Overlay the dashed bright-teal 'recommended' treatment on any style."""
+    return style + "dashed=1;dashPattern=6 4;strokeColor=#00E9BB;strokeWidth=2;"
 
 SUBNET_STYLES: dict[SubnetType, str] = {
     SubnetType.PUBLIC: STYLE_SUBNET_PUBLIC,
@@ -465,4 +500,150 @@ def generate_vwan_topology(vwan: AzureVWan) -> str:
             cells += _edge_cell(hub_id, vnet_spoke_id)
 
     label = f"vWAN Topology — {vwan.name}"
+    return _wrap_diagram(cells, label)
+
+
+# ── Future-State Topology (Phase E) ────────────────────────────────────────
+
+_FUTURE_COMPONENT_STYLES: dict[str, str] = {
+    "firewall": STYLE_FIREWALL,
+    "gateway": STYLE_VNET_GATEWAY,
+    "route_server": STYLE_ROUTE_SERVER,
+}
+
+_FUTURE_HUB_W = 520
+_FUTURE_HUB_H = 160
+_FUTURE_HUB_GAP = 80
+_FUTURE_SPOKE_Y_GAP = 120
+_FUTURE_SPOKES_PER_ROW = 5
+
+
+def _future_node_style(node: FutureStateNode, base_style: str) -> str:
+    return _recommended_style(base_style) if node.is_new else base_style
+
+
+def _future_node_label(node: FutureStateNode) -> str:
+    label = node.name + (f"\n{node.location}" if node.location else "")
+    return label + (RECOMMENDED_SUFFIX if node.is_new else "")
+
+
+def generate_future_state_topology(
+    topology: AzureTopology,
+    classification: TopologyClassification,
+    future: FutureStateModel | None = None,
+) -> str:
+    """Generate draw.io XML for the recommended future-state topology.
+
+    Args:
+        topology: Discovered AzureTopology checkpoint.
+        classification: Output of classify_topology(topology).
+        future: Pre-built future-state model; built from the inputs when None.
+
+    Returns:
+        draw.io XML string. Net-new (recommended) resources are rendered with
+        a dashed bright-teal border and a "(recommended)" label suffix.
+    """
+    if future is None:
+        future = build_future_state(topology, classification)
+
+    cells = ""
+    hub_style_base = STYLE_VWAN_HUB if future.target_pattern == "vwan" else STYLE_VNET
+
+    if not future.hubs and not future.spokes:
+        note_id = _cell_id()
+        cells += _container_cell(
+            note_id,
+            "No VNets discovered — no future-state topology to model.",
+            40,
+            80,
+            420,
+            60,
+            "text;html=1;strokeColor=none;fillColor=#ffe6cc;align=center;",
+        )
+        return _wrap_diagram(cells, "Future State Topology (empty)")
+
+    # Hubs in a row at the top, components laid out inside each hub container
+    hub_cell_ids: list[str] = []
+    cursor_x = 40
+    for hub in future.hubs:
+        hub_id = _cell_id()
+        hub_cell_ids.append(hub_id)
+        cells += _container_cell(
+            hub_id,
+            _future_node_label(hub),
+            cursor_x,
+            VPC_Y_START,
+            _FUTURE_HUB_W,
+            _FUTURE_HUB_H,
+            _future_node_style(hub, hub_style_base),
+        )
+        # Components named after a specific hub (e.g. secured-hub firewalls)
+        # land in that hub; everything else lands in the first hub.
+        comps = []
+        for c in future.hub_components:
+            named_hub = next((h for h in future.hubs if h.name in c.name), None)
+            target = named_hub or future.hubs[0]
+            if target is hub:
+                comps.append(c)
+        comp_x = SUBNET_PADDING
+        comp_y = VPC_HEADER_H + SUBNET_PADDING
+        for comp in comps:
+            comp_id = _cell_id()
+            base = _FUTURE_COMPONENT_STYLES.get(comp.kind, STYLE_SUBNET_UNKNOWN)
+            cells += _child_cell(
+                comp_id,
+                _future_node_label(comp),
+                comp_x,
+                comp_y,
+                ICON_W * 2,
+                ICON_H + 24,
+                _future_node_style(comp, base),
+                hub_id,
+            )
+            comp_x += ICON_W * 2 + SUBNET_COL_GAP * 2
+        cursor_x += _FUTURE_HUB_W + _FUTURE_HUB_GAP
+
+    # Spokes in a grid below the hub row, each peered to the nearest hub
+    spoke_y_start = VPC_Y_START + _FUTURE_HUB_H + _FUTURE_SPOKE_Y_GAP
+    for idx, spoke in enumerate(future.spokes):
+        col = idx % _FUTURE_SPOKES_PER_ROW
+        row = idx // _FUTURE_SPOKES_PER_ROW
+        sx = 40 + col * (SUBNET_W + SUBNET_COL_GAP * 2)
+        sy = spoke_y_start + row * (SUBNET_H + SUBNET_ROW_GAP * 2)
+        spoke_id = _cell_id()
+        cells += _container_cell(
+            spoke_id,
+            _future_node_label(spoke),
+            sx,
+            sy,
+            SUBNET_W,
+            SUBNET_H,
+            _future_node_style(spoke, STYLE_VNET),
+        )
+        if hub_cell_ids:
+            hub_cell = hub_cell_ids[idx % len(hub_cell_ids)]
+            edge_label = "peering" + (RECOMMENDED_SUFFIX if spoke.is_new or future.hubs[idx % len(future.hubs)].is_new else "")
+            cells += _edge_cell(hub_cell, spoke_id, edge_label)
+
+    # Change list as a side legend so the diagram is self-explanatory
+    legend_x = 40
+    legend_y = spoke_y_start + (
+        (max(1, -(-len(future.spokes) // _FUTURE_SPOKES_PER_ROW)))
+        * (SUBNET_H + SUBNET_ROW_GAP * 2)
+    ) + 60
+    for change in future.changes:
+        note_id = _cell_id()
+        cells += _container_cell(
+            note_id,
+            f"→ {change.title}",
+            legend_x,
+            legend_y,
+            420,
+            36,
+            "rounded=1;whiteSpace=wrap;html=1;fillColor=none;"
+            "dashed=1;dashPattern=6 4;strokeColor=#00E9BB;fontSize=10;align=left;spacingLeft=8;",
+        )
+        legend_y += 46
+
+    label = f"Future State Topology — {future.target_pattern}"
     return _wrap_diagram(cells, label)

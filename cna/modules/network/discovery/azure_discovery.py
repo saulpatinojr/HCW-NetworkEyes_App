@@ -18,6 +18,11 @@ API coverage (v1.2.0):
        Load Balancers (rules + probes), Public IPs (association info),
        Private Endpoints (DNS zone groups), NAT Gateways, Bastion Hosts
   Management API: Management Group tree from tenant root
+
+API coverage additions (v1.3.0):
+  ARM: Route Servers (virtual hubs with kind=RouteServer + BGP connections)
+  Monitor API: metric alert + activity log alert counts,
+       diagnostic-settings coverage for Gateways / AppGWs / Load Balancers
 """
 
 from __future__ import annotations
@@ -50,6 +55,8 @@ from cna.core.topology_schema import (
     AzurePrivateEndpointConnection,
     AzurePublicIP,
     AzureRouteEntry,
+    AzureRouteServer,
+    AzureRouteServerBgpConnection,
     AzureRouteTable,
     AzureSubnet,
     AzureSubscriptionTopology,
@@ -385,6 +392,7 @@ class AzureDiscovery:
         _run("nat_gateways", self._collect_nat_gateways, net, sub_id)
         _run("vnets", self._collect_vnets, net, sub_id)
         _run("virtual_wans", self._collect_vwans, net, sub_id)
+        _run("route_servers", self._collect_route_servers, net, sub_id)
         _run("firewalls", self._collect_firewalls, net, sub_id)
         _run("application_gateways", self._collect_appgws, net, sub_id)
         _run("load_balancers", self._collect_load_balancers, net, sub_id)
@@ -432,6 +440,9 @@ class AzureDiscovery:
                 len(topo.nsgs),
                 firewalls=topo.firewalls,
                 bastion_hosts=topo.bastion_hosts,
+                gateways=topo.virtual_network_gateways,
+                appgws=topo.application_gateways,
+                load_balancers=topo.load_balancers,
             )
             obs = topo.observability
             self._progress(
@@ -1197,6 +1208,62 @@ class AzureDiscovery:
             )
         return vwans
 
+    # ------------------------------------------------------------------ Route Servers
+
+    def _collect_route_servers(self, net, sub_id: str) -> list[AzureRouteServer]:
+        """Azure Route Servers are virtual hubs with kind == 'RouteServer'."""
+        route_servers = []
+        for hub in _safe_list(net.virtual_hubs.list()):
+            if str(getattr(hub, "kind", "") or "").lower() != "routeserver":
+                continue
+            rg = _rg_from_id(hub.id)
+            # The RouteServerSubnet is exposed via the hub's IP configurations
+            hosted_subnet_id = None
+            for ipc in _safe_list(net.virtual_hub_ip_configuration.list(rg, hub.name)):
+                subnet = getattr(ipc, "subnet", None)
+                if subnet is not None and getattr(subnet, "id", None):
+                    hosted_subnet_id = subnet.id
+                    break
+            vnet_id = (
+                hosted_subnet_id.rsplit("/subnets/", 1)[0] if hosted_subnet_id else None
+            )
+            bgp_connections = []
+            for conn in _safe_list(net.virtual_hub_bgp_connections.list(rg, hub.name)):
+                bgp_connections.append(
+                    AzureRouteServerBgpConnection(
+                        id=conn.id or "",
+                        name=conn.name or "unknown",
+                        peer_ip=getattr(conn, "peer_ip", None),
+                        peer_asn=getattr(conn, "peer_asn", None),
+                        provisioning_state=str(
+                            getattr(conn, "provisioning_state", None) or "Succeeded"
+                        ),
+                        connection_state=getattr(conn, "connection_state", None),
+                    )
+                )
+            route_servers.append(
+                AzureRouteServer(
+                    id=hub.id,
+                    name=hub.name,
+                    location=hub.location or "",
+                    resource_group=rg,
+                    hosted_subnet_id=hosted_subnet_id,
+                    vnet_id=vnet_id,
+                    virtual_router_asn=getattr(hub, "virtual_router_asn", None),
+                    virtual_router_ips=list(getattr(hub, "virtual_router_ips", None) or []),
+                    allow_branch_to_branch_traffic=bool(
+                        getattr(hub, "allow_branch_to_branch_traffic", False)
+                    ),
+                    hub_routing_preference=getattr(hub, "hub_routing_preference", None),
+                    bgp_connections=bgp_connections,
+                    provisioning_state=str(
+                        getattr(hub, "provisioning_state", None) or "Succeeded"
+                    ),
+                    tags=dict(hub.tags or {}),
+                )
+            )
+        return route_servers
+
     # ------------------------------------------------------------------ Firewalls
 
     def _collect_firewalls(self, net, sub_id: str) -> list[AzureFirewall]:
@@ -1619,9 +1686,13 @@ class AzureDiscovery:
         nsg_count: int,
         firewalls: list | None = None,
         bastion_hosts: list | None = None,
+        gateways: list | None = None,
+        appgws: list | None = None,
+        load_balancers: list | None = None,
     ) -> ObservabilityData:
         """Collect Network Watcher, Log Analytics, flow log, Traffic Analytics,
-        Bastion, and Firewall diagnostic settings data."""
+        diagnostic-settings coverage (Firewall, Bastion, Gateway, AppGW, LB),
+        and Azure Monitor alert-rule counts."""
         obs = ObservabilityData(nsg_flow_logs_total=nsg_count)
 
         # Network Watcher presence per region
@@ -1715,6 +1786,38 @@ class AzureDiscovery:
             obs.bastion_total += 1
             if _has_la_diagnostic(bh.id):
                 obs.bastion_with_diagnostics += 1
+
+        # v1.3.0 — generalized diagnostic-settings coverage for gateways,
+        # Application Gateways, and Load Balancers (same LA-sink check).
+        for gw in gateways or []:
+            obs.gateways_total += 1
+            if _has_la_diagnostic(gw.id):
+                obs.gateways_with_diagnostics += 1
+
+        for agw in appgws or []:
+            obs.appgw_total += 1
+            if _has_la_diagnostic(agw.id):
+                obs.appgw_with_diagnostics += 1
+
+        for lb in load_balancers or []:
+            obs.lb_total += 1
+            if _has_la_diagnostic(lb.id):
+                obs.lb_with_diagnostics += 1
+
+        # v1.3.0 — Azure Monitor alert-rule coverage (metric alerts +
+        # activity log alerts). Degrades gracefully on missing permissions.
+        try:
+            from azure.mgmt.monitor import MonitorManagementClient
+
+            mon = MonitorManagementClient(self._credential, sub_id)
+            obs.metric_alert_count = len(_safe_list(mon.metric_alerts.list_by_subscription()))
+            obs.activity_log_alert_count = len(
+                _safe_list(mon.activity_log_alerts.list_by_subscription_id())
+            )
+        except ImportError:
+            logger.warning("azure-mgmt-monitor not installed — alert-rule counts skipped")
+        except Exception as e:
+            logger.warning("[%s] Alert-rule enumeration failed: %s", sub_id, e)
 
         return obs
 

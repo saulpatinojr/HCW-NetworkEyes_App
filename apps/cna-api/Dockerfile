@@ -26,6 +26,8 @@ RUN pip install --no-cache-dir \
     "azure-mgmt-loganalytics>=13.0" \
     "azure-mgmt-compute>=30.0" \
     "tenacity>=8.4" \
+    "jinja2>=3.1" \
+    "httpx>=0.27" \
     "click>=8.1" \
     "rich>=13.7"
 

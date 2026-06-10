@@ -35,6 +35,29 @@ export default async function DiagramPage({ params }: PageProps) {
       <section className="glass p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-navy-100">Diagram Workspace</h2>
+          {/* Current / Future state toggle.
+              TODO(Phase E follow-up): the future-state .drawio XML is produced by
+              cna/diagram_engine/drawio_generator.py:generate_future_state_topology
+              during assessment-report generation (worker), but this page only embeds
+              a blank diagrams.net editor — there is no data flow that loads generated
+              XML into the iframe yet. Once generated diagrams are persisted as
+              engagement documents/deliverables and loadable here, enable this toggle
+              and swap the iframe content between current- and future-state XML. */}
+          <div
+            className="inline-flex overflow-hidden rounded-lg border border-navy-700/40 text-xs font-semibold"
+            role="group"
+            aria-label="Diagram state"
+          >
+            <span className="bg-teal-900/30 px-3 py-2 text-teal-300">Current state</span>
+            <button
+              type="button"
+              disabled
+              title="Generated with the assessment report"
+              className="cursor-not-allowed px-3 py-2 text-navy-500"
+            >
+              Future state
+            </button>
+          </div>
           <a
             href="https://app.diagrams.net/"
             target="_blank"

@@ -12,5 +12,6 @@
   "public_ip": "shape=mxgraph.azure2.public_ip_addresses;fillColor=#0078D4;strokeColor=#ffffff;fontStyle=1;fontSize=10;",
   "expressroute": "shape=mxgraph.azure2.expressroute_circuits;fillColor=#0078D4;strokeColor=#ffffff;fontStyle=1;fontSize=10;",
   "application_gateway": "shape=mxgraph.azure2.application_gateways;fillColor=#0078D4;strokeColor=#ffffff;fontStyle=1;fontSize=10;",
-  "route_table": "shape=mxgraph.azure2.route_tables;fillColor=#0078D4;strokeColor=#ffffff;fontStyle=1;fontSize=10;"
+  "route_table": "shape=mxgraph.azure2.route_tables;fillColor=#0078D4;strokeColor=#ffffff;fontStyle=1;fontSize=10;",
+  "route_server": "shape=mxgraph.azure2.virtual_router;fillColor=#0078D4;strokeColor=#ffffff;fontStyle=1;fontSize=10;"
 }
