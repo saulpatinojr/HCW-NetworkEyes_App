@@ -5,7 +5,7 @@ DD-003: recommendation sourced from MCP servers, not custom prompts.
 """
 
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
@@ -87,7 +87,7 @@ class Finding(BaseModel):
     est_monthly_cost_usd: float | None = None
     human_reviewed: bool = False  # DD-009: must be True before report
     human_notes: str | None = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     version: str = FINDINGS_SCHEMA_VERSION
 
 

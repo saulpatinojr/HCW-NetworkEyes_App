@@ -1,6 +1,6 @@
 """Engagement model — central state for an assessment engagement."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
 
@@ -21,7 +21,7 @@ class EngagementConfig(BaseModel):
     client_name: str
     client_slug: str
     regions: list[str]
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     engagement_end_date: str | None = None
     inventory: EnvironmentInventory | None = None
     modules_installed: list[str] = Field(default_factory=list)
