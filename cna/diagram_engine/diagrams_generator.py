@@ -31,8 +31,8 @@ def _diagrams_available() -> bool:
 
 def _render_aws_vpc_cluster(vpc, igw_nodes: dict, nat_nodes: dict) -> None:
     from diagrams import Edge
-    from diagrams.aws.network import InternetGateway, NATGateway
     from diagrams.aws.network import VPC as SubnetNode
+    from diagrams.aws.network import InternetGateway, NATGateway
 
     for igw in vpc.internet_gateways:
         igw_node = InternetGateway(igw.name or igw.id)
@@ -82,8 +82,8 @@ def generate_aws_vpc_diagram(
         )
         return None
 
-    from diagrams import Cluster, Diagram, Edge
-    from diagrams.aws.network import DirectConnect, InternetGateway, NATGateway, TransitGateway
+    from diagrams import Cluster, Diagram
+    from diagrams.aws.network import DirectConnect, TransitGateway
 
     output_path.mkdir(parents=True, exist_ok=True)
     safe_region = region_topology.region.replace("-", "_")

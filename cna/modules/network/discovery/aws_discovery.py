@@ -707,7 +707,7 @@ class AWSDiscovery:
         self,
         account,
         role_name: str,
-        topology: "AWSTopology",
+        topology: AWSTopology,
         engagement_id: str,
     ) -> None:
         """Discover all regions in a single account and append to topology."""

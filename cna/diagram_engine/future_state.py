@@ -27,8 +27,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-_MIN_MULTI_REGION_COUNT = 2
-
 from cna.core.topology_schema import (
     AzureFirewall,
     AzureRouteServer,
@@ -38,6 +36,8 @@ from cna.core.topology_schema import (
     VNet,
 )
 from cna.modules.network.analysis.topology_classifier import TopologyClassification
+
+_MIN_MULTI_REGION_COUNT = 2
 
 # ── Models ─────────────────────────────────────────────────────────────────
 
