@@ -182,13 +182,19 @@ export async function generateDeliverable(
           engagement_name: engagement.name,
           generated_at: new Date().toISOString(),
         }),
+        cache: "no-store",
+        signal: AbortSignal.timeout(90_000),
       });
       if (!res.ok) {
         const body = await res.text();
         console.error("[generateDeliverable][encyclopedia]", res.status, body.slice(0, 500));
         return { error: `Encyclopedia generation failed (API error ${res.status}).` };
       }
-      content = (await res.json()).content as string;
+      const json = (await res.json().catch(() => null)) as { content?: unknown } | null;
+      if (!json || typeof json.content !== "string") {
+        return { error: "Encyclopedia generation failed (invalid API response)." };
+      }
+      content = json.content
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error("[generateDeliverable][encyclopedia][error]", err);
