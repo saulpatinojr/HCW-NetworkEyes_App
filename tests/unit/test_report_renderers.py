@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 import pytest
@@ -53,7 +53,7 @@ def _make_report(findings=None) -> FindingsReport:
         high_count=sum(1 for f in findings if f.severity == "high"),
         medium_count=sum(1 for f in findings if f.severity == "medium"),
         low_count=sum(1 for f in findings if f.severity == "low"),
-        generated_at=datetime.utcnow().isoformat(),
+        generated_at=datetime.now(timezone.utc).isoformat(),
     )
 
 

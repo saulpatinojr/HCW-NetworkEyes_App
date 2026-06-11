@@ -47,12 +47,12 @@ jobs:
       IMAGE_NAME: ${{ github.repository_owner }}/cna
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       # AWS OIDC — no long-lived keys
       - name: Configure AWS credentials (OIDC)
         if: inputs.cloud == 'aws'
-        uses: aws-actions/configure-aws-credentials@v6
+        uses: aws-actions/configure-aws-credentials@633526dcc9c26211a4282d6d8de3d8b5cb7ad07b # v6
         with:
           role-to-assume: ${{ secrets.CNA_AWS_ROLE_ARN }}
           aws-region: us-east-1
@@ -60,32 +60,39 @@ jobs:
       # Azure OIDC — uses same AZURE_* secrets as all other workflows
       - name: Configure Azure credentials (OIDC)
         if: inputs.cloud == 'azure'
-        uses: azure/login@v3
+        uses: azure/login@2dd0bbf4064d5a1812889dc200bb8eed2597f82a # v3.0.0
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Log in to GHCR
-        uses: docker/login-action@v4
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Pull CNA image
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
         run: |
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }}
+          docker pull "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG"
 
       - name: Run cna publish
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          ENGAGEMENT_ID: ${{ inputs.engagement_id }}
+          CLOUD: ${{ inputs.cloud }}
+          PUBLISH_BUCKET: ${{ secrets.CNA_PUBLISH_BUCKET }}
         run: |
           docker run --rm \
             -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN \
             -e AZURE_CLIENT_ID -e AZURE_TENANT_ID -e AZURE_SUBSCRIPTION_ID \
-            -v ${{ github.workspace }}/engagements:/app/engagements:ro \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }} \
+            -v "${{ github.workspace }}/engagements:/app/engagements:ro" \
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG" \
             publish run \
-              --engagement-id ${{ inputs.engagement_id }} \
-              --cloud ${{ inputs.cloud }} \
-              --bucket ${{ secrets.CNA_PUBLISH_BUCKET }} \
+              --engagement-id "$ENGAGEMENT_ID" \
+              --cloud "$CLOUD" \
+              --bucket "$PUBLISH_BUCKET" \
               --ttl-hours 168

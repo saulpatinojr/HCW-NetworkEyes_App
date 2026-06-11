@@ -57,7 +57,7 @@ jobs:
           fi
 
       - name: Azure login with OIDC
-        uses: azure/login@v3
+        uses: azure/login@2dd0bbf4064d5a1812889dc200bb8eed2597f82a # v3.0.0
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -65,9 +65,12 @@ jobs:
 
       - name: Derive Container App names from environment
         id: names
+        env:
+          INPUT_ENV: ${{ inputs.environment }}
+          INPUT_REGION: ${{ inputs.region_short }}
         run: |
           # Name prefix matches locals.tf: "${var.project_name}-${var.environment}-${var.region_short}"
-          PREFIX="cna-${{ inputs.environment }}-${{ inputs.region_short }}"
+          PREFIX="cna-${INPUT_ENV}-${INPUT_REGION}"
           echo "api_app=ca-${PREFIX}-api"       >> "$GITHUB_OUTPUT"
           echo "worker_app=ca-${PREFIX}-worker" >> "$GITHUB_OUTPUT"
           echo "web_app=ca-${PREFIX}-web"       >> "$GITHUB_OUTPUT"
@@ -75,27 +78,33 @@ jobs:
 
       - name: Update cna-api image
         if: inputs.api_image != ''
+        env:
+          API_IMAGE: ${{ inputs.api_image }}
         run: |
           az containerapp update \
             --name "${{ steps.names.outputs.api_app }}" \
             --resource-group "${{ steps.names.outputs.resource_group }}" \
-            --image "${{ inputs.api_image }}"
+            --image "$API_IMAGE"
 
       - name: Update cna-worker image
         if: inputs.worker_image != ''
+        env:
+          WORKER_IMAGE: ${{ inputs.worker_image }}
         run: |
           az containerapp update \
             --name "${{ steps.names.outputs.worker_app }}" \
             --resource-group "${{ steps.names.outputs.resource_group }}" \
-            --image "${{ inputs.worker_image }}"
+            --image "$WORKER_IMAGE"
 
       - name: Update cna-web image
         if: inputs.web_image != ''
+        env:
+          WEB_IMAGE: ${{ inputs.web_image }}
         run: |
           az containerapp update \
             --name "${{ steps.names.outputs.web_app }}" \
             --resource-group "${{ steps.names.outputs.resource_group }}" \
-            --image "${{ inputs.web_image }}"
+            --image "$WEB_IMAGE"
 
       - name: Verify cna-web health after update
         if: inputs.web_image != ''
