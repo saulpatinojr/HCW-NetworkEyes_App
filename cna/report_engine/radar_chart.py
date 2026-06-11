@@ -67,7 +67,7 @@ def radar_chart_svg(
         )
 
     # Axes + labels
-    for (label, _), angle in zip(dimensions, angles):
+    for (label, _), angle in zip(dimensions, angles, strict=True):
         ax, ay = _point(cx, cy, angle, radius)
         parts.append(
             f'<line x1="{cx:.1f}" y1="{cy:.1f}" x2="{ax:.1f}" y2="{ay:.1f}" '
@@ -88,7 +88,7 @@ def radar_chart_svg(
     # Score polygon
     score_coords = [
         _point(cx, cy, angle, radius * max(0.0, min(100.0, float(score))) / 100.0)
-        for (_, score), angle in zip(dimensions, angles)
+        for (_, score), angle in zip(dimensions, angles, strict=True)
     ]
     score_pts = " ".join(f"{x:.1f},{y:.1f}" for x, y in score_coords)
     parts.append(
@@ -97,7 +97,7 @@ def radar_chart_svg(
     )
 
     # Vertex dots + score values
-    for ((_, score), (x, y)) in zip(dimensions, score_coords):
+    for (_, score), (x, y) in zip(dimensions, score_coords, strict=True):
         parts.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="4" fill="{_DARK_TEAL}"/>')
         parts.append(
             f'<text x="{x:.1f}" y="{y - 9:.1f}" text-anchor="middle" font-size="11" '

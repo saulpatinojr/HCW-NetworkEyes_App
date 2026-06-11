@@ -96,8 +96,7 @@ STYLE_VWAN_HUB = shape_style(
 STYLE_FIREWALL = shape_style(
     "azure2",
     "firewall",
-    "shape=mxgraph.azure2.firewalls;"
-    "fillColor=#0078D4;strokeColor=#ffffff;fontStyle=1;fontSize=10;",
+    "shape=mxgraph.azure2.firewalls;fillColor=#0078D4;strokeColor=#ffffff;fontStyle=1;fontSize=10;",
 )
 STYLE_VNET_GATEWAY = shape_style(
     "azure2",
@@ -121,6 +120,7 @@ RECOMMENDED_SUFFIX = " (recommended)"
 def _recommended_style(style: str) -> str:
     """Overlay the dashed bright-teal 'recommended' treatment on any style."""
     return style + "dashed=1;dashPattern=6 4;strokeColor=#00E9BB;strokeWidth=2;"
+
 
 SUBNET_STYLES: dict[SubnetType, str] = {
     SubnetType.PUBLIC: STYLE_SUBNET_PUBLIC,
@@ -622,15 +622,23 @@ def generate_future_state_topology(
         )
         if hub_cell_ids:
             hub_cell = hub_cell_ids[idx % len(hub_cell_ids)]
-            edge_label = "peering" + (RECOMMENDED_SUFFIX if spoke.is_new or future.hubs[idx % len(future.hubs)].is_new else "")
+            edge_label = "peering" + (
+                RECOMMENDED_SUFFIX
+                if spoke.is_new or future.hubs[idx % len(future.hubs)].is_new
+                else ""
+            )
             cells += _edge_cell(hub_cell, spoke_id, edge_label)
 
     # Change list as a side legend so the diagram is self-explanatory
     legend_x = 40
-    legend_y = spoke_y_start + (
-        (max(1, -(-len(future.spokes) // _FUTURE_SPOKES_PER_ROW)))
-        * (SUBNET_H + SUBNET_ROW_GAP * 2)
-    ) + 60
+    legend_y = (
+        spoke_y_start
+        + (
+            (max(1, -(-len(future.spokes) // _FUTURE_SPOKES_PER_ROW)))
+            * (SUBNET_H + SUBNET_ROW_GAP * 2)
+        )
+        + 60
+    )
     for change in future.changes:
         note_id = _cell_id()
         cells += _container_cell(

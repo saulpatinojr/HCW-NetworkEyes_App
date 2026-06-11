@@ -76,9 +76,7 @@ def _finding(
         description=description,
         observed_state=ObservedState(fact=fact, evidence_ref=evidence_ref),
         framework_mappings=list(_BCDR_FRAMEWORK),
-        recommendations=[
-            FindingRecommendation(source="CNA Platform", text=recommendation)
-        ],
+        recommendations=[FindingRecommendation(source="CNA Platform", text=recommendation)],
         recommendation=recommendation,
         traffic_direction=classify_traffic_direction(rule_id, "BC/DR", resource_type),
         status=FindingStatus.OPEN,
@@ -121,9 +119,7 @@ def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
             )
         )
 
-    er_gateways = [
-        gw for gw in sub.virtual_network_gateways if gw.gateway_type == "ExpressRoute"
-    ]
+    er_gateways = [gw for gw in sub.virtual_network_gateways if gw.gateway_type == "ExpressRoute"]
 
     for gw in sub.virtual_network_gateways:
         # AZ-BCDR-002: VPN gateway active-passive
@@ -137,10 +133,7 @@ def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
                     resource_id=gw.id,
                     resource_type="Microsoft.Network/virtualNetworkGateways",
                     title=f"VPN gateway '{gw.name}' runs in active-passive mode",
-                    fact=(
-                        f"VPN gateway {gw.name} (SKU: {gw.sku_name}) has "
-                        f"active_active=False."
-                    ),
+                    fact=(f"VPN gateway {gw.name} (SKU: {gw.sku_name}) has active_active=False."),
                     evidence_ref=(
                         f"discovery:azure_{sub_id}"
                         f".virtual_network_gateways[id={gw.id}].active_active"
@@ -174,8 +167,7 @@ def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
                         f"is deployed in {len(gw.zones)} availability zone(s)."
                     ),
                     evidence_ref=(
-                        f"discovery:azure_{sub_id}"
-                        f".virtual_network_gateways[id={gw.id}].zones"
+                        f"discovery:azure_{sub_id}.virtual_network_gateways[id={gw.id}].zones"
                     ),
                     recommendation=(
                         "Migrate to an AZ SKU (e.g. VpnGw2AZ / ErGw2AZ) deployed "
@@ -201,8 +193,7 @@ def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
                 resource_id=gw.id,
                 resource_type="Microsoft.Network/virtualNetworkGateways",
                 title=(
-                    f"Single ExpressRoute gateway '{gw.name}' terminates all "
-                    f"circuit connectivity"
+                    f"Single ExpressRoute gateway '{gw.name}' terminates all circuit connectivity"
                 ),
                 fact=(
                     f"Subscription {sub_id} has "
@@ -211,8 +202,7 @@ def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
                     f"({gw.name}, SKU: {gw.sku_name})."
                 ),
                 evidence_ref=(
-                    f"discovery:azure_{sub_id}.virtual_network_gateways"
-                    f"[gateway_type=ExpressRoute]"
+                    f"discovery:azure_{sub_id}.virtual_network_gateways[gateway_type=ExpressRoute]"
                 ),
                 recommendation=(
                     "Deploy a second ExpressRoute gateway in another region (or a "

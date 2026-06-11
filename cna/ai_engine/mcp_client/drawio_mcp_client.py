@@ -32,9 +32,7 @@ logger = logging.getLogger("cna.mcp.drawio")
 # apps/cna-web/scripts/filter-shape-index.mjs when switching libraries.
 ALLOWED_LIBS: frozenset[str] = frozenset({"azure2", "aws4"})
 
-_DEFAULT_URL = os.getenv(
-    "CNA_DRAWIO_MCP_URL", "http://localhost:3000/api/drawio-mcp"
-).rstrip("/")
+_DEFAULT_URL = os.getenv("CNA_DRAWIO_MCP_URL", "http://localhost:3000/api/drawio-mcp").rstrip("/")
 _DEFAULT_TIMEOUT = float(os.getenv("CNA_DRAWIO_MCP_TIMEOUT", "5"))
 
 _STYLE_PREFIX_RE = re.compile(r"shape=mxgraph\.([a-z0-9]+)\.", re.IGNORECASE)
@@ -90,9 +88,7 @@ class DrawioMCPClient:
         for raw in raw_hits:
             style = str(raw.get("style", ""))
             if not _is_allowed_style(style):
-                logger.warning(
-                    "drawio MCP returned disallowed style; dropped (style=%s)", style
-                )
+                logger.warning("drawio MCP returned disallowed style; dropped (style=%s)", style)
                 continue
             hits.append(
                 ShapeHit(

@@ -163,9 +163,7 @@ _MANAGEMENT_RESOURCE_HINTS: tuple[str, ...] = (
 )
 
 
-def classify_traffic_direction(
-    rule_id: str, category: str = "", resource_type: str = ""
-) -> str:
+def classify_traffic_direction(rule_id: str, category: str = "", resource_type: str = "") -> str:
     """Classify a finding into a traffic-direction plane.
 
     Resolution order: rule_id (exact match) → category (case-insensitive)

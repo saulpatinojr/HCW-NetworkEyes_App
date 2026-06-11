@@ -84,17 +84,13 @@ def classify_topology(topology: AzureTopology) -> TopologyClassification:
             ),
         )
 
-    hub_ids = [
-        v.id for v in vnets if _is_hub(v, gateway_vnet_ids, firewall_subnet_ids)
-    ]
+    hub_ids = [v.id for v in vnets if _is_hub(v, gateway_vnet_ids, firewall_subnet_ids)]
     hub_id_set = set(hub_ids)
     spoke_ids = [
         v.id
         for v in vnets
         if v.id not in hub_id_set
-        and any(
-            p.use_remote_gateways or p.remote_vnet_id in hub_id_set for p in v.peerings
-        )
+        and any(p.use_remote_gateways or p.remote_vnet_id in hub_id_set for p in v.peerings)
     ]
 
     if hub_ids and spoke_ids:

@@ -1224,9 +1224,7 @@ class AzureDiscovery:
                 if subnet is not None and getattr(subnet, "id", None):
                     hosted_subnet_id = subnet.id
                     break
-            vnet_id = (
-                hosted_subnet_id.rsplit("/subnets/", 1)[0] if hosted_subnet_id else None
-            )
+            vnet_id = hosted_subnet_id.rsplit("/subnets/", 1)[0] if hosted_subnet_id else None
             bgp_connections = []
             for conn in _safe_list(net.virtual_hub_bgp_connections.list(rg, hub.name)):
                 bgp_connections.append(
@@ -1256,9 +1254,7 @@ class AzureDiscovery:
                     ),
                     hub_routing_preference=getattr(hub, "hub_routing_preference", None),
                     bgp_connections=bgp_connections,
-                    provisioning_state=str(
-                        getattr(hub, "provisioning_state", None) or "Succeeded"
-                    ),
+                    provisioning_state=str(getattr(hub, "provisioning_state", None) or "Succeeded"),
                     tags=dict(hub.tags or {}),
                 )
             )

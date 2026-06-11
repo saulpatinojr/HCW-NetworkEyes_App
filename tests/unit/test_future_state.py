@@ -4,7 +4,6 @@ import xml.etree.ElementTree as ET
 
 from cna.core.topology_schema import (
     AzureRouteServer,
-    AzureSubnet,
     AzureSubscriptionTopology,
     AzureTopology,
     AzureVHub,
@@ -23,7 +22,9 @@ from cna.modules.network.analysis import classify_topology
 SUB = "00000000-0000-0000-0000-000000000001"
 
 
-def _vnet(name: str, peerings: list[VNetPeering] | None = None, subnets=None, location="eastus") -> VNet:
+def _vnet(
+    name: str, peerings: list[VNetPeering] | None = None, subnets=None, location="eastus"
+) -> VNet:
     return VNet(
         id=f"/subscriptions/{SUB}/resourceGroups/rg/providers/Microsoft.Network/virtualNetworks/{name}",
         name=name,
@@ -224,9 +225,7 @@ def test_future_state_xml_marks_recommended_resources():
 
 
 def test_future_state_xml_handles_empty_topology():
-    topology = _topology(
-        [AzureSubscriptionTopology(subscription_id=SUB, tenant_id="tenant")]
-    )
+    topology = _topology([AzureSubscriptionTopology(subscription_id=SUB, tenant_id="tenant")])
     classification = classify_topology(topology)
     xml = generate_future_state_topology(topology, classification)
     ET.fromstring(xml)  # noqa: S314

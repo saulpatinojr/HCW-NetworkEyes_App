@@ -8,21 +8,21 @@ SUB = "00000000-0000-0000-0000-000000000001"
 
 
 def _model_finding(**overrides) -> Finding:
-    base = dict(
-        rule_id="AZ-COST-001",
-        severity="low",
-        platform="azure",
-        region="eastus",
-        category="FinOps",
-        title="Orphaned Public IP",
-        resource_id="pip-1",
-        resource_type="Microsoft.Network/publicIPAddresses",
-        account_id=SUB,
-        observed_state=ObservedState(fact="observed", evidence_ref="ref"),
-        traffic_direction="north_south",
-        est_monthly_cost_usd=3.65,
-        framework_mappings=[FrameworkMapping(framework="FinOps Framework")],
-    )
+    base = {
+        "rule_id": "AZ-COST-001",
+        "severity": "low",
+        "platform": "azure",
+        "region": "eastus",
+        "category": "FinOps",
+        "title": "Orphaned Public IP",
+        "resource_id": "pip-1",
+        "resource_type": "Microsoft.Network/publicIPAddresses",
+        "account_id": SUB,
+        "observed_state": ObservedState(fact="observed", evidence_ref="ref"),
+        "traffic_direction": "north_south",
+        "est_monthly_cost_usd": 3.65,
+        "framework_mappings": [FrameworkMapping(framework="FinOps Framework")],
+    }
     base.update(overrides)
     return Finding(**base)
 

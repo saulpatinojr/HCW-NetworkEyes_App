@@ -82,11 +82,18 @@ def normalize_finding(finding: Finding | dict) -> dict:
         frameworks: list[dict] = []
         fw = _get(finding, "framework")
         if fw:
-            frameworks = [{"framework": str(fw), "control_id": None, "control_name": None, "alignment": None}]
+            frameworks = [
+                {"framework": str(fw), "control_id": None, "control_name": None, "alignment": None}
+            ]
         recommendations: list[dict] = []
         rec = _get(finding, "recommendation")
         if rec:
-            recommendations = [{"text": str(rec), "source": str(_get(finding, "recommendation_source") or "CNA Platform")}]
+            recommendations = [
+                {
+                    "text": str(rec),
+                    "source": str(_get(finding, "recommendation_source") or "CNA Platform"),
+                }
+            ]
     else:
         fact = finding.observed_state.fact
         evidence = finding.observed_state.evidence_ref
@@ -101,7 +108,12 @@ def normalize_finding(finding: Finding | dict) -> dict:
         ]
         recommendations = [{"text": r.text, "source": r.source} for r in finding.recommendations]
         if not recommendations and finding.recommendation:
-            recommendations = [{"text": finding.recommendation, "source": finding.recommendation_source or "CNA Platform"}]
+            recommendations = [
+                {
+                    "text": finding.recommendation,
+                    "source": finding.recommendation_source or "CNA Platform",
+                }
+            ]
 
     title = str(_get(finding, "title") or "")
     rule_id = str(_get(finding, "rule_id", "ruleId") or "")
@@ -133,7 +145,9 @@ def normalize_finding(finding: Finding | dict) -> dict:
         "evidence": evidence,
         "resource_id": str(_get(finding, "resource_id", "resourceId") or ""),
         "resource_type": resource_type,
-        "account_id": str(_get(finding, "account_id", "subscription_id", "subscriptionId", "credentialId") or ""),
+        "account_id": str(
+            _get(finding, "account_id", "subscription_id", "subscriptionId", "credentialId") or ""
+        ),
         "region": str(_get(finding, "region") or ""),
         "category": category,
         "traffic_direction": direction or "unclassified",
@@ -229,7 +243,8 @@ def _topology_tables(topology: Any | None) -> dict:
                 tables["peerings"].append(
                     {
                         "vnet": vnet.name,
-                        "remote": peering.remote_vnet_name or peering.remote_vnet_id.rsplit("/", 1)[-1],
+                        "remote": peering.remote_vnet_name
+                        or peering.remote_vnet_id.rsplit("/", 1)[-1],
                         "state": peering.peering_state,
                         "gateway_transit": peering.allow_gateway_transit,
                         "use_remote_gateways": peering.use_remote_gateways,
@@ -402,7 +417,7 @@ def build_encyclopedia_context(  # noqa: PLR0913 — one optional input per data
     if topology is not None and classification is not None and future_state is None:
         future_state = build_future_state(topology, classification)
 
-    severity_counts = {sev: 0 for sev in _SEVERITY_ORDER}
+    severity_counts = dict.fromkeys(_SEVERITY_ORDER, 0)
     for f in normalized:
         severity_counts[f["severity"]] = severity_counts.get(f["severity"], 0) + 1
 
@@ -414,25 +429,25 @@ def build_encyclopedia_context(  # noqa: PLR0913 — one optional input per data
     }
     for f in normalized:
         by_direction.setdefault(f["traffic_direction"], by_direction["unclassified"])
-        by_direction[f["traffic_direction"] if f["traffic_direction"] in by_direction else "unclassified"].append(f)
+        by_direction[
+            f["traffic_direction"] if f["traffic_direction"] in by_direction else "unclassified"
+        ].append(f)
 
     sev_rank = {sev: i for i, sev in enumerate(_SEVERITY_ORDER)}
 
     def _sorted(items: list[dict]) -> list[dict]:
-        return sorted(items, key=lambda f: (sev_rank.get(f["severity"], 99), f["rule_id"], f["title"]))
+        return sorted(
+            items, key=lambda f: (sev_rank.get(f["severity"], 99), f["rule_id"], f["title"])
+        )
 
     cost_findings = _sorted([f for f in normalized if f["rule_id"].startswith("AZ-COST-")])
     bcdr_findings = _sorted([f for f in normalized if f["rule_id"].startswith("AZ-BCDR-")])
     top_findings = _sorted([f for f in normalized if f["severity"] in ("CRITICAL", "HIGH")])
-    total_est_cost = round(
-        sum(f["est_monthly_cost_usd"] or 0.0 for f in normalized), 2
-    )
+    total_est_cost = round(sum(f["est_monthly_cost_usd"] or 0.0 for f in normalized), 2)
 
     # Stat-master pivots (cost matrix + severity × direction)
     stat_records = stat_bundle.records if stat_bundle else []
-    cost_matrix = [
-        r for r in stat_records if r.est_monthly_cost_impact > 0
-    ]
+    cost_matrix = [r for r in stat_records if r.est_monthly_cost_impact > 0]
     severity_direction: dict[str, dict[str, int]] = {}
     for r in stat_records:
         row = severity_direction.setdefault(r.traffic_direction, {})
@@ -459,7 +474,11 @@ def build_encyclopedia_context(  # noqa: PLR0913 — one optional input per data
         "findings_by_direction": {k: _sorted(v) for k, v in by_direction.items()},
         "east_west_findings": _sorted(by_direction["east_west"]),
         "north_south_findings": _sorted(
-            [f for f in by_direction["north_south"] if not f["rule_id"].startswith(("AZ-COST-", "AZ-BCDR-"))]
+            [
+                f
+                for f in by_direction["north_south"]
+                if not f["rule_id"].startswith(("AZ-COST-", "AZ-BCDR-"))
+            ]
         ),
         "management_findings": _sorted(by_direction["management"]),
         "cost_findings": cost_findings,
@@ -507,11 +526,7 @@ class EncyclopediaReportRenderer:
         future_diagram_svg: str | None = None,
     ) -> str:
         """Render the encyclopedia to an HTML string (no file I/O)."""
-        if (
-            topology is not None
-            and current_diagram_svg is None
-            and future_diagram_svg is None
-        ):
+        if topology is not None and current_diagram_svg is None and future_diagram_svg is None:
             cls = classification or classify_topology(topology)
             current_diagram_svg, future_diagram_svg = generate_diagram_svgs(
                 topology, cls, future_state

@@ -141,8 +141,6 @@ def test_blocked_subscription_produces_no_findings():
         subscription_id=SUB,
         tenant_id="tenant",
         discovery_blocked=True,
-        public_ips=[
-            AzurePublicIP(id="pip-1", name="pip", location="eastus", resource_group="rg")
-        ],
+        public_ips=[AzurePublicIP(id="pip-1", name="pip", location="eastus", resource_group="rg")],
     )
     assert generate_finops_findings(_topology(sub)) == []

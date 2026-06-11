@@ -39,8 +39,9 @@ from cna.modules.network.discovery.azure_discovery import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("cna-api")
 
-from routers.chat import router as chat_router  # noqa: E402
-from routers.metrics import rebuild_metrics, router as metrics_router  # noqa: E402
+from routers.chat import router as chat_router  # noqa: E402, I001
+from routers.metrics import rebuild_metrics  # noqa: E402
+from routers.metrics import router as metrics_router  # noqa: E402
 from routers.reports import router as reports_router  # noqa: E402
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "")

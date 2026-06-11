@@ -194,9 +194,7 @@ def build_grounding_context(
         title = str(f.get("title") or "")
         rule_id = str(f.get("rule_id") or f.get("ruleId") or "")
         if not rule_id:
-            match = _RULE_ID_RE.search(title) or _RULE_ID_RE.search(
-                str(f.get("description") or "")
-            )
+            match = _RULE_ID_RE.search(title) or _RULE_ID_RE.search(str(f.get("description") or ""))
             rule_id = match.group(1) if match else ""
         cost = f.get("est_monthly_cost_usd") or f.get("estCostImpact")
         grounded.append(
@@ -426,9 +424,7 @@ class GroundedChatAgent:
         if choices and isinstance(choices[0].get("message", {}).get("content"), str):
             return choices[0]["message"]["content"]
         return "\n".join(
-            part.get("text", "")
-            for part in (data.get("content") or [])
-            if part.get("text")
+            part.get("text", "") for part in (data.get("content") or []) if part.get("text")
         )
 
     # --------------------------------------------------------- azure openai
@@ -446,18 +442,14 @@ class GroundedChatAgent:
         endpoint = _clean(os.environ.get("AZURE_OPENAI_ENDPOINT"))
         if not endpoint:
             raise ChatConfigError("AZURE_OPENAI_ENDPOINT is not set")
-        deployment = (
-            _clean(os.environ.get("AZURE_OPENAI_DEPLOYMENT")) or DEFAULT_AZURE_DEPLOYMENT
-        )
+        deployment = _clean(os.environ.get("AZURE_OPENAI_DEPLOYMENT")) or DEFAULT_AZURE_DEPLOYMENT
         api_version = (
             _clean(os.environ.get("AZURE_OPENAI_API_VERSION")) or DEFAULT_AZURE_API_VERSION
         )
 
         from azure.identity import DefaultAzureCredential
 
-        token = DefaultAzureCredential().get_token(
-            "https://cognitiveservices.azure.com/.default"
-        )
+        token = DefaultAzureCredential().get_token("https://cognitiveservices.azure.com/.default")
 
         url = (
             f"{endpoint.rstrip('/')}/openai/deployments/{deployment}"

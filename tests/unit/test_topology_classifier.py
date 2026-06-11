@@ -60,9 +60,7 @@ def test_hub_spoke_from_gateway_transit():
         peerings=[_peering("spoke-to-hub", hub.id, use_remote_gateways=True)],
     )
     hub.peerings = [_peering("hub-to-spoke", spoke.id, allow_gateway_transit=True)]
-    sub = AzureSubscriptionTopology(
-        subscription_id=SUB, tenant_id="tenant", vnets=[hub, spoke]
-    )
+    sub = AzureSubscriptionTopology(subscription_id=SUB, tenant_id="tenant", vnets=[hub, spoke])
     result = classify_topology(_topology([sub]))
     assert result.pattern == "hub_spoke"
     assert hub.id in result.hub_vnet_ids

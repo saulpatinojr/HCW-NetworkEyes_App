@@ -83,9 +83,7 @@ def _finding(
         description=description,
         observed_state=ObservedState(fact=fact, evidence_ref=evidence_ref),
         framework_mappings=list(_FINOPS_FRAMEWORK),
-        recommendations=[
-            FindingRecommendation(source="CNA Platform", text=recommendation)
-        ],
+        recommendations=[FindingRecommendation(source="CNA Platform", text=recommendation)],
         recommendation=recommendation,
         traffic_direction=classify_traffic_direction(rule_id, "FinOps", resource_type),
         est_monthly_cost_usd=est_monthly_cost_usd,
@@ -123,8 +121,7 @@ def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
                     f"any resource."
                 ),
                 evidence_ref=(
-                    f"discovery:azure_{sub_id}.public_ips[id={pip.id}]"
-                    f".associated_resource_type"
+                    f"discovery:azure_{sub_id}.public_ips[id={pip.id}].associated_resource_type"
                 ),
                 recommendation=(
                     "Delete the unassociated public IP if no longer needed, or "
@@ -133,8 +130,7 @@ def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
                 ),
                 est_monthly_cost_usd=monthly,
                 description=(
-                    f"Public IP '{pip.name}' is billed while unattached. "
-                    f"{_verify(monthly)}."
+                    f"Public IP '{pip.name}' is billed while unattached. {_verify(monthly)}."
                 ),
             )
         )
@@ -160,8 +156,7 @@ def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
                         resource_id=gw.id,
                         resource_type="Microsoft.Network/virtualNetworkGateways",
                         title=(
-                            f"Gateway '{gm.gateway_name}' billed but moved zero "
-                            f"traffic in 24 hours"
+                            f"Gateway '{gm.gateway_name}' billed but moved zero traffic in 24 hours"
                         ),
                         fact=(
                             f"{gm.gateway_type} gateway {gm.gateway_name} "
@@ -197,11 +192,7 @@ def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
                 if smaller:
                     current_cost = prices.vpn_gateway_monthly(sku)
                     smaller_cost = prices.vpn_gateway_monthly(smaller)
-                    saving = (
-                        current_cost - smaller_cost
-                        if current_cost and smaller_cost
-                        else None
-                    )
+                    saving = current_cost - smaller_cost if current_cost and smaller_cost else None
                     findings.append(
                         _finding(
                             rule_id=R_AZ_COST_OVERSIZED_GATEWAY,
@@ -233,7 +224,7 @@ def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
                             est_monthly_cost_usd=saving,
                             description=(
                                 f"Downsizing {sku} → {smaller} would reduce spend. "
-                                f"{('Estimated monthly saving: ~$%.2f USD [VERIFY]' % saving) if saving else 'Saving depends on SKU pricing [VERIFY]'}."
+                                f"{f'Estimated monthly saving: ~${saving:.2f} USD [VERIFY]' if saving else 'Saving depends on SKU pricing [VERIFY]'}."
                             ),
                         )
                     )
@@ -266,8 +257,7 @@ def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
                     resource_id=fw.id if fw else fm.firewall_name,
                     resource_type="Microsoft.Network/azureFirewalls",
                     title=(
-                        f"Azure Firewall '{fm.firewall_name}' billed while "
-                        f"processing zero traffic"
+                        f"Azure Firewall '{fm.firewall_name}' billed while processing zero traffic"
                     ),
                     fact=(
                         f"Azure Firewall {fm.firewall_name} ({tier} tier) recorded "
@@ -316,8 +306,7 @@ def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
                     f"traffic through it."
                 ),
                 evidence_ref=(
-                    f"discovery:azure_{sub_id}.nat_gateways[id={nat.id}]"
-                    f".associated_subnet_ids"
+                    f"discovery:azure_{sub_id}.nat_gateways[id={nat.id}].associated_subnet_ids"
                 ),
                 recommendation=(
                     "Associate the NAT gateway with the subnets that need "

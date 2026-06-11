@@ -124,9 +124,7 @@ def _load_topology_classification(engagement_id: str) -> tuple[str | None, str |
         from cna.core.topology_schema import AzureTopology
         from cna.modules.network.analysis.topology_classifier import classify_topology
 
-        classification = classify_topology(
-            AzureTopology.model_validate_json(row["topologyJson"])
-        )
+        classification = classify_topology(AzureTopology.model_validate_json(row["topologyJson"]))
         return classification.pattern, classification.rationale
     except Exception as exc:  # noqa: BLE001 — grounding metadata only, never fatal
         logger.warning("topology classify failed for %s: %s", engagement_id, exc)
@@ -180,9 +178,7 @@ def chat(engagement_id: str, request: ChatRequest) -> dict:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 — surface upstream failures as 502
         logger.exception("chat completion failed for %s", engagement_id)
-        raise HTTPException(
-            status_code=502, detail=f"AI engine request failed: {exc}"
-        ) from exc
+        raise HTTPException(status_code=502, detail=f"AI engine request failed: {exc}") from exc
 
     return {
         "answer": result.text,

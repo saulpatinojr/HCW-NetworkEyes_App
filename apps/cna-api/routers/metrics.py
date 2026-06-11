@@ -120,9 +120,7 @@ def rebuild_metrics(engagement_id: str) -> int:
     now = datetime.now(UTC)
     with _get_db() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                'DELETE FROM "MetricRecord" WHERE "engagementId" = %s', (engagement_id,)
-            )
+            cur.execute('DELETE FROM "MetricRecord" WHERE "engagementId" = %s', (engagement_id,))
             if bundle.records:
                 psycopg2.extras.execute_values(
                     cur,

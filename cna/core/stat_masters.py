@@ -125,9 +125,7 @@ def _dimensions_from_dict(finding: dict) -> tuple[str, ...]:
 
 def _cost_of(finding: Finding | dict) -> float:
     if isinstance(finding, dict):
-        value = _dict_get(
-            finding, "est_monthly_cost_usd", "est_cost_impact", "estCostImpact"
-        )
+        value = _dict_get(finding, "est_monthly_cost_usd", "est_cost_impact", "estCostImpact")
     else:
         value = finding.est_monthly_cost_usd
     try:

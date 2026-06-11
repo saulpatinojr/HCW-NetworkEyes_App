@@ -219,9 +219,7 @@ def _build_hub_spoke_refinements(
 
     for gw in gateways:
         components.append(
-            FutureStateNode(
-                id=gw.id, name=gw.name, kind="gateway", location=gw.location
-            )
+            FutureStateNode(id=gw.id, name=gw.name, kind="gateway", location=gw.location)
         )
 
     if not route_servers:
@@ -244,9 +242,7 @@ def _build_hub_spoke_refinements(
                     "VNet enables dynamic BGP route exchange between gateways, "
                     "NVAs, and spokes, eliminating static UDR maintenance."
                 ),
-                prerequisites=[
-                    "Dedicated RouteServerSubnet (/27) available in the hub VNet"
-                ],
+                prerequisites=["Dedicated RouteServerSubnet (/27) available in the hub VNet"],
                 affected_resources=list(classification.hub_vnet_ids),
             )
         )
@@ -307,10 +303,7 @@ def _build_vwan_refinements(
     classification: TopologyClassification,
 ) -> FutureStateModel:
     """vwan → secured-hub and routing-intent refinements."""
-    hubs = [
-        FutureStateNode(id=h.id, name=h.name, kind="vhub", location=h.location)
-        for h in vhubs
-    ]
+    hubs = [FutureStateNode(id=h.id, name=h.name, kind="vhub", location=h.location) for h in vhubs]
     spoke_id_set = set(classification.spoke_vnet_ids)
     spokes = [_vnet_node(v, "spoke_vnet") for v in vnets if v.id in spoke_id_set]
     components: list[FutureStateNode] = []

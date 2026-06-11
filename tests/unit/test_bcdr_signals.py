@@ -14,9 +14,7 @@ SUB = "00000000-0000-0000-0000-000000000001"
 
 
 def _topology(*subs: AzureSubscriptionTopology) -> AzureTopology:
-    return AzureTopology(
-        engagement_id="ENG-001", tenant_id="tenant", subscriptions=list(subs)
-    )
+    return AzureTopology(engagement_id="ENG-001", tenant_id="tenant", subscriptions=list(subs))
 
 
 def _vnet(name: str) -> VNet:

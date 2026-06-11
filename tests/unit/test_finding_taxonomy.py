@@ -41,9 +41,7 @@ def test_category_fallback():
 
 def test_resource_type_fallback():
     assert (
-        classify_traffic_direction(
-            "", resource_type="Microsoft.Network/publicIPAddresses"
-        )
+        classify_traffic_direction("", resource_type="Microsoft.Network/publicIPAddresses")
         == "north_south"
     )
     assert (
