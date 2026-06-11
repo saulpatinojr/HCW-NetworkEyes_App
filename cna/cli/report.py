@@ -47,7 +47,7 @@ def report_group():
     help="Confirm native speaker review complete (DD-015)",
 )
 @click.option("--output-dir", default=None, help="Override deliverables output directory")
-def generate(
+def generate(  # noqa: PLR0913
     engagement_id, data_dir, skip_pdf, no_pptx, regional_ja, ja_review_complete, output_dir
 ):
     """Render all engagement deliverables.

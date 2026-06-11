@@ -49,7 +49,7 @@ def discover():
 @click.option(
     "--data-dir", default="./engagements", help="Engagement data directory (default: ./engagements)"
 )
-def discover_aws(
+def discover_aws(  # noqa: PLR0913
     engagement_id, org_role, external_id, regions, accounts, resume, skip_opt_in_regions, data_dir
 ):
     """Discover AWS network topology via STS AssumeRole.
@@ -145,7 +145,7 @@ def discover_aws(
 @click.option(
     "--data-dir", default="./engagements", help="Engagement data directory (default: ./engagements)"
 )
-def discover_azure(
+def discover_azure(  # noqa: PLR0913
     engagement_id,
     tenant_id,
     subscriptions,

@@ -29,6 +29,39 @@ def _diagrams_available() -> bool:
         return False
 
 
+def _render_aws_vpc_cluster(vpc, igw_nodes: dict, nat_nodes: dict) -> None:
+    from diagrams import Edge
+    from diagrams.aws.network import InternetGateway, NATGateway
+    from diagrams.aws.network import VPC as SubnetNode
+
+    for igw in vpc.internet_gateways:
+        igw_node = InternetGateway(igw.name or igw.id)
+        igw_nodes[igw.id] = igw_node
+
+    for nat in vpc.nat_gateways:
+        nat_node = NATGateway(nat.name or nat.id)
+        nat_nodes[nat.id] = nat_node
+        if igw_nodes:
+            list(igw_nodes.values())[0] >> Edge(label="egress") >> nat_node
+
+    for subnet in vpc.subnets:
+        if subnet.subnet_type.value == "public":
+            SubnetNode(f"{subnet.name or subnet.id}\n{subnet.cidr}")
+        else:
+            SubnetNode(f"{subnet.name or subnet.id}\n{subnet.cidr}")
+
+
+def _render_aws_tgw_connections(region_topology, tgw_nodes: dict) -> None:
+    from diagrams import Edge
+
+    for tgw in region_topology.transit_gateways:
+        if tgw.id in tgw_nodes:
+            for attachment in tgw.attachments:
+                for vpc in region_topology.vpcs:
+                    if vpc.id == attachment.resource_id:
+                        tgw_nodes[tgw.id] >> Edge(label=attachment.state)
+
+
 def generate_aws_vpc_diagram(
     region_topology,  # AWSRegionTopology — avoid circular import at module level
     output_path: Path,
@@ -88,40 +121,10 @@ def generate_aws_vpc_diagram(
         for vpc in region_topology.vpcs:
             vpc_label = vpc.name or vpc.id
             with Cluster(f"VPC: {vpc_label}\n{vpc.cidr}"):
-                # IGW
-                for igw in vpc.internet_gateways:
-                    igw_node = InternetGateway(igw.name or igw.id)
-                    igw_nodes[igw.id] = igw_node
-
-                # NAT Gateways
-                for nat in vpc.nat_gateways:
-                    nat_node = NATGateway(nat.name or nat.id)
-                    nat_nodes[nat.id] = nat_node
-                    if igw_nodes:
-                        list(igw_nodes.values())[0] >> Edge(label="egress") >> nat_node
-
-                # Subnets as sub-clusters
-                public_nodes = []
-                private_nodes = []
-                for subnet in vpc.subnets:
-                    from diagrams.aws.network import VPC as SubnetNode
-
-                    if subnet.subnet_type.value == "public":
-                        public_nodes.append(
-                            SubnetNode(f"{subnet.name or subnet.id}\n{subnet.cidr}")
-                        )
-                    else:
-                        private_nodes.append(
-                            SubnetNode(f"{subnet.name or subnet.id}\n{subnet.cidr}")
-                        )
+                _render_aws_vpc_cluster(vpc, igw_nodes, nat_nodes)
 
         # TGW connections to VPCs via attachments
-        for tgw in region_topology.transit_gateways:
-            if tgw.id in tgw_nodes:
-                for attachment in tgw.attachments:
-                    for vpc in region_topology.vpcs:
-                        if vpc.id == attachment.resource_id:
-                            tgw_nodes[tgw.id] >> Edge(label=attachment.state)
+        _render_aws_tgw_connections(region_topology, tgw_nodes)
 
     result_path = Path(f"{filename}.png")
     if result_path.exists():

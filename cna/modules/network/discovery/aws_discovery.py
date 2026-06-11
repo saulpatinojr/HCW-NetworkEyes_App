@@ -703,6 +703,66 @@ class AWSDiscovery:
 
     # ----------------------------------------------------------------- run
 
+    def _discover_account(
+        self,
+        account,
+        role_name: str,
+        topology: "AWSTopology",
+        engagement_id: str,
+    ) -> None:
+        """Discover all regions in a single account and append to topology."""
+        account_id = account.account_id
+        logger.info(
+            "[%s] Discovering account %s (%s)",
+            engagement_id,
+            account_id,
+            account.account_name or "",
+        )
+
+        if self.opts.resume:
+            checkpoints = self.store.list_completed_checkpoints(engagement_id, "aws")
+            if any(account_id in c for c in checkpoints):
+                logger.info(
+                    "[%s] Skipping %s — checkpoint exists (--resume)", engagement_id, account_id
+                )
+                return
+
+        try:
+            if account.is_management_account:
+                acct_session = self._mgmt_session
+            else:
+                acct_session = self._assume_role(account_id, role_name)
+        except CNAAuthError as e:
+            logger.error("Cannot access account %s: %s", account_id, e)
+            self.store.write_audit_event(
+                engagement_id,
+                "aws",
+                event={"type": "access_denied", "account": account_id, "error": str(e)},
+            )
+            return
+
+        regions = self._get_enabled_regions(acct_session)
+        logger.info("[%s] Account %s: %d regions", engagement_id, account_id, len(regions))
+
+        for region in regions:
+            logger.info("[%s] %s / %s", engagement_id, account_id, region)
+            region_topo = self._discover_region(acct_session, account_id, region)
+            topology.regions.append(region_topo)
+
+            checkpoint_key = f"aws_{account_id}_{region}"
+            self.store.write_discovery_checkpoint(
+                engagement_id,
+                "aws",
+                account_id=checkpoint_key,
+                data=json.loads(region_topo.model_dump_json()),
+            )
+
+            vpc_count = len(region_topo.vpcs)
+            blocked = " [BLOCKED]" if region_topo.discovery_blocked else ""
+            logger.info(
+                "[%s] %s/%s: %d VPCs%s", engagement_id, account_id, region, vpc_count, blocked
+            )
+
     def run(self) -> AWSTopology:
         """Execute full discovery. Returns completed AWSTopology.
 
@@ -731,7 +791,6 @@ class AWSDiscovery:
                 )
             ]
 
-        # Mark management account
         for a in accounts:
             if a.account_id == mgmt_account_id:
                 a.is_management_account = True
@@ -745,59 +804,7 @@ class AWSDiscovery:
         # 3. Discover each account
         role_name = self.opts.org_role_arn.split("/")[-1]  # extract role name from ARN
         for account in accounts:
-            account_id = account.account_id
-            logger.info(
-                "[%s] Discovering account %s (%s)",
-                engagement_id,
-                account_id,
-                account.account_name or "",
-            )
-
-            # Resume: skip if all regions have checkpoints
-            if self.opts.resume:
-                checkpoints = self.store.list_completed_checkpoints(engagement_id, "aws")
-                if any(account_id in c for c in checkpoints):
-                    logger.info(
-                        "[%s] Skipping %s — checkpoint exists (--resume)", engagement_id, account_id
-                    )
-                    continue
-
-            try:
-                if account.is_management_account:
-                    acct_session = self._mgmt_session
-                else:
-                    acct_session = self._assume_role(account_id, role_name)
-            except CNAAuthError as e:
-                logger.error("Cannot access account %s: %s", account_id, e)
-                self.store.write_audit_event(
-                    engagement_id,
-                    "aws",
-                    event={"type": "access_denied", "account": account_id, "error": str(e)},
-                )
-                continue
-
-            regions = self._get_enabled_regions(acct_session)
-            logger.info("[%s] Account %s: %d regions", engagement_id, account_id, len(regions))
-
-            for region in regions:
-                logger.info("[%s] %s / %s", engagement_id, account_id, region)
-                region_topo = self._discover_region(acct_session, account_id, region)
-                topology.regions.append(region_topo)
-
-                # Write checkpoint per account+region
-                checkpoint_key = f"aws_{account_id}_{region}"
-                self.store.write_discovery_checkpoint(
-                    engagement_id,
-                    "aws",
-                    account_id=checkpoint_key,
-                    data=json.loads(region_topo.model_dump_json()),
-                )
-
-                vpc_count = len(region_topo.vpcs)
-                blocked = " [BLOCKED]" if region_topo.discovery_blocked else ""
-                logger.info(
-                    "[%s] %s/%s: %d VPCs%s", engagement_id, account_id, region, vpc_count, blocked
-                )
+            self._discover_account(account, role_name, topology, engagement_id)
 
         logger.info(
             "[%s] AWS discovery complete. %d regions collected.",

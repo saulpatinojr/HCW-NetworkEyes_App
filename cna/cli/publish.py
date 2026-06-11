@@ -31,7 +31,7 @@ def publish_group():
 @click.option("--container", default=None, help="Azure Blob container name (azure)")
 @click.option("--ttl-hours", default=168, help="Link TTL in hours (max 168 = 7 days)")
 @click.option("--data-dir", default="./engagements")
-def run(engagement_id, cloud, bucket, s3_prefix, storage_account, container, ttl_hours, data_dir):
+def run(engagement_id, cloud, bucket, s3_prefix, storage_account, container, ttl_hours, data_dir):  # noqa: PLR0913
     """Upload deliverables and publish portal.
 
     \b

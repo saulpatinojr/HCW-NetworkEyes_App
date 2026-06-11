@@ -15,6 +15,8 @@ Rule IDs:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from cna.core.finding_taxonomy import classify_traffic_direction
 from cna.core.findings_schema import (
     Finding,
@@ -55,49 +57,46 @@ def _verify(amount: float) -> str:
     return f"Estimated monthly cost: ~${amount:,.2f} USD [VERIFY]"
 
 
-def _finding(
-    *,
-    rule_id: str,
-    severity: FindingSeverity,
-    sub_id: str,
-    region: str,
-    resource_id: str,
-    resource_type: str,
-    title: str,
-    fact: str,
-    evidence_ref: str,
-    recommendation: str,
-    est_monthly_cost_usd: float | None,
-    description: str,
-) -> Finding:
+@dataclass
+class _FindingParams:
+    rule_id: str
+    severity: FindingSeverity
+    sub_id: str
+    region: str
+    resource_id: str
+    resource_type: str
+    title: str
+    fact: str
+    evidence_ref: str
+    recommendation: str
+    est_monthly_cost_usd: float | None
+    description: str
+
+
+def _finding(p: _FindingParams) -> Finding:
     return Finding(
-        rule_id=rule_id,
-        severity=severity,
+        rule_id=p.rule_id,
+        severity=p.severity,
         platform="azure",
         category="FinOps",
-        account_id=sub_id,
-        region=region or "Global",
-        resource_id=resource_id,
-        resource_type=resource_type,
-        title=title,
-        description=description,
-        observed_state=ObservedState(fact=fact, evidence_ref=evidence_ref),
+        account_id=p.sub_id,
+        region=p.region or "Global",
+        resource_id=p.resource_id,
+        resource_type=p.resource_type,
+        title=p.title,
+        description=p.description,
+        observed_state=ObservedState(fact=p.fact, evidence_ref=p.evidence_ref),
         framework_mappings=list(_FINOPS_FRAMEWORK),
-        recommendations=[FindingRecommendation(source="CNA Platform", text=recommendation)],
-        recommendation=recommendation,
-        traffic_direction=classify_traffic_direction(rule_id, "FinOps", resource_type),
-        est_monthly_cost_usd=est_monthly_cost_usd,
+        recommendations=[FindingRecommendation(source="CNA Platform", text=p.recommendation)],
+        recommendation=p.recommendation,
+        traffic_direction=classify_traffic_direction(p.rule_id, "FinOps", p.resource_type),
+        est_monthly_cost_usd=p.est_monthly_cost_usd,
         status=FindingStatus.OPEN,
     )
 
 
-def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
-    from cna.modules.network.analysis import azure_network_prices as prices
-
+def _check_orphaned_pips(sub_id: str, sub, prices) -> list[Finding]:
     findings: list[Finding] = []
-    sub_id = sub.subscription_id
-
-    # AZ-COST-001: orphaned public IPs
     for pip in sub.public_ips:
         if pip.associated_resource_type:
             continue
@@ -107,7 +106,7 @@ def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
             else prices.PUBLIC_IP_STANDARD_MONTHLY
         )
         findings.append(
-            _finding(
+            _finding(_FindingParams(
                 rule_id=R_AZ_COST_ORPHANED_PIP,
                 severity=FindingSeverity.LOW,
                 sub_id=sub_id,
@@ -132,167 +131,167 @@ def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
                 description=(
                     f"Public IP '{pip.name}' is billed while unattached. {_verify(monthly)}."
                 ),
-            )
+            ))
         )
+    return findings
 
-    gw_by_name = {gw.name: gw for gw in sub.virtual_network_gateways}
 
-    if sub.network_metrics:
-        for gm in sub.network_metrics.gateway_metrics:
-            gw = gw_by_name.get(gm.gateway_name)
-            sku = gw.sku_name if gw else ""
-            monthly = prices.gateway_monthly(gm.gateway_type, sku) if gw else None
+def _check_gateway_metrics(sub_id: str, gw_by_name: dict, metrics, prices) -> list[Finding]:
+    findings: list[Finding] = []
+    for gm in metrics.gateway_metrics:
+        gw = gw_by_name.get(gm.gateway_name)
+        sku = gw.sku_name if gw else ""
+        monthly = prices.gateway_monthly(gm.gateway_type, sku) if gw else None
 
-            # AZ-COST-002: idle gateway — zero observed throughput in 24h
-            ingress = gm.ingress_bytes_24h or 0
-            egress = gm.egress_bytes_24h or 0
-            if gw and ingress == 0 and egress == 0:
+        ingress = gm.ingress_bytes_24h or 0
+        egress = gm.egress_bytes_24h or 0
+        if gw and ingress == 0 and egress == 0:
+            findings.append(
+                _finding(_FindingParams(
+                    rule_id=R_AZ_COST_IDLE_GATEWAY,
+                    severity=FindingSeverity.MEDIUM,
+                    sub_id=sub_id,
+                    region=gw.location,
+                    resource_id=gw.id,
+                    resource_type="Microsoft.Network/virtualNetworkGateways",
+                    title=(
+                        f"Gateway '{gm.gateway_name}' billed but moved zero traffic in 24 hours"
+                    ),
+                    fact=(
+                        f"{gm.gateway_type} gateway {gm.gateway_name} "
+                        f"(SKU: {sku or 'unknown'}) recorded 0 ingress and 0 "
+                        f"egress bytes over the 24-hour metric window."
+                    ),
+                    evidence_ref=(
+                        f"discovery:azure_{sub_id}.network_metrics"
+                        f".gateway_metrics[name={gm.gateway_name}]"
+                    ),
+                    recommendation=(
+                        "Confirm the gateway is still required. If tunnels are "
+                        "unused, decommission the gateway and its public IPs. "
+                        "If traffic is expected, investigate tunnel and routing "
+                        "health."
+                    ),
+                    est_monthly_cost_usd=monthly,
+                    description=(
+                        f"Idle gateway continues to accrue hourly charges. "
+                        f"{_verify(monthly) if monthly else 'Monthly cost depends on SKU [VERIFY]'}."
+                    ),
+                ))
+            )
+
+        if (
+            gw
+            and gm.gateway_type == "Vpn"
+            and gm.utilization_pct is not None
+            and 0 < gm.utilization_pct < _OVERSIZE_UTILIZATION_PCT
+        ):
+            smaller = prices.next_smaller_vpn_sku(sku)
+            if smaller:
+                current_cost = prices.vpn_gateway_monthly(sku)
+                smaller_cost = prices.vpn_gateway_monthly(smaller)
+                saving = current_cost - smaller_cost if current_cost and smaller_cost else None
                 findings.append(
-                    _finding(
-                        rule_id=R_AZ_COST_IDLE_GATEWAY,
-                        severity=FindingSeverity.MEDIUM,
+                    _finding(_FindingParams(
+                        rule_id=R_AZ_COST_OVERSIZED_GATEWAY,
+                        severity=FindingSeverity.LOW,
                         sub_id=sub_id,
                         region=gw.location,
                         resource_id=gw.id,
                         resource_type="Microsoft.Network/virtualNetworkGateways",
                         title=(
-                            f"Gateway '{gm.gateway_name}' billed but moved zero traffic in 24 hours"
+                            f"VPN gateway '{gm.gateway_name}' SKU appears "
+                            f"oversized for observed traffic"
                         ),
                         fact=(
-                            f"{gm.gateway_type} gateway {gm.gateway_name} "
-                            f"(SKU: {sku or 'unknown'}) recorded 0 ingress and 0 "
-                            f"egress bytes over the 24-hour metric window."
+                            f"VPN gateway {gm.gateway_name} (SKU: {sku}) peaked "
+                            f"at {gm.utilization_pct:.1f}% of provisioned "
+                            f"bandwidth over the 24-hour metric window."
                         ),
                         evidence_ref=(
                             f"discovery:azure_{sub_id}.network_metrics"
                             f".gateway_metrics[name={gm.gateway_name}]"
+                            f".utilization_pct"
                         ),
                         recommendation=(
-                            "Confirm the gateway is still required. If tunnels are "
-                            "unused, decommission the gateway and its public IPs. "
-                            "If traffic is expected, investigate tunnel and routing "
-                            "health."
+                            f"Evaluate resizing from {sku} to {smaller} after "
+                            f"reviewing a longer utilization window (30+ days) "
+                            f"and planned growth. Gateway resize causes brief "
+                            f"connectivity interruption — schedule a window."
                         ),
-                        est_monthly_cost_usd=monthly,
+                        est_monthly_cost_usd=saving,
                         description=(
-                            f"Idle gateway continues to accrue hourly charges. "
-                            f"{_verify(monthly) if monthly else 'Monthly cost depends on SKU [VERIFY]'}."
+                            f"Downsizing {sku} → {smaller} would reduce spend. "
+                            f"{f'Estimated monthly saving: ~${saving:.2f} USD [VERIFY]' if saving else 'Saving depends on SKU pricing [VERIFY]'}."
                         ),
-                    )
+                    ))
                 )
+    return findings
 
-            # AZ-COST-003: oversized VPN gateway SKU vs observed peak
-            if (
-                gw
-                and gm.gateway_type == "Vpn"
-                and gm.utilization_pct is not None
-                and 0 < gm.utilization_pct < _OVERSIZE_UTILIZATION_PCT
-            ):
-                smaller = prices.next_smaller_vpn_sku(sku)
-                if smaller:
-                    current_cost = prices.vpn_gateway_monthly(sku)
-                    smaller_cost = prices.vpn_gateway_monthly(smaller)
-                    saving = current_cost - smaller_cost if current_cost and smaller_cost else None
-                    findings.append(
-                        _finding(
-                            rule_id=R_AZ_COST_OVERSIZED_GATEWAY,
-                            severity=FindingSeverity.LOW,
-                            sub_id=sub_id,
-                            region=gw.location,
-                            resource_id=gw.id,
-                            resource_type="Microsoft.Network/virtualNetworkGateways",
-                            title=(
-                                f"VPN gateway '{gm.gateway_name}' SKU appears "
-                                f"oversized for observed traffic"
-                            ),
-                            fact=(
-                                f"VPN gateway {gm.gateway_name} (SKU: {sku}) peaked "
-                                f"at {gm.utilization_pct:.1f}% of provisioned "
-                                f"bandwidth over the 24-hour metric window."
-                            ),
-                            evidence_ref=(
-                                f"discovery:azure_{sub_id}.network_metrics"
-                                f".gateway_metrics[name={gm.gateway_name}]"
-                                f".utilization_pct"
-                            ),
-                            recommendation=(
-                                f"Evaluate resizing from {sku} to {smaller} after "
-                                f"reviewing a longer utilization window (30+ days) "
-                                f"and planned growth. Gateway resize causes brief "
-                                f"connectivity interruption — schedule a window."
-                            ),
-                            est_monthly_cost_usd=saving,
-                            description=(
-                                f"Downsizing {sku} → {smaller} would reduce spend. "
-                                f"{f'Estimated monthly saving: ~${saving:.2f} USD [VERIFY]' if saving else 'Saving depends on SKU pricing [VERIFY]'}."
-                            ),
-                        )
-                    )
 
-        # AZ-COST-005: firewall billed while processing zero traffic
-        fw_by_name = {fw.name: fw for fw in sub.firewalls}
-        for fm in sub.network_metrics.firewall_metrics:
-            if fm.collection_error:
-                continue
-            zero_hits = (
-                (fm.network_rule_hits_24h or 0) == 0
-                and (fm.app_rule_hits_24h or 0) == 0
-                and (fm.nat_rule_hits_24h or 0) == 0
-            )
-            if not zero_hits:
-                continue
-            fw = fw_by_name.get(fm.firewall_name)
-            tier = fw.sku_tier if fw else "Standard"
-            from cna.modules.network.analysis.azure_network_prices import (
-                FIREWALL_MONTHLY,
-            )
+def _check_firewall_metrics(sub_id: str, fw_by_name: dict, metrics) -> list[Finding]:
+    from cna.modules.network.analysis.azure_network_prices import FIREWALL_MONTHLY
 
-            monthly = FIREWALL_MONTHLY.get(tier)
-            findings.append(
-                _finding(
-                    rule_id=R_AZ_COST_FIREWALL_ZERO_TRAFFIC,
-                    severity=FindingSeverity.MEDIUM,
-                    sub_id=sub_id,
-                    region=fw.location if fw else "Global",
-                    resource_id=fw.id if fw else fm.firewall_name,
-                    resource_type="Microsoft.Network/azureFirewalls",
-                    title=(
-                        f"Azure Firewall '{fm.firewall_name}' billed while processing zero traffic"
-                    ),
-                    fact=(
-                        f"Azure Firewall {fm.firewall_name} ({tier} tier) recorded "
-                        f"0 network, application, and NAT rule hits over the "
-                        f"24-hour metric window."
-                    ),
-                    evidence_ref=(
-                        f"discovery:azure_{sub_id}.network_metrics"
-                        f".firewall_metrics[name={fm.firewall_name}]"
-                    ),
-                    recommendation=(
-                        "Verify routing actually sends traffic through this "
-                        "firewall (see AZ-NET-009). If the firewall is genuinely "
-                        "unused, decommission it; if it protects intermittent "
-                        "workloads, consider Firewall Basic or stop/start "
-                        "automation."
-                    ),
-                    est_monthly_cost_usd=monthly,
-                    description=(
-                        f"A deployed firewall accrues hourly charges regardless of "
-                        f"traffic. {_verify(monthly) if monthly else 'Monthly cost depends on tier [VERIFY]'}."
-                    ),
-                )
-            )
+    findings: list[Finding] = []
+    for fm in metrics.firewall_metrics:
+        if fm.collection_error:
+            continue
+        zero_hits = (
+            (fm.network_rule_hits_24h or 0) == 0
+            and (fm.app_rule_hits_24h or 0) == 0
+            and (fm.nat_rule_hits_24h or 0) == 0
+        )
+        if not zero_hits:
+            continue
+        fw = fw_by_name.get(fm.firewall_name)
+        tier = fw.sku_tier if fw else "Standard"
+        monthly = FIREWALL_MONTHLY.get(tier)
+        findings.append(
+            _finding(_FindingParams(
+                rule_id=R_AZ_COST_FIREWALL_ZERO_TRAFFIC,
+                severity=FindingSeverity.MEDIUM,
+                sub_id=sub_id,
+                region=fw.location if fw else "Global",
+                resource_id=fw.id if fw else fm.firewall_name,
+                resource_type="Microsoft.Network/azureFirewalls",
+                title=(
+                    f"Azure Firewall '{fm.firewall_name}' billed while processing zero traffic"
+                ),
+                fact=(
+                    f"Azure Firewall {fm.firewall_name} ({tier} tier) recorded "
+                    f"0 network, application, and NAT rule hits over the "
+                    f"24-hour metric window."
+                ),
+                evidence_ref=(
+                    f"discovery:azure_{sub_id}.network_metrics"
+                    f".firewall_metrics[name={fm.firewall_name}]"
+                ),
+                recommendation=(
+                    "Verify routing actually sends traffic through this "
+                    "firewall (see AZ-NET-009). If the firewall is genuinely "
+                    "unused, decommission it; if it protects intermittent "
+                    "workloads, consider Firewall Basic or stop/start "
+                    "automation."
+                ),
+                est_monthly_cost_usd=monthly,
+                description=(
+                    f"A deployed firewall accrues hourly charges regardless of "
+                    f"traffic. {_verify(monthly) if monthly else 'Monthly cost depends on tier [VERIFY]'}."
+                ),
+            ))
+        )
+    return findings
 
-    # AZ-COST-004: NAT gateway with no associated subnets
+
+def _check_idle_nat_gateways(sub_id: str, sub) -> list[Finding]:
+    from cna.modules.network.analysis.azure_network_prices import NAT_GATEWAY_MONTHLY
+
+    findings: list[Finding] = []
     for nat in sub.nat_gateways:
         if nat.associated_subnet_ids:
             continue
-        from cna.modules.network.analysis.azure_network_prices import (
-            NAT_GATEWAY_MONTHLY,
-        )
-
         findings.append(
-            _finding(
+            _finding(_FindingParams(
                 rule_id=R_AZ_COST_NAT_GW_NO_SUBNETS,
                 severity=FindingSeverity.LOW,
                 sub_id=sub_id,
@@ -318,8 +317,26 @@ def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
                     f"An unattached NAT gateway is billed hourly while providing "
                     f"no egress path. {_verify(NAT_GATEWAY_MONTHLY)}."
                 ),
-            )
+            ))
         )
+    return findings
+
+
+def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
+    from cna.modules.network.analysis import azure_network_prices as prices
+
+    sub_id = sub.subscription_id
+    findings: list[Finding] = []
+
+    findings.extend(_check_orphaned_pips(sub_id, sub, prices))
+
+    if sub.network_metrics:
+        gw_by_name = {gw.name: gw for gw in sub.virtual_network_gateways}
+        findings.extend(_check_gateway_metrics(sub_id, gw_by_name, sub.network_metrics, prices))
+        fw_by_name = {fw.name: fw for fw in sub.firewalls}
+        findings.extend(_check_firewall_metrics(sub_id, fw_by_name, sub.network_metrics))
+
+    findings.extend(_check_idle_nat_gateways(sub_id, sub))
 
     return findings
 

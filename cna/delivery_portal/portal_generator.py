@@ -29,6 +29,8 @@ from cna.report_engine.deliverable_manifest import DeliverableManifest
 
 logger = logging.getLogger("cna.portal.generator")
 
+_BYTES_PER_UNIT = 1024
+
 # MIME types per extension — must be set on every uploaded file (Gap #14)
 CONTENT_TYPES: dict[str, str] = {
     ".pdf": "application/pdf",
@@ -199,9 +201,9 @@ class PortalGenerator:
     def _filesizeformat(value: int) -> str:
         """Human-readable file size."""
         for unit in ["B", "KB", "MB", "GB"]:
-            if value < 1024:
+            if value < _BYTES_PER_UNIT:
                 return f"{value:.0f} {unit}"
-            value /= 1024
+            value /= _BYTES_PER_UNIT
         return f"{value:.1f} TB"
 
     @staticmethod

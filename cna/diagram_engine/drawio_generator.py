@@ -174,7 +174,7 @@ def _vpc_dims(subnet_count: int) -> tuple[int, int]:
 # ── XML helpers ───────────────────────────────────────────────────────────
 
 
-def _container_cell(cell_id: str, label: str, x: int, y: int, w: int, h: int, style: str) -> str:
+def _container_cell(cell_id: str, label: str, x: int, y: int, w: int, h: int, style: str) -> str:  # noqa: PLR0913
     return (
         f'<mxCell id="{cell_id}" value="{_safe(label)}" style="{style}" '
         f'vertex="1" parent="1">'
@@ -183,7 +183,7 @@ def _container_cell(cell_id: str, label: str, x: int, y: int, w: int, h: int, st
     )
 
 
-def _child_cell(
+def _child_cell(  # noqa: PLR0913
     cell_id: str, label: str, x: int, y: int, w: int, h: int, style: str, parent_id: str
 ) -> str:
     return (

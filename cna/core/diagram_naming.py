@@ -28,7 +28,7 @@ DIAGRAM_TYPES = {
 OUTPUT_FORMATS = ["drawio", "svg", "png", "pdf"]
 
 
-def diagram_filename(
+def diagram_filename(  # noqa: PLR0913
     engagement_slug: str,
     region_group: str,
     platform: str,  # aws | azure
@@ -48,7 +48,7 @@ def diagram_filename(
     return Path("output") / "diagrams" / engagement_slug / region_group / filename
 
 
-def all_format_paths(
+def all_format_paths(  # noqa: PLR0913
     engagement_slug: str,
     region_group: str,
     platform: str,

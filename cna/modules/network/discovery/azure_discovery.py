@@ -98,6 +98,10 @@ class AzureDiscoveryOptions:
     client_secret: str | None = None  # never logged, in-memory only
 
 
+_RG_PARTS_INDEX = 4  # fallback index for resource group in a split ARM resource ID
+_NVA_DISPLAY_LIMIT = 5  # max NVA names shown inline in progress messages
+
+
 def _rg_from_id(resource_id: str) -> str:
     """Extract resource group name from an Azure resource ID."""
     parts = resource_id.split("/")
@@ -105,7 +109,7 @@ def _rg_from_id(resource_id: str) -> str:
         idx = next(i for i, p in enumerate(parts) if p.lower() == "resourcegroups")
         return parts[idx + 1]
     except (StopIteration, IndexError):
-        return parts[4] if len(parts) > 4 else ""
+        return parts[_RG_PARTS_INDEX] if len(parts) > _RG_PARTS_INDEX else ""
 
 
 def _sub_from_id(resource_id: str) -> str:
@@ -154,19 +158,39 @@ def _classify_subnet(
     - No NSG, no route table, default outbound enabled → PUBLIC (uncontrolled)
     - Anything else → UNKNOWN
     """
-    if name.lower() in _INFRA_SUBNET_NAMES:
+    if name.lower() in _INFRA_SUBNET_NAMES or delegation:
         return SubnetType.PRIVATE
-    if delegation:
-        return SubnetType.PRIVATE
-    has_nsg = bool(nsg_id)
-    has_udr = bool(route_table_id)
+    has_nsg, has_udr = bool(nsg_id), bool(route_table_id)
     if has_nsg and has_udr:
         return SubnetType.ISOLATED
     if has_nsg or has_udr:
         return SubnetType.PRIVATE
-    if default_outbound_access:
-        return SubnetType.PUBLIC
-    return SubnetType.UNKNOWN
+    return SubnetType.PUBLIC if default_outbound_access else SubnetType.UNKNOWN
+
+
+@dataclass
+class _ObservabilityContext:
+    net: object
+    sub_id: str
+    nsg_count: int
+    firewalls: list | None = None
+    bastion_hosts: list | None = None
+    gateways: list | None = None
+    appgws: list | None = None
+    load_balancers: list | None = None
+
+
+@dataclass
+class _MetricsContext:
+    sub_id: str
+    gateways: list
+    firewalls: list | None = None
+    load_balancers: list | None = None
+    vnets: list | None = None
+    er_circuits: list | None = None
+    public_ips: list | None = None
+    la_workspaces: list | None = None
+    appgws: list | None = None
 
 
 class AzureDiscovery:
@@ -414,36 +438,65 @@ class AzureDiscovery:
         )
 
         # ── Phase 2: Extended assessment data ─────────────────────────────────
+        self._run_phase2_collectors(topo, net, sub_id, sub_name)
+
+        if errors:
+            topo.block_reason = "; ".join(errors)
+            # Only mark fully blocked if every collector failed (nothing discovered)
+            all_empty = (
+                not topo.vnets and not topo.nsgs and not topo.public_ips and not topo.load_balancers
+            )
+            if all_empty:
+                topo.discovery_blocked = True
+
+        return topo
+
+    def _run_phase2_collectors(self, topo, net, sub_id: str, sub_name: str) -> None:
+        """Run Phase 2 extended assessment collectors for one subscription."""
+        self._run_nva_scan(topo, net, sub_id, sub_name)
+        self._run_bgp_scan(topo, net, sub_id, sub_name)
+        self._run_observability_scan(topo, net, sub_id, sub_name)
+        self._run_metrics_scan(topo, sub_id, sub_name)
+        self._run_waf_scan(topo, sub_id, sub_name)
+
+    def _run_nva_scan(self, topo, net, sub_id: str, sub_name: str) -> None:
         self._progress(f"[{sub_name}] Scanning for NVAs / NGFWs…")
         try:
             topo.nvas = self._collect_nvas(net, sub_id)
             if topo.nvas:
-                names = ", ".join(n.name for n in topo.nvas[:5])
-                extra = f" (+{len(topo.nvas) - 5} more)" if len(topo.nvas) > 5 else ""
+                names = ", ".join(n.name for n in topo.nvas[:_NVA_DISPLAY_LIMIT])
+                extra = (
+                    f" (+{len(topo.nvas) - _NVA_DISPLAY_LIMIT} more)"
+                    if len(topo.nvas) > _NVA_DISPLAY_LIMIT
+                    else ""
+                )
                 self._progress(f"[{sub_name}] NVAs found: {len(topo.nvas)} — {names}{extra}")
             else:
                 self._progress(f"[{sub_name}] No NVAs / NGFWs detected")
         except Exception as e:
             self._progress(f"[{sub_name}] NVA scan skipped: {e}")
 
+    def _run_bgp_scan(self, topo, net, sub_id: str, sub_name: str) -> None:
         self._progress(f"[{sub_name}] Querying BGP peer status…")
         try:
             topo.bgp_data = self._collect_bgp_data(net, sub_id, topo.virtual_network_gateways)
         except Exception as e:
             self._progress(f"[{sub_name}] BGP data skipped: {e}")
 
+    def _run_observability_scan(self, topo, net, sub_id: str, sub_name: str) -> None:
         self._progress(f"[{sub_name}] Collecting observability data…")
         try:
-            topo.observability = self._collect_observability(
-                net,
-                sub_id,
-                len(topo.nsgs),
+            obs_ctx = _ObservabilityContext(
+                net=net,
+                sub_id=sub_id,
+                nsg_count=len(topo.nsgs),
                 firewalls=topo.firewalls,
                 bastion_hosts=topo.bastion_hosts,
                 gateways=topo.virtual_network_gateways,
                 appgws=topo.application_gateways,
                 load_balancers=topo.load_balancers,
             )
+            topo.observability = self._collect_observability(obs_ctx)
             obs = topo.observability
             self._progress(
                 f"[{sub_name}] Observability: "
@@ -455,14 +508,15 @@ class AzureDiscovery:
         except Exception as e:
             self._progress(f"[{sub_name}] Observability data skipped: {e}")
 
+    def _run_metrics_scan(self, topo, sub_id: str, sub_name: str) -> None:
         self._progress(f"[{sub_name}] Collecting network metrics (last 24 h)…")
         try:
-            topo.network_metrics = self._collect_network_metrics(
-                sub_id,
-                topo.virtual_network_gateways,
-                topo.firewalls,
-                topo.load_balancers,
-                topo.vnets,
+            metrics_ctx = _MetricsContext(
+                sub_id=sub_id,
+                gateways=topo.virtual_network_gateways,
+                firewalls=topo.firewalls,
+                load_balancers=topo.load_balancers,
+                vnets=topo.vnets,
                 er_circuits=topo.express_route_circuits,
                 public_ips=topo.public_ips,
                 la_workspaces=(
@@ -470,6 +524,7 @@ class AzureDiscovery:
                 ),
                 appgws=topo.application_gateways,
             )
+            topo.network_metrics = self._collect_network_metrics(metrics_ctx)
             if topo.network_metrics.collection_error:
                 self._progress(f"[{sub_name}] Metrics: {topo.network_metrics.collection_error}")
             else:
@@ -485,6 +540,7 @@ class AzureDiscovery:
         except Exception as e:
             self._progress(f"[{sub_name}] Metrics skipped: {e}")
 
+    def _run_waf_scan(self, topo, sub_id: str, sub_name: str) -> None:
         self._progress(f"[{sub_name}] Scanning Front Door WAF policies…")
         try:
             topo.front_door_waf_policies = self._collect_front_door_waf_policies(sub_id)
@@ -505,82 +561,70 @@ class AzureDiscovery:
         except Exception as e:
             self._progress(f"[{sub_name}] Defender for Cloud skipped: {e}")
 
-        if errors:
-            topo.block_reason = "; ".join(errors)
-            # Only mark fully blocked if every collector failed (nothing discovered)
-            all_empty = (
-                not topo.vnets and not topo.nsgs and not topo.public_ips and not topo.load_balancers
-            )
-            if all_empty:
-                topo.discovery_blocked = True
-
-        return topo
-
     # ------------------------------------------------------------------ VNets
+
+    @staticmethod
+    def _build_subnet(s) -> AzureSubnet:
+        """Convert one ARM subnet object to an AzureSubnet dataclass."""
+        nsg_name = None
+        if s.network_security_group and s.network_security_group.id:
+            nsg_name = s.network_security_group.id.split("/")[-1]
+
+        rt_name = None
+        if s.route_table and s.route_table.id:
+            rt_name = s.route_table.id.split("/")[-1]
+
+        nat_gw_id = None
+        if hasattr(s, "nat_gateway") and s.nat_gateway:
+            nat_gw_id = s.nat_gateway.id
+
+        extra_prefixes: list[str] = []
+        if hasattr(s, "address_prefixes") and s.address_prefixes:
+            extra_prefixes = list(s.address_prefixes)
+
+        default_outbound = True
+        if hasattr(s, "default_outbound_access") and s.default_outbound_access is not None:
+            default_outbound = bool(s.default_outbound_access)
+
+        pl_svc_policy = "Enabled"
+        if hasattr(s, "private_link_service_network_policies"):
+            pl_svc_policy = str(s.private_link_service_network_policies or "Enabled")
+
+        _nsg_id = s.network_security_group.id if s.network_security_group else None
+        _rt_id = s.route_table.id if s.route_table else None
+        _delegation = s.delegations[0].service_name if s.delegations else None
+        return AzureSubnet(
+            id=s.id,
+            name=s.name,
+            address_prefix=s.address_prefix or (extra_prefixes[0] if extra_prefixes else ""),
+            nsg_id=_nsg_id,
+            nsg_name=nsg_name,
+            route_table_id=_rt_id,
+            route_table_name=rt_name,
+            nat_gateway_id=nat_gw_id,
+            service_endpoints=[se.service for se in (s.service_endpoints or [])],
+            private_endpoint_network_policies=str(
+                s.private_endpoint_network_policies or "Enabled"
+            ),
+            private_link_service_network_policies=pl_svc_policy,
+            default_outbound_access=default_outbound,
+            delegation=_delegation,
+            address_prefixes=extra_prefixes,
+            subnet_type=_classify_subnet(
+                s.name or "",
+                _nsg_id,
+                _rt_id,
+                _delegation,
+                default_outbound,
+            ),
+        )
 
     def _collect_vnets(self, net, sub_id: str) -> list[VNet]:
         vnets = []
         for vnet in net.virtual_networks.list_all():
             subnets = []
             for s in vnet.subnets or []:
-                # Extract names from IDs for human-readable display
-                nsg_name = None
-                if s.network_security_group and s.network_security_group.id:
-                    nsg_name = s.network_security_group.id.split("/")[-1]
-
-                rt_name = None
-                if s.route_table and s.route_table.id:
-                    rt_name = s.route_table.id.split("/")[-1]
-
-                nat_gw_id = None
-                if hasattr(s, "nat_gateway") and s.nat_gateway:
-                    nat_gw_id = s.nat_gateway.id
-
-                # Collect all address prefixes (dual-stack support)
-                extra_prefixes: list[str] = []
-                if hasattr(s, "address_prefixes") and s.address_prefixes:
-                    extra_prefixes = list(s.address_prefixes)
-
-                # Default outbound access (new subnets default True, can be disabled)
-                default_outbound = True
-                if hasattr(s, "default_outbound_access") and s.default_outbound_access is not None:
-                    default_outbound = bool(s.default_outbound_access)
-
-                pl_svc_policy = "Enabled"
-                if hasattr(s, "private_link_service_network_policies"):
-                    pl_svc_policy = str(s.private_link_service_network_policies or "Enabled")
-
-                _nsg_id = s.network_security_group.id if s.network_security_group else None
-                _rt_id = s.route_table.id if s.route_table else None
-                _delegation = s.delegations[0].service_name if s.delegations else None
-                subnets.append(
-                    AzureSubnet(
-                        id=s.id,
-                        name=s.name,
-                        address_prefix=s.address_prefix
-                        or (extra_prefixes[0] if extra_prefixes else ""),
-                        nsg_id=_nsg_id,
-                        nsg_name=nsg_name,
-                        route_table_id=_rt_id,
-                        route_table_name=rt_name,
-                        nat_gateway_id=nat_gw_id,
-                        service_endpoints=[se.service for se in (s.service_endpoints or [])],
-                        private_endpoint_network_policies=str(
-                            s.private_endpoint_network_policies or "Enabled"
-                        ),
-                        private_link_service_network_policies=pl_svc_policy,
-                        default_outbound_access=default_outbound,
-                        delegation=_delegation,
-                        address_prefixes=extra_prefixes,
-                        subnet_type=_classify_subnet(
-                            s.name or "",
-                            _nsg_id,
-                            _rt_id,
-                            _delegation,
-                            default_outbound,
-                        ),
-                    )
-                )
+                subnets.append(self._build_subnet(s))
 
             peerings = []
             for p in vnet.virtual_network_peerings or []:
@@ -737,6 +781,24 @@ class AzureDiscovery:
 
     # ------------------------------------------------------------------ Public IPs
 
+    _PIP_ASSOC_TYPES: dict[str, str] = {
+        "networkinterfaces": "NIC",
+        "loadbalancers": "LB",
+        "applicationgateways": "AppGW",
+        "azurefirewalls": "Firewall",
+        "bastionhosts": "Bastion",
+        "virtualnetworkgateways": "VpnGateway",
+    }
+
+    @staticmethod
+    def _infer_pip_assoc_type(assoc_id: str) -> str | None:
+        """Infer the associated resource type from a Public IP ip_configuration ID."""
+        id_lower = assoc_id.lower()
+        return next(
+            (t for k, t in AzureDiscovery._PIP_ASSOC_TYPES.items() if k in id_lower),
+            None,
+        )
+
     def _collect_public_ips(self, net, sub_id: str) -> list[AzurePublicIP]:
         pips = []
         for pip in net.public_ip_addresses.list_all():
@@ -749,20 +811,7 @@ class AzureDiscovery:
             assoc_type = None
             if pip.ip_configuration and pip.ip_configuration.id:
                 assoc_id = pip.ip_configuration.id
-                # Infer type from the resource ID path
-                id_lower = assoc_id.lower()
-                if "networkinterfaces" in id_lower:
-                    assoc_type = "NIC"
-                elif "loadbalancers" in id_lower:
-                    assoc_type = "LB"
-                elif "applicationgateways" in id_lower:
-                    assoc_type = "AppGW"
-                elif "azurefirewalls" in id_lower:
-                    assoc_type = "Firewall"
-                elif "bastionhosts" in id_lower:
-                    assoc_type = "Bastion"
-                elif "virtualnetworkgateways" in id_lower:
-                    assoc_type = "VpnGateway"
+                assoc_type = self._infer_pip_assoc_type(assoc_id)
 
             dns_label = None
             fqdn = None
@@ -994,44 +1043,82 @@ class AzureDiscovery:
 
     # ------------------------------------------------------------------ Private Endpoints
 
+    @staticmethod
+    def _validate_pe_dns(custom_dns: list[str], private_ips: list[str]) -> bool | None:
+        """Validate that private endpoint FQDNs resolve to RFC-1918 addresses.
+
+        Returns True if at least one FQDN resolves to a private IP, False if one
+        resolves to a public IP, or None when resolution is inconclusive.
+        """
+        if not custom_dns and private_ips:
+            return True
+        if not custom_dns:
+            return None
+        import ipaddress as _ipaddr
+        import socket as _socket
+
+        _rfc1918 = (
+            _ipaddr.ip_network("10.0.0.0/8"),
+            _ipaddr.ip_network("172.16.0.0/12"),
+            _ipaddr.ip_network("192.168.0.0/16"),
+        )
+        result: bool | None = None
+        for fqdn in custom_dns[:3]:
+            try:
+                resolved_ip = _socket.gethostbyname(fqdn)
+                addr = _ipaddr.ip_address(resolved_ip)
+                if any(addr in net_range for net_range in _rfc1918):
+                    return True
+                result = False
+            except Exception as _e:
+                logger.debug("DNS resolution skipped for %s: %s", fqdn, _e)
+        return result
+
+    @staticmethod
+    def _pe_private_ips(net, pe) -> list[str]:
+        """Collect private IPs from a private endpoint's attached NICs."""
+        private_ips: list[str] = []
+        for nic_ref in pe.network_interfaces or []:
+            if not nic_ref.id:
+                continue
+            try:
+                nic_rg = _rg_from_id(nic_ref.id)
+                nic_name = nic_ref.id.split("/")[-1]
+                nic_obj = net.network_interfaces.get(nic_rg, nic_name)
+                for ipc in nic_obj.ip_configurations or []:
+                    if ipc.private_ip_address:
+                        private_ips.append(ipc.private_ip_address)
+            except Exception as _e:
+                logger.debug("PE NIC GET failed for %s: %s", nic_ref.id, _e)
+        return private_ips
+
+    @staticmethod
+    def _pe_service_conns(pe) -> list[AzurePrivateEndpointConnection]:
+        """Build service connection list from both auto and manual connections."""
+        service_conns: list[AzurePrivateEndpointConnection] = []
+        for sc in list(pe.private_link_service_connections or []) + list(
+            pe.manual_private_link_service_connections or []
+        ):
+            state = "Pending"
+            if sc.private_link_service_connection_state:
+                state = str(sc.private_link_service_connection_state.status or "Pending")
+            service_conns.append(
+                AzurePrivateEndpointConnection(
+                    connection_name=sc.name or "",
+                    private_link_service_id=sc.private_link_service_id or "",
+                    group_ids=list(sc.group_ids or []),
+                    connection_state=state,
+                )
+            )
+        return service_conns
+
     def _collect_private_endpoints(self, net, sub_id: str) -> list[AzurePrivateEndpoint]:
         endpoints = []
         for pe in net.private_endpoints.list_by_subscription():
             rg = _rg_from_id(pe.id)
-            subnet_id = ""
-            if pe.subnet:
-                subnet_id = pe.subnet.id or ""
-
-            # Collect private IP addresses from NICs via ARM NIC GET
-            private_ips: list[str] = []
-            for nic_ref in pe.network_interfaces or []:
-                if not nic_ref.id:
-                    continue
-                try:
-                    nic_rg = _rg_from_id(nic_ref.id)
-                    nic_name = nic_ref.id.split("/")[-1]
-                    nic_obj = net.network_interfaces.get(nic_rg, nic_name)
-                    for ipc in nic_obj.ip_configurations or []:
-                        if ipc.private_ip_address:
-                            private_ips.append(ipc.private_ip_address)
-                except Exception as _e:
-                    logger.debug("PE NIC GET failed for %s: %s", nic_ref.id, _e)
-            # Use manual_private_link_service_connections or auto ones
-            service_conns: list[AzurePrivateEndpointConnection] = []
-            for sc in list(pe.private_link_service_connections or []) + list(
-                pe.manual_private_link_service_connections or []
-            ):
-                state = "Pending"
-                if sc.private_link_service_connection_state:
-                    state = str(sc.private_link_service_connection_state.status or "Pending")
-                service_conns.append(
-                    AzurePrivateEndpointConnection(
-                        connection_name=sc.name or "",
-                        private_link_service_id=sc.private_link_service_id or "",
-                        group_ids=list(sc.group_ids or []),
-                        connection_state=state,
-                    )
-                )
+            subnet_id = pe.subnet.id or "" if pe.subnet else ""
+            private_ips = self._pe_private_ips(net, pe)
+            service_conns = self._pe_service_conns(pe)
 
             dns_group_names: list[str] = []
             custom_dns: list[str] = []
@@ -1041,34 +1128,6 @@ class AzureDiscovery:
             for dng in pe.private_dns_zone_groups or []:
                 if dng.name:
                     dns_group_names.append(dng.name)
-
-            # PE DNS validation — confirm at least one FQDN resolves to a
-            # private IP (RFC 1918).  Misconfigured DNS zones that resolve to
-            # public addresses indicate a data-exfil risk.
-            dns_resolves_private: bool | None = None
-            if custom_dns and private_ips:
-                import ipaddress as _ipaddr
-                import socket as _socket
-
-                _rfc1918 = (
-                    _ipaddr.ip_network("10.0.0.0/8"),
-                    _ipaddr.ip_network("172.16.0.0/12"),
-                    _ipaddr.ip_network("192.168.0.0/16"),
-                )
-                for fqdn in custom_dns[:3]:
-                    try:
-                        resolved_ip = _socket.gethostbyname(fqdn)
-                        addr = _ipaddr.ip_address(resolved_ip)
-                        if any(addr in net_range for net_range in _rfc1918):
-                            dns_resolves_private = True
-                            break
-                        else:
-                            dns_resolves_private = False
-                    except Exception as _e:
-                        logger.debug("DNS resolution skipped for %s: %s", fqdn, _e)
-            elif private_ips and not custom_dns:
-                # No FQDNs configured — treat as private-only (no public exposure)
-                dns_resolves_private = True
 
             endpoints.append(
                 AzurePrivateEndpoint(
@@ -1081,7 +1140,7 @@ class AzureDiscovery:
                     service_connections=service_conns,
                     dns_zone_group_names=dns_group_names,
                     custom_dns_configs=custom_dns,
-                    dns_resolves_to_private_ip=dns_resolves_private,
+                    dns_resolves_to_private_ip=self._validate_pe_dns(custom_dns, private_ips),
                     tags=dict(pe.tags or {}),
                 )
             )
@@ -1482,87 +1541,16 @@ class AzureDiscovery:
         nvas: list[AzureNVA] = []
 
         for vm in _safe_list(cmc.virtual_machines.list_all()):
-            publisher: str | None = None
-            offer: str | None = None
-            plan_name: str | None = None
-            identification_method: str | None = None
+            publisher, offer, plan_name, identification_method = (
+                self._identify_nva_publisher(vm)
+            )
+            vm_nics, has_ip_forwarding = self._collect_vm_nics(net, vm)
 
-            # ── Strategy 1: explicit marketplace plan ──────────────────
-            if vm.plan and vm.plan.publisher:
-                pub_lower = vm.plan.publisher.lower()
-                if pub_lower in self._NGFW_PUBLISHERS:
-                    publisher = vm.plan.publisher
-                    offer = vm.plan.product
-                    plan_name = vm.plan.name
-                    identification_method = "marketplace"
-
-            # ── Strategy 2: image reference publisher ──────────────────
-            if not identification_method:
-                img = vm.storage_profile.image_reference if vm.storage_profile else None
-                if img and img.publisher:
-                    pub_lower = img.publisher.lower()
-                    if pub_lower in self._NGFW_PUBLISHERS:
-                        publisher = img.publisher
-                        offer = img.offer
-                        plan_name = img.sku
-                        identification_method = "image_reference"
-
-            # ── Collect NICs (needed for strategy 3 + topology) ────────
-            vm_nics: list[AzureNIC] = []
-            has_ip_forwarding = False
-            nic_refs = []
-            if vm.network_profile:
-                nic_refs = vm.network_profile.network_interfaces or []
-            for nic_ref in nic_refs:
-                if not nic_ref.id:
-                    continue
-                try:
-                    nic_rg = _rg_from_id(nic_ref.id)
-                    nic_name = nic_ref.id.split("/")[-1]
-                    nic = net.network_interfaces.get(nic_rg, nic_name)
-                    ip_fwd = bool(getattr(nic, "enable_ip_forwarding", False))
-                    if ip_fwd:
-                        has_ip_forwarding = True
-
-                    subnet_ids: list[str] = []
-                    private_ips: list[str] = []
-                    public_ip_id: str | None = None
-                    for ipc in nic.ip_configurations or []:
-                        if ipc.subnet and ipc.subnet.id:
-                            subnet_ids.append(ipc.subnet.id)
-                        if ipc.private_ip_address:
-                            private_ips.append(ipc.private_ip_address)
-                        if ipc.public_ip_address and ipc.public_ip_address.id:
-                            public_ip_id = ipc.public_ip_address.id
-
-                    vm_nics.append(
-                        AzureNIC(
-                            id=nic.id,
-                            name=nic.name,
-                            location=nic.location,
-                            resource_group=nic_rg,
-                            vm_id=vm.id,
-                            ip_forwarding_enabled=ip_fwd,
-                            subnet_ids=subnet_ids,
-                            private_ips=private_ips,
-                            public_ip_id=public_ip_id,
-                            nsg_id=(
-                                nic.network_security_group.id
-                                if nic.network_security_group
-                                else None
-                            ),
-                            tags=dict(vm.tags or {}),
-                        )
-                    )
-                except Exception as nic_exc:
-                    logger.debug("NIC fetch failed %s: %s", nic_ref.id, nic_exc)
-
-            # ── Strategy 3: IP forwarding on any NIC ──────────────────
             if not identification_method and has_ip_forwarding:
                 identification_method = "ip_forwarding"
 
             if not identification_method:
-                continue  # not an NVA
+                continue
 
             rg = _rg_from_id(vm.id or "")
             os_type: str | None = None
@@ -1591,6 +1579,90 @@ class AzureDiscovery:
             )
 
         return nvas
+
+    def _identify_nva_publisher(
+        self, vm
+    ) -> tuple[str | None, str | None, str | None, str | None]:
+        """Return (publisher, offer, plan_name, identification_method) for a VM.
+
+        Returns all None if the VM does not match any NVA identification strategy.
+        """
+        publisher: str | None = None
+        offer: str | None = None
+        plan_name: str | None = None
+        identification_method: str | None = None
+
+        if vm.plan and vm.plan.publisher:
+            pub_lower = vm.plan.publisher.lower()
+            if pub_lower in self._NGFW_PUBLISHERS:
+                publisher = vm.plan.publisher
+                offer = vm.plan.product
+                plan_name = vm.plan.name
+                identification_method = "marketplace"
+
+        if not identification_method:
+            img = vm.storage_profile.image_reference if vm.storage_profile else None
+            if img and img.publisher:
+                pub_lower = img.publisher.lower()
+                if pub_lower in self._NGFW_PUBLISHERS:
+                    publisher = img.publisher
+                    offer = img.offer
+                    plan_name = img.sku
+                    identification_method = "image_reference"
+
+        return publisher, offer, plan_name, identification_method
+
+    def _collect_vm_nics(self, net, vm) -> tuple[list[AzureNIC], bool]:
+        """Fetch all NIC objects for a VM and return (nics, has_ip_forwarding)."""
+        vm_nics: list[AzureNIC] = []
+        has_ip_forwarding = False
+        nic_refs = []
+        if vm.network_profile:
+            nic_refs = vm.network_profile.network_interfaces or []
+        for nic_ref in nic_refs:
+            if not nic_ref.id:
+                continue
+            try:
+                nic_rg = _rg_from_id(nic_ref.id)
+                nic_name = nic_ref.id.split("/")[-1]
+                nic = net.network_interfaces.get(nic_rg, nic_name)
+                ip_fwd = bool(getattr(nic, "enable_ip_forwarding", False))
+                if ip_fwd:
+                    has_ip_forwarding = True
+
+                subnet_ids: list[str] = []
+                private_ips: list[str] = []
+                public_ip_id: str | None = None
+                for ipc in nic.ip_configurations or []:
+                    if ipc.subnet and ipc.subnet.id:
+                        subnet_ids.append(ipc.subnet.id)
+                    if ipc.private_ip_address:
+                        private_ips.append(ipc.private_ip_address)
+                    if ipc.public_ip_address and ipc.public_ip_address.id:
+                        public_ip_id = ipc.public_ip_address.id
+
+                vm_nics.append(
+                    AzureNIC(
+                        id=nic.id,
+                        name=nic.name,
+                        location=nic.location,
+                        resource_group=nic_rg,
+                        vm_id=vm.id,
+                        ip_forwarding_enabled=ip_fwd,
+                        subnet_ids=subnet_ids,
+                        private_ips=private_ips,
+                        public_ip_id=public_ip_id,
+                        nsg_id=(
+                            nic.network_security_group.id
+                            if nic.network_security_group
+                            else None
+                        ),
+                        tags=dict(vm.tags or {}),
+                    )
+                )
+            except Exception as nic_exc:
+                logger.debug("NIC fetch failed %s: %s", nic_ref.id, nic_exc)
+        return vm_nics, has_ip_forwarding
 
     # ------------------------------------------------------------------ BGP data
 
@@ -1675,23 +1747,21 @@ class AzureDiscovery:
 
     # ------------------------------------------------------------------ Observability
 
-    def _collect_observability(
-        self,
-        net,
-        sub_id: str,
-        nsg_count: int,
-        firewalls: list | None = None,
-        bastion_hosts: list | None = None,
-        gateways: list | None = None,
-        appgws: list | None = None,
-        load_balancers: list | None = None,
-    ) -> ObservabilityData:
+    def _collect_observability(self, ctx: _ObservabilityContext) -> ObservabilityData:
         """Collect Network Watcher, Log Analytics, flow log, Traffic Analytics,
         diagnostic-settings coverage (Firewall, Bastion, Gateway, AppGW, LB),
         and Azure Monitor alert-rule counts."""
-        obs = ObservabilityData(nsg_flow_logs_total=nsg_count)
+        net = ctx.net
+        sub_id = ctx.sub_id
+        obs = ObservabilityData(nsg_flow_logs_total=ctx.nsg_count)
+        self._obs_collect_network_watchers(net, sub_id, obs)
+        self._obs_collect_flow_logs(net, obs)
+        self._obs_collect_la_workspaces(sub_id, obs)
+        self._obs_collect_diagnostics(sub_id, ctx, obs)
+        self._obs_collect_alert_counts(sub_id, obs)
+        return obs
 
-        # Network Watcher presence per region
+    def _obs_collect_network_watchers(self, net, sub_id, obs) -> None:
         try:
             for nw in _safe_list(net.network_watchers.list_all()):
                 obs.network_watchers.append(
@@ -1702,13 +1772,9 @@ class AzureDiscovery:
                     )
                 )
         except Exception as e:
-            logger.warning(
-                "[%s] Network Watcher listing failed: %s",
-                sub_id,
-                e,
-            )
+            logger.warning("[%s] Network Watcher listing failed: %s", sub_id, e)
 
-        # NSG flow log count + Traffic Analytics state (via flow_logs API per Network Watcher)
+    def _obs_collect_flow_logs(self, net, obs) -> None:
         flow_enabled = 0
         ta_enabled = 0
         for nw_info in obs.network_watchers:
@@ -1717,7 +1783,6 @@ class AzureDiscovery:
                 for fl in _safe_list(net.flow_logs.list(nw_rg, nw_info.name)):
                     if getattr(fl, "enabled", False):
                         flow_enabled += 1
-                        # Traffic Analytics is nested inside flow log resource
                         ta_cfg = getattr(fl, "flow_analytics_configuration", None)
                         if ta_cfg:
                             ta_ws = getattr(
@@ -1730,11 +1795,9 @@ class AzureDiscovery:
         obs.nsg_flow_logs_enabled = flow_enabled
         obs.traffic_analytics_enabled = ta_enabled
 
-        # Log Analytics workspaces
+    def _obs_collect_la_workspaces(self, sub_id, obs) -> None:
         try:
-            from azure.mgmt.loganalytics import (
-                LogAnalyticsManagementClient,
-            )
+            from azure.mgmt.loganalytics import LogAnalyticsManagementClient
 
             la = LogAnalyticsManagementClient(self._credential, sub_id)
             for ws in _safe_list(la.workspaces.list()):
@@ -1755,53 +1818,37 @@ class AzureDiscovery:
         except Exception as e:
             logger.warning("[%s] Log Analytics listing failed: %s", sub_id, e)
 
-        # Firewall and Bastion diagnostic settings — check each resource for a
-        # Log Analytics sink via the Azure Monitor diagnostic settings API.
-        def _has_la_diagnostic(resource_id: str) -> bool:
-            try:
-                from azure.mgmt.monitor import MonitorManagementClient
+    def _has_la_diagnostic(self, sub_id: str, resource_id: str) -> bool:
+        """Return True if the resource has a Log Analytics diagnostic-settings sink."""
+        try:
+            from azure.mgmt.monitor import MonitorManagementClient
 
-                mon = MonitorManagementClient(self._credential, sub_id)
-                for ds in _safe_list(mon.diagnostic_settings.list(resource_id)):
-                    if getattr(ds, "workspace_id", None):
-                        return True
-            except Exception as _e:
-                logger.debug(
-                    "Diagnostic settings query failed for %s: %s",
-                    resource_id,
-                    _e,
-                )
-            return False
+            mon = MonitorManagementClient(self._credential, sub_id)
+            for ds in _safe_list(mon.diagnostic_settings.list(resource_id)):
+                if getattr(ds, "workspace_id", None):
+                    return True
+        except Exception as _e:
+            logger.debug("Diagnostic settings query failed for %s: %s", resource_id, _e)
+        return False
 
-        for fw in firewalls or []:
-            obs.firewalls_total += 1
-            if _has_la_diagnostic(fw.id):
-                obs.firewalls_with_diagnostics += 1
+    def _obs_collect_diagnostics(self, sub_id, ctx, obs) -> None:
+        resource_groups = [
+            (ctx.firewalls, "firewalls_total", "firewalls_with_diagnostics"),
+            (ctx.bastion_hosts, "bastion_total", "bastion_with_diagnostics"),
+            (ctx.gateways, "gateways_total", "gateways_with_diagnostics"),
+            (ctx.appgws, "appgw_total", "appgw_with_diagnostics"),
+            (ctx.load_balancers, "lb_total", "lb_with_diagnostics"),
+        ]
+        for resources, total_attr, diag_attr in resource_groups:
+            self._obs_tally_diagnostics(sub_id, resources or [], obs, total_attr, diag_attr)
 
-        for bh in bastion_hosts or []:
-            obs.bastion_total += 1
-            if _has_la_diagnostic(bh.id):
-                obs.bastion_with_diagnostics += 1
+    def _obs_tally_diagnostics(self, sub_id, resources, obs, total_attr, diag_attr) -> None:
+        for resource in resources:
+            setattr(obs, total_attr, getattr(obs, total_attr) + 1)
+            if self._has_la_diagnostic(sub_id, resource.id):
+                setattr(obs, diag_attr, getattr(obs, diag_attr) + 1)
 
-        # v1.3.0 — generalized diagnostic-settings coverage for gateways,
-        # Application Gateways, and Load Balancers (same LA-sink check).
-        for gw in gateways or []:
-            obs.gateways_total += 1
-            if _has_la_diagnostic(gw.id):
-                obs.gateways_with_diagnostics += 1
-
-        for agw in appgws or []:
-            obs.appgw_total += 1
-            if _has_la_diagnostic(agw.id):
-                obs.appgw_with_diagnostics += 1
-
-        for lb in load_balancers or []:
-            obs.lb_total += 1
-            if _has_la_diagnostic(lb.id):
-                obs.lb_with_diagnostics += 1
-
-        # v1.3.0 — Azure Monitor alert-rule coverage (metric alerts +
-        # activity log alerts). Degrades gracefully on missing permissions.
+    def _obs_collect_alert_counts(self, sub_id, obs) -> None:
         try:
             from azure.mgmt.monitor import MonitorManagementClient
 
@@ -1814,8 +1861,6 @@ class AzureDiscovery:
             logger.warning("azure-mgmt-monitor not installed — alert-rule counts skipped")
         except Exception as e:
             logger.warning("[%s] Alert-rule enumeration failed: %s", sub_id, e)
-
-        return obs
 
     # ------------------------------------------------------------------ Network metrics
 
@@ -1839,18 +1884,7 @@ class AzureDiscovery:
         "HighPerformance": 2000,
     }
 
-    def _collect_network_metrics(
-        self,
-        sub_id: str,
-        gateways: list[AzureVirtualNetworkGateway],
-        firewalls: list[AzureFirewall] | None = None,
-        load_balancers: list[AzureLoadBalancer] | None = None,
-        vnets: list[VNet] | None = None,
-        er_circuits: list | None = None,
-        public_ips: list | None = None,
-        la_workspaces: list | None = None,
-        appgws: list[ApplicationGateway] | None = None,
-    ) -> NetworkMetrics:
+    def _collect_network_metrics(self, ctx: _MetricsContext) -> NetworkMetrics:
         """Collect 24-hour Azure Monitor metrics and compute VNet IP utilization.
 
         Collectors (each runs independently — failure in one does not abort others):
@@ -1865,7 +1899,6 @@ class AzureDiscovery:
           9. App Gateway: CapacityUnits + BackendLastByteResponseTime + request counts
         """
         import datetime as _dt
-        import ipaddress
         from datetime import timedelta
 
         metrics = NetworkMetrics()
@@ -1877,234 +1910,213 @@ class AzureDiscovery:
             return metrics
 
         try:
-            monitor = MonitorManagementClient(self._credential, sub_id)
+            monitor = MonitorManagementClient(self._credential, ctx.sub_id)
             end = _dt.datetime.now(_dt.UTC)
             start = end - timedelta(hours=24)
             timespan = (
                 f"{start.strftime('%Y-%m-%dT%H:%M:%SZ')}/{end.strftime('%Y-%m-%dT%H:%M:%SZ')}"
             )
-
-            # ── 1. Gateway metrics (ingress/egress + utilization) ─────────────
-            for gw in (gateways or [])[:5]:  # cap to avoid rate limits
-                gm = GatewayMetric(
-                    gateway_name=gw.name,
-                    gateway_type=gw.gateway_type,
-                    bandwidth_mbps_provisioned=self._GW_SKU_BANDWIDTH.get(gw.sku_name),
-                )
-                try:
-                    result = monitor.metrics.list(
-                        resource_uri=gw.id,
-                        timespan=timespan,
-                        interval="PT1H",
-                        metricnames="TunnelIngressBytes,TunnelEgressBytes,AverageBandwidth",
-                        aggregation="Total,Average",
-                    )
-                    for metric in result.value or []:
-                        mn = metric.name.value if metric.name else ""
-                        if mn == "TunnelIngressBytes":
-                            gm.ingress_bytes_24h = sum(
-                                dp.total or 0
-                                for ts in metric.timeseries
-                                for dp in ts.data
-                                if dp.total is not None
-                            )
-                        elif mn == "TunnelEgressBytes":
-                            gm.egress_bytes_24h = sum(
-                                dp.total or 0
-                                for ts in metric.timeseries
-                                for dp in ts.data
-                                if dp.total is not None
-                            )
-                        elif mn == "AverageBandwidth":
-                            # AverageBandwidth is in bps — convert to Mbps
-                            raw_bps_values = [
-                                dp.average
-                                for ts in metric.timeseries
-                                for dp in ts.data
-                                if dp.average is not None
-                            ]
-                            if raw_bps_values and gm.bandwidth_mbps_provisioned:
-                                avg_mbps = (sum(raw_bps_values) / len(raw_bps_values)) / 1_000_000
-                                gm.utilization_pct = round(
-                                    (avg_mbps / gm.bandwidth_mbps_provisioned) * 100, 1
-                                )
-                except Exception as e:
-                    logger.debug("[%s] Gateway metrics for %s failed: %s", sub_id, gw.name, e)
-                metrics.gateway_metrics.append(gm)
-
-            # ── 2. Azure Firewall metrics ─────────────────────────────────────
-            for fw in (firewalls or [])[:5]:
-                fm = FirewallMetric(firewall_name=fw.name)
-                try:
-                    result = monitor.metrics.list(
-                        resource_uri=fw.id,
-                        timespan=timespan,
-                        interval="PT1H",
-                        metricnames=("DataProcessed,ApplicationRuleHit,NetworkRuleHit,NatRuleHit"),
-                        aggregation="Total",
-                    )
-                    for metric in result.value or []:
-                        mn = metric.name.value if metric.name else ""
-                        total = sum(
-                            dp.total or 0
-                            for ts in metric.timeseries
-                            for dp in ts.data
-                            if dp.total is not None
-                        )
-                        if mn == "DataProcessed":
-                            # DataProcessed is in bytes — convert to GB
-                            fm.data_processed_gb_24h = round(total / 1_073_741_824, 3)
-                        elif mn == "ApplicationRuleHit":
-                            fm.app_rule_hits_24h = int(total)
-                        elif mn == "NetworkRuleHit":
-                            fm.network_rule_hits_24h = int(total)
-                        elif mn == "NatRuleHit":
-                            fm.nat_rule_hits_24h = int(total)
-                except Exception as e:
-                    fm.collection_error = str(e)
-                    logger.debug("[%s] Firewall metrics for %s failed: %s", sub_id, fw.name, e)
-                metrics.firewall_metrics.append(fm)
-
-            # ── 3. Load Balancer SNAT metrics ─────────────────────────────────
-            # Only Standard SKU LBs expose SNAT metrics; Basic skips gracefully.
-            for lb in (load_balancers or [])[:10]:
-                lm = LoadBalancerMetric(lb_name=lb.name)
-                try:
-                    result = monitor.metrics.list(
-                        resource_uri=lb.id,
-                        timespan=timespan,
-                        interval="PT1H",
-                        metricnames="SnatConnectionCount,UsedSnatPorts,AllocatedSnatPorts",
-                        aggregation="Total,Average",
-                    )
-                    for metric in result.value or []:
-                        mn = metric.name.value if metric.name else ""
-                        if mn == "SnatConnectionCount":
-                            lm.snat_connections_24h = sum(
-                                dp.total or 0
-                                for ts in metric.timeseries
-                                for dp in ts.data
-                                if dp.total is not None
-                            )
-                        elif mn == "UsedSnatPorts":
-                            vals = [
-                                dp.average
-                                for ts in metric.timeseries
-                                for dp in ts.data
-                                if dp.average is not None
-                            ]
-                            if vals:
-                                lm.used_snat_ports = round(sum(vals) / len(vals), 1)
-                        elif mn == "AllocatedSnatPorts":
-                            vals = [
-                                dp.average
-                                for ts in metric.timeseries
-                                for dp in ts.data
-                                if dp.average is not None
-                            ]
-                            if vals:
-                                lm.allocated_snat_ports = round(sum(vals) / len(vals), 1)
-                    if (
-                        lm.used_snat_ports
-                        and lm.allocated_snat_ports
-                        and lm.allocated_snat_ports > 0
-                    ):
-                        lm.snat_port_utilization_pct = round(
-                            (lm.used_snat_ports / lm.allocated_snat_ports) * 100, 1
-                        )
-                except Exception as e:
-                    lm.collection_error = str(e)
-                    logger.debug("[%s] LB SNAT metrics for %s failed: %s", sub_id, lb.name, e)
-                metrics.lb_metrics.append(lm)
-
-            # ── 4. ER circuit utilization ─────────────────────────────────────
-            # ER circuit bandwidth is in Mbps; Monitor returns bps.
-            for erc in (er_circuits or [])[:5]:
-                em = ERCircuitMetric(
-                    circuit_name=erc.name,
-                    bandwidth_mbps_provisioned=float(erc.bandwidth_mbps or 0) or None,
-                )
-                try:
-                    result = monitor.metrics.list(
-                        resource_uri=erc.id,
-                        timespan=timespan,
-                        interval="PT1H",
-                        metricnames=("BitsInPerSecond,BitsOutPerSecond"),
-                        aggregation="Average",
-                    )
-                    for metric in result.value or []:
-                        mn = metric.name.value if metric.name else ""
-                        vals = [
-                            dp.average
-                            for ts in metric.timeseries
-                            for dp in ts.data
-                            if dp.average is not None
-                        ]
-                        if not vals:
-                            continue
-                        avg_bps = sum(vals) / len(vals)
-                        if mn == "BitsInPerSecond":
-                            em.primary_bits_in_per_second = round(avg_bps, 1)
-                            if em.bandwidth_mbps_provisioned:
-                                em.primary_utilization_pct = round(
-                                    (avg_bps / 1_000_000 / em.bandwidth_mbps_provisioned) * 100,
-                                    1,
-                                )
-                        elif mn == "BitsOutPerSecond":
-                            em.secondary_bits_in_per_second = round(avg_bps, 1)
-                            if em.bandwidth_mbps_provisioned:
-                                em.secondary_utilization_pct = round(
-                                    (avg_bps / 1_000_000 / em.bandwidth_mbps_provisioned) * 100,
-                                    1,
-                                )
-                except Exception as e:
-                    em.collection_error = str(e)
-                    logger.debug("[%s] ER metrics for %s failed: %s", sub_id, erc.name, e)
-                metrics.er_circuit_metrics.append(em)
-
-            # ── 5. DDoS attack telemetry ──────────────────────────────────────
-            for pip in (public_ips or [])[:20]:  # cap to avoid rate limits
-                try:
-                    result = monitor.metrics.list(
-                        resource_uri=pip.id,
-                        timespan=timespan,
-                        interval="PT1H",
-                        metricnames="IfUnderDDoSAttack,DdosPacketsDropped",
-                        aggregation="Maximum,Total",
-                    )
-                    under_attack = False
-                    for metric in result.value or []:
-                        mn = metric.name.value if metric.name else ""
-                        if mn == "IfUnderDDoSAttack":
-                            max_val = max(
-                                (
-                                    dp.maximum or 0
-                                    for ts in metric.timeseries
-                                    for dp in ts.data
-                                    if dp.maximum is not None
-                                ),
-                                default=0,
-                            )
-                            if max_val > 0:
-                                under_attack = True
-                                metrics.ddos_attack_events_24h += 1
-                        elif mn == "DdosPacketsDropped" and under_attack:
-                            pass  # logged via IfUnderDDoSAttack
-                    if under_attack and pip.ip_address:
-                        metrics.public_ips_under_ddos_attack.append(pip.ip_address)
-                except Exception as e:
-                    logger.debug("[%s] DDoS metrics for %s failed: %s", sub_id, pip.id, e)
-
+            self._collect_gateway_metrics(ctx.sub_id, ctx.gateways, monitor, timespan, metrics)
+            self._collect_firewall_metrics(ctx.sub_id, ctx.firewalls, monitor, timespan, metrics)
+            self._collect_lb_metrics(ctx.sub_id, ctx.load_balancers, monitor, timespan, metrics)
+            self._collect_er_metrics(ctx.sub_id, ctx.er_circuits, monitor, timespan, metrics)
+            self._collect_ddos_metrics(ctx.sub_id, ctx.public_ips, monitor, timespan, metrics)
         except Exception as e:
             metrics.collection_error = str(e)
 
-        # ── 6. VNet IP space utilization (no Monitor call — computed from topology) ──
+        self._compute_vnet_utilization(ctx.vnets, metrics)
+        self._collect_nta_metrics(ctx.sub_id, ctx.la_workspaces, metrics)
+        self._collect_cost_metrics(ctx.sub_id, metrics)
+        self._collect_appgw_metrics(ctx.sub_id, ctx.appgws, monitor if not metrics.collection_error else None, timespan if not metrics.collection_error else "", metrics)
+
+        return metrics
+
+    @staticmethod
+    def _sum_metric_total(metric) -> float:
+        """Sum all dp.total values across all timeseries for a Monitor metric result."""
+        return sum(
+            dp.total or 0
+            for ts in metric.timeseries
+            for dp in ts.data
+            if dp.total is not None
+        )
+
+    @staticmethod
+    def _avg_metric_values(metric) -> list[float]:
+        """Collect all non-None dp.average values across all timeseries."""
+        return [
+            dp.average
+            for ts in metric.timeseries
+            for dp in ts.data
+            if dp.average is not None
+        ]
+
+    @staticmethod
+    def _max_metric_maximum(metric) -> float:
+        """Return the max dp.maximum value across all timeseries (0 if none)."""
+        return max(
+            (dp.maximum or 0 for ts in metric.timeseries for dp in ts.data if dp.maximum is not None),
+            default=0,
+        )
+
+    def _collect_gateway_metrics(self, sub_id, gateways, monitor, timespan, metrics) -> None:
+        for gw in (gateways or [])[:5]:
+            gm = GatewayMetric(
+                gateway_name=gw.name,
+                gateway_type=gw.gateway_type,
+                bandwidth_mbps_provisioned=self._GW_SKU_BANDWIDTH.get(gw.sku_name),
+            )
+            try:
+                result = monitor.metrics.list(
+                    resource_uri=gw.id,
+                    timespan=timespan,
+                    interval="PT1H",
+                    metricnames="TunnelIngressBytes,TunnelEgressBytes,AverageBandwidth",
+                    aggregation="Total,Average",
+                )
+                for metric in result.value or []:
+                    mn = metric.name.value if metric.name else ""
+                    if mn == "TunnelIngressBytes":
+                        gm.ingress_bytes_24h = self._sum_metric_total(metric)
+                    elif mn == "TunnelEgressBytes":
+                        gm.egress_bytes_24h = self._sum_metric_total(metric)
+                    elif mn == "AverageBandwidth":
+                        raw_bps_values = self._avg_metric_values(metric)
+                        if raw_bps_values and gm.bandwidth_mbps_provisioned:
+                            avg_mbps = (sum(raw_bps_values) / len(raw_bps_values)) / 1_000_000
+                            gm.utilization_pct = round(
+                                (avg_mbps / gm.bandwidth_mbps_provisioned) * 100, 1
+                            )
+            except Exception as e:
+                logger.debug("[%s] Gateway metrics for %s failed: %s", sub_id, gw.name, e)
+            metrics.gateway_metrics.append(gm)
+
+    def _collect_firewall_metrics(self, sub_id, firewalls, monitor, timespan, metrics) -> None:
+        for fw in (firewalls or [])[:5]:
+            fm = FirewallMetric(firewall_name=fw.name)
+            try:
+                result = monitor.metrics.list(
+                    resource_uri=fw.id,
+                    timespan=timespan,
+                    interval="PT1H",
+                    metricnames="DataProcessed,ApplicationRuleHit,NetworkRuleHit,NatRuleHit",
+                    aggregation="Total",
+                )
+                for metric in result.value or []:
+                    mn = metric.name.value if metric.name else ""
+                    total = self._sum_metric_total(metric)
+                    if mn == "DataProcessed":
+                        fm.data_processed_gb_24h = round(total / 1_073_741_824, 3)
+                    elif mn == "ApplicationRuleHit":
+                        fm.app_rule_hits_24h = int(total)
+                    elif mn == "NetworkRuleHit":
+                        fm.network_rule_hits_24h = int(total)
+                    elif mn == "NatRuleHit":
+                        fm.nat_rule_hits_24h = int(total)
+            except Exception as e:
+                fm.collection_error = str(e)
+                logger.debug("[%s] Firewall metrics for %s failed: %s", sub_id, fw.name, e)
+            metrics.firewall_metrics.append(fm)
+
+    def _collect_lb_metrics(self, sub_id, load_balancers, monitor, timespan, metrics) -> None:
+        for lb in (load_balancers or [])[:10]:
+            lm = LoadBalancerMetric(lb_name=lb.name)
+            try:
+                result = monitor.metrics.list(
+                    resource_uri=lb.id,
+                    timespan=timespan,
+                    interval="PT1H",
+                    metricnames="SnatConnectionCount,UsedSnatPorts,AllocatedSnatPorts",
+                    aggregation="Total,Average",
+                )
+                for metric in result.value or []:
+                    mn = metric.name.value if metric.name else ""
+                    if mn == "SnatConnectionCount":
+                        lm.snat_connections_24h = self._sum_metric_total(metric)
+                    elif mn in ("UsedSnatPorts", "AllocatedSnatPorts"):
+                        vals = self._avg_metric_values(metric)
+                        if vals:
+                            avg = round(sum(vals) / len(vals), 1)
+                            if mn == "UsedSnatPorts":
+                                lm.used_snat_ports = avg
+                            else:
+                                lm.allocated_snat_ports = avg
+                if lm.used_snat_ports and lm.allocated_snat_ports and lm.allocated_snat_ports > 0:
+                    lm.snat_port_utilization_pct = round(
+                        (lm.used_snat_ports / lm.allocated_snat_ports) * 100, 1
+                    )
+            except Exception as e:
+                lm.collection_error = str(e)
+                logger.debug("[%s] LB SNAT metrics for %s failed: %s", sub_id, lb.name, e)
+            metrics.lb_metrics.append(lm)
+
+    def _collect_er_metrics(self, sub_id, er_circuits, monitor, timespan, metrics) -> None:
+        for erc in (er_circuits or [])[:5]:
+            em = ERCircuitMetric(
+                circuit_name=erc.name,
+                bandwidth_mbps_provisioned=float(erc.bandwidth_mbps or 0) or None,
+            )
+            try:
+                result = monitor.metrics.list(
+                    resource_uri=erc.id,
+                    timespan=timespan,
+                    interval="PT1H",
+                    metricnames="BitsInPerSecond,BitsOutPerSecond",
+                    aggregation="Average",
+                )
+                for metric in result.value or []:
+                    mn = metric.name.value if metric.name else ""
+                    vals = self._avg_metric_values(metric)
+                    if not vals:
+                        continue
+                    avg_bps = sum(vals) / len(vals)
+                    if mn == "BitsInPerSecond":
+                        em.primary_bits_in_per_second = round(avg_bps, 1)
+                        if em.bandwidth_mbps_provisioned:
+                            em.primary_utilization_pct = round(
+                                (avg_bps / 1_000_000 / em.bandwidth_mbps_provisioned) * 100, 1
+                            )
+                    elif mn == "BitsOutPerSecond":
+                        em.secondary_bits_in_per_second = round(avg_bps, 1)
+                        if em.bandwidth_mbps_provisioned:
+                            em.secondary_utilization_pct = round(
+                                (avg_bps / 1_000_000 / em.bandwidth_mbps_provisioned) * 100, 1
+                            )
+            except Exception as e:
+                em.collection_error = str(e)
+                logger.debug("[%s] ER metrics for %s failed: %s", sub_id, erc.name, e)
+            metrics.er_circuit_metrics.append(em)
+
+    def _collect_ddos_metrics(self, sub_id, public_ips, monitor, timespan, metrics) -> None:
+        for pip in (public_ips or [])[:20]:
+            try:
+                result = monitor.metrics.list(
+                    resource_uri=pip.id,
+                    timespan=timespan,
+                    interval="PT1H",
+                    metricnames="IfUnderDDoSAttack,DdosPacketsDropped",
+                    aggregation="Maximum,Total",
+                )
+                under_attack = False
+                for metric in result.value or []:
+                    mn = metric.name.value if metric.name else ""
+                    if mn == "IfUnderDDoSAttack":
+                        if self._max_metric_maximum(metric) > 0:
+                            under_attack = True
+                            metrics.ddos_attack_events_24h += 1
+                if under_attack and pip.ip_address:
+                    metrics.public_ips_under_ddos_attack.append(pip.ip_address)
+            except Exception as e:
+                logger.debug("[%s] DDoS metrics for %s failed: %s", sub_id, pip.id, e)
+
+    def _compute_vnet_utilization(self, vnets, metrics) -> None:
+        import ipaddress
+
         for vnet in vnets or []:
             try:
                 prefixes = vnet.address_space or []
                 if not prefixes:
                     continue
-                # Use the first (primary) address space for utilization calc
                 vnet_net = ipaddress.ip_network(prefixes[0], strict=False)
                 vnet_size = vnet_net.num_addresses
                 if vnet_size <= 0:
@@ -2118,63 +2130,71 @@ class AzureDiscovery:
             except Exception as e:
                 logger.debug("VNet utilization calc failed for %s: %s", vnet.id, e)
 
-        # ── 7. NTA east-west / north-south bytes via Log Analytics ───────────
-        # Requires azure-monitor-query and at least one LA workspace with
-        # Traffic Analytics enabled (AzureNetworkAnalytics_CL populated).
-        if la_workspaces:
+    def _collect_nta_metrics(self, sub_id, la_workspaces, metrics) -> None:
+        if not la_workspaces:
+            return
+        try:
+            from azure.monitor.query import LogsQueryClient
+
+            logs_client = LogsQueryClient(self._credential)
+            nta_query = (
+                "AzureNetworkAnalytics_CL"
+                "| where TimeGenerated > ago(24h)"
+                "| where SubType_s == 'FlowLog'"
+                "| summarize Bytes=sum(FlowsByteCount_d) by FlowDirection_s"
+            )
+            east_west, north_south, queried_ws = self._nta_query_workspaces(
+                sub_id, logs_client, nta_query, la_workspaces
+            )
+            if queried_ws:
+                metrics.nta_east_west_bytes_24h = east_west
+                metrics.nta_north_south_bytes_24h = north_south
+                metrics.nta_query_workspace_id = queried_ws
+        except ImportError:
+            logger.debug("[%s] azure-monitor-query not installed; NTA query skipped", sub_id)
+        except Exception as e:
+            logger.debug("[%s] NTA query failed: %s", sub_id, e)
+
+    def _nta_query_workspaces(
+        self, sub_id, logs_client, nta_query, la_workspaces
+    ) -> tuple[float, float, str | None]:
+        """Query up to 3 LA workspaces for NTA flow data; return (east_west, north_south, ws_id)."""
+        import datetime as _dt2
+        from datetime import timedelta as _td
+
+        from azure.monitor.query import LogsQueryStatus
+
+        east_west: float = 0.0
+        north_south: float = 0.0
+        queried_ws: str | None = None
+        for ws in (la_workspaces or [])[:3]:
+            ws_id = ws.get("workspace_id") or ws.get("id", "")
+            if not ws_id:
+                continue
             try:
-                from azure.monitor.query import LogsQueryClient, LogsQueryStatus
-
-                logs_client = LogsQueryClient(self._credential)
-                nta_query = (
-                    "AzureNetworkAnalytics_CL"
-                    "| where TimeGenerated > ago(24h)"
-                    "| where SubType_s == 'FlowLog'"
-                    "| summarize Bytes=sum(FlowsByteCount_d) by FlowDirection_s"
+                resp = logs_client.query_workspace(
+                    workspace_id=ws_id,
+                    query=nta_query,
+                    timespan=(
+                        _dt2.datetime.now(_dt2.UTC) - _td(hours=24),
+                        _dt2.datetime.now(_dt2.UTC),
+                    ),
                 )
-                east_west: float = 0.0
-                north_south: float = 0.0
-                queried_ws: str | None = None
-                for ws in (la_workspaces or [])[:3]:
-                    ws_id = ws.get("workspace_id") or ws.get("id", "")
-                    if not ws_id:
-                        continue
-                    try:
-                        import datetime as _dt2
-                        from datetime import timedelta as _td
-
-                        resp = logs_client.query_workspace(
-                            workspace_id=ws_id,
-                            query=nta_query,
-                            timespan=(
-                                _dt2.datetime.now(_dt2.UTC) - _td(hours=24),
-                                _dt2.datetime.now(_dt2.UTC),
-                            ),
-                        )
-                        if resp.status == LogsQueryStatus.SUCCESS and resp.tables:
-                            for row in resp.tables[0].rows:
-                                direction = str(row[0]).strip()
-                                byte_val = float(row[1] or 0)
-                                if direction in ("E", "IntraVNet"):
-                                    east_west += byte_val
-                                elif direction in ("I", "O", "Inbound", "Outbound"):
-                                    north_south += byte_val
-                            queried_ws = ws_id
-                            break  # first workspace with data wins
-                    except Exception as e:
-                        logger.debug("[%s] NTA query on %s failed: %s", sub_id, ws_id, e)
-                if queried_ws:
-                    metrics.nta_east_west_bytes_24h = east_west
-                    metrics.nta_north_south_bytes_24h = north_south
-                    metrics.nta_query_workspace_id = queried_ws
-            except ImportError:
-                logger.debug("[%s] azure-monitor-query not installed; NTA query skipped", sub_id)
+                if resp.status == LogsQueryStatus.SUCCESS and resp.tables:
+                    for row in resp.tables[0].rows:
+                        direction = str(row[0]).strip()
+                        byte_val = float(row[1] or 0)
+                        if direction in ("E", "IntraVNet"):
+                            east_west += byte_val
+                        elif direction in ("I", "O", "Inbound", "Outbound"):
+                            north_south += byte_val
+                    queried_ws = ws_id
+                    break
             except Exception as e:
-                logger.debug("[%s] NTA query failed: %s", sub_id, e)
+                logger.debug("[%s] NTA query on %s failed: %s", sub_id, ws_id, e)
+        return east_west, north_south, queried_ws
 
-        # ── 8. Cost Management — Microsoft.Network MTD egress spend ──────────
-        # Requires Billing Reader (or Cost Management Reader) on the subscription.
-        # Uses azure-mgmt-costmanagement (lazy import — optional dependency).
+    def _collect_cost_metrics(self, sub_id, metrics) -> None:
         try:
             import datetime as _dt3
 
@@ -2221,7 +2241,9 @@ class AzureDiscovery:
         except Exception as e:
             logger.debug("[%s] Cost Management query failed: %s", sub_id, e)
 
-        # ── 9. Application Gateway — capacity units + latency + request counts ──
+    def _collect_appgw_metrics(self, sub_id, appgws, monitor, timespan, metrics) -> None:
+        if monitor is None:
+            return
         for ag in (appgws or [])[:10]:
             agm = AppGatewayMetric(appgw_name=ag.name)
             try:
@@ -2236,66 +2258,38 @@ class AzureDiscovery:
                     aggregation="Average,Total,Maximum",
                 )
                 for metric in result.value or []:
-                    mn = metric.name.value if metric.name else ""
-                    if mn == "CapacityUnits":
-                        avg_vals = [
-                            dp.average
-                            for ts in metric.timeseries
-                            for dp in ts.data
-                            if dp.average is not None
-                        ]
-                        max_vals = [
-                            dp.maximum
-                            for ts in metric.timeseries
-                            for dp in ts.data
-                            if dp.maximum is not None
-                        ]
-                        if avg_vals:
-                            agm.capacity_units_avg = round(sum(avg_vals) / len(avg_vals), 2)
-                        if max_vals:
-                            agm.capacity_units_max = round(max(max_vals), 2)
-                    elif mn == "BackendLastByteResponseTime":
-                        avg_vals = [
-                            dp.average
-                            for ts in metric.timeseries
-                            for dp in ts.data
-                            if dp.average is not None
-                        ]
-                        if avg_vals:
-                            agm.backend_latency_ms_avg = round(sum(avg_vals) / len(avg_vals), 1)
-                    elif mn == "FailedRequests":
-                        agm.failed_requests_24h = int(
-                            sum(
-                                dp.total or 0
-                                for ts in metric.timeseries
-                                for dp in ts.data
-                                if dp.total is not None
-                            )
-                        )
-                    elif mn == "TotalRequests":
-                        agm.total_requests_24h = int(
-                            sum(
-                                dp.total or 0
-                                for ts in metric.timeseries
-                                for dp in ts.data
-                                if dp.total is not None
-                            )
-                        )
-                    elif mn == "ApplicationGatewayWAFRuleMatches":
-                        agm.waf_rule_hits_24h = int(
-                            sum(
-                                dp.total or 0
-                                for ts in metric.timeseries
-                                for dp in ts.data
-                                if dp.total is not None
-                            )
-                        )
+                    self._apply_appgw_metric(metric, agm)
             except Exception as e:
                 agm.collection_error = str(e)
                 logger.debug("[%s] App GW metrics for %s failed: %s", sub_id, ag.name, e)
             metrics.appgw_metrics.append(agm)
 
-        return metrics
+    @staticmethod
+    def _apply_appgw_metric(metric, agm) -> None:
+        """Apply one Monitor metric value to an AppGatewayMetric object."""
+        mn = metric.name.value if metric.name else ""
+        if mn == "CapacityUnits":
+            avg_vals = AzureDiscovery._avg_metric_values(metric)
+            max_vals = [
+                dp.maximum
+                for ts in metric.timeseries
+                for dp in ts.data
+                if dp.maximum is not None
+            ]
+            if avg_vals:
+                agm.capacity_units_avg = round(sum(avg_vals) / len(avg_vals), 2)
+            if max_vals:
+                agm.capacity_units_max = round(max(max_vals), 2)
+        elif mn == "BackendLastByteResponseTime":
+            avg_vals = AzureDiscovery._avg_metric_values(metric)
+            if avg_vals:
+                agm.backend_latency_ms_avg = round(sum(avg_vals) / len(avg_vals), 1)
+        elif mn == "FailedRequests":
+            agm.failed_requests_24h = int(AzureDiscovery._sum_metric_total(metric))
+        elif mn == "TotalRequests":
+            agm.total_requests_24h = int(AzureDiscovery._sum_metric_total(metric))
+        elif mn == "ApplicationGatewayWAFRuleMatches":
+            agm.waf_rule_hits_24h = int(AzureDiscovery._sum_metric_total(metric))
 
     # ----------------------------------------------- Front Door WAF policies
 
@@ -2339,6 +2333,57 @@ class AzureDiscovery:
 
     # ------------------------------------------------- Defender for Cloud
 
+    @staticmethod
+    def _defender_status(item) -> str:
+        try:
+            return (item.status.code if item.status else "Unknown") or "Unknown"
+        except Exception as _e:
+            logger.debug("Could not read assessment status: %s", _e)
+            return "Unknown"
+
+    @staticmethod
+    def _defender_meta(item) -> dict | None:
+        """Return parsed metadata dict, or None if item should be skipped."""
+        try:
+            meta = item.metadata
+            category = (meta.categories[0] if meta and meta.categories else None) or ""
+            if "network" not in (category or "").lower():
+                return None
+            return {
+                "category": category,
+                "severity": (meta.severity if meta else "Medium") or "Medium",
+                "description": meta.description if meta else None,
+                "remediation": meta.remediation_description if meta else None,
+                "effort": meta.implementation_effort if meta else None,
+                "threats": list(meta.threats or []) if meta else [],
+                "user_impact": meta.user_impact if meta else None,
+                "display_name": (meta.display_name if meta else item.name) or item.name or "",
+            }
+        except Exception as _e:
+            logger.debug("Could not read assessment metadata: %s", _e)
+            return {
+                "category": "Networking",
+                "severity": "Medium",
+                "description": None,
+                "remediation": None,
+                "effort": None,
+                "threats": [],
+                "user_impact": None,
+                "display_name": item.name or "",
+            }
+
+    @staticmethod
+    def _defender_resource(item) -> tuple[str | None, str | None]:
+        try:
+            if item.resource_details:
+                return (
+                    getattr(item.resource_details, "id", None),
+                    getattr(item.resource_details, "resource_type", None),
+                )
+        except Exception as _e:
+            logger.debug("Could not read assessment resource details: %s", _e)
+        return None, None
+
     def _collect_defender_assessments(self, sub_id: str) -> list[DefenderAssessment]:
         """Collect Defender for Cloud security assessments filtered to Networking category.
 
@@ -2358,58 +2403,28 @@ class AzureDiscovery:
             sc = SecurityCenter(self._credential, sub_id)
             scope = f"/subscriptions/{sub_id}"
             for item in sc.assessments.list(scope):
-                status_code = "Unknown"
-                severity = "Medium"
-                try:
-                    status_code = (item.status.code if item.status else "Unknown") or "Unknown"
-                except Exception as _e:
-                    logger.debug("Could not read assessment status: %s", _e)
+                status_code = self._defender_status(item)
                 if status_code not in ("Unhealthy", "NotApplicable"):
                     continue
-                try:
-                    meta = item.metadata
-                    category = (meta.categories[0] if meta and meta.categories else None) or ""
-                    if "network" not in (category or "").lower():
-                        continue
-                    severity = (meta.severity if meta else "Medium") or "Medium"
-                    description = meta.description if meta else None
-                    remediation = meta.remediation_description if meta else None
-                    effort = meta.implementation_effort if meta else None
-                    threats = list(meta.threats or []) if meta else []
-                    user_impact = meta.user_impact if meta else None
-                    display_name = (meta.display_name if meta else item.name) or item.name or ""
-                except Exception as _e:
-                    logger.debug("Could not read assessment metadata: %s", _e)
-                    category = "Networking"
-                    description = None
-                    remediation = None
-                    effort = None
-                    threats = []
-                    user_impact = None
-                    display_name = item.name or ""
-
-                resource_id = None
-                resource_type = None
-                try:
-                    if item.resource_details:
-                        resource_id = getattr(item.resource_details, "id", None)
-                        resource_type = getattr(item.resource_details, "resource_type", None)
-                except Exception as _e:
-                    logger.debug("Could not read assessment resource details: %s", _e)
-
+                meta = self._defender_meta(item)
+                if meta is None:
+                    continue
+                resource_id, resource_type = self._defender_resource(item)
+                effort = meta["effort"]
+                user_impact = meta["user_impact"]
                 assessments.append(
                     DefenderAssessment(
                         assessment_id=item.id or "",
-                        display_name=display_name,
-                        description=description,
-                        remediation_description=remediation,
+                        display_name=meta["display_name"],
+                        description=meta["description"],
+                        remediation_description=meta["remediation"],
                         status=status_code,
-                        severity=str(severity),
+                        severity=str(meta["severity"]),
                         resource_id=resource_id,
                         resource_type=resource_type,
-                        category=category,
+                        category=meta["category"],
                         implementation_effort=str(effort) if effort else None,
-                        threats=[str(t) for t in threats],
+                        threats=[str(t) for t in meta["threats"]],
                         user_impact=str(user_impact) if user_impact else None,
                     )
                 )

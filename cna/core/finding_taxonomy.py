@@ -163,6 +163,44 @@ _MANAGEMENT_RESOURCE_HINTS: tuple[str, ...] = (
 )
 
 
+def _classify_by_rule_id(rule_id: str) -> str | None:
+    if rule_id in _EAST_WEST_RULES:
+        return EAST_WEST
+    if rule_id in _NORTH_SOUTH_RULES:
+        return NORTH_SOUTH
+    if rule_id in _MANAGEMENT_RULES:
+        return MANAGEMENT
+    if rule_id.startswith(("AZ-COST-", "AZ-BCDR-")):
+        return NORTH_SOUTH
+    return None
+
+
+def _classify_by_category(category: str) -> str | None:
+    cat = (category or "").strip().lower()
+    if not cat:
+        return None
+    if cat in _EAST_WEST_CATEGORIES:
+        return EAST_WEST
+    if cat in _NORTH_SOUTH_CATEGORIES:
+        return NORTH_SOUTH
+    if cat in _MANAGEMENT_CATEGORIES:
+        return MANAGEMENT
+    return None
+
+
+def _classify_by_resource_type(resource_type: str) -> str | None:
+    rt = (resource_type or "").strip().lower()
+    if not rt:
+        return None
+    if any(hint in rt for hint in _MANAGEMENT_RESOURCE_HINTS):
+        return MANAGEMENT
+    if any(hint in rt for hint in _EAST_WEST_RESOURCE_HINTS):
+        return EAST_WEST
+    if any(hint in rt for hint in _NORTH_SOUTH_RESOURCE_HINTS):
+        return NORTH_SOUTH
+    return None
+
+
 def classify_traffic_direction(rule_id: str, category: str = "", resource_type: str = "") -> str:
     """Classify a finding into a traffic-direction plane.
 
@@ -171,33 +209,16 @@ def classify_traffic_direction(rule_id: str, category: str = "", resource_type: 
     "management", or "" when no deterministic mapping exists.
     """
     if rule_id:
-        if rule_id in _EAST_WEST_RULES:
-            return EAST_WEST
-        if rule_id in _NORTH_SOUTH_RULES:
-            return NORTH_SOUTH
-        if rule_id in _MANAGEMENT_RULES:
-            return MANAGEMENT
-        # Unknown rule families fall through to category/resource_type;
-        # COST/BCDR prefixes default to north_south (perimeter resources).
-        if rule_id.startswith(("AZ-COST-", "AZ-BCDR-")):
-            return NORTH_SOUTH
+        result = _classify_by_rule_id(rule_id)
+        if result is not None:
+            return result
 
-    cat = (category or "").strip().lower()
-    if cat:
-        if cat in _EAST_WEST_CATEGORIES:
-            return EAST_WEST
-        if cat in _NORTH_SOUTH_CATEGORIES:
-            return NORTH_SOUTH
-        if cat in _MANAGEMENT_CATEGORIES:
-            return MANAGEMENT
+    result = _classify_by_category(category)
+    if result is not None:
+        return result
 
-    rt = (resource_type or "").strip().lower()
-    if rt:
-        if any(hint in rt for hint in _MANAGEMENT_RESOURCE_HINTS):
-            return MANAGEMENT
-        if any(hint in rt for hint in _EAST_WEST_RESOURCE_HINTS):
-            return EAST_WEST
-        if any(hint in rt for hint in _NORTH_SOUTH_RESOURCE_HINTS):
-            return NORTH_SOUTH
+    result = _classify_by_resource_type(resource_type)
+    if result is not None:
+        return result
 
     return ""

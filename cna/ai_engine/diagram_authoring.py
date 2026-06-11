@@ -30,6 +30,50 @@ from cna.diagram_engine.drawio_generator import (
 logger = logging.getLogger("cna.ai_engine.diagram_authoring")
 
 
+def _probe_mcp_health(mcp_client: DrawioMCPClient | None) -> None:
+    if mcp_client is None:
+        return
+    try:
+        if mcp_client.health():
+            logger.info("draw.io MCP surface reachable")
+        else:
+            logger.info("draw.io MCP surface unreachable; offline catalog only")
+    except Exception:  # noqa: BLE001
+        logger.info("draw.io MCP health probe raised; ignoring")
+
+
+def _aws_region_diagrams(aws_regions: list[AWSRegionTopology]) -> list[C4Diagram]:
+    diagrams: list[C4Diagram] = []
+    for r in aws_regions:
+        if r.discovery_blocked:
+            continue
+        try:
+            xml = generate_vpc_topology(r)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("generate_vpc_topology failed for %s/%s: %s", r.account_id, r.region, e)
+            continue
+        scope = f"aws-{r.account_id}-{r.region}"
+        diagrams.append(C4Diagram(layer=C4Layer.CONTAINER, name=f"container-{scope}", xml=xml))
+        diagrams.append(C4Diagram(layer=C4Layer.COMPONENT, name=f"component-{scope}", xml=xml))
+    return diagrams
+
+
+def _azure_sub_diagrams(azure_subs: list[AzureSubscriptionTopology]) -> list[C4Diagram]:
+    diagrams: list[C4Diagram] = []
+    for s in azure_subs:
+        if s.discovery_blocked:
+            continue
+        try:
+            xml = generate_vnet_topology(s)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("generate_vnet_topology failed for %s: %s", s.subscription_id, e)
+            continue
+        scope = f"azure-{s.subscription_id}"
+        diagrams.append(C4Diagram(layer=C4Layer.CONTAINER, name=f"container-{scope}", xml=xml))
+        diagrams.append(C4Diagram(layer=C4Layer.COMPONENT, name=f"component-{scope}", xml=xml))
+    return diagrams
+
+
 def author_engagement_bundle(
     engagement_label: str,
     aws_regions: list[AWSRegionTopology] | None = None,
@@ -45,58 +89,27 @@ def author_engagement_bundle(
     aws_regions = aws_regions or []
     azure_subs = azure_subs or []
 
-    # Diagnostic — does not gate behaviour.
-    if mcp_client is not None:
-        try:
-            if mcp_client.health():
-                logger.info("draw.io MCP surface reachable")
-            else:
-                logger.info("draw.io MCP surface unreachable; offline catalog only")
-        except Exception:  # noqa: BLE001
-            logger.info("draw.io MCP health probe raised; ignoring")
+    _probe_mcp_health(mcp_client)
 
-    bundle: list[C4Diagram] = []
-
-    # Context (executive)
     children: list[str] = []
     for r in aws_regions:
         children.append(f"AWS {r.account_id} / {r.region}")
     for s in azure_subs:
         children.append(f"Azure sub {s.subscription_id}")
-    bundle.append(
+
+    bundle: list[C4Diagram] = [
         C4Diagram(
             layer=C4Layer.CONTEXT,
             name="context",
             xml=build_context_xml(engagement_label, children),
         )
-    )
+    ]
 
     # Container + Component (architect + engineer)
     # For now the same XML serves both layers — the architect view is the
     # default summary, the engineer view is the same diagram with future
     # per-subnet detail toggled on. Splitting these is a follow-up sprint.
-    for r in aws_regions:
-        if r.discovery_blocked:
-            continue
-        try:
-            xml = generate_vpc_topology(r)
-        except Exception as e:  # noqa: BLE001
-            logger.warning("generate_vpc_topology failed for %s/%s: %s", r.account_id, r.region, e)
-            continue
-        scope = f"aws-{r.account_id}-{r.region}"
-        bundle.append(C4Diagram(layer=C4Layer.CONTAINER, name=f"container-{scope}", xml=xml))
-        bundle.append(C4Diagram(layer=C4Layer.COMPONENT, name=f"component-{scope}", xml=xml))
-
-    for s in azure_subs:
-        if s.discovery_blocked:
-            continue
-        try:
-            xml = generate_vnet_topology(s)
-        except Exception as e:  # noqa: BLE001
-            logger.warning("generate_vnet_topology failed for %s: %s", s.subscription_id, e)
-            continue
-        scope = f"azure-{s.subscription_id}"
-        bundle.append(C4Diagram(layer=C4Layer.CONTAINER, name=f"container-{scope}", xml=xml))
-        bundle.append(C4Diagram(layer=C4Layer.COMPONENT, name=f"component-{scope}", xml=xml))
+    bundle.extend(_aws_region_diagrams(aws_regions))
+    bundle.extend(_azure_sub_diagrams(azure_subs))
 
     return bundle

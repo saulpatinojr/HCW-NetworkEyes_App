@@ -15,6 +15,8 @@ Rule IDs:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from cna.core.finding_taxonomy import classify_traffic_direction
 from cna.core.findings_schema import (
     Finding,
@@ -25,6 +27,9 @@ from cna.core.findings_schema import (
     ObservedState,
 )
 from cna.core.topology_schema import AzureSubscriptionTopology, AzureTopology
+
+_MIN_REDUNDANCY_ZONES = 2
+_SINGLE_GATEWAY = 1
 
 R_AZ_BCDR_FW_NOT_ZONE_REDUNDANT = "AZ-BCDR-001"
 R_AZ_BCDR_VPN_ACTIVE_PASSIVE = "AZ-BCDR-002"
@@ -49,36 +54,38 @@ _BCDR_FRAMEWORK = [
 ]
 
 
-def _finding(
-    *,
-    rule_id: str,
-    severity: FindingSeverity,
-    sub_id: str,
-    region: str,
-    resource_id: str,
-    resource_type: str,
-    title: str,
-    fact: str,
-    evidence_ref: str,
-    recommendation: str,
-    description: str,
-) -> Finding:
+@dataclass
+class _FindingParams:
+    rule_id: str
+    severity: FindingSeverity
+    sub_id: str
+    region: str
+    resource_id: str
+    resource_type: str
+    title: str
+    fact: str
+    evidence_ref: str
+    recommendation: str
+    description: str
+
+
+def _finding(p: _FindingParams) -> Finding:
     return Finding(
-        rule_id=rule_id,
-        severity=severity,
+        rule_id=p.rule_id,
+        severity=p.severity,
         platform="azure",
         category="BC/DR",
-        account_id=sub_id,
-        region=region or "Global",
-        resource_id=resource_id,
-        resource_type=resource_type,
-        title=title,
-        description=description,
-        observed_state=ObservedState(fact=fact, evidence_ref=evidence_ref),
+        account_id=p.sub_id,
+        region=p.region or "Global",
+        resource_id=p.resource_id,
+        resource_type=p.resource_type,
+        title=p.title,
+        description=p.description,
+        observed_state=ObservedState(fact=p.fact, evidence_ref=p.evidence_ref),
         framework_mappings=list(_BCDR_FRAMEWORK),
-        recommendations=[FindingRecommendation(source="CNA Platform", text=recommendation)],
-        recommendation=recommendation,
-        traffic_direction=classify_traffic_direction(rule_id, "BC/DR", resource_type),
+        recommendations=[FindingRecommendation(source="CNA Platform", text=p.recommendation)],
+        recommendation=p.recommendation,
+        traffic_direction=classify_traffic_direction(p.rule_id, "BC/DR", p.resource_type),
         status=FindingStatus.OPEN,
     )
 
@@ -89,10 +96,10 @@ def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
 
     # AZ-BCDR-001: firewall not zone-redundant
     for fw in sub.firewalls:
-        if len(fw.zones) >= 2:
+        if len(fw.zones) >= _MIN_REDUNDANCY_ZONES:
             continue
         findings.append(
-            _finding(
+            _finding(_FindingParams(
                 rule_id=R_AZ_BCDR_FW_NOT_ZONE_REDUNDANT,
                 severity=FindingSeverity.MEDIUM,
                 sub_id=sub_id,
@@ -116,7 +123,7 @@ def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
                     "failure; every flow routed through it is interrupted by a "
                     "zone outage."
                 ),
-            )
+            ))
         )
 
     er_gateways = [gw for gw in sub.virtual_network_gateways if gw.gateway_type == "ExpressRoute"]
@@ -125,7 +132,7 @@ def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
         # AZ-BCDR-002: VPN gateway active-passive
         if gw.gateway_type == "Vpn" and not gw.active_active:
             findings.append(
-                _finding(
+                _finding(_FindingParams(
                     rule_id=R_AZ_BCDR_VPN_ACTIVE_PASSIVE,
                     severity=FindingSeverity.MEDIUM,
                     sub_id=sub_id,
@@ -148,13 +155,13 @@ def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
                         "Active-passive VPN gateways interrupt hybrid connectivity "
                         "during failover and planned maintenance."
                     ),
-                )
+                ))
             )
 
         # AZ-BCDR-005: gateway not zone-redundant (non-Basic SKUs)
-        if gw.sku_name != "Basic" and len(gw.zones) < 2:
+        if gw.sku_name != "Basic" and len(gw.zones) < _MIN_REDUNDANCY_ZONES:
             findings.append(
-                _finding(
+                _finding(_FindingParams(
                     rule_id=R_AZ_BCDR_GW_NOT_ZONE_REDUNDANT,
                     severity=FindingSeverity.MEDIUM,
                     sub_id=sub_id,
@@ -177,15 +184,15 @@ def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
                         "A zonal failure would take down all tunnels/circuit "
                         "connectivity terminating on this gateway."
                     ),
-                )
+                ))
             )
 
     # AZ-BCDR-003: ER circuits present but only one ER gateway terminates them
-    if sub.express_route_circuits and len(er_gateways) == 1:
+    if sub.express_route_circuits and len(er_gateways) == _SINGLE_GATEWAY:
         gw = er_gateways[0]
         circuit_names = ", ".join(c.name for c in sub.express_route_circuits[:5])
         findings.append(
-            _finding(
+            _finding(_FindingParams(
                 rule_id=R_AZ_BCDR_SINGLE_ER_GATEWAY,
                 severity=FindingSeverity.HIGH,
                 sub_id=sub_id,
@@ -214,7 +221,7 @@ def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
                     "gateway — a regional or gateway-level failure severs hybrid "
                     "connectivity."
                 ),
-            )
+            ))
         )
 
     return findings
@@ -240,7 +247,7 @@ def generate_bcdr_findings(topology: AzureTopology) -> list[Finding]:
     if len(all_firewalls) == 1 and vnet_count > 1:
         sub_id, fw = all_firewalls[0]
         findings.append(
-            _finding(
+            _finding(_FindingParams(
                 rule_id=R_AZ_BCDR_SINGLE_FIREWALL_SPOF,
                 severity=FindingSeverity.HIGH,
                 sub_id=sub_id,
@@ -269,7 +276,7 @@ def generate_bcdr_findings(topology: AzureTopology) -> list[Finding]:
                     "firewall outage halts east-west and internet-bound traffic "
                     "for the entire footprint."
                 ),
-            )
+            ))
         )
 
     return findings

@@ -27,6 +27,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+_MIN_MULTI_REGION_COUNT = 2
+
 from cna.core.topology_schema import (
     AzureFirewall,
     AzureRouteServer,
@@ -269,7 +271,7 @@ def _build_hub_spoke_refinements(
         )
 
     regions = _regions(vnets)
-    if len(regions) >= 2:
+    if len(regions) >= _MIN_MULTI_REGION_COUNT:
         changes.append(
             FutureStateChange(
                 change_type="consider_vwan_migration",

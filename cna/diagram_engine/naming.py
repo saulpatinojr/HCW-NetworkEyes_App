@@ -33,7 +33,7 @@ def _slug(text: str, max_len: int = 24) -> str:
     return s.strip("-")[:max_len]
 
 
-def diagram_filename(
+def diagram_filename(  # noqa: PLR0913
     engagement_id: str,
     platform: str,  # "aws" | "azure"
     diagram_type: str,  # "vpc-topology" | "vnet-topology" | "tgw-topology" | etc.

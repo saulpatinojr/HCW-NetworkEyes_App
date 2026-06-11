@@ -190,6 +190,123 @@ def build_maturity_dimensions(findings: list[dict]) -> list[tuple[str, float]]:
 # ── Topology table extraction ──────────────────────────────────────────────
 
 
+def _accumulate_subscription_tables(sub, tables: dict, obs_totals: dict) -> bool:
+    """Append one subscription's resources into *tables* and *obs_totals*.
+
+    Returns True if observability data was found.
+    """
+    has_obs = False
+    if getattr(sub, "discovery_blocked", False):
+        tables["subscriptions"].append(
+            {"id": sub.subscription_id, "name": sub.subscription_name, "blocked": True}
+        )
+        return has_obs
+    tables["subscriptions"].append(
+        {"id": sub.subscription_id, "name": sub.subscription_name, "blocked": False}
+    )
+    tables["vnet_count"] += len(sub.vnets)
+    _accumulate_vnets(sub, tables)
+    _accumulate_resources(sub, tables)
+    obs = getattr(sub, "observability", None)
+    if obs is not None:
+        has_obs = True
+        for key in obs_totals:
+            obs_totals[key] += getattr(obs, key, 0) or 0
+    return has_obs
+
+
+def _accumulate_vnets(sub, tables: dict) -> None:
+    for vnet in sub.vnets:
+        for peering in vnet.peerings:
+            tables["peerings"].append(
+                {
+                    "vnet": vnet.name,
+                    "remote": peering.remote_vnet_name
+                    or peering.remote_vnet_id.rsplit("/", 1)[-1],
+                    "state": peering.peering_state,
+                    "gateway_transit": peering.allow_gateway_transit,
+                    "use_remote_gateways": peering.use_remote_gateways,
+                    "forwarded_traffic": peering.allow_forwarded_traffic,
+                }
+            )
+        for rt in vnet.route_tables:
+            tables["route_tables"].append(
+                {
+                    "name": rt.name,
+                    "vnet": vnet.name,
+                    "routes": len(rt.routes),
+                    "subnets": len(rt.associated_subnet_ids),
+                    "bgp_propagation_disabled": rt.disable_bgp_route_propagation,
+                }
+            )
+
+
+def _accumulate_resources(sub, tables: dict) -> None:
+    for pip in sub.public_ips:
+        tables["public_ips"].append(
+            {
+                "name": pip.name,
+                "ip": pip.ip_address,
+                "sku": pip.sku_name,
+                "associated": bool(pip.associated_resource_id),
+                "associated_type": pip.associated_resource_type,
+                "region": pip.location,
+            }
+        )
+    for fw in sub.firewalls:
+        tables["firewalls"].append(
+            {
+                "name": fw.name,
+                "sku": fw.sku_tier,
+                "threat_intel": fw.threat_intel_mode,
+                "zones": ", ".join(fw.zones) or "none",
+                "region": fw.location,
+            }
+        )
+    for agw in sub.application_gateways:
+        tables["app_gateways"].append(
+            {
+                "name": agw.name,
+                "sku": agw.sku_name,
+                "waf_enabled": agw.waf_enabled,
+                "waf_mode": agw.waf_mode,
+                "zones": ", ".join(agw.zones) or "none",
+                "region": agw.location,
+            }
+        )
+    for gw in sub.virtual_network_gateways:
+        tables["gateways"].append(
+            {
+                "name": gw.name,
+                "type": gw.gateway_type,
+                "sku": gw.sku_name,
+                "active_active": gw.active_active,
+                "bgp": gw.enable_bgp,
+                "connections": len(gw.connections),
+                "region": gw.location,
+            }
+        )
+    for nat in sub.nat_gateways:
+        tables["nat_gateways"].append(
+            {
+                "name": nat.name,
+                "public_ips": len(nat.public_ip_ids),
+                "subnets": len(nat.associated_subnet_ids),
+                "zones": ", ".join(nat.zones) or "none",
+                "region": nat.location,
+            }
+        )
+    for waf in getattr(sub, "front_door_waf_policies", []) or []:
+        tables["front_door_waf"].append(
+            {
+                "name": waf.name,
+                "mode": waf.policy_mode,
+                "state": waf.policy_enabled_state,
+                "custom_rules": waf.custom_rules_count,
+            }
+        )
+
+
 def _topology_tables(topology: Any | None) -> dict:
     """Flatten an AzureTopology into the row dicts the chapter tables render.
 
@@ -229,106 +346,8 @@ def _topology_tables(topology: Any | None) -> dict:
     has_obs = False
 
     for sub in getattr(topology, "subscriptions", []) or []:
-        if getattr(sub, "discovery_blocked", False):
-            tables["subscriptions"].append(
-                {"id": sub.subscription_id, "name": sub.subscription_name, "blocked": True}
-            )
-            continue
-        tables["subscriptions"].append(
-            {"id": sub.subscription_id, "name": sub.subscription_name, "blocked": False}
-        )
-        tables["vnet_count"] += len(sub.vnets)
-        for vnet in sub.vnets:
-            for peering in vnet.peerings:
-                tables["peerings"].append(
-                    {
-                        "vnet": vnet.name,
-                        "remote": peering.remote_vnet_name
-                        or peering.remote_vnet_id.rsplit("/", 1)[-1],
-                        "state": peering.peering_state,
-                        "gateway_transit": peering.allow_gateway_transit,
-                        "use_remote_gateways": peering.use_remote_gateways,
-                        "forwarded_traffic": peering.allow_forwarded_traffic,
-                    }
-                )
-            for rt in vnet.route_tables:
-                tables["route_tables"].append(
-                    {
-                        "name": rt.name,
-                        "vnet": vnet.name,
-                        "routes": len(rt.routes),
-                        "subnets": len(rt.associated_subnet_ids),
-                        "bgp_propagation_disabled": rt.disable_bgp_route_propagation,
-                    }
-                )
-        for pip in sub.public_ips:
-            tables["public_ips"].append(
-                {
-                    "name": pip.name,
-                    "ip": pip.ip_address,
-                    "sku": pip.sku_name,
-                    "associated": bool(pip.associated_resource_id),
-                    "associated_type": pip.associated_resource_type,
-                    "region": pip.location,
-                }
-            )
-        for fw in sub.firewalls:
-            tables["firewalls"].append(
-                {
-                    "name": fw.name,
-                    "sku": fw.sku_tier,
-                    "threat_intel": fw.threat_intel_mode,
-                    "zones": ", ".join(fw.zones) or "none",
-                    "region": fw.location,
-                }
-            )
-        for agw in sub.application_gateways:
-            tables["app_gateways"].append(
-                {
-                    "name": agw.name,
-                    "sku": agw.sku_name,
-                    "waf_enabled": agw.waf_enabled,
-                    "waf_mode": agw.waf_mode,
-                    "zones": ", ".join(agw.zones) or "none",
-                    "region": agw.location,
-                }
-            )
-        for gw in sub.virtual_network_gateways:
-            tables["gateways"].append(
-                {
-                    "name": gw.name,
-                    "type": gw.gateway_type,
-                    "sku": gw.sku_name,
-                    "active_active": gw.active_active,
-                    "bgp": gw.enable_bgp,
-                    "connections": len(gw.connections),
-                    "region": gw.location,
-                }
-            )
-        for nat in sub.nat_gateways:
-            tables["nat_gateways"].append(
-                {
-                    "name": nat.name,
-                    "public_ips": len(nat.public_ip_ids),
-                    "subnets": len(nat.associated_subnet_ids),
-                    "zones": ", ".join(nat.zones) or "none",
-                    "region": nat.location,
-                }
-            )
-        for waf in getattr(sub, "front_door_waf_policies", []) or []:
-            tables["front_door_waf"].append(
-                {
-                    "name": waf.name,
-                    "mode": waf.policy_mode,
-                    "state": waf.policy_enabled_state,
-                    "custom_rules": waf.custom_rules_count,
-                }
-            )
-        obs = getattr(sub, "observability", None)
-        if obs is not None:
+        if _accumulate_subscription_tables(sub, tables, obs_totals):
             has_obs = True
-            for key in obs_totals:
-                obs_totals[key] += getattr(obs, key, 0) or 0
 
     if has_obs:
         tables["observability"] = obs_totals

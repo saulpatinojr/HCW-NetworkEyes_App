@@ -43,7 +43,7 @@ logger = logging.getLogger("cna.cli.analyze")
 @click.option(
     "--data-dir", default="./engagements", help="Engagement data directory (default: ./engagements)"
 )
-def analyze(engagement_id, load_aws, load_azure, dry_run, no_recommendations, data_dir):
+def analyze(engagement_id, load_aws, load_azure, dry_run, no_recommendations, data_dir):  # noqa: C901, PLR0912, PLR0913
     """Analyze discovery checkpoints and generate a FindingsReport.
 
     \b

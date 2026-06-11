@@ -12,6 +12,8 @@ from __future__ import annotations
 import math
 from xml.sax.saxutils import escape
 
+_MIN_RADAR_DIMENSIONS = 3
+
 _NAVY = "#012638"
 _DARK_TEAL = "#004E3D"
 _BRIGHT_TEAL = "#00E9BB"
@@ -41,7 +43,7 @@ def radar_chart_svg(
         Self-contained ``<svg>…</svg>`` string (no external CSS required),
         safe to embed in WeasyPrint-rendered HTML.
     """
-    if len(dimensions) < 3:
+    if len(dimensions) < _MIN_RADAR_DIMENSIONS:
         raise ValueError("radar_chart_svg requires at least 3 dimensions")
 
     cx = cy = size / 2.0

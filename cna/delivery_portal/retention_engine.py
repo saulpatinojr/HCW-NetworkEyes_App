@@ -23,6 +23,7 @@ from datetime import UTC, datetime, timedelta
 logger = logging.getLogger("cna.portal.retention")
 
 _RETENTION_DAYS = 90
+_RETENTION_WARNING_DAYS = 14
 
 
 class RetentionExpiredError(RuntimeError):
@@ -65,7 +66,7 @@ class RetentionEngine:
             )
 
         days_remaining = (expiry - now).days
-        if days_remaining <= 14:
+        if days_remaining <= _RETENTION_WARNING_DAYS:
             logger.warning(
                 "[%s] Retention window expires in %d days (%s). Schedule data deletion.",
                 engagement_id,

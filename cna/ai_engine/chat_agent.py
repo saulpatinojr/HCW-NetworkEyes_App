@@ -44,6 +44,9 @@ from tenacity import (
 
 logger = logging.getLogger("cna.chat_agent")
 
+_HTTP_TOO_MANY_REQUESTS = 429
+_HTTP_SERVER_ERROR = 500
+
 # Engine ids — keep in sync with apps/cna-web/lib/ai-engine.ts VALID_ENGINES
 ENGINE_FOUNDRY_CLAUDE = "foundry-claude"
 ENGINE_AZURE_OPENAI = "azure-openai"
@@ -176,7 +179,7 @@ def _finding_block(f: GroundedFinding) -> str:
     return "\n".join(lines)
 
 
-def build_grounding_context(
+def build_grounding_context(  # noqa: PLR0913
     engagement_id: str,
     findings: list[dict],
     stat_summary: dict | None = None,
@@ -329,7 +332,7 @@ def _is_transient(exc: BaseException) -> bool:
         return True
     if isinstance(exc, httpx.HTTPStatusError):
         status = exc.response.status_code
-        return status == 429 or status >= 500
+        return status == _HTTP_TOO_MANY_REQUESTS or status >= _HTTP_SERVER_ERROR
     return False
 
 

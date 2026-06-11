@@ -46,12 +46,11 @@ def _is_hub(vnet: VNet, gateway_vnet_ids: set[str], firewall_subnet_ids: set[str
     return False
 
 
-def classify_topology(topology: AzureTopology) -> TopologyClassification:
-    """Classify the tenant network pattern from peering flags and placement.
-
-    Deterministic and side-effect free — safe to call repeatedly on the
-    same checkpoint.
-    """
+def _collect_topology_indices(
+    topology: AzureTopology,
+) -> tuple[list[VNet], list[str], set[str], set[str]]:
+    """Collect VNets, vhub IDs, gateway VNet IDs and firewall subnet IDs
+    from all unblocked subscriptions."""
     vnets: list[VNet] = []
     vhub_ids: list[str] = []
     gateway_vnet_ids: set[str] = set()
@@ -65,11 +64,21 @@ def classify_topology(topology: AzureTopology) -> TopologyClassification:
             vhub_ids.extend(hub.id for hub in vwan.hubs)
         for gw in sub.virtual_network_gateways:
             if gw.subnet_id:
-                # GatewaySubnet id embeds the VNet id (…/virtualNetworks/<name>/subnets/…)
                 gateway_vnet_ids.add(gw.subnet_id.rsplit("/subnets/", 1)[0])
         for fw in sub.firewalls:
             if fw.subnet_id:
                 firewall_subnet_ids.add(fw.subnet_id)
+
+    return vnets, vhub_ids, gateway_vnet_ids, firewall_subnet_ids
+
+
+def classify_topology(topology: AzureTopology) -> TopologyClassification:
+    """Classify the tenant network pattern from peering flags and placement.
+
+    Deterministic and side-effect free — safe to call repeatedly on the
+    same checkpoint.
+    """
+    vnets, vhub_ids, gateway_vnet_ids, firewall_subnet_ids = _collect_topology_indices(topology)
 
     # vWAN takes precedence — vhubs are managed hubs by definition
     if vhub_ids:
