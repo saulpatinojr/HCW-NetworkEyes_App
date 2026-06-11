@@ -282,7 +282,9 @@ class AnalysisEngine:
         """Return True if a TCP rule exposes the given port."""
         return proto in ("tcp", "6") and fp is not None and fp <= port <= (tp or fp)
 
-    def _check_aws_sg_open_cidr(self, sg, vpc, account_id: str, region: str, rule, cidr: str) -> None:
+    def _check_aws_sg_open_cidr(
+        self, sg, vpc, account_id: str, region: str, rule, cidr: str
+    ) -> None:
         fp = rule.from_port
         tp = rule.to_port
         proto = rule.protocol
@@ -480,7 +482,9 @@ class AnalysisEngine:
                 )
             )
 
-    def _check_aws_connectivity(self, region_topo: AWSRegionTopology, account_id: str, region: str) -> None:
+    def _check_aws_connectivity(
+        self, region_topo: AWSRegionTopology, account_id: str, region: str
+    ) -> None:
         dx_connections = region_topo.direct_connect_connections
         if len(dx_connections) == 1:
             self._emit(
@@ -985,7 +989,10 @@ class AnalysisEngine:
 
     def _check_azure_lb_and_vnet_metrics(self, metrics, sub_id: str) -> None:
         for lm in metrics.lb_metrics:
-            if lm.snat_port_utilization_pct and lm.snat_port_utilization_pct > _HIGH_UTILIZATION_PCT:
+            if (
+                lm.snat_port_utilization_pct
+                and lm.snat_port_utilization_pct > _HIGH_UTILIZATION_PCT
+            ):
                 self._emit(
                     Finding(
                         rule_id=R_AZ_LB_SNAT_EXHAUSTION,
@@ -1169,13 +1176,12 @@ class AnalysisEngine:
             failure_rate_high = (
                 has_requests
                 and bool(agm.failed_requests_24h)
-                and (agm.failed_requests_24h / agm.total_requests_24h) > _APPGW_FAILURE_RATE_THRESHOLD
+                and (agm.failed_requests_24h / agm.total_requests_24h)
+                > _APPGW_FAILURE_RATE_THRESHOLD
             )
             if latency_breach or failure_rate_high:
                 latency_str = (
-                    f"{agm.backend_latency_ms_avg:.0f}ms"
-                    if agm.backend_latency_ms_avg
-                    else "N/A"
+                    f"{agm.backend_latency_ms_avg:.0f}ms" if agm.backend_latency_ms_avg else "N/A"
                 )
                 fail_pct = (
                     f"{(agm.failed_requests_24h / agm.total_requests_24h * 100):.1f}%"
@@ -1390,7 +1396,9 @@ class AnalysisEngine:
                 )
             )
 
-    def _check_azure_peering_gateway_transit(self, sub_topo: AzureSubscriptionTopology, sub_id: str) -> None:
+    def _check_azure_peering_gateway_transit(
+        self, sub_topo: AzureSubscriptionTopology, sub_id: str
+    ) -> None:
         for vnet in sub_topo.vnets:
             has_local_gw = (
                 any(gw.vnet_id == vnet.id for gw in sub_topo.virtual_network_gateways)
@@ -1495,7 +1503,9 @@ class AnalysisEngine:
                     )
                 )
 
-    def _check_azure_peering_and_routing(self, sub_topo: AzureSubscriptionTopology, sub_id: str) -> None:
+    def _check_azure_peering_and_routing(
+        self, sub_topo: AzureSubscriptionTopology, sub_id: str
+    ) -> None:
         self._check_azure_peering_gateway_transit(sub_topo, sub_id)
         self._check_azure_vnet_flow_logs(sub_topo, sub_id)
         rt_by_name = {rt.name: rt for rt in sub_topo.route_tables}
@@ -1503,9 +1513,7 @@ class AnalysisEngine:
             self._check_azure_fw_bypass(vnet, rt_by_name, sub_id)
 
     def _check_azure_fw_bypass(self, vnet, rt_by_name: dict, sub_id: str) -> None:
-        is_spoke = any(
-            p.allow_forwarded_traffic or p.use_remote_gateways for p in vnet.peerings
-        )
+        is_spoke = any(p.allow_forwarded_traffic or p.use_remote_gateways for p in vnet.peerings)
         if not is_spoke:
             return
 

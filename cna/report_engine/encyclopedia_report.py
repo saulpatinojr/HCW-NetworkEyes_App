@@ -221,8 +221,7 @@ def _accumulate_vnets(sub, tables: dict) -> None:
             tables["peerings"].append(
                 {
                     "vnet": vnet.name,
-                    "remote": peering.remote_vnet_name
-                    or peering.remote_vnet_id.rsplit("/", 1)[-1],
+                    "remote": peering.remote_vnet_name or peering.remote_vnet_id.rsplit("/", 1)[-1],
                     "state": peering.peering_state,
                     "gateway_transit": peering.allow_gateway_transit,
                     "use_remote_gateways": peering.use_remote_gateways,

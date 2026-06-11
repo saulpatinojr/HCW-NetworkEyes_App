@@ -162,19 +162,22 @@ _PLATFORM_SUBNETS = {
 
 def _check_no_firewall(vnets, firewalls, sub_name):
     if vnets and not firewalls:
-        return [{
-            "title": f"No Azure Firewall deployed in '{sub_name}'",
-            "severity": "HIGH", "category": "Network Security",
-            "description": (
-                f"Subscription '{sub_name}' has {len(vnets)} VNet(s) but no Azure Firewall. "
-                "Without a centralized firewall, east-west and north-south traffic is uninspected."
-            ),
-            "recommendation": (
-                "Deploy Azure Firewall (Standard or Premium) in a hub VNet. "
-                "Route spoke subnets through the firewall via UDRs. "
-                "Enable Threat Intelligence in Deny mode."
-            ),
-        }]
+        return [
+            {
+                "title": f"No Azure Firewall deployed in '{sub_name}'",
+                "severity": "HIGH",
+                "category": "Network Security",
+                "description": (
+                    f"Subscription '{sub_name}' has {len(vnets)} VNet(s) but no Azure Firewall. "
+                    "Without a centralized firewall, east-west and north-south traffic is uninspected."
+                ),
+                "recommendation": (
+                    "Deploy Azure Firewall (Standard or Premium) in a hub VNet. "
+                    "Route spoke subnets through the firewall via UDRs. "
+                    "Enable Threat Intelligence in Deny mode."
+                ),
+            }
+        ]
     return []
 
 
@@ -184,68 +187,80 @@ def _check_vnet(vnet):
     location = vnet.get("location", "")
     rg = vnet.get("resource_group", "")
     if not vnet.get("ddos_protection_enabled"):
-        findings.append({
-            "title": f"VNet '{vnet_name}' has no DDoS Protection Plan",
-            "severity": "MEDIUM", "category": "Network Protection",
-            "description": (
-                f"VNet '{vnet_name}' ({location}, RG: {rg}) has no Azure DDoS Protection Plan. "
-                "Basic DDoS protection lacks adaptive tuning and rapid response SLA."
-            ),
-            "recommendation": (
-                "Attach a DDoS Protection Plan to VNets hosting public-facing workloads, "
-                "especially those with App Gateways or public IPs."
-            ),
-        })
+        findings.append(
+            {
+                "title": f"VNet '{vnet_name}' has no DDoS Protection Plan",
+                "severity": "MEDIUM",
+                "category": "Network Protection",
+                "description": (
+                    f"VNet '{vnet_name}' ({location}, RG: {rg}) has no Azure DDoS Protection Plan. "
+                    "Basic DDoS protection lacks adaptive tuning and rapid response SLA."
+                ),
+                "recommendation": (
+                    "Attach a DDoS Protection Plan to VNets hosting public-facing workloads, "
+                    "especially those with App Gateways or public IPs."
+                ),
+            }
+        )
     dns_servers = vnet.get("dns_servers", [])
     if dns_servers:
         non_azure = [d for d in dns_servers if d != "168.63.129.16"]
         if non_azure:
-            findings.append({
-                "title": f"VNet '{vnet_name}' uses custom DNS servers",
-                "severity": "INFORMATIONAL", "category": "DNS & Name Resolution",
-                "description": (
-                    f"VNet '{vnet_name}' ({location}) uses custom DNS servers: "
-                    f"{', '.join(non_azure)}. Verify these forward Private DNS zones correctly "
-                    "and are highly available. Misconfigured DNS can break private endpoint resolution."
-                ),
-                "recommendation": (
-                    "Ensure custom DNS servers forward Azure Private DNS zones "
-                    "(168.63.129.16 as forwarder). Consider Azure DNS Private Resolver "
-                    "for a managed, HA solution."
-                ),
-            })
+            findings.append(
+                {
+                    "title": f"VNet '{vnet_name}' uses custom DNS servers",
+                    "severity": "INFORMATIONAL",
+                    "category": "DNS & Name Resolution",
+                    "description": (
+                        f"VNet '{vnet_name}' ({location}) uses custom DNS servers: "
+                        f"{', '.join(non_azure)}. Verify these forward Private DNS zones correctly "
+                        "and are highly available. Misconfigured DNS can break private endpoint resolution."
+                    ),
+                    "recommendation": (
+                        "Ensure custom DNS servers forward Azure Private DNS zones "
+                        "(168.63.129.16 as forwarder). Consider Azure DNS Private Resolver "
+                        "for a managed, HA solution."
+                    ),
+                }
+            )
     for subnet in vnet.get("subnets", []):
         sname = subnet.get("name", "")
         if sname in _PLATFORM_SUBNETS:
             continue
         if not subnet.get("nsg_id"):
-            findings.append({
-                "title": f"Subnet '{sname}' in '{vnet_name}' has no NSG",
-                "severity": "MEDIUM", "category": "Network Segmentation",
-                "description": (
-                    f"Subnet '{sname}' (VNet: '{vnet_name}', {location}) has no Network Security "
-                    "Group. All intra-VNet traffic to this subnet is permitted by default."
-                ),
-                "recommendation": (
-                    "Attach an NSG with least-privilege inbound rules. Deny all by default, "
-                    "permit only required ports from approved sources. Enable NSG Flow Logs."
-                ),
-            })
+            findings.append(
+                {
+                    "title": f"Subnet '{sname}' in '{vnet_name}' has no NSG",
+                    "severity": "MEDIUM",
+                    "category": "Network Segmentation",
+                    "description": (
+                        f"Subnet '{sname}' (VNet: '{vnet_name}', {location}) has no Network Security "
+                        "Group. All intra-VNet traffic to this subnet is permitted by default."
+                    ),
+                    "recommendation": (
+                        "Attach an NSG with least-privilege inbound rules. Deny all by default, "
+                        "permit only required ports from approved sources. Enable NSG Flow Logs."
+                    ),
+                }
+            )
     for peering in vnet.get("peerings", []):
         if peering.get("allow_gateway_transit") or peering.get("use_remote_gateways"):
-            findings.append({
-                "title": f"VNet peering '{peering.get('name', 'unknown')}' allows gateway transit",
-                "severity": "INFORMATIONAL", "category": "Routing & Transit",
-                "description": (
-                    f"Peering between '{vnet_name}' and "
-                    f"'{peering.get('remote_vnet_name', 'remote VNet')}' has gateway transit "
-                    "enabled. Verify this is intentional (hub-spoke) and not a misconfiguration."
-                ),
-                "recommendation": (
-                    "Confirm gateway transit is required for hub-spoke architecture. "
-                    "Disable on spoke-to-spoke peerings to prevent unintended routing paths."
-                ),
-            })
+            findings.append(
+                {
+                    "title": f"VNet peering '{peering.get('name', 'unknown')}' allows gateway transit",
+                    "severity": "INFORMATIONAL",
+                    "category": "Routing & Transit",
+                    "description": (
+                        f"Peering between '{vnet_name}' and "
+                        f"'{peering.get('remote_vnet_name', 'remote VNet')}' has gateway transit "
+                        "enabled. Verify this is intentional (hub-spoke) and not a misconfiguration."
+                    ),
+                    "recommendation": (
+                        "Confirm gateway transit is required for hub-spoke architecture. "
+                        "Disable on spoke-to-spoke peerings to prevent unintended routing paths."
+                    ),
+                }
+            )
     return findings
 
 
@@ -264,20 +279,23 @@ def _check_nsg(nsg):
         proto = rule.get("protocol", "")
         direction = rule.get("direction", "")
         if src in ("*", "Internet", "Any") and dport in ("*", "Any") and proto in ("*", "Any"):
-            findings.append({
-                "title": f"NSG '{nsg_name}' has a wildcard allow-all {direction} rule",
-                "severity": "HIGH", "category": "Network Segmentation",
-                "description": (
-                    f"NSG '{nsg_name}' rule '{rule.get('name', '?')}' (priority {rule.get('priority', '?')}) "
-                    f"allows all {direction} traffic from '{src}' to '{dst}' on all ports. "
-                    "This effectively disables network-layer access control."
-                ),
-                "recommendation": (
-                    "Remove or narrow the wildcard allow rule. Replace with specific rules "
-                    "permitting only required source CIDRs, ports, and protocols. "
-                    "Apply least-privilege: deny all by default, allow explicitly."
-                ),
-            })
+            findings.append(
+                {
+                    "title": f"NSG '{nsg_name}' has a wildcard allow-all {direction} rule",
+                    "severity": "HIGH",
+                    "category": "Network Segmentation",
+                    "description": (
+                        f"NSG '{nsg_name}' rule '{rule.get('name', '?')}' (priority {rule.get('priority', '?')}) "
+                        f"allows all {direction} traffic from '{src}' to '{dst}' on all ports. "
+                        "This effectively disables network-layer access control."
+                    ),
+                    "recommendation": (
+                        "Remove or narrow the wildcard allow rule. Replace with specific rules "
+                        "permitting only required source CIDRs, ports, and protocols. "
+                        "Apply least-privilege: deny all by default, allow explicitly."
+                    ),
+                }
+            )
     for rule in rules:
         if rule.get("access") != "Allow" or rule.get("direction") != "Inbound":
             continue
@@ -288,36 +306,42 @@ def _check_nsg(nsg):
         ports.update(rule.get("destination_port_ranges", []))
         if src in internet_sources and ports & rdp_ssh_ports:
             exposed = sorted(ports & rdp_ssh_ports)
-            findings.append({
-                "title": f"NSG '{nsg_name}' exposes {'RDP' if '3389' in exposed else 'SSH'} to the Internet",
-                "severity": "CRITICAL", "category": "Remote Access",
+            findings.append(
+                {
+                    "title": f"NSG '{nsg_name}' exposes {'RDP' if '3389' in exposed else 'SSH'} to the Internet",
+                    "severity": "CRITICAL",
+                    "category": "Remote Access",
+                    "description": (
+                        f"NSG '{nsg_name}' rule '{rule.get('name', '?')}' allows inbound "
+                        f"traffic on port(s) {', '.join(exposed)} from the Internet. "
+                        "Direct RDP/SSH exposure is a primary attack vector for brute-force and "
+                        "ransomware campaigns."
+                    ),
+                    "recommendation": (
+                        "Remove direct RDP/SSH internet exposure immediately. "
+                        "Use Azure Bastion for browser-based access, or restrict source to "
+                        "specific corporate IP ranges. Consider JIT VM Access via Microsoft Defender."
+                    ),
+                }
+            )
+    if not nsg.get("flow_logs_enabled"):
+        findings.append(
+            {
+                "title": f"NSG '{nsg_name}' has no flow logs enabled",
+                "severity": "LOW",
+                "category": "Monitoring & Visibility",
                 "description": (
-                    f"NSG '{nsg_name}' rule '{rule.get('name', '?')}' allows inbound "
-                    f"traffic on port(s) {', '.join(exposed)} from the Internet. "
-                    "Direct RDP/SSH exposure is a primary attack vector for brute-force and "
-                    "ransomware campaigns."
+                    f"NSG '{nsg_name}' does not have Network Watcher flow logs enabled. "
+                    "Without flow logs, traffic analysis, threat detection, and forensic "
+                    "investigation are severely limited."
                 ),
                 "recommendation": (
-                    "Remove direct RDP/SSH internet exposure immediately. "
-                    "Use Azure Bastion for browser-based access, or restrict source to "
-                    "specific corporate IP ranges. Consider JIT VM Access via Microsoft Defender."
+                    "Enable NSG Flow Logs v2 via Azure Network Watcher. "
+                    "Configure a 90-day retention policy. Forward logs to a Log Analytics "
+                    "workspace and enable Traffic Analytics for visualization."
                 ),
-            })
-    if not nsg.get("flow_logs_enabled"):
-        findings.append({
-            "title": f"NSG '{nsg_name}' has no flow logs enabled",
-            "severity": "LOW", "category": "Monitoring & Visibility",
-            "description": (
-                f"NSG '{nsg_name}' does not have Network Watcher flow logs enabled. "
-                "Without flow logs, traffic analysis, threat detection, and forensic "
-                "investigation are severely limited."
-            ),
-            "recommendation": (
-                "Enable NSG Flow Logs v2 via Azure Network Watcher. "
-                "Configure a 90-day retention policy. Forward logs to a Log Analytics "
-                "workspace and enable Traffic Analytics for visualization."
-            ),
-        })
+            }
+        )
     return findings
 
 
@@ -326,36 +350,45 @@ def _check_route_tables(route_tables):
     for rt in route_tables:
         rt_name = rt.get("name", "unknown")
         for route in rt.get("routes", []):
-            if route.get("address_prefix") == "0.0.0.0/0" and route.get("next_hop_type") == "Internet":
-                findings.append({
-                    "title": f"Route table '{rt_name}' sends default traffic directly to Internet",
-                    "severity": "MEDIUM", "category": "Routing & Transit",
+            if (
+                route.get("address_prefix") == "0.0.0.0/0"
+                and route.get("next_hop_type") == "Internet"
+            ):
+                findings.append(
+                    {
+                        "title": f"Route table '{rt_name}' sends default traffic directly to Internet",
+                        "severity": "MEDIUM",
+                        "category": "Routing & Transit",
+                        "description": (
+                            f"Route table '{rt_name}' has a default route (0.0.0.0/0) with next-hop "
+                            f"'Internet'. Traffic from associated subnets bypasses centralized firewall "
+                            "inspection and flows directly to the Internet."
+                        ),
+                        "recommendation": (
+                            "Change the default route next-hop to the Azure Firewall private IP "
+                            "(or NVA) for centralized egress inspection. "
+                            "Only use direct Internet next-hop for dedicated egress subnets with explicit "
+                            "justification."
+                        ),
+                    }
+                )
+        if rt.get("disable_bgp_route_propagation"):
+            findings.append(
+                {
+                    "title": f"Route table '{rt_name}' has BGP route propagation disabled",
+                    "severity": "INFORMATIONAL",
+                    "category": "Routing & Transit",
                     "description": (
-                        f"Route table '{rt_name}' has a default route (0.0.0.0/0) with next-hop "
-                        f"'Internet'. Traffic from associated subnets bypasses centralized firewall "
-                        "inspection and flows directly to the Internet."
+                        f"Route table '{rt_name}' has BGP route propagation disabled. "
+                        "On-premises routes learned via VPN/ExpressRoute are not automatically added to "
+                        "subnets associated with this table, which may break hybrid connectivity."
                     ),
                     "recommendation": (
-                        "Change the default route next-hop to the Azure Firewall private IP "
-                        "(or NVA) for centralized egress inspection. "
-                        "Only use direct Internet next-hop for dedicated egress subnets with explicit "
-                        "justification."
+                        "Verify this is intentional. If subnets need on-premises connectivity, "
+                        "enable BGP route propagation or add explicit static routes for on-premises prefixes."
                     ),
-                })
-        if rt.get("disable_bgp_route_propagation"):
-            findings.append({
-                "title": f"Route table '{rt_name}' has BGP route propagation disabled",
-                "severity": "INFORMATIONAL", "category": "Routing & Transit",
-                "description": (
-                    f"Route table '{rt_name}' has BGP route propagation disabled. "
-                    "On-premises routes learned via VPN/ExpressRoute are not automatically added to "
-                    "subnets associated with this table, which may break hybrid connectivity."
-                ),
-                "recommendation": (
-                    "Verify this is intentional. If subnets need on-premises connectivity, "
-                    "enable BGP route propagation or add explicit static routes for on-premises prefixes."
-                ),
-            })
+                }
+            )
     return findings
 
 
@@ -364,33 +397,39 @@ def _check_firewalls(firewalls):
     for fw in firewalls:
         fw_name = fw.get("name", "unknown")
         if fw.get("threat_intel_mode", "Alert") != "Deny":
-            findings.append({
-                "title": f"Firewall '{fw_name}' threat intelligence not in Deny mode",
-                "severity": "HIGH", "category": "Network Security",
-                "description": (
-                    f"Azure Firewall '{fw_name}' threat intelligence mode is "
-                    f"'{fw.get('threat_intel_mode', 'Alert')}'. Known-malicious IPs are alerted "
-                    "but not blocked, allowing C2 traffic to pass."
-                ),
-                "recommendation": (
-                    "Set Threat Intelligence to Deny in the Firewall Policy. "
-                    "Review alert logs first to identify legitimate traffic before switching."
-                ),
-            })
+            findings.append(
+                {
+                    "title": f"Firewall '{fw_name}' threat intelligence not in Deny mode",
+                    "severity": "HIGH",
+                    "category": "Network Security",
+                    "description": (
+                        f"Azure Firewall '{fw_name}' threat intelligence mode is "
+                        f"'{fw.get('threat_intel_mode', 'Alert')}'. Known-malicious IPs are alerted "
+                        "but not blocked, allowing C2 traffic to pass."
+                    ),
+                    "recommendation": (
+                        "Set Threat Intelligence to Deny in the Firewall Policy. "
+                        "Review alert logs first to identify legitimate traffic before switching."
+                    ),
+                }
+            )
         zones = fw.get("zones", [])
         if not zones or len(zones) < _MIN_ZONE_REDUNDANCY:
-            findings.append({
-                "title": f"Azure Firewall '{fw_name}' is not zone-redundant",
-                "severity": "MEDIUM", "category": "Resilience",
-                "description": (
-                    f"Azure Firewall '{fw_name}' is deployed in {len(zones)} availability zone(s). "
-                    "A single-zone or no-zone Firewall has no SLA protection against zonal failure."
-                ),
-                "recommendation": (
-                    "Redeploy the Firewall with zones=[1,2,3] and a zone-redundant Public IP. "
-                    "Use Standard SKU Firewall Policy. This requires a Standard tier Firewall."
-                ),
-            })
+            findings.append(
+                {
+                    "title": f"Azure Firewall '{fw_name}' is not zone-redundant",
+                    "severity": "MEDIUM",
+                    "category": "Resilience",
+                    "description": (
+                        f"Azure Firewall '{fw_name}' is deployed in {len(zones)} availability zone(s). "
+                        "A single-zone or no-zone Firewall has no SLA protection against zonal failure."
+                    ),
+                    "recommendation": (
+                        "Redeploy the Firewall with zones=[1,2,3] and a zone-redundant Public IP. "
+                        "Use Standard SKU Firewall Policy. This requires a Standard tier Firewall."
+                    ),
+                }
+            )
     return findings
 
 
@@ -399,45 +438,54 @@ def _check_app_gateways(app_gws):
     for agw in app_gws:
         agw_name = agw.get("name", "unknown")
         if not agw.get("waf_enabled"):
-            findings.append({
-                "title": f"Application Gateway '{agw_name}' has WAF disabled",
-                "severity": "HIGH", "category": "Application Security",
-                "description": (
-                    f"App Gateway '{agw_name}' is deployed without WAF. "
-                    "Without WAF, OWASP Top 10 attacks (SQLi, XSS, request smuggling) are not inspected."
-                ),
-                "recommendation": (
-                    "Upgrade to WAF_v2 SKU. Enable WAF in Detection mode first, "
-                    "tune false positives, then switch to Prevention with OWASP 3.2 ruleset."
-                ),
-            })
+            findings.append(
+                {
+                    "title": f"Application Gateway '{agw_name}' has WAF disabled",
+                    "severity": "HIGH",
+                    "category": "Application Security",
+                    "description": (
+                        f"App Gateway '{agw_name}' is deployed without WAF. "
+                        "Without WAF, OWASP Top 10 attacks (SQLi, XSS, request smuggling) are not inspected."
+                    ),
+                    "recommendation": (
+                        "Upgrade to WAF_v2 SKU. Enable WAF in Detection mode first, "
+                        "tune false positives, then switch to Prevention with OWASP 3.2 ruleset."
+                    ),
+                }
+            )
         elif agw.get("waf_mode") and agw.get("waf_mode") != "Prevention":
-            findings.append({
-                "title": f"Application Gateway '{agw_name}' WAF is in Detection (not Prevention) mode",
-                "severity": "MEDIUM", "category": "Application Security",
-                "description": (
-                    f"App Gateway '{agw_name}' has WAF enabled but in Detection mode. "
-                    "Attacks are logged but not blocked, providing no actual protection."
-                ),
-                "recommendation": (
-                    "After reviewing and tuning Detection mode logs for false positives, "
-                    "switch WAF mode to Prevention. Apply OWASP CRS 3.2 or later."
-                ),
-            })
+            findings.append(
+                {
+                    "title": f"Application Gateway '{agw_name}' WAF is in Detection (not Prevention) mode",
+                    "severity": "MEDIUM",
+                    "category": "Application Security",
+                    "description": (
+                        f"App Gateway '{agw_name}' has WAF enabled but in Detection mode. "
+                        "Attacks are logged but not blocked, providing no actual protection."
+                    ),
+                    "recommendation": (
+                        "After reviewing and tuning Detection mode logs for false positives, "
+                        "switch WAF mode to Prevention. Apply OWASP CRS 3.2 or later."
+                    ),
+                }
+            )
         agw_zones = agw.get("zones", [])
         if not agw_zones or len(agw_zones) < _MIN_ZONE_REDUNDANCY:
-            findings.append({
-                "title": f"Application Gateway '{agw_name}' is not zone-redundant",
-                "severity": "MEDIUM", "category": "Resilience",
-                "description": (
-                    f"App Gateway '{agw_name}' has {len(agw_zones)} availability zone(s). "
-                    "A non-zone-redundant App Gateway is a single point of failure for ingress traffic."
-                ),
-                "recommendation": (
-                    "Migrate to Application Gateway v2 with zones=[1,2,3] configured. "
-                    "Use a zone-redundant frontend public IP (Standard SKU)."
-                ),
-            })
+            findings.append(
+                {
+                    "title": f"Application Gateway '{agw_name}' is not zone-redundant",
+                    "severity": "MEDIUM",
+                    "category": "Resilience",
+                    "description": (
+                        f"App Gateway '{agw_name}' has {len(agw_zones)} availability zone(s). "
+                        "A non-zone-redundant App Gateway is a single point of failure for ingress traffic."
+                    ),
+                    "recommendation": (
+                        "Migrate to Application Gateway v2 with zones=[1,2,3] configured. "
+                        "Use a zone-redundant frontend public IP (Standard SKU)."
+                    ),
+                }
+            )
     return findings
 
 
@@ -447,34 +495,40 @@ def _check_load_balancers(load_balancers):
         lb_name = lb.get("name", "unknown")
         lb_zones = lb.get("zones", [])
         if lb.get("sku_name") == "Basic":
-            findings.append({
-                "title": f"Load Balancer '{lb_name}' uses Basic SKU",
-                "severity": "MEDIUM", "category": "Resilience",
-                "description": (
-                    f"Load Balancer '{lb_name}' uses the Basic SKU which has no SLA, "
-                    "no zone redundancy, and does not support HTTPS health probes or "
-                    "integration with availability zones."
-                ),
-                "recommendation": (
-                    "Upgrade to Standard SKU. Basic LBs are on the retirement path. "
-                    "Standard LBs support zone redundancy, secure-by-default (no public access "
-                    "without NSG), and HA ports."
-                ),
-            })
+            findings.append(
+                {
+                    "title": f"Load Balancer '{lb_name}' uses Basic SKU",
+                    "severity": "MEDIUM",
+                    "category": "Resilience",
+                    "description": (
+                        f"Load Balancer '{lb_name}' uses the Basic SKU which has no SLA, "
+                        "no zone redundancy, and does not support HTTPS health probes or "
+                        "integration with availability zones."
+                    ),
+                    "recommendation": (
+                        "Upgrade to Standard SKU. Basic LBs are on the retirement path. "
+                        "Standard LBs support zone redundancy, secure-by-default (no public access "
+                        "without NSG), and HA ports."
+                    ),
+                }
+            )
         elif not lb_zones or len(lb_zones) < _MIN_ZONE_REDUNDANCY:
-            findings.append({
-                "title": f"Load Balancer '{lb_name}' is not zone-redundant",
-                "severity": "LOW", "category": "Resilience",
-                "description": (
-                    f"Load Balancer '{lb_name}' ({lb.get('lb_type', 'Public')}) "
-                    f"has {len(lb_zones)} availability zone(s). "
-                    "Frontend IP configurations are not zone-redundant."
-                ),
-                "recommendation": (
-                    "Configure the frontend IP as zone-redundant (specify zones=[1,2,3]) "
-                    "when using Standard LB. Ensure backend VMs also span multiple zones."
-                ),
-            })
+            findings.append(
+                {
+                    "title": f"Load Balancer '{lb_name}' is not zone-redundant",
+                    "severity": "LOW",
+                    "category": "Resilience",
+                    "description": (
+                        f"Load Balancer '{lb_name}' ({lb.get('lb_type', 'Public')}) "
+                        f"has {len(lb_zones)} availability zone(s). "
+                        "Frontend IP configurations are not zone-redundant."
+                    ),
+                    "recommendation": (
+                        "Configure the frontend IP as zone-redundant (specify zones=[1,2,3]) "
+                        "when using Standard LB. Ensure backend VMs also span multiple zones."
+                    ),
+                }
+            )
     return findings
 
 
@@ -485,35 +539,41 @@ def _check_vnet_gateway_connections(vnet_gateways):
         if gw.get("gateway_type") != "Vpn":
             continue
         if not gw.get("active_active"):
-            findings.append({
-                "title": f"VPN Gateway '{gw_name}' is not in active-active mode",
-                "severity": "MEDIUM", "category": "Resilience",
-                "description": (
-                    f"VPN Gateway '{gw_name}' is in active-standby mode. "
-                    "Active-standby has a failover time of 10-15 seconds for planned and "
-                    "60-90 seconds for unplanned maintenance events."
-                ),
-                "recommendation": (
-                    "Enable active-active mode on the VPN Gateway. This requires two public IPs "
-                    "and VpnGw2 or higher SKU. Also configure BGP for automatic failover."
-                ),
-            })
-        for conn in gw.get("connections", []):
-            if conn.get("connection_status") not in ("Connected", "Unknown"):
-                findings.append({
-                    "title": f"VPN connection '{conn.get('name', '?')}' on gateway '{gw_name}' is not connected",
-                    "severity": "HIGH", "category": "Connectivity",
+            findings.append(
+                {
+                    "title": f"VPN Gateway '{gw_name}' is not in active-active mode",
+                    "severity": "MEDIUM",
+                    "category": "Resilience",
                     "description": (
-                        f"Gateway connection '{conn.get('name', '?')}' (type: {conn.get('connection_type', '?')}) "
-                        f"has status '{conn.get('connection_status', 'Unknown')}'. "
-                        "A disconnected VPN tunnel breaks hybrid connectivity to on-premises."
+                        f"VPN Gateway '{gw_name}' is in active-standby mode. "
+                        "Active-standby has a failover time of 10-15 seconds for planned and "
+                        "60-90 seconds for unplanned maintenance events."
                     ),
                     "recommendation": (
-                        "Investigate the connection status in Azure Portal > VPN Gateways > Connections. "
-                        "Check on-premises VPN device logs, verify pre-shared keys and IKE parameters, "
-                        "and confirm firewall rules allow UDP 500/4500."
+                        "Enable active-active mode on the VPN Gateway. This requires two public IPs "
+                        "and VpnGw2 or higher SKU. Also configure BGP for automatic failover."
                     ),
-                })
+                }
+            )
+        for conn in gw.get("connections", []):
+            if conn.get("connection_status") not in ("Connected", "Unknown"):
+                findings.append(
+                    {
+                        "title": f"VPN connection '{conn.get('name', '?')}' on gateway '{gw_name}' is not connected",
+                        "severity": "HIGH",
+                        "category": "Connectivity",
+                        "description": (
+                            f"Gateway connection '{conn.get('name', '?')}' (type: {conn.get('connection_type', '?')}) "
+                            f"has status '{conn.get('connection_status', 'Unknown')}'. "
+                            "A disconnected VPN tunnel breaks hybrid connectivity to on-premises."
+                        ),
+                        "recommendation": (
+                            "Investigate the connection status in Azure Portal > VPN Gateways > Connections. "
+                            "Check on-premises VPN device logs, verify pre-shared keys and IKE parameters, "
+                            "and confirm firewall rules allow UDP 500/4500."
+                        ),
+                    }
+                )
     return findings
 
 
@@ -521,56 +581,65 @@ def _check_public_ips(public_ips, sub_name):
     findings = []
     unassociated = [p for p in public_ips if not p.get("associated_resource_type")]
     if unassociated:
-        findings.append({
-            "title": f"{len(unassociated)} unassociated Public IP(s) in '{sub_name}'",
-            "severity": "LOW", "category": "Cost & Hygiene",
-            "description": (
-                f"{len(unassociated)} Public IP(s) are not attached to any resource: "
-                f"{', '.join(p.get('name', '?') for p in unassociated[:5])}. "
-                "Unassociated IPs incur charges and may represent unused or orphaned resources."
-            ),
-            "recommendation": (
-                "Delete unassociated Public IPs that are no longer needed. "
-                "If reserved for future use, document the intent in resource tags. "
-                "Use Azure Policy to alert on orphaned public IPs."
-            ),
-        })
+        findings.append(
+            {
+                "title": f"{len(unassociated)} unassociated Public IP(s) in '{sub_name}'",
+                "severity": "LOW",
+                "category": "Cost & Hygiene",
+                "description": (
+                    f"{len(unassociated)} Public IP(s) are not attached to any resource: "
+                    f"{', '.join(p.get('name', '?') for p in unassociated[:5])}. "
+                    "Unassociated IPs incur charges and may represent unused or orphaned resources."
+                ),
+                "recommendation": (
+                    "Delete unassociated Public IPs that are no longer needed. "
+                    "If reserved for future use, document the intent in resource tags. "
+                    "Use Azure Policy to alert on orphaned public IPs."
+                ),
+            }
+        )
     basic_pips = [p for p in public_ips if p.get("sku_name") == "Basic"]
     if basic_pips:
-        findings.append({
-            "title": f"{len(basic_pips)} Basic SKU Public IP(s) in '{sub_name}'",
-            "severity": "MEDIUM", "category": "Resilience",
-            "description": (
-                f"{len(basic_pips)} Public IP(s) use the Basic SKU: "
-                f"{', '.join(p.get('name', '?') for p in basic_pips[:5])}. "
-                "Basic IPs are open by default, not zone-redundant, and on the retirement path "
-                "(retirement: September 30, 2025)."
-            ),
-            "recommendation": (
-                "Upgrade all Basic Public IPs to Standard SKU. "
-                "Standard IPs are secure by default (require NSG) and support zone redundancy. "
-                "Follow the migration guide at learn.microsoft.com/azure/virtual-network/ip-services/public-ip-basic-upgrade-guidance."
-            ),
-        })
+        findings.append(
+            {
+                "title": f"{len(basic_pips)} Basic SKU Public IP(s) in '{sub_name}'",
+                "severity": "MEDIUM",
+                "category": "Resilience",
+                "description": (
+                    f"{len(basic_pips)} Public IP(s) use the Basic SKU: "
+                    f"{', '.join(p.get('name', '?') for p in basic_pips[:5])}. "
+                    "Basic IPs are open by default, not zone-redundant, and on the retirement path "
+                    "(retirement: September 30, 2025)."
+                ),
+                "recommendation": (
+                    "Upgrade all Basic Public IPs to Standard SKU. "
+                    "Standard IPs are secure by default (require NSG) and support zone redundancy. "
+                    "Follow the migration guide at learn.microsoft.com/azure/virtual-network/ip-services/public-ip-basic-upgrade-guidance."
+                ),
+            }
+        )
     return findings
 
 
 def _check_bastion(bastion_hosts, vnets, sub_name):
     if not bastion_hosts and vnets:
-        return [{
-            "title": f"No Azure Bastion deployed in '{sub_name}'",
-            "severity": "MEDIUM", "category": "Remote Access",
-            "description": (
-                f"Subscription '{sub_name}' has {len(vnets)} VNet(s) but no Azure Bastion host. "
-                "Without Bastion, secure RDP/SSH access requires either public IPs on VMs or "
-                "complex VPN/JIT configurations."
-            ),
-            "recommendation": (
-                "Deploy Azure Bastion (Standard SKU) to provide browser-based RDP/SSH "
-                "without exposing VMs to the Internet. Enable tunneling and shareable links "
-                "for additional flexibility."
-            ),
-        }]
+        return [
+            {
+                "title": f"No Azure Bastion deployed in '{sub_name}'",
+                "severity": "MEDIUM",
+                "category": "Remote Access",
+                "description": (
+                    f"Subscription '{sub_name}' has {len(vnets)} VNet(s) but no Azure Bastion host. "
+                    "Without Bastion, secure RDP/SSH access requires either public IPs on VMs or "
+                    "complex VPN/JIT configurations."
+                ),
+                "recommendation": (
+                    "Deploy Azure Bastion (Standard SKU) to provide browser-based RDP/SSH "
+                    "without exposing VMs to the Internet. Enable tunneling and shareable links "
+                    "for additional flexibility."
+                ),
+            }
+        ]
     return []
 
 
@@ -579,20 +648,23 @@ def _check_private_endpoints(private_endpoints):
     for pe in private_endpoints:
         for sc in pe.get("service_connections", []):
             if sc.get("connection_state") == "Pending":
-                findings.append({
-                    "title": f"Private Endpoint '{pe.get('name', '?')}' has a pending connection",
-                    "severity": "MEDIUM", "category": "Connectivity",
-                    "description": (
-                        f"Private Endpoint '{pe.get('name', '?')}' connection to "
-                        f"'{sc.get('private_link_service_id', '?').split('/')[-1]}' is in Pending state. "
-                        "Traffic to the private service cannot flow until the connection is approved."
-                    ),
-                    "recommendation": (
-                        "Approve the pending private endpoint connection in the target resource's "
-                        "Networking > Private endpoint connections blade. "
-                        "Verify the request is from an expected subscription and service."
-                    ),
-                })
+                findings.append(
+                    {
+                        "title": f"Private Endpoint '{pe.get('name', '?')}' has a pending connection",
+                        "severity": "MEDIUM",
+                        "category": "Connectivity",
+                        "description": (
+                            f"Private Endpoint '{pe.get('name', '?')}' connection to "
+                            f"'{sc.get('private_link_service_id', '?').split('/')[-1]}' is in Pending state. "
+                            "Traffic to the private service cannot flow until the connection is approved."
+                        ),
+                        "recommendation": (
+                            "Approve the pending private endpoint connection in the target resource's "
+                            "Networking > Private endpoint connections blade. "
+                            "Verify the request is from an expected subscription and service."
+                        ),
+                    }
+                )
     return findings
 
 
@@ -605,51 +677,64 @@ def _check_gateway_skus(vnet_gateways):
         gen = gw.get("generation", "") or ""
         zones = gw.get("zones", [])
         if gw_type == "Vpn" and sku == "Basic":
-            findings.append({
-                "title": f"VPN Gateway '{gw_name}' uses Basic SKU — no SLA or zone redundancy",
-                "severity": "HIGH", "category": "Gateway",
-                "description": (
-                    f"VPN Gateway '{gw_name}' is deployed with the Basic SKU. "
-                    "Basic gateways are limited to 100 Mbps aggregate throughput, "
-                    "do not support BGP, active-active configuration, or zone redundancy, "
-                    "and carry no Microsoft SLA."
-                ),
-                "recommendation": (
-                    "Upgrade to VpnGw2 or higher (Generation 2). "
-                    "For zone redundancy, choose a *AZ SKU (e.g., VpnGw2AZ). "
-                    "Enable BGP and active-active mode for resilient hybrid connectivity."
-                ),
-            })
+            findings.append(
+                {
+                    "title": f"VPN Gateway '{gw_name}' uses Basic SKU — no SLA or zone redundancy",
+                    "severity": "HIGH",
+                    "category": "Gateway",
+                    "description": (
+                        f"VPN Gateway '{gw_name}' is deployed with the Basic SKU. "
+                        "Basic gateways are limited to 100 Mbps aggregate throughput, "
+                        "do not support BGP, active-active configuration, or zone redundancy, "
+                        "and carry no Microsoft SLA."
+                    ),
+                    "recommendation": (
+                        "Upgrade to VpnGw2 or higher (Generation 2). "
+                        "For zone redundancy, choose a *AZ SKU (e.g., VpnGw2AZ). "
+                        "Enable BGP and active-active mode for resilient hybrid connectivity."
+                    ),
+                }
+            )
         if gw_type == "Vpn" and gen and "Generation1" in gen:
-            findings.append({
-                "title": f"VPN Gateway '{gw_name}' is Generation 1 — limited throughput ceiling",
-                "severity": "LOW", "category": "Gateway",
-                "description": (
-                    f"VPN Gateway '{gw_name}' uses Generation 1 hardware. "
-                    "Generation 2 provides up to 100 Gbps aggregate throughput (VpnGw5AZ) "
-                    "vs. 1.25 Gbps maximum for Generation 1. "
-                    "Throughput caps may become a bottleneck as workloads grow."
-                ),
-                "recommendation": (
-                    "Redeploy or resize to a Generation 2 SKU (VpnGw2-VpnGw5 or their AZ variants). "
-                    "Generation 2 supports higher throughput at the same or lower cost."
-                ),
-            })
-        if gw_type == "Vpn" and sku not in ("Basic",) and (not zones or len(zones) < _MIN_ZONE_REDUNDANCY):
-            findings.append({
-                "title": f"VPN Gateway '{gw_name}' is not zone-redundant",
-                "severity": "MEDIUM", "category": "Gateway",
-                "description": (
-                    f"VPN Gateway '{gw_name}' (SKU: {sku}) is not deployed across "
-                    "availability zones. A zonal failure would interrupt all "
-                    "VPN tunnels and hybrid connectivity."
-                ),
-                "recommendation": (
-                    "Migrate to an AZ SKU (e.g., VpnGw2AZ) and deploy with "
-                    "zones=[1,2,3]. Also configure a zone-redundant Public IP "
-                    "(Standard SKU with zones=[1,2,3])."
-                ),
-            })
+            findings.append(
+                {
+                    "title": f"VPN Gateway '{gw_name}' is Generation 1 — limited throughput ceiling",
+                    "severity": "LOW",
+                    "category": "Gateway",
+                    "description": (
+                        f"VPN Gateway '{gw_name}' uses Generation 1 hardware. "
+                        "Generation 2 provides up to 100 Gbps aggregate throughput (VpnGw5AZ) "
+                        "vs. 1.25 Gbps maximum for Generation 1. "
+                        "Throughput caps may become a bottleneck as workloads grow."
+                    ),
+                    "recommendation": (
+                        "Redeploy or resize to a Generation 2 SKU (VpnGw2-VpnGw5 or their AZ variants). "
+                        "Generation 2 supports higher throughput at the same or lower cost."
+                    ),
+                }
+            )
+        if (
+            gw_type == "Vpn"
+            and sku not in ("Basic",)
+            and (not zones or len(zones) < _MIN_ZONE_REDUNDANCY)
+        ):
+            findings.append(
+                {
+                    "title": f"VPN Gateway '{gw_name}' is not zone-redundant",
+                    "severity": "MEDIUM",
+                    "category": "Gateway",
+                    "description": (
+                        f"VPN Gateway '{gw_name}' (SKU: {sku}) is not deployed across "
+                        "availability zones. A zonal failure would interrupt all "
+                        "VPN tunnels and hybrid connectivity."
+                    ),
+                    "recommendation": (
+                        "Migrate to an AZ SKU (e.g., VpnGw2AZ) and deploy with "
+                        "zones=[1,2,3]. Also configure a zone-redundant Public IP "
+                        "(Standard SKU with zones=[1,2,3])."
+                    ),
+                }
+            )
     return findings
 
 
@@ -659,74 +744,86 @@ def _check_nva(nva):
     nics = nva.get("nics", [])
     method = nva.get("identification_method", "")
     if len(nics) < _MIN_NIC_COUNT:
-        findings.append({
-            "title": f"NVA '{nva_name}' has only {len(nics)} NIC — possible hairpin or misconfiguration",
-            "severity": "HIGH", "category": "Network Appliances",
-            "description": (
-                f"NVA '{nva_name}' was identified as a network virtual appliance but has fewer than 2 NICs. "
-                "Most NGFWs require at least a LAN and a WAN interface to separate inside and outside traffic. "
-                "A single-NIC configuration often indicates a misconfiguration or a hairpin NAT design."
-            ),
-            "recommendation": (
-                "Verify the intended traffic model. If this NVA should inspect bidirectional traffic, "
-                "add a second NIC on a separate subnet. Review associated UDRs to ensure traffic is "
-                "actually traversing the appliance."
-            ),
-        })
+        findings.append(
+            {
+                "title": f"NVA '{nva_name}' has only {len(nics)} NIC — possible hairpin or misconfiguration",
+                "severity": "HIGH",
+                "category": "Network Appliances",
+                "description": (
+                    f"NVA '{nva_name}' was identified as a network virtual appliance but has fewer than 2 NICs. "
+                    "Most NGFWs require at least a LAN and a WAN interface to separate inside and outside traffic. "
+                    "A single-NIC configuration often indicates a misconfiguration or a hairpin NAT design."
+                ),
+                "recommendation": (
+                    "Verify the intended traffic model. If this NVA should inspect bidirectional traffic, "
+                    "add a second NIC on a separate subnet. Review associated UDRs to ensure traffic is "
+                    "actually traversing the appliance."
+                ),
+            }
+        )
     mgmt_nics_without_nsg = [n for n in nics if not n.get("nsg_id")]
     if mgmt_nics_without_nsg:
-        findings.append({
-            "title": f"NVA '{nva_name}': {len(mgmt_nics_without_nsg)} NIC(s) without NSG",
-            "severity": "MEDIUM", "category": "Network Appliances",
-            "description": (
-                f"NVA '{nva_name}' has {len(mgmt_nics_without_nsg)} network interface(s) "
-                "with no Network Security Group attached. Without an NSG, management-plane access "
-                "to the NVA is not filtered at the Azure layer, increasing the blast radius if "
-                "the appliance is compromised."
-            ),
-            "recommendation": (
-                "Attach an NSG to every NIC of the NVA. The management NIC NSG should restrict "
-                "inbound access to known jump-host IPs and deny all other inbound traffic. "
-                "Never expose the management interface directly to the internet."
-            ),
-        })
+        findings.append(
+            {
+                "title": f"NVA '{nva_name}': {len(mgmt_nics_without_nsg)} NIC(s) without NSG",
+                "severity": "MEDIUM",
+                "category": "Network Appliances",
+                "description": (
+                    f"NVA '{nva_name}' has {len(mgmt_nics_without_nsg)} network interface(s) "
+                    "with no Network Security Group attached. Without an NSG, management-plane access "
+                    "to the NVA is not filtered at the Azure layer, increasing the blast radius if "
+                    "the appliance is compromised."
+                ),
+                "recommendation": (
+                    "Attach an NSG to every NIC of the NVA. The management NIC NSG should restrict "
+                    "inbound access to known jump-host IPs and deny all other inbound traffic. "
+                    "Never expose the management interface directly to the internet."
+                ),
+            }
+        )
     if method == "ip_forwarding":
-        findings.append({
-            "title": f"VM '{nva_name}' has IP forwarding enabled — verify intent",
-            "severity": "MEDIUM", "category": "Network Appliances",
-            "description": (
-                f"VM '{nva_name}' has IP forwarding enabled on one or more NICs but does not match "
-                "any known NGFW marketplace publisher. IP forwarding is required for NVAs and routers "
-                "but is a security risk if enabled on general-purpose VMs, as it allows the VM to "
-                "forward traffic it did not originate."
-            ),
-            "recommendation": (
-                "Confirm this VM is intentionally acting as a router or NVA. If not, disable IP "
-                "forwarding on its NICs in the Azure portal. If it is an NVA, document the vendor, "
-                "version, and licensing and ensure it is under a formal change-management process."
-            ),
-        })
+        findings.append(
+            {
+                "title": f"VM '{nva_name}' has IP forwarding enabled — verify intent",
+                "severity": "MEDIUM",
+                "category": "Network Appliances",
+                "description": (
+                    f"VM '{nva_name}' has IP forwarding enabled on one or more NICs but does not match "
+                    "any known NGFW marketplace publisher. IP forwarding is required for NVAs and routers "
+                    "but is a security risk if enabled on general-purpose VMs, as it allows the VM to "
+                    "forward traffic it did not originate."
+                ),
+                "recommendation": (
+                    "Confirm this VM is intentionally acting as a router or NVA. If not, disable IP "
+                    "forwarding on its NICs in the Azure portal. If it is an NVA, document the vendor, "
+                    "version, and licensing and ensure it is under a formal change-management process."
+                ),
+            }
+        )
     return findings
 
 
 def _check_nvas(nvas, sub_name):
     if not nvas:
         return []
-    findings = [{
-        "title": f"{len(nvas)} Network Virtual Appliance(s) detected in '{sub_name}'",
-        "severity": "INFORMATIONAL", "category": "Network Appliances",
-        "description": (
-            f"Subscription '{sub_name}' contains {len(nvas)} NVA(s) "
-            f"({', '.join(n.get('name', '?') for n in nvas[:5])}). "
-            "NVAs acting as NGFWs are critical chokepoints for East-West and North-South traffic. "
-            "Their placement, licensing, and HA configuration must be validated."
-        ),
-        "recommendation": (
-            "Verify each NVA is deployed in an Active/Active or Active/Standby HA pair. "
-            "Confirm UDRs route traffic through the NVA in both inbound and outbound directions. "
-            "Check that management interfaces are on a dedicated subnet with no default route to the internet."
-        ),
-    }]
+    findings = [
+        {
+            "title": f"{len(nvas)} Network Virtual Appliance(s) detected in '{sub_name}'",
+            "severity": "INFORMATIONAL",
+            "category": "Network Appliances",
+            "description": (
+                f"Subscription '{sub_name}' contains {len(nvas)} NVA(s) "
+                f"({', '.join(n.get('name', '?') for n in nvas[:5])}). "
+                "NVAs acting as NGFWs are critical chokepoints for East-West and North-South traffic. "
+                "Their placement, licensing, and HA configuration must be validated."
+            ),
+            "recommendation": (
+                "Verify each NVA is deployed in an Active/Active or Active/Standby HA pair. "
+                "Confirm UDRs route traffic through the NVA in both inbound and outbound directions. "
+                "Check that management interfaces are on a dedicated subnet with no default route to the internet."
+            ),
+        }
+    ]
     for nva in nvas:
         findings += _check_nva(nva)
     return findings
@@ -740,73 +837,88 @@ def _check_bgp_gateway(bgp, vnet_gateways):
     if not bgp_enabled:
         matching_gw = next((g for g in vnet_gateways if g.get("name") == gw_name), {})
         if bool(matching_gw.get("connections")):
-            findings.append({
-                "title": f"VPN Gateway '{gw_name}' has connections but BGP is disabled",
-                "severity": "MEDIUM", "category": "BGP & Routing",
-                "description": (
-                    f"VPN Gateway '{gw_name}' has active connections but BGP is not enabled. "
-                    "Without BGP, routes must be statically maintained and failover is not automatic. "
-                    "This increases operational overhead and risk of routing gaps during maintenance."
-                ),
-                "recommendation": (
-                    "Enable BGP on the VPN Gateway and on-premises VPN device. "
-                    "Use a private ASN (64512-65534) and configure BGP peer IPs. "
-                    "BGP enables dynamic route learning, path selection, and automatic failover "
-                    "in active-active configurations."
-                ),
-            })
+            findings.append(
+                {
+                    "title": f"VPN Gateway '{gw_name}' has connections but BGP is disabled",
+                    "severity": "MEDIUM",
+                    "category": "BGP & Routing",
+                    "description": (
+                        f"VPN Gateway '{gw_name}' has active connections but BGP is not enabled. "
+                        "Without BGP, routes must be statically maintained and failover is not automatic. "
+                        "This increases operational overhead and risk of routing gaps during maintenance."
+                    ),
+                    "recommendation": (
+                        "Enable BGP on the VPN Gateway and on-premises VPN device. "
+                        "Use a private ASN (64512-65534) and configure BGP peer IPs. "
+                        "BGP enables dynamic route learning, path selection, and automatic failover "
+                        "in active-active configurations."
+                    ),
+                }
+            )
         return findings
     for peer in [p for p in peers if p.get("state") not in ("Connected", "Unknown")]:
-        findings.append({
-            "title": f"BGP peer {peer.get('peer_ip', '?')} on '{gw_name}' is {peer.get('state', 'Disconnected')}",
-            "severity": "HIGH", "category": "BGP & Routing",
-            "description": (
-                f"BGP peer {peer.get('peer_ip', '?')} (ASN: {peer.get('peer_asn', 'unknown')}) "
-                f"on gateway '{gw_name}' is in state '{peer.get('state', 'Disconnected')}'. "
-                f"Routes received: {peer.get('routes_received', 0)}. "
-                "A disconnected BGP peer means dynamic routes from that peer are withdrawn and "
-                "traffic may black-hole."
-            ),
-            "recommendation": (
-                "Check BGP session state on the remote peer (on-premises router or remote gateway). "
-                "Verify ASN, peer IP, and BGP timers match. "
-                "Review Azure VPN Gateway diagnostics for IKE and BGP logs."
-            ),
-        })
+        findings.append(
+            {
+                "title": f"BGP peer {peer.get('peer_ip', '?')} on '{gw_name}' is {peer.get('state', 'Disconnected')}",
+                "severity": "HIGH",
+                "category": "BGP & Routing",
+                "description": (
+                    f"BGP peer {peer.get('peer_ip', '?')} (ASN: {peer.get('peer_asn', 'unknown')}) "
+                    f"on gateway '{gw_name}' is in state '{peer.get('state', 'Disconnected')}'. "
+                    f"Routes received: {peer.get('routes_received', 0)}. "
+                    "A disconnected BGP peer means dynamic routes from that peer are withdrawn and "
+                    "traffic may black-hole."
+                ),
+                "recommendation": (
+                    "Check BGP session state on the remote peer (on-premises router or remote gateway). "
+                    "Verify ASN, peer IP, and BGP timers match. "
+                    "Review Azure VPN Gateway diagnostics for IKE and BGP logs."
+                ),
+            }
+        )
     learned_count = bgp.get("learned_routes_count", 0)
     adv_count = bgp.get("advertised_routes_count", 0)
     connected_peers = [p for p in peers if p.get("state") == "Connected"]
     if bgp_enabled and learned_count == 0 and connected_peers:
-        findings.append({
-            "title": f"VPN Gateway '{gw_name}' has connected BGP peers but no learned routes",
-            "severity": "HIGH", "category": "BGP & Routing",
-            "description": (
-                f"Gateway '{gw_name}' has {len(connected_peers)} connected BGP peer(s) but is not "
-                "learning any routes. This indicates the remote side is not advertising any prefixes, "
-                "which would cause on-premises resources to be unreachable from Azure."
-            ),
-            "recommendation": (
-                "Verify the on-premises BGP configuration is advertising the correct prefixes to Azure. "
-                "Check for BGP route filters or prefix-lists that may be blocking advertisements. "
-                "Review route policies on the remote device."
-            ),
-        })
+        findings.append(
+            {
+                "title": f"VPN Gateway '{gw_name}' has connected BGP peers but no learned routes",
+                "severity": "HIGH",
+                "category": "BGP & Routing",
+                "description": (
+                    f"Gateway '{gw_name}' has {len(connected_peers)} connected BGP peer(s) but is not "
+                    "learning any routes. This indicates the remote side is not advertising any prefixes, "
+                    "which would cause on-premises resources to be unreachable from Azure."
+                ),
+                "recommendation": (
+                    "Verify the on-premises BGP configuration is advertising the correct prefixes to Azure. "
+                    "Check for BGP route filters or prefix-lists that may be blocking advertisements. "
+                    "Review route policies on the remote device."
+                ),
+            }
+        )
     if bgp_enabled and (learned_count > 0 or adv_count > 0):
-        findings.append({
-            "title": f"BGP Route Table: '{gw_name}' — {learned_count} learned, {adv_count} advertised",
-            "severity": "INFORMATIONAL", "category": "BGP & Routing",
-            "description": (
-                f"Gateway '{gw_name}' BGP route summary: "
-                f"{learned_count} route(s) learned from peers, {adv_count} route(s) advertised to peers. "
-                + (f"Sample learned prefixes: {', '.join(bgp.get('learned_routes', [])[:5])}."
-                   if bgp.get("learned_routes") else "")
-            ),
-            "recommendation": (
-                "Review the learned routes to confirm all expected on-premises prefixes are present. "
-                "Verify advertised routes match the intended Azure address spaces. "
-                "Investigate unexpected or missing prefixes."
-            ),
-        })
+        findings.append(
+            {
+                "title": f"BGP Route Table: '{gw_name}' — {learned_count} learned, {adv_count} advertised",
+                "severity": "INFORMATIONAL",
+                "category": "BGP & Routing",
+                "description": (
+                    f"Gateway '{gw_name}' BGP route summary: "
+                    f"{learned_count} route(s) learned from peers, {adv_count} route(s) advertised to peers. "
+                    + (
+                        f"Sample learned prefixes: {', '.join(bgp.get('learned_routes', [])[:5])}."
+                        if bgp.get("learned_routes")
+                        else ""
+                    )
+                ),
+                "recommendation": (
+                    "Review the learned routes to confirm all expected on-premises prefixes are present. "
+                    "Verify advertised routes match the intended Azure address spaces. "
+                    "Investigate unexpected or missing prefixes."
+                ),
+            }
+        )
     return findings
 
 
@@ -818,76 +930,88 @@ def _check_observability(obs, vnets, sub_name):
     vnet_regions = {v.get("location", "") for v in vnets}
     missing_nw = vnet_regions - nw_regions
     if missing_nw:
-        findings.append({
-            "title": f"Network Watcher not enabled in {len(missing_nw)} region(s) in '{sub_name}'",
-            "severity": "MEDIUM", "category": "Observability",
-            "description": (
-                f"Azure Network Watcher is not enabled in {len(missing_nw)} region(s) that contain VNets: "
-                f"{', '.join(sorted(missing_nw))}. "
-                "Network Watcher is required for NSG flow logs, Connection Monitor, packet capture, "
-                "and topology visualization."
-            ),
-            "recommendation": (
-                "Enable Azure Network Watcher in every region where Azure resources are deployed. "
-                "Network Watcher is free and enables critical diagnostics: "
-                "NSG flow logs, Connection Monitor, IP flow verify, and next hop."
-            ),
-        })
+        findings.append(
+            {
+                "title": f"Network Watcher not enabled in {len(missing_nw)} region(s) in '{sub_name}'",
+                "severity": "MEDIUM",
+                "category": "Observability",
+                "description": (
+                    f"Azure Network Watcher is not enabled in {len(missing_nw)} region(s) that contain VNets: "
+                    f"{', '.join(sorted(missing_nw))}. "
+                    "Network Watcher is required for NSG flow logs, Connection Monitor, packet capture, "
+                    "and topology visualization."
+                ),
+                "recommendation": (
+                    "Enable Azure Network Watcher in every region where Azure resources are deployed. "
+                    "Network Watcher is free and enables critical diagnostics: "
+                    "NSG flow logs, Connection Monitor, IP flow verify, and next hop."
+                ),
+            }
+        )
     workspaces = obs.get("log_analytics_workspaces", [])
     if not workspaces and vnets:
-        findings.append({
-            "title": f"No Log Analytics workspace in '{sub_name}'",
-            "severity": "HIGH", "category": "Observability",
-            "description": (
-                f"Subscription '{sub_name}' has {len(vnets)} VNet(s) but no Log Analytics workspace. "
-                "Without a workspace, NSG flow logs, diagnostic settings, Azure Monitor alerts, "
-                "and Traffic Analytics cannot be centrally collected or queried."
-            ),
-            "recommendation": (
-                "Create a Log Analytics workspace in this subscription. "
-                "Configure a minimum 90-day retention policy. "
-                "Forward all diagnostic settings (NSGs, firewalls, gateways) to the workspace. "
-                "Enable Traffic Analytics for NSG flow logs."
-            ),
-        })
+        findings.append(
+            {
+                "title": f"No Log Analytics workspace in '{sub_name}'",
+                "severity": "HIGH",
+                "category": "Observability",
+                "description": (
+                    f"Subscription '{sub_name}' has {len(vnets)} VNet(s) but no Log Analytics workspace. "
+                    "Without a workspace, NSG flow logs, diagnostic settings, Azure Monitor alerts, "
+                    "and Traffic Analytics cannot be centrally collected or queried."
+                ),
+                "recommendation": (
+                    "Create a Log Analytics workspace in this subscription. "
+                    "Configure a minimum 90-day retention policy. "
+                    "Forward all diagnostic settings (NSGs, firewalls, gateways) to the workspace. "
+                    "Enable Traffic Analytics for NSG flow logs."
+                ),
+            }
+        )
     for ws in workspaces:
         ret = ws.get("retention_days", 30)
         if ret < _LOG_RETENTION_MIN_DAYS:
-            findings.append({
-                "title": f"Log Analytics workspace '{ws.get('name', 'unknown')}' has short retention ({ret} days)",
-                "severity": "MEDIUM", "category": "Observability",
-                "description": (
-                    f"Log Analytics workspace '{ws.get('name', 'unknown')}' retains data for only {ret} days. "
-                    "Security investigations, compliance audits, and forensic analysis typically require "
-                    "90+ days of log history. NIST 800-53 and CIS recommend at least 90 days online "
-                    "retention (1 year for compliance workloads)."
-                ),
-                "recommendation": (
-                    "Increase retention to at least 90 days in the workspace "
-                    "Settings > Usage and estimated costs > Data Retention. "
-                    "For compliance workloads (PCI, HIPAA, SOC 2), set 365 days "
-                    "or archive to Azure Storage with immutability policies."
-                ),
-            })
+            findings.append(
+                {
+                    "title": f"Log Analytics workspace '{ws.get('name', 'unknown')}' has short retention ({ret} days)",
+                    "severity": "MEDIUM",
+                    "category": "Observability",
+                    "description": (
+                        f"Log Analytics workspace '{ws.get('name', 'unknown')}' retains data for only {ret} days. "
+                        "Security investigations, compliance audits, and forensic analysis typically require "
+                        "90+ days of log history. NIST 800-53 and CIS recommend at least 90 days online "
+                        "retention (1 year for compliance workloads)."
+                    ),
+                    "recommendation": (
+                        "Increase retention to at least 90 days in the workspace "
+                        "Settings > Usage and estimated costs > Data Retention. "
+                        "For compliance workloads (PCI, HIPAA, SOC 2), set 365 days "
+                        "or archive to Azure Storage with immutability policies."
+                    ),
+                }
+            )
     fl_enabled = obs.get("nsg_flow_logs_enabled", 0)
     fl_total = obs.get("nsg_flow_logs_total", 0)
     if fl_total > 0 and fl_enabled < fl_total:
         missing_fl = fl_total - fl_enabled
-        findings.append({
-            "title": f"{missing_fl} of {fl_total} NSG(s) missing flow logs in '{sub_name}'",
-            "severity": "MEDIUM", "category": "Observability",
-            "description": (
-                f"{missing_fl} NSG(s) in '{sub_name}' do not have Network Watcher flow logs enabled. "
-                "Without flow logs, traffic analysis, threat hunting, and forensic investigation are "
-                "severely limited. Flow logs are required by NIST 800-53 AU-12 and CIS Azure Benchmark."
-            ),
-            "recommendation": (
-                "Enable NSG Flow Logs v2 for all NSGs via Azure Network Watcher. "
-                "Set a Log Analytics workspace destination and enable Traffic Analytics. "
-                "Configure at least 90-day retention. "
-                "Use Azure Policy to enforce flow logs at scale."
-            ),
-        })
+        findings.append(
+            {
+                "title": f"{missing_fl} of {fl_total} NSG(s) missing flow logs in '{sub_name}'",
+                "severity": "MEDIUM",
+                "category": "Observability",
+                "description": (
+                    f"{missing_fl} NSG(s) in '{sub_name}' do not have Network Watcher flow logs enabled. "
+                    "Without flow logs, traffic analysis, threat hunting, and forensic investigation are "
+                    "severely limited. Flow logs are required by NIST 800-53 AU-12 and CIS Azure Benchmark."
+                ),
+                "recommendation": (
+                    "Enable NSG Flow Logs v2 for all NSGs via Azure Network Watcher. "
+                    "Set a Log Analytics workspace destination and enable Traffic Analytics. "
+                    "Configure at least 90-day retention. "
+                    "Use Azure Policy to enforce flow logs at scale."
+                ),
+            }
+        )
     return findings
 
 
@@ -902,58 +1026,71 @@ def _check_network_metrics(net_metrics, vnet_gateways, sub_name):
         egress = gm.get("egress_bytes_24h") or 0
         util = gm.get("utilization_pct")
         if util and util > _GW_HIGH_UTILIZATION_PCT:
-            findings.append({
-                "title": f"High bandwidth utilization on '{gm_name}' ({util:.0f}%)",
-                "severity": "HIGH", "category": "Performance",
-                "description": (
-                    f"Gateway '{gm_name}' is operating at {util:.0f}% of its provisioned bandwidth capacity. "
-                    "Sustained utilization above 80% risks congestion, increased latency, and packet drops "
-                    "during peak periods."
-                ),
-                "recommendation": (
-                    "Upgrade to a higher-throughput SKU. "
-                    "Consider enabling ExpressRoute FastPath if applicable. "
-                    "Review traffic patterns for optimization opportunities "
-                    "(compression, caching, traffic shaping)."
-                ),
-            })
+            findings.append(
+                {
+                    "title": f"High bandwidth utilization on '{gm_name}' ({util:.0f}%)",
+                    "severity": "HIGH",
+                    "category": "Performance",
+                    "description": (
+                        f"Gateway '{gm_name}' is operating at {util:.0f}% of its provisioned bandwidth capacity. "
+                        "Sustained utilization above 80% risks congestion, increased latency, and packet drops "
+                        "during peak periods."
+                    ),
+                    "recommendation": (
+                        "Upgrade to a higher-throughput SKU. "
+                        "Consider enabling ExpressRoute FastPath if applicable. "
+                        "Review traffic patterns for optimization opportunities "
+                        "(compression, caching, traffic shaping)."
+                    ),
+                }
+            )
         matching_gw = next((g for g in vnet_gateways if g.get("name") == gm_name), {})
         if bool(matching_gw.get("connections")) and ingress == 0 and egress == 0:
-            findings.append({
-                "title": f"VPN Gateway '{gm_name}' shows zero traffic in the last 24 hours",
-                "severity": "MEDIUM", "category": "Performance",
+            findings.append(
+                {
+                    "title": f"VPN Gateway '{gm_name}' shows zero traffic in the last 24 hours",
+                    "severity": "MEDIUM",
+                    "category": "Performance",
+                    "description": (
+                        f"Gateway '{gm_name}' has active connection(s) configured but recorded zero bytes "
+                        "transferred in the last 24 hours. This may indicate a disconnected tunnel, unused "
+                        "gateway (wasted cost), or a monitoring gap."
+                    ),
+                    "recommendation": (
+                        "Verify tunnel connectivity via Azure Portal > VPN Gateway > Connections. "
+                        "If the gateway is no longer needed, consider decommissioning to reduce costs. "
+                        "If traffic is expected, investigate VPN client or on-premises routing configuration."
+                    ),
+                }
+            )
+    if gw_metrics_list:
+        total_in_gb = (
+            sum((gm.get("ingress_bytes_24h") or 0) for gm in gw_metrics_list) / 1_000_000_000
+        )
+        total_out_gb = (
+            sum((gm.get("egress_bytes_24h") or 0) for gm in gw_metrics_list) / 1_000_000_000
+        )
+        findings.append(
+            {
+                "title": (
+                    f"Gateway Traffic Summary (24 h): "
+                    f"{total_in_gb:.2f} GB in / {total_out_gb:.2f} GB out — '{sub_name}'"
+                ),
+                "severity": "INFORMATIONAL",
+                "category": "Performance",
                 "description": (
-                    f"Gateway '{gm_name}' has active connection(s) configured but recorded zero bytes "
-                    "transferred in the last 24 hours. This may indicate a disconnected tunnel, unused "
-                    "gateway (wasted cost), or a monitoring gap."
+                    f"Combined VPN gateway traffic for '{sub_name}' over the last 24 hours: "
+                    f"Ingress {total_in_gb:.2f} GB, Egress {total_out_gb:.2f} GB across "
+                    f"{len(gw_metrics_list)} gateway(s). "
+                    "No latency metrics are available without Azure Network Watcher Connection Monitor configured."
                 ),
                 "recommendation": (
-                    "Verify tunnel connectivity via Azure Portal > VPN Gateway > Connections. "
-                    "If the gateway is no longer needed, consider decommissioning to reduce costs. "
-                    "If traffic is expected, investigate VPN client or on-premises routing configuration."
+                    "Configure Azure Network Watcher Connection Monitor to capture "
+                    "round-trip latency and packet loss between endpoints. "
+                    "Set alerting thresholds for latency > 150 ms and packet loss > 1%."
                 ),
-            })
-    if gw_metrics_list:
-        total_in_gb = sum((gm.get("ingress_bytes_24h") or 0) for gm in gw_metrics_list) / 1_000_000_000
-        total_out_gb = sum((gm.get("egress_bytes_24h") or 0) for gm in gw_metrics_list) / 1_000_000_000
-        findings.append({
-            "title": (
-                f"Gateway Traffic Summary (24 h): "
-                f"{total_in_gb:.2f} GB in / {total_out_gb:.2f} GB out — '{sub_name}'"
-            ),
-            "severity": "INFORMATIONAL", "category": "Performance",
-            "description": (
-                f"Combined VPN gateway traffic for '{sub_name}' over the last 24 hours: "
-                f"Ingress {total_in_gb:.2f} GB, Egress {total_out_gb:.2f} GB across "
-                f"{len(gw_metrics_list)} gateway(s). "
-                "No latency metrics are available without Azure Network Watcher Connection Monitor configured."
-            ),
-            "recommendation": (
-                "Configure Azure Network Watcher Connection Monitor to capture "
-                "round-trip latency and packet loss between endpoints. "
-                "Set alerting thresholds for latency > 150 ms and packet loss > 1%."
-            ),
-        })
+            }
+        )
     return findings
 
 
@@ -962,19 +1099,22 @@ def _topology_to_findings(sub_topo: dict) -> list[dict]:
     sub_name = sub_topo.get("subscription_name") or sub_topo.get("subscription_id", "unknown")
     sub_id = sub_topo.get("subscription_id", "unknown")
     if sub_topo.get("discovery_blocked"):
-        return [{
-            "title": f"Discovery blocked for subscription '{sub_name}'",
-            "severity": "HIGH", "category": "Access Control",
-            "description": (
-                f"The service principal lacks permissions to discover subscription {sub_id}. "
-                f"Reason: {sub_topo.get('block_reason', 'insufficient permissions')}. "
-                "Network topology is unknown for this subscription."
-            ),
-            "recommendation": (
-                "Assign the Reader role at the subscription scope. If NSG / route table details "
-                "are required, also assign Network Contributor."
-            ),
-        }]
+        return [
+            {
+                "title": f"Discovery blocked for subscription '{sub_name}'",
+                "severity": "HIGH",
+                "category": "Access Control",
+                "description": (
+                    f"The service principal lacks permissions to discover subscription {sub_id}. "
+                    f"Reason: {sub_topo.get('block_reason', 'insufficient permissions')}. "
+                    "Network topology is unknown for this subscription."
+                ),
+                "recommendation": (
+                    "Assign the Reader role at the subscription scope. If NSG / route table details "
+                    "are required, also assign Network Contributor."
+                ),
+            }
+        ]
     vnets = sub_topo.get("vnets", [])
     firewalls = sub_topo.get("firewalls", [])
     vnet_gws = sub_topo.get("virtual_network_gateways", [])
@@ -999,6 +1139,7 @@ def _topology_to_findings(sub_topo: dict) -> list[dict]:
     findings += _check_observability(sub_topo.get("observability") or {}, vnets, sub_name)
     findings += _check_network_metrics(sub_topo.get("network_metrics") or {}, vnet_gws, sub_name)
     return findings
+
 
 def _finding_model_to_dict(finding: Any) -> dict:
     """Map a cna.core.findings_schema.Finding to the flat dict shape used by

@@ -106,32 +106,34 @@ def _check_orphaned_pips(sub_id: str, sub, prices) -> list[Finding]:
             else prices.PUBLIC_IP_STANDARD_MONTHLY
         )
         findings.append(
-            _finding(_FindingParams(
-                rule_id=R_AZ_COST_ORPHANED_PIP,
-                severity=FindingSeverity.LOW,
-                sub_id=sub_id,
-                region=pip.location,
-                resource_id=pip.id,
-                resource_type="Microsoft.Network/publicIPAddresses",
-                title=f"Orphaned public IP '{pip.name}' incurs charges with no workload",
-                fact=(
-                    f"Public IP {pip.name} ({pip.sku_name} SKU) in {pip.location} "
-                    f"has associated_resource_type=None — it is not attached to "
-                    f"any resource."
-                ),
-                evidence_ref=(
-                    f"discovery:azure_{sub_id}.public_ips[id={pip.id}].associated_resource_type"
-                ),
-                recommendation=(
-                    "Delete the unassociated public IP if no longer needed, or "
-                    "document the reservation intent in resource tags. Use Azure "
-                    "Policy to alert on orphaned public IPs."
-                ),
-                est_monthly_cost_usd=monthly,
-                description=(
-                    f"Public IP '{pip.name}' is billed while unattached. {_verify(monthly)}."
-                ),
-            ))
+            _finding(
+                _FindingParams(
+                    rule_id=R_AZ_COST_ORPHANED_PIP,
+                    severity=FindingSeverity.LOW,
+                    sub_id=sub_id,
+                    region=pip.location,
+                    resource_id=pip.id,
+                    resource_type="Microsoft.Network/publicIPAddresses",
+                    title=f"Orphaned public IP '{pip.name}' incurs charges with no workload",
+                    fact=(
+                        f"Public IP {pip.name} ({pip.sku_name} SKU) in {pip.location} "
+                        f"has associated_resource_type=None — it is not attached to "
+                        f"any resource."
+                    ),
+                    evidence_ref=(
+                        f"discovery:azure_{sub_id}.public_ips[id={pip.id}].associated_resource_type"
+                    ),
+                    recommendation=(
+                        "Delete the unassociated public IP if no longer needed, or "
+                        "document the reservation intent in resource tags. Use Azure "
+                        "Policy to alert on orphaned public IPs."
+                    ),
+                    est_monthly_cost_usd=monthly,
+                    description=(
+                        f"Public IP '{pip.name}' is billed while unattached. {_verify(monthly)}."
+                    ),
+                )
+            )
         )
     return findings
 
@@ -147,37 +149,39 @@ def _check_gateway_metrics(sub_id: str, gw_by_name: dict, metrics, prices) -> li
         egress = gm.egress_bytes_24h or 0
         if gw and ingress == 0 and egress == 0:
             findings.append(
-                _finding(_FindingParams(
-                    rule_id=R_AZ_COST_IDLE_GATEWAY,
-                    severity=FindingSeverity.MEDIUM,
-                    sub_id=sub_id,
-                    region=gw.location,
-                    resource_id=gw.id,
-                    resource_type="Microsoft.Network/virtualNetworkGateways",
-                    title=(
-                        f"Gateway '{gm.gateway_name}' billed but moved zero traffic in 24 hours"
-                    ),
-                    fact=(
-                        f"{gm.gateway_type} gateway {gm.gateway_name} "
-                        f"(SKU: {sku or 'unknown'}) recorded 0 ingress and 0 "
-                        f"egress bytes over the 24-hour metric window."
-                    ),
-                    evidence_ref=(
-                        f"discovery:azure_{sub_id}.network_metrics"
-                        f".gateway_metrics[name={gm.gateway_name}]"
-                    ),
-                    recommendation=(
-                        "Confirm the gateway is still required. If tunnels are "
-                        "unused, decommission the gateway and its public IPs. "
-                        "If traffic is expected, investigate tunnel and routing "
-                        "health."
-                    ),
-                    est_monthly_cost_usd=monthly,
-                    description=(
-                        f"Idle gateway continues to accrue hourly charges. "
-                        f"{_verify(monthly) if monthly else 'Monthly cost depends on SKU [VERIFY]'}."
-                    ),
-                ))
+                _finding(
+                    _FindingParams(
+                        rule_id=R_AZ_COST_IDLE_GATEWAY,
+                        severity=FindingSeverity.MEDIUM,
+                        sub_id=sub_id,
+                        region=gw.location,
+                        resource_id=gw.id,
+                        resource_type="Microsoft.Network/virtualNetworkGateways",
+                        title=(
+                            f"Gateway '{gm.gateway_name}' billed but moved zero traffic in 24 hours"
+                        ),
+                        fact=(
+                            f"{gm.gateway_type} gateway {gm.gateway_name} "
+                            f"(SKU: {sku or 'unknown'}) recorded 0 ingress and 0 "
+                            f"egress bytes over the 24-hour metric window."
+                        ),
+                        evidence_ref=(
+                            f"discovery:azure_{sub_id}.network_metrics"
+                            f".gateway_metrics[name={gm.gateway_name}]"
+                        ),
+                        recommendation=(
+                            "Confirm the gateway is still required. If tunnels are "
+                            "unused, decommission the gateway and its public IPs. "
+                            "If traffic is expected, investigate tunnel and routing "
+                            "health."
+                        ),
+                        est_monthly_cost_usd=monthly,
+                        description=(
+                            f"Idle gateway continues to accrue hourly charges. "
+                            f"{_verify(monthly) if monthly else 'Monthly cost depends on SKU [VERIFY]'}."
+                        ),
+                    )
+                )
             )
 
         if (
@@ -192,39 +196,41 @@ def _check_gateway_metrics(sub_id: str, gw_by_name: dict, metrics, prices) -> li
                 smaller_cost = prices.vpn_gateway_monthly(smaller)
                 saving = current_cost - smaller_cost if current_cost and smaller_cost else None
                 findings.append(
-                    _finding(_FindingParams(
-                        rule_id=R_AZ_COST_OVERSIZED_GATEWAY,
-                        severity=FindingSeverity.LOW,
-                        sub_id=sub_id,
-                        region=gw.location,
-                        resource_id=gw.id,
-                        resource_type="Microsoft.Network/virtualNetworkGateways",
-                        title=(
-                            f"VPN gateway '{gm.gateway_name}' SKU appears "
-                            f"oversized for observed traffic"
-                        ),
-                        fact=(
-                            f"VPN gateway {gm.gateway_name} (SKU: {sku}) peaked "
-                            f"at {gm.utilization_pct:.1f}% of provisioned "
-                            f"bandwidth over the 24-hour metric window."
-                        ),
-                        evidence_ref=(
-                            f"discovery:azure_{sub_id}.network_metrics"
-                            f".gateway_metrics[name={gm.gateway_name}]"
-                            f".utilization_pct"
-                        ),
-                        recommendation=(
-                            f"Evaluate resizing from {sku} to {smaller} after "
-                            f"reviewing a longer utilization window (30+ days) "
-                            f"and planned growth. Gateway resize causes brief "
-                            f"connectivity interruption — schedule a window."
-                        ),
-                        est_monthly_cost_usd=saving,
-                        description=(
-                            f"Downsizing {sku} → {smaller} would reduce spend. "
-                            f"{f'Estimated monthly saving: ~${saving:.2f} USD [VERIFY]' if saving else 'Saving depends on SKU pricing [VERIFY]'}."
-                        ),
-                    ))
+                    _finding(
+                        _FindingParams(
+                            rule_id=R_AZ_COST_OVERSIZED_GATEWAY,
+                            severity=FindingSeverity.LOW,
+                            sub_id=sub_id,
+                            region=gw.location,
+                            resource_id=gw.id,
+                            resource_type="Microsoft.Network/virtualNetworkGateways",
+                            title=(
+                                f"VPN gateway '{gm.gateway_name}' SKU appears "
+                                f"oversized for observed traffic"
+                            ),
+                            fact=(
+                                f"VPN gateway {gm.gateway_name} (SKU: {sku}) peaked "
+                                f"at {gm.utilization_pct:.1f}% of provisioned "
+                                f"bandwidth over the 24-hour metric window."
+                            ),
+                            evidence_ref=(
+                                f"discovery:azure_{sub_id}.network_metrics"
+                                f".gateway_metrics[name={gm.gateway_name}]"
+                                f".utilization_pct"
+                            ),
+                            recommendation=(
+                                f"Evaluate resizing from {sku} to {smaller} after "
+                                f"reviewing a longer utilization window (30+ days) "
+                                f"and planned growth. Gateway resize causes brief "
+                                f"connectivity interruption — schedule a window."
+                            ),
+                            est_monthly_cost_usd=saving,
+                            description=(
+                                f"Downsizing {sku} → {smaller} would reduce spend. "
+                                f"{f'Estimated monthly saving: ~${saving:.2f} USD [VERIFY]' if saving else 'Saving depends on SKU pricing [VERIFY]'}."
+                            ),
+                        )
+                    )
                 )
     return findings
 
@@ -247,38 +253,40 @@ def _check_firewall_metrics(sub_id: str, fw_by_name: dict, metrics) -> list[Find
         tier = fw.sku_tier if fw else "Standard"
         monthly = FIREWALL_MONTHLY.get(tier)
         findings.append(
-            _finding(_FindingParams(
-                rule_id=R_AZ_COST_FIREWALL_ZERO_TRAFFIC,
-                severity=FindingSeverity.MEDIUM,
-                sub_id=sub_id,
-                region=fw.location if fw else "Global",
-                resource_id=fw.id if fw else fm.firewall_name,
-                resource_type="Microsoft.Network/azureFirewalls",
-                title=(
-                    f"Azure Firewall '{fm.firewall_name}' billed while processing zero traffic"
-                ),
-                fact=(
-                    f"Azure Firewall {fm.firewall_name} ({tier} tier) recorded "
-                    f"0 network, application, and NAT rule hits over the "
-                    f"24-hour metric window."
-                ),
-                evidence_ref=(
-                    f"discovery:azure_{sub_id}.network_metrics"
-                    f".firewall_metrics[name={fm.firewall_name}]"
-                ),
-                recommendation=(
-                    "Verify routing actually sends traffic through this "
-                    "firewall (see AZ-NET-009). If the firewall is genuinely "
-                    "unused, decommission it; if it protects intermittent "
-                    "workloads, consider Firewall Basic or stop/start "
-                    "automation."
-                ),
-                est_monthly_cost_usd=monthly,
-                description=(
-                    f"A deployed firewall accrues hourly charges regardless of "
-                    f"traffic. {_verify(monthly) if monthly else 'Monthly cost depends on tier [VERIFY]'}."
-                ),
-            ))
+            _finding(
+                _FindingParams(
+                    rule_id=R_AZ_COST_FIREWALL_ZERO_TRAFFIC,
+                    severity=FindingSeverity.MEDIUM,
+                    sub_id=sub_id,
+                    region=fw.location if fw else "Global",
+                    resource_id=fw.id if fw else fm.firewall_name,
+                    resource_type="Microsoft.Network/azureFirewalls",
+                    title=(
+                        f"Azure Firewall '{fm.firewall_name}' billed while processing zero traffic"
+                    ),
+                    fact=(
+                        f"Azure Firewall {fm.firewall_name} ({tier} tier) recorded "
+                        f"0 network, application, and NAT rule hits over the "
+                        f"24-hour metric window."
+                    ),
+                    evidence_ref=(
+                        f"discovery:azure_{sub_id}.network_metrics"
+                        f".firewall_metrics[name={fm.firewall_name}]"
+                    ),
+                    recommendation=(
+                        "Verify routing actually sends traffic through this "
+                        "firewall (see AZ-NET-009). If the firewall is genuinely "
+                        "unused, decommission it; if it protects intermittent "
+                        "workloads, consider Firewall Basic or stop/start "
+                        "automation."
+                    ),
+                    est_monthly_cost_usd=monthly,
+                    description=(
+                        f"A deployed firewall accrues hourly charges regardless of "
+                        f"traffic. {_verify(monthly) if monthly else 'Monthly cost depends on tier [VERIFY]'}."
+                    ),
+                )
+            )
         )
     return findings
 
@@ -291,33 +299,35 @@ def _check_idle_nat_gateways(sub_id: str, sub) -> list[Finding]:
         if nat.associated_subnet_ids:
             continue
         findings.append(
-            _finding(_FindingParams(
-                rule_id=R_AZ_COST_NAT_GW_NO_SUBNETS,
-                severity=FindingSeverity.LOW,
-                sub_id=sub_id,
-                region=nat.location,
-                resource_id=nat.id,
-                resource_type="Microsoft.Network/natGateways",
-                title=f"NAT gateway '{nat.name}' has no associated subnets",
-                fact=(
-                    f"NAT gateway {nat.name} in {nat.location} has "
-                    f"associated_subnet_ids=[] — no subnet routes outbound "
-                    f"traffic through it."
-                ),
-                evidence_ref=(
-                    f"discovery:azure_{sub_id}.nat_gateways[id={nat.id}].associated_subnet_ids"
-                ),
-                recommendation=(
-                    "Associate the NAT gateway with the subnets that need "
-                    "predictable outbound SNAT, or delete it (and its public "
-                    "IPs) if it is no longer required."
-                ),
-                est_monthly_cost_usd=NAT_GATEWAY_MONTHLY,
-                description=(
-                    f"An unattached NAT gateway is billed hourly while providing "
-                    f"no egress path. {_verify(NAT_GATEWAY_MONTHLY)}."
-                ),
-            ))
+            _finding(
+                _FindingParams(
+                    rule_id=R_AZ_COST_NAT_GW_NO_SUBNETS,
+                    severity=FindingSeverity.LOW,
+                    sub_id=sub_id,
+                    region=nat.location,
+                    resource_id=nat.id,
+                    resource_type="Microsoft.Network/natGateways",
+                    title=f"NAT gateway '{nat.name}' has no associated subnets",
+                    fact=(
+                        f"NAT gateway {nat.name} in {nat.location} has "
+                        f"associated_subnet_ids=[] — no subnet routes outbound "
+                        f"traffic through it."
+                    ),
+                    evidence_ref=(
+                        f"discovery:azure_{sub_id}.nat_gateways[id={nat.id}].associated_subnet_ids"
+                    ),
+                    recommendation=(
+                        "Associate the NAT gateway with the subnets that need "
+                        "predictable outbound SNAT, or delete it (and its public "
+                        "IPs) if it is no longer required."
+                    ),
+                    est_monthly_cost_usd=NAT_GATEWAY_MONTHLY,
+                    description=(
+                        f"An unattached NAT gateway is billed hourly while providing "
+                        f"no egress path. {_verify(NAT_GATEWAY_MONTHLY)}."
+                    ),
+                )
+            )
         )
     return findings
 

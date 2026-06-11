@@ -603,9 +603,7 @@ class AzureDiscovery:
             route_table_name=rt_name,
             nat_gateway_id=nat_gw_id,
             service_endpoints=[se.service for se in (s.service_endpoints or [])],
-            private_endpoint_network_policies=str(
-                s.private_endpoint_network_policies or "Enabled"
-            ),
+            private_endpoint_network_policies=str(s.private_endpoint_network_policies or "Enabled"),
             private_link_service_network_policies=pl_svc_policy,
             default_outbound_access=default_outbound,
             delegation=_delegation,
@@ -1541,9 +1539,7 @@ class AzureDiscovery:
         nvas: list[AzureNVA] = []
 
         for vm in _safe_list(cmc.virtual_machines.list_all()):
-            publisher, offer, plan_name, identification_method = (
-                self._identify_nva_publisher(vm)
-            )
+            publisher, offer, plan_name, identification_method = self._identify_nva_publisher(vm)
             vm_nics, has_ip_forwarding = self._collect_vm_nics(net, vm)
 
             if not identification_method and has_ip_forwarding:
@@ -1580,9 +1576,7 @@ class AzureDiscovery:
 
         return nvas
 
-    def _identify_nva_publisher(
-        self, vm
-    ) -> tuple[str | None, str | None, str | None, str | None]:
+    def _identify_nva_publisher(self, vm) -> tuple[str | None, str | None, str | None, str | None]:
         """Return (publisher, offer, plan_name, identification_method) for a VM.
 
         Returns all None if the VM does not match any NVA identification strategy.
@@ -1653,9 +1647,7 @@ class AzureDiscovery:
                         private_ips=private_ips,
                         public_ip_id=public_ip_id,
                         nsg_id=(
-                            nic.network_security_group.id
-                            if nic.network_security_group
-                            else None
+                            nic.network_security_group.id if nic.network_security_group else None
                         ),
                         tags=dict(vm.tags or {}),
                     )
@@ -1927,7 +1919,13 @@ class AzureDiscovery:
         self._compute_vnet_utilization(ctx.vnets, metrics)
         self._collect_nta_metrics(ctx.sub_id, ctx.la_workspaces, metrics)
         self._collect_cost_metrics(ctx.sub_id, metrics)
-        self._collect_appgw_metrics(ctx.sub_id, ctx.appgws, monitor if not metrics.collection_error else None, timespan if not metrics.collection_error else "", metrics)
+        self._collect_appgw_metrics(
+            ctx.sub_id,
+            ctx.appgws,
+            monitor if not metrics.collection_error else None,
+            timespan if not metrics.collection_error else "",
+            metrics,
+        )
 
         return metrics
 
@@ -1935,27 +1933,24 @@ class AzureDiscovery:
     def _sum_metric_total(metric) -> float:
         """Sum all dp.total values across all timeseries for a Monitor metric result."""
         return sum(
-            dp.total or 0
-            for ts in metric.timeseries
-            for dp in ts.data
-            if dp.total is not None
+            dp.total or 0 for ts in metric.timeseries for dp in ts.data if dp.total is not None
         )
 
     @staticmethod
     def _avg_metric_values(metric) -> list[float]:
         """Collect all non-None dp.average values across all timeseries."""
-        return [
-            dp.average
-            for ts in metric.timeseries
-            for dp in ts.data
-            if dp.average is not None
-        ]
+        return [dp.average for ts in metric.timeseries for dp in ts.data if dp.average is not None]
 
     @staticmethod
     def _max_metric_maximum(metric) -> float:
         """Return the max dp.maximum value across all timeseries (0 if none)."""
         return max(
-            (dp.maximum or 0 for ts in metric.timeseries for dp in ts.data if dp.maximum is not None),
+            (
+                dp.maximum or 0
+                for ts in metric.timeseries
+                for dp in ts.data
+                if dp.maximum is not None
+            ),
             default=0,
         )
 
@@ -2271,10 +2266,7 @@ class AzureDiscovery:
         if mn == "CapacityUnits":
             avg_vals = AzureDiscovery._avg_metric_values(metric)
             max_vals = [
-                dp.maximum
-                for ts in metric.timeseries
-                for dp in ts.data
-                if dp.maximum is not None
+                dp.maximum for ts in metric.timeseries for dp in ts.data if dp.maximum is not None
             ]
             if avg_vals:
                 agm.capacity_units_avg = round(sum(avg_vals) / len(avg_vals), 2)
