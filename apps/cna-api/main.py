@@ -39,6 +39,11 @@ from cna.modules.network.discovery.azure_discovery import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("cna-api")
 
+# The container starts uvicorn with module path "apps.cna-api.main" from /app,
+# so only /app is on sys.path — make the API directory importable so the
+# absolute `routers.*` imports resolve in both container and local runs.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 from routers.chat import router as chat_router  # noqa: E402, I001
 from routers.metrics import rebuild_metrics  # noqa: E402
 from routers.metrics import router as metrics_router  # noqa: E402
@@ -1203,10 +1208,18 @@ def _topology_to_findings(sub_topo: dict) -> list[dict]:  # noqa: C901
 
 def _finding_model_to_dict(finding: Any) -> dict:
     """Map a cna.core.findings_schema.Finding to the flat dict shape used by
-    _replace_discovery_findings (Prisma Finding columns)."""
+    _replace_discovery_findings (Prisma Finding columns).
+
+    The Prisma Finding table has no ruleId column, so the rule id is embedded
+    as a title prefix; the stat-master / encyclopedia / copilot loaders all
+    recover it with the shared _RULE_ID_RE extraction."""
+    rule_id = finding.rule_id or ""
+    title = finding.title
+    if rule_id and rule_id not in title:
+        title = f"{rule_id}: {title}"
     return {
-        "rule_id": finding.rule_id or "",
-        "title": finding.title,
+        "rule_id": rule_id,
+        "title": title,
         "severity": str(finding.severity.value).upper(),
         "category": finding.category or "General",
         "description": finding.description or finding.observed_state.fact,
