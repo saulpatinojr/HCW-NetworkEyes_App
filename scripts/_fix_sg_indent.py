@@ -1,7 +1,5 @@
 """Dedent the body of _check_aws_sg_open_cidr and add boolean helpers."""
 
-import re
-
 path = "cna/ai_engine/analysis_engine.py"
 with open(path, encoding="utf-8") as f:
     src = f.read()
