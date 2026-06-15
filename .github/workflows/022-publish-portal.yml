@@ -47,12 +47,12 @@ jobs:
       IMAGE_NAME: ${{ github.repository_owner }}/cna
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       # AWS OIDC — no long-lived keys
       - name: Configure AWS credentials (OIDC)
         if: inputs.cloud == 'aws'
-        uses: aws-actions/configure-aws-credentials@633526dcc9c26211a4282d6d8de3d8b5cb7ad07b # v6
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # v6
         with:
           role-to-assume: ${{ secrets.CNA_AWS_ROLE_ARN }}
           aws-region: us-east-1
@@ -60,14 +60,14 @@ jobs:
       # Azure OIDC — uses same AZURE_* secrets as all other workflows
       - name: Configure Azure credentials (OIDC)
         if: inputs.cloud == 'azure'
-        uses: azure/login@2dd0bbf4064d5a1812889dc200bb8eed2597f82a # v3.0.0
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3.0.0
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Log in to GHCR
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
