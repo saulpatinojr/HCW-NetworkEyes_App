@@ -41,7 +41,7 @@ dev = [
     "pytest>=9.1.0",
     "pytest-cov>=7.1.0",               # coverage plugin (was missing from dev deps)
     "ruff>=0.15.17",
-    "pre-commit>=4.5.1",               # pre-commit itself as a dev dep
+    "pre-commit>=4.6.0",               # pre-commit itself as a dev dep
     "detect-secrets>=1.5",           # used by pre-commit hook
 ]
 
