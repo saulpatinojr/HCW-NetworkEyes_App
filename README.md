@@ -20,7 +20,7 @@ backed by PostgreSQL and authenticated via Microsoft Entra ID.
 | Platform foundation + CLI | ✅ Beta-ready | Python `cna` package |
 | Azure discovery engine | ✅ Beta-ready | VNet, peerings, gateways, firewall, NSG, UDR, flow logs |
 | AWS discovery stubs | ✅ Beta-ready | VPC, TGW, security groups |
-| AI analysis engine | ✅ Beta-ready | Azure Foundry Claude as primary managed provider |
+| AI analysis engine | ✅ Beta-ready | Azure OpenAI (gpt-chat-latest) via managed identity, Terraform-managed |
 | Web platform (Next.js) | ✅ Beta-ready | Entra ID auth, engagement workflow |
 | CNA visual system | ✅ Merged | Navy/teal palette, Aeonik font, SVG brand assets |
 | East-West / North-South taxonomy | ✅ Merged | `traffic_direction` on all findings |

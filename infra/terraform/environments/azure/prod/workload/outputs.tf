@@ -23,7 +23,7 @@ output "managed_identity_client_id" {
 }
 
 output "managed_identity_id" {
-  description = "Resource ID of the user-assigned managed identity — used to attach to Container Apps Job for Foundry validation."
+  description = "Resource ID of the user-assigned managed identity used by the Container Apps."
   value       = module.identity.managed_identity_id
 }
 
@@ -64,10 +64,6 @@ output "foundry_project_name" {
 
 output "foundry_endpoint" {
   value = module.ai.foundry_endpoint
-}
-
-output "foundry_claude_messages_endpoint" {
-  value = module.ai.foundry_claude_messages_endpoint
 }
 
 output "private_endpoint_subnet_prefix" {

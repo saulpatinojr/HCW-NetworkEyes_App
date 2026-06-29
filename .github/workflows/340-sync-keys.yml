@@ -78,11 +78,11 @@ jobs:
           AZURE_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}
           AZURE_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-          # ─── GenAI Engine Switching ───────────────────────────────────────────
+          # ─── GenAI Engine (Azure OpenAI — only supported engine) ──────────────
           CNA_AI_ENGINE_DEFAULT=${{ vars.CNA_AI_ENGINE_DEFAULT }}
-          FOUNDRY_CLAUDE_ENDPOINT=${{ vars.FOUNDRY_CLAUDE_ENDPOINT }}
-          FOUNDRY_CLAUDE_MODEL=${{ vars.FOUNDRY_CLAUDE_MODEL }}
-          FOUNDRY_CLAUDE_API_KEY=
+          AZURE_OPENAI_ENDPOINT=${{ vars.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_DEPLOYMENT=${{ vars.AZURE_OPENAI_DEPLOYMENT }}
+          AZURE_OPENAI_API_VERSION=${{ vars.AZURE_OPENAI_API_VERSION }}
           CNA_AZURE_MCP_ENDPOINT=${{ vars.CNA_AZURE_MCP_ENDPOINT }}
           CNA_AZURE_MCP_TRANSPORT=${{ vars.CNA_AZURE_MCP_TRANSPORT }}
           CNA_AWS_MCP_ENDPOINT=${{ vars.CNA_AWS_MCP_ENDPOINT }}

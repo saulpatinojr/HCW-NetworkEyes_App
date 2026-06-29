@@ -108,8 +108,6 @@ module "compute" {
     AZURE_OPENAI_ENDPOINT               = var.azure_openai_endpoint
     AZURE_OPENAI_DEPLOYMENT             = var.azure_openai_deployment
     AZURE_OPENAI_API_VERSION            = var.azure_openai_api_version
-    FOUNDRY_CLAUDE_ENDPOINT             = var.foundry_claude_endpoint != "" ? var.foundry_claude_endpoint : module.ai.foundry_claude_messages_endpoint
-    FOUNDRY_CLAUDE_MODEL                = var.foundry_claude_model
     CNA_AZURE_MCP_ENDPOINT              = var.azure_mcp_endpoint
     CNA_AZURE_MCP_TRANSPORT             = var.azure_mcp_transport
     CNA_AWS_MCP_ENDPOINT                = var.aws_mcp_endpoint
@@ -156,7 +154,7 @@ module "ai" {
   tags                = local.tags
 
   environment      = var.environment
-  foundry_location = "eastus2"
+  foundry_location = var.foundry_location
   # DEV-ONLY suffix bump (-aif -> -aif2): the prior cna-dev-eus2-aif account is
   # soft-deleted and its name is reserved, which 409s on recreate. Bumping the
   # name sidesteps the soft-delete graveyard without a manual purge. See

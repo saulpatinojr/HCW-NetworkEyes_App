@@ -474,8 +474,6 @@ jobs:
             fi
           }
           AI_ENGINE_DEFAULT=$(optional_var "${{ vars.CNA_AI_ENGINE_DEFAULT }}")
-          FOUNDRY_CLAUDE_ENDPOINT=$(optional_var "${{ vars.FOUNDRY_CLAUDE_ENDPOINT }}")
-          FOUNDRY_CLAUDE_MODEL=$(optional_var "${{ vars.FOUNDRY_CLAUDE_MODEL }}")
           AZURE_MCP_ENDPOINT=$(optional_var "${{ vars.CNA_AZURE_MCP_ENDPOINT }}")
           AZURE_MCP_TRANSPORT=$(optional_var "${{ vars.CNA_AZURE_MCP_TRANSPORT }}")
           AWS_MCP_ENDPOINT=$(optional_var "${{ vars.CNA_AWS_MCP_ENDPOINT }}")
@@ -492,9 +490,7 @@ jobs:
             -var="entra_client_id=${{ vars.CNA_ENTRA_CLIENT_ID }}" \
             -var="nextauth_url=${{ vars.CNA_NEXTAUTH_URL }}" \
             -var="container_registry_username=${{ vars.DOCKERHUB_NAMESPACE }}" \
-            -var="ai_engine_default=${AI_ENGINE_DEFAULT:-foundry-claude}" \
-            -var="foundry_claude_endpoint=${FOUNDRY_CLAUDE_ENDPOINT}" \
-            -var="foundry_claude_model=${FOUNDRY_CLAUDE_MODEL:-claude-sonnet-4-6}" \
+            -var="ai_engine_default=${AI_ENGINE_DEFAULT:-azure-openai}" \
             -var="azure_mcp_endpoint=${AZURE_MCP_ENDPOINT}" \
             -var="azure_mcp_transport=${AZURE_MCP_TRANSPORT:-streamable-http}" \
             -var="aws_mcp_endpoint=${AWS_MCP_ENDPOINT}" \
@@ -726,8 +722,6 @@ jobs:
             fi
           }
           AI_ENGINE_DEFAULT=$(optional_var "${{ vars.CNA_AI_ENGINE_DEFAULT }}")
-          FOUNDRY_CLAUDE_ENDPOINT=$(optional_var "${{ vars.FOUNDRY_CLAUDE_ENDPOINT }}")
-          FOUNDRY_CLAUDE_MODEL=$(optional_var "${{ vars.FOUNDRY_CLAUDE_MODEL }}")
           AZURE_MCP_ENDPOINT=$(optional_var "${{ vars.CNA_AZURE_MCP_ENDPOINT }}")
           AZURE_MCP_TRANSPORT=$(optional_var "${{ vars.CNA_AZURE_MCP_TRANSPORT }}")
           AWS_MCP_ENDPOINT=$(optional_var "${{ vars.CNA_AWS_MCP_ENDPOINT }}")
@@ -744,9 +738,7 @@ jobs:
             -var="entra_client_id=${{ vars.CNA_ENTRA_CLIENT_ID }}" \
             -var="nextauth_url=${{ vars.CNA_NEXTAUTH_URL }}" \
             -var="container_registry_username=${{ vars.DOCKERHUB_NAMESPACE }}" \
-            -var="ai_engine_default=${AI_ENGINE_DEFAULT:-foundry-claude}" \
-            -var="foundry_claude_endpoint=${FOUNDRY_CLAUDE_ENDPOINT}" \
-            -var="foundry_claude_model=${FOUNDRY_CLAUDE_MODEL:-claude-sonnet-4-6}" \
+            -var="ai_engine_default=${AI_ENGINE_DEFAULT:-azure-openai}" \
             -var="azure_mcp_endpoint=${AZURE_MCP_ENDPOINT}" \
             -var="azure_mcp_transport=${AZURE_MCP_TRANSPORT:-streamable-http}" \
             -var="aws_mcp_endpoint=${AWS_MCP_ENDPOINT}" \
@@ -769,7 +761,6 @@ jobs:
           echo "database_server_name=$(terraform output -raw database_server_name)" >> "$GITHUB_OUTPUT"
           echo "database_server_fqdn=$(terraform output -raw database_server_fqdn)" >> "$GITHUB_OUTPUT"
           echo "database_subnet_prefix=$(terraform output -raw database_subnet_prefix)" >> "$GITHUB_OUTPUT"
-          echo "managed_identity_client_id=$(terraform output -raw managed_identity_client_id)" >> "$GITHUB_OUTPUT"
 
       - name: Approve Front Door private endpoint connections
         id: approve_private_link
@@ -978,70 +969,27 @@ jobs:
             fi
           done
 
-      - name: Validate Foundry private DNS and managed identity inference
-        id: validate_foundry_private_access
-        # NON-BLOCKING (temporary) — see docs/non-blocking-ci-steps.md #4, issues #98/#99.
-        # Post-deploy SMOKE TEST: the infrastructure has already applied by this point, so
-        # a validation failure (managed-identity token path #99, or the in-flux inference
-        # target #98) must NOT fail the deploy. Remove this flag when #99 is fixed and #98
-        # repoints validation to Azure OpenAI.
-        continue-on-error: true
-        env:
-          RESOURCE_GROUP_NAME: ${{ steps.export_ids.outputs.resource_group_name }}
-          CONTAINER_APP_ENVIRONMENT_ID: ${{ steps.export_ids.outputs.container_app_environment_id }}
-          WEB_CONTAINER_APP_NAME: ${{ steps.export_ids.outputs.web_container_app_name }}
-          PRIVATE_ENDPOINT_SUBNET_PREFIX: ${{ steps.export_ids.outputs.private_endpoint_subnet_prefix }}
-          MANAGED_IDENTITY_CLIENT_ID: ${{ steps.export_ids.outputs.managed_identity_client_id }}
-          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_NAMESPACE }}
-          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_TOKEN }}
-          RUN_ID: ${{ github.run_id }}
-        run: bash ${{ github.workspace }}/scripts/ci/validate_foundry_private_access.sh
-
-
-      - name: Sync Entra app web URLs
-        # NON-BLOCKING (temporary) — see docs/non-blocking-ci-steps.md #6, issue #101.
-        # The deploy SP lacks Microsoft Graph permission to run `az ad app update`, so
-        # this fails with "Insufficient privileges". The Front Door host is stable per
-        # environment, so the redirect URI can be set once out-of-band (or moved to the
-        # Graph-capable bootstrap script). Remove this flag when #101 is resolved.
-        continue-on-error: true
+      - name: Report NextAuth redirect URI (managed out-of-band)
+        # The NextAuth redirect URI is set on the NextAuth APP OBJECT by the
+        # Graph-capable bootstrap (scripts/Initialize-CnaGitHubSecrets.ps1), which
+        # owns that app. The deploy identities are least-privilege and intentionally
+        # have NO Microsoft Graph app-management rights, so the deploy does not (and
+        # must not) call `az ad app update`. Microsoft guidance: redirect URIs belong
+        # on the application object, never on a service principal. See docs/adr/0003.
+        #
+        # Terraform already writes the real Front Door host to the CNA_NEXTAUTH_URL
+        # repository variable; re-running the bootstrap applies the redirect URI from
+        # it (idempotent). This step only surfaces the value for operators.
         working-directory: infra/terraform/environments/azure/${{ inputs.environment }}/workload
-        env:
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
         run: |
           FRONTDOOR_HOST=$(terraform output -raw frontdoor_endpoint_host_name 2>/dev/null || echo "")
           if [ -z "$FRONTDOOR_HOST" ]; then
-            echo "No Front Door hostname yet; skipping Entra app URL sync."
+            echo "No Front Door hostname yet; nothing to report."
             exit 0
           fi
-
-          NEXTAUTH_URL="https://$FRONTDOOR_HOST"
-          REDIRECT_URI="${NEXTAUTH_URL}/api/auth/callback/microsoft-entra-id"
-          APP_JSON="$(az ad app show --id "$AZURE_CLIENT_ID" --output json)"
-          CURRENT_HOME_PAGE="$(jq -r '.web.homePageUrl // ""' <<<"$APP_JSON")"
-          REDIRECT_URIS_JSON="$(
-            jq --arg uri "$REDIRECT_URI" '
-              ((.web.redirectUris // []) + [$uri])
-              | unique
-            ' <<<"$APP_JSON"
-          )"
-
-          if [[ "$CURRENT_HOME_PAGE" == "$NEXTAUTH_URL" ]] \
-            && jq -e --arg uri "$REDIRECT_URI" '(.web.redirectUris // []) | index($uri)' <<<"$APP_JSON" >/dev/null; then
-            echo "Entra app already matches $NEXTAUTH_URL"
-            exit 0
-          fi
-
-          mapfile -t REDIRECT_URIS < <(jq -r '.[]' <<<"$REDIRECT_URIS_JSON")
-          az ad app update \
-            --id "$AZURE_CLIENT_ID" \
-            --web-home-page-url "$NEXTAUTH_URL" \
-            --web-redirect-uris "${REDIRECT_URIS[@]}" \
-            --output none
-
-          echo "Synced Entra app home page URL and redirect URI:"
-          echo "  Home page URL: $NEXTAUTH_URL"
-          echo "  Redirect URI : $REDIRECT_URI"
+          echo "NextAuth redirect URI for the 'CNA Assessment Tool' Entra app:"
+          echo "  https://${FRONTDOOR_HOST}/api/auth/callback/microsoft-entra-id"
+          echo "Ensure it is present on the NextAuth app (managed by the bootstrap script)."
 
       - name: Export platform outputs
         id: export
@@ -1098,7 +1046,6 @@ jobs:
           CONTAINER_APP_ENVIRONMENT_ID: ${{ steps.export_ids.outputs.container_app_environment_id }}
           WEB_CONTAINER_APP_NAME: ${{ steps.export_ids.outputs.web_container_app_name }}
           PRIVATE_ENDPOINT_SUBNET_PREFIX: ${{ steps.export_ids.outputs.private_endpoint_subnet_prefix }}
-          FOUNDRY_PRIVATE_ACCESS_VALIDATION: passed
           NEXTAUTH_URL: ${{ steps.export.outputs.nextauth_url }}
         run: python3 ${{ github.workspace }}/scripts/ci/update_apply_evidence.py
 

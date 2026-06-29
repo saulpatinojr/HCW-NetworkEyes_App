@@ -100,8 +100,6 @@ jobs:
             fi
           }
           AI_ENGINE_DEFAULT=$(optional_var "${{ vars.CNA_AI_ENGINE_DEFAULT }}")
-          FOUNDRY_CLAUDE_ENDPOINT=$(optional_var "${{ vars.FOUNDRY_CLAUDE_ENDPOINT }}")
-          FOUNDRY_CLAUDE_MODEL=$(optional_var "${{ vars.FOUNDRY_CLAUDE_MODEL }}")
           AZURE_MCP_ENDPOINT=$(optional_var "${{ vars.CNA_AZURE_MCP_ENDPOINT }}")
           AZURE_MCP_TRANSPORT=$(optional_var "${{ vars.CNA_AZURE_MCP_TRANSPORT }}")
           AWS_MCP_ENDPOINT=$(optional_var "${{ vars.CNA_AWS_MCP_ENDPOINT }}")
@@ -115,9 +113,7 @@ jobs:
             -var="entra_client_id=${{ vars.CNA_ENTRA_CLIENT_ID }}" \
             -var="nextauth_url=${{ vars.CNA_NEXTAUTH_URL }}" \
             -var="container_registry_username=${{ vars.DOCKERHUB_NAMESPACE }}" \
-            -var="ai_engine_default=${AI_ENGINE_DEFAULT:-foundry-claude}" \
-            -var="foundry_claude_endpoint=${FOUNDRY_CLAUDE_ENDPOINT}" \
-            -var="foundry_claude_model=${FOUNDRY_CLAUDE_MODEL:-claude-sonnet-4-6}" \
+            -var="ai_engine_default=${AI_ENGINE_DEFAULT:-azure-openai}" \
             -var="azure_mcp_endpoint=${AZURE_MCP_ENDPOINT}" \
             -var="azure_mcp_transport=${AZURE_MCP_TRANSPORT:-streamable-http}" \
             -var="aws_mcp_endpoint=${AWS_MCP_ENDPOINT}" \

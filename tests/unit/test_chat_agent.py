@@ -2,7 +2,7 @@
 
 No real LLM calls — transport is monkeypatched. Covers grounding-context
 building/truncation, prompt assembly, citation extraction, engine
-resolution, and the answer() flow end-to-end with a fake Foundry response.
+resolution, and the answer() flow end-to-end with a fake Azure OpenAI response.
 """
 
 import httpx
@@ -127,30 +127,39 @@ def test_extract_citations_dedupes():
 
 def test_resolve_engine_prefers_stored_value(monkeypatch):
     monkeypatch.setenv("CNA_AI_ENGINE_DEFAULT", "azure-openai")
-    assert resolve_engine("foundry-claude") == "foundry-claude"
+    # azure-openai is now the only valid engine; the retired foundry-claude id
+    # is rejected and falls through to the env default.
+    assert resolve_engine("azure-openai") == "azure-openai"
+    assert resolve_engine("foundry-claude") == "azure-openai"
     assert resolve_engine("bogus") == "azure-openai"
     monkeypatch.delenv("CNA_AI_ENGINE_DEFAULT")
-    assert resolve_engine(None) == "foundry-claude"
+    assert resolve_engine(None) == "azure-openai"
 
 
 def test_agent_raises_config_error_when_nothing_configured(monkeypatch):
-    for var in (
-        "FOUNDRY_CLAUDE_ENDPOINT",
-        "FOUNDRY_CLAUDE_API_KEY",
-        "AZURE_OPENAI_ENDPOINT",
-    ):
-        monkeypatch.delenv(var, raising=False)
+    monkeypatch.delenv("AZURE_OPENAI_ENDPOINT", raising=False)
     with pytest.raises(ChatConfigError):
         GroundedChatAgent()
 
 
-# ── answer() with mocked Foundry transport ───────────────────────────────────
+# ── answer() with mocked Azure OpenAI transport ──────────────────────────────
 
 
-def test_answer_grounded_via_mocked_foundry(monkeypatch):
-    monkeypatch.setenv("FOUNDRY_CLAUDE_ENDPOINT", "https://foundry.example/v1/messages")
-    monkeypatch.setenv("FOUNDRY_CLAUDE_API_KEY", "test-key")
-    monkeypatch.delenv("AZURE_OPENAI_ENDPOINT", raising=False)
+class _FakeToken:
+    token = "fake-aad-token"
+
+
+class _FakeCredential:
+    def get_token(self, *_scopes):
+        return _FakeToken()
+
+
+def test_answer_grounded_via_mocked_azure_openai(monkeypatch):
+    import azure.identity
+
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://aif.example")
+    monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT", "gpt-chat-latest")
+    monkeypatch.setattr(azure.identity, "DefaultAzureCredential", _FakeCredential)
 
     captured: dict = {}
 
@@ -160,7 +169,7 @@ def test_answer_grounded_via_mocked_foundry(monkeypatch):
         captured["json"] = json
         return httpx.Response(
             200,
-            json={"content": [{"type": "text", "text": "Fix AZ-NET-002 on snet-app."}]},
+            json={"choices": [{"message": {"content": "Fix AZ-NET-002 on snet-app."}}]},
             request=httpx.Request("POST", url),
         )
 
@@ -174,15 +183,19 @@ def test_answer_grounded_via_mocked_foundry(monkeypatch):
     )
 
     assert result.text == "Fix AZ-NET-002 on snet-app."
-    assert result.engine == "foundry-claude"
+    assert result.engine == "azure-openai"
     assert [c.rule_id for c in result.citations] == ["AZ-NET-002"]
 
-    # wire format mirrors lib/ai-engine.ts completeWithClaude
-    assert captured["url"] == "https://foundry.example/v1/messages"
-    assert captured["headers"]["x-api-key"] == "test-key"
-    assert captured["headers"]["anthropic-version"] == "2023-06-01"
+    # wire format mirrors lib/ai-engine.ts completeWithAzure
+    assert captured["url"] == (
+        "https://aif.example/openai/deployments/gpt-chat-latest"
+        "/chat/completions?api-version=2024-12-01-preview"
+    )
+    assert captured["headers"]["Authorization"] == "Bearer fake-aad-token"
     body = captured["json"]
-    assert "Answer ONLY from the assessment context" in body["system"]
-    # client-side system turns are excluded from messages
-    assert all(m["role"] in ("user", "assistant") for m in body["messages"])
+    # the grounded system prompt is the first message
+    assert body["messages"][0]["role"] == "system"
+    assert "Answer ONLY from the assessment context" in body["messages"][0]["content"]
+    # client-side system turns are excluded from the user/assistant turns
+    assert all(m["role"] in ("user", "assistant") for m in body["messages"][1:])
     assert body["messages"][-1]["content"] == "What is risky?"

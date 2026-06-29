@@ -18,14 +18,12 @@ locals {
     for url in local.optional_outbound_urls : split("/", replace(replace(url, "https://", ""), "http://", ""))[0]
   ]
 
-  foundry_messages_endpoint_host = split(
+  # Host the web app calls for Azure OpenAI (the AIServices account's
+  # services.ai.azure.com endpoint). Allowed through the egress firewall.
+  azure_openai_endpoint_host = split(
     "/",
     replace(
-      replace(
-        var.foundry_claude_endpoint != "" ? var.foundry_claude_endpoint : module.ai.foundry_claude_messages_endpoint,
-        "https://",
-        ""
-      ),
+      replace(var.azure_openai_endpoint, "https://", ""),
       "http://",
       ""
     )
@@ -45,7 +43,7 @@ locals {
       "pkg-containers.githubusercontent.com",
       "${module.storage.storage_account_name}.blob.core.windows.net",
       local.key_vault_host,
-      local.foundry_messages_endpoint_host,
+      local.azure_openai_endpoint_host,
       "login.microsoftonline.com",
       "management.azure.com",
     ],

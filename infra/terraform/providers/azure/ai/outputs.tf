@@ -21,7 +21,3 @@ output "foundry_project_id" {
 output "foundry_project_name" {
   value = var.foundry_project_name
 }
-
-output "foundry_claude_messages_endpoint" {
-  value = "https://${azurerm_cognitive_account.foundry.custom_subdomain_name}.services.ai.azure.com/anthropic/v1/messages"
-}

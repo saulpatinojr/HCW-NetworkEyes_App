@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Added Architecture Decision Records under `docs/adr/` (0001–0005) covering the Anthropic removal, smoke-test removal, Entra redirect-URI ownership, Key Vault network hardening target, and the container image-pull strategy.
+- Made the Foundry/AIServices account region configurable via a `foundry_location` workload variable (default `eastus2`) instead of a hardcoded literal.
 - Wired live MCP endpoint defaults for Azure and AWS recommendation enrichment through Terraform variables, `.env.example`, and the existing GitHub variable bootstrap flow.
 - Added streamable HTTP JSON-RPC tool-call support for the Azure and AWS MCP clients while preserving offline recommendation fallback when endpoints are unavailable.
 - Extended CISA ZTMM v2 mappings for AWS WAF, Azure Application Gateway WAF, and Azure Front Door WAF findings into the `Applications and Workloads` pillar.
@@ -27,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Aligned MCP configuration defaults on `https://mcp.azure.com`, `https://aws-mcp.us-east-1.api.aws/mcp`, and `streamable-http` transport.
 
 ### Removed
+- Removed the Anthropic / Foundry-Claude inference path end-to-end (#100): the `foundry-claude` engine and its wire format in `apps/cna-web/lib/ai-engine.ts` and `cna/ai_engine/chat_agent.py`, the `foundry_claude_*` Terraform variables/outputs and `FOUNDRY_CLAUDE_*` container env vars (dev + prod), and the `FOUNDRY_CLAUDE_*` references in `.env.example`, the bootstrap script, and the drift/sync workflows. Azure OpenAI (`gpt-chat-latest`) is now the only supported engine. See `docs/adr/0001`.
+- Removed the Foundry private-access smoke test (#98/#99): `scripts/ci/validate_foundry_private_access.sh`, its `211-deploy-azure-split.yml` step, and the associated evidence wiring. See `docs/adr/0002`.
+- Removed the deploy-time "Sync Entra app web URLs" step (#101); the NextAuth redirect URI is owned by the Graph-capable bootstrap script on the application object, keeping the deploy identity least-privilege. See `docs/adr/0003`.
 - Removed `TODO.md` after migrating completed work and deployment-gated follow-up context into the changelog.
 
 ---

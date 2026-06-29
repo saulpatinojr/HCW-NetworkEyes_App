@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 
 export const AI_ENGINE_SETTING_KEY = "ai.activeEngine";
 
-export type AiEngineId = "azure-openai" | "foundry-claude";
+export type AiEngineId = "azure-openai";
 
 export type AiChatMessage = {
   role: "system" | "user" | "assistant";
@@ -36,17 +36,14 @@ export type McpServerStatus = {
   configured: boolean;
 };
 
-const VALID_ENGINES = new Set<AiEngineId>(["azure-openai", "foundry-claude"]);
+const DEFAULT_AZURE_DEPLOYMENT = "gpt-chat-latest";
+const DEFAULT_AZURE_API_VERSION = "2024-12-01-preview";
+
+const VALID_ENGINES = new Set<AiEngineId>(["azure-openai"]);
 
 function clean(value: string | null | undefined): string {
   const trimmed = value?.trim() ?? "";
   return trimmed.toLowerCase() === "none" ? "" : trimmed;
-}
-
-function maskSecret(value: string): string {
-  if (!value) return "Not configured";
-  if (value.length <= 8) return "Configured";
-  return `${value.slice(0, 4)}...${value.slice(-4)}`;
 }
 
 function hostOnly(value: string): string {
@@ -64,9 +61,9 @@ export function normalizeAiEngine(value: string | null | undefined): AiEngineId 
 }
 
 export function getConfiguredDefaultAiEngine(): AiEngineId {
-  // Default to azure-openai: it is the only provider with a deployed model
-  // (gpt-chat-latest). Anthropic/Claude on Foundry is unavailable in this tenant
-  // and pending removal.
+  // Azure OpenAI (gpt-chat-latest on the AIServices account) is the only
+  // supported provider. Anthropic/Claude on Foundry was removed — it has no
+  // model deployment in this tenant (see docs/adr/0001).
   return normalizeAiEngine(process.env.CNA_AI_ENGINE_DEFAULT) ?? "azure-openai";
 }
 
@@ -102,18 +99,14 @@ export function getMcpServerStatuses(): McpServerStatus[] {
 
 export function getAiEngineStatuses(activeEngine: AiEngineId): AiEngineStatus[] {
   const azureEndpoint = clean(process.env.AZURE_OPENAI_ENDPOINT);
-  const azureDeployment = clean(process.env.AZURE_OPENAI_DEPLOYMENT) || "gpt-5.2-chat";
-  const azureApiVersion = clean(process.env.AZURE_OPENAI_API_VERSION) || "2024-12-01-preview";
-
-  const claudeEndpoint = clean(process.env.FOUNDRY_CLAUDE_ENDPOINT);
-  const claudeModel = clean(process.env.FOUNDRY_CLAUDE_MODEL) || "claude-sonnet-4-6";
-  const claudeApiKey = clean(process.env.FOUNDRY_CLAUDE_API_KEY);
+  const azureDeployment = clean(process.env.AZURE_OPENAI_DEPLOYMENT) || DEFAULT_AZURE_DEPLOYMENT;
+  const azureApiVersion = clean(process.env.AZURE_OPENAI_API_VERSION) || DEFAULT_AZURE_API_VERSION;
 
   return [
     {
       id: "azure-openai",
       label: "Azure OpenAI",
-      description: "Optional out-of-band provider. Promote to first-class only after Terraform provisions Azure OpenAI networking, RBAC, deployment, and env vars.",
+      description: "Primary GenAI engine. Terraform provisions the deployment, private networking, RBAC, and env vars; the app authenticates with its managed identity.",
       configured: Boolean(azureEndpoint && azureDeployment),
       active: activeEngine === "azure-openai",
       details: [
@@ -125,25 +118,6 @@ export function getAiEngineStatuses(activeEngine: AiEngineId): AiEngineStatus[] 
       missing: [
         ...(!azureEndpoint ? ["AZURE_OPENAI_ENDPOINT"] : []),
         ...(!azureDeployment ? ["AZURE_OPENAI_DEPLOYMENT"] : []),
-      ],
-    },
-    {
-      id: "foundry-claude",
-      label: "Foundry Claude Sonnet 4.6",
-      description: "Terraform-managed private Foundry deployment using managed identity by default, with API key fallback only when explicitly configured.",
-      configured: Boolean(claudeEndpoint && claudeModel),
-      active: activeEngine === "foundry-claude",
-      details: [
-        { label: "Endpoint", value: hostOnly(claudeEndpoint) },
-        { label: "Model", value: claudeModel },
-        {
-          label: "Authentication",
-          value: claudeApiKey ? `API key fallback (${maskSecret(claudeApiKey)})` : "Managed identity",
-        },
-      ],
-      missing: [
-        ...(!claudeEndpoint ? ["FOUNDRY_CLAUDE_ENDPOINT"] : []),
-        ...(!claudeModel ? ["FOUNDRY_CLAUDE_MODEL"] : []),
       ],
     },
   ];
@@ -213,56 +187,14 @@ function getAzureClient(): AzureOpenAI {
   return new AzureOpenAI({
     endpoint,
     azureADTokenProvider,
-    apiVersion: clean(process.env.AZURE_OPENAI_API_VERSION) || "2024-12-01-preview",
-    deployment: clean(process.env.AZURE_OPENAI_DEPLOYMENT) || "gpt-5.2-chat",
+    apiVersion: clean(process.env.AZURE_OPENAI_API_VERSION) || DEFAULT_AZURE_API_VERSION,
+    deployment: clean(process.env.AZURE_OPENAI_DEPLOYMENT) || DEFAULT_AZURE_DEPLOYMENT,
   });
-}
-
-async function getFoundryAuthHeaders(apiKey: string): Promise<Record<string, string>> {
-  if (apiKey) {
-    return {
-      "api-key": apiKey,
-      "x-api-key": apiKey,
-    };
-  }
-
-  const credential = new DefaultAzureCredential();
-  const tokenProvider = getBearerTokenProvider(
-    credential,
-    "https://cognitiveservices.azure.com/.default",
-  );
-  const token = await tokenProvider();
-
-  return {
-    Authorization: `Bearer ${token}`,
-  };
-}
-
-function toClaudeMessages(messages: AiChatMessage[]): {
-  system?: string;
-  messages: Array<{ role: "user" | "assistant"; content: string }>;
-} {
-  const system = messages
-    .filter((message) => message.role === "system")
-    .map((message) => message.content)
-    .join("\n\n");
-
-  const claudeMessages = messages
-    .filter((message) => message.role !== "system")
-    .map((message) => ({
-      role: message.role as "user" | "assistant",
-      content: message.content,
-    }));
-
-  return {
-    system: system || undefined,
-    messages: claudeMessages.length ? claudeMessages : [{ role: "user", content: "" }],
-  };
 }
 
 async function completeWithAzure(options: AiCompletionOptions): Promise<string> {
   const client = getAzureClient();
-  const deployment = clean(process.env.AZURE_OPENAI_DEPLOYMENT) || "gpt-5.2-chat";
+  const deployment = clean(process.env.AZURE_OPENAI_DEPLOYMENT) || DEFAULT_AZURE_DEPLOYMENT;
 
   const response = await client.chat.completions.create({
     model: deployment,
@@ -274,69 +206,17 @@ async function completeWithAzure(options: AiCompletionOptions): Promise<string> 
   return response.choices[0]?.message?.content ?? "";
 }
 
-async function completeWithClaude(options: AiCompletionOptions): Promise<string> {
-  const endpoint = clean(process.env.FOUNDRY_CLAUDE_ENDPOINT);
-  const model = clean(process.env.FOUNDRY_CLAUDE_MODEL) || "claude-sonnet-4-6";
-  const apiKey = clean(process.env.FOUNDRY_CLAUDE_API_KEY);
-
-  if (!endpoint) {
-    throw new Error("Foundry Claude endpoint must be configured before use.");
-  }
-
-  const claudePayload = toClaudeMessages(options.messages);
-  const authHeaders = await getFoundryAuthHeaders(apiKey);
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      "anthropic-version": "2023-06-01",
-      ...authHeaders,
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: options.maxCompletionTokens,
-      system: claudePayload.system,
-      messages: claudePayload.messages,
-    }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Foundry Claude request failed (${response.status}): ${body.slice(0, 500)}`);
-  }
-
-  const data = await response.json() as {
-    content?: Array<{ type?: string; text?: string }>;
-    output_text?: string;
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-
-  if (typeof data.output_text === "string") return data.output_text;
-  if (typeof data.choices?.[0]?.message?.content === "string") {
-    return data.choices[0].message.content;
-  }
-
-  return (data.content ?? [])
-    .map((part) => part.text ?? "")
-    .filter(Boolean)
-    .join("\n");
-}
-
 export async function generateAiCompletion(options: AiCompletionOptions): Promise<string> {
   const activeEngine = await getActiveAiEngine();
   const statuses = getAiEngineStatuses(activeEngine);
   const activeStatus = statuses.find((item) => item.id === activeEngine);
 
   if (activeStatus?.configured) {
-    return activeEngine === "foundry-claude"
-      ? completeWithClaude(options)
-      : completeWithAzure(options);
+    return completeWithAzure(options);
   }
 
   const fallback = statuses.find((item) => item.configured);
   if (fallback?.id === "azure-openai") return completeWithAzure(options);
-  if (fallback?.id === "foundry-claude") return completeWithClaude(options);
 
-  throw new Error("No AI engine is configured. Configure Foundry Claude on the AI Engine page before running analysis.");
+  throw new Error("Azure OpenAI is not configured. Set AZURE_OPENAI_ENDPOINT (and AZURE_OPENAI_DEPLOYMENT) before running analysis.");
 }

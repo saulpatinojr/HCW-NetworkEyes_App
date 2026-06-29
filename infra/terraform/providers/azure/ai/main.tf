@@ -28,7 +28,7 @@ resource "azapi_resource" "foundry_project" {
     }
     properties = {
       displayName = var.foundry_project_name
-      description = "CNA ${var.environment} Foundry project for Claude and model-routing validation"
+      description = "CNA ${var.environment} Foundry project hosting the Azure OpenAI deployment"
     }
   }
 

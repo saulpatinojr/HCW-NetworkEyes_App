@@ -1546,6 +1546,11 @@ if (-not $SkipAzureSetup) {
     # client secret below. It is NOT a deploy identity and gets no federated
     # credentials or subscription roles.
     #
+    # This bootstrap is the SINGLE authoritative manager of the NextAuth redirect
+    # URI (set on the application object, per Microsoft guidance — never on a
+    # service principal). The deploy pipeline is least-privilege and has no Graph
+    # app-management rights, so it never touches this app. See docs/adr/0003.
+    #
     # Deploy OIDC uses THREE separate, least-privilege service principals:
     #   - Main: repo-level jobs on main (policy-gates/000/100/320) — ref:refs/heads/main
     #   - Dev : 211 plan/apply for dev, plus drift/sync — environment:dev
@@ -1608,7 +1613,7 @@ if (-not $SkipAzureSetup) {
             Write-Ok "Redirect URI already present: $redirectUri"
         }
     } else {
-        Write-Host "    [INFO] CNA_NEXTAUTH_URL is 'none'. Redirect URI will be added later after workflow 210 exposes the real Front Door hostname."
+        Write-Host "    [INFO] CNA_NEXTAUTH_URL is 'none'. The first deploy (211) creates Front Door and writes the real host to the CNA_NEXTAUTH_URL repo variable via Terraform. Re-run this bootstrap after that first deploy to add the redirect URI (idempotent)."
     }
 } else {
     Write-Step "Collecting Azure values without Azure setup"
@@ -1687,9 +1692,7 @@ $variableDefaults = [ordered]@{
     AZURE_TARGET_SUBSCRIPTION_NAME = $(if ([string]::IsNullOrWhiteSpace($resolvedSubscriptionName)) { "none" } else { $resolvedSubscriptionName })
     CNA_ENTRA_CLIENT_ID            = $appId
     CNA_NEXTAUTH_URL               = $nextAuthUrlForRedirect
-    CNA_AI_ENGINE_DEFAULT          = "foundry-claude"
-    FOUNDRY_CLAUDE_ENDPOINT        = "none"
-    FOUNDRY_CLAUDE_MODEL           = "claude-sonnet-4-6"
+    CNA_AI_ENGINE_DEFAULT          = "azure-openai"
     CNA_AZURE_MCP_ENDPOINT         = "https://mcp.azure.com"
     CNA_AZURE_MCP_TRANSPORT        = "streamable-http"
     CNA_AWS_MCP_ENDPOINT           = "https://aws-mcp.us-east-1.api.aws/mcp"

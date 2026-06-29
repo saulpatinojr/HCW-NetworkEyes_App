@@ -38,8 +38,8 @@ export default async function AiEnginePage() {
               AI Engine
             </h1>
             <p className="mt-2 max-w-3xl text-sm text-navy-500 dark:text-navy-300">
-              Validate the active GenAI provider, Terraform-managed private Foundry Claude
-              configuration, and MCP server endpoints used by the assessment app.
+              Validate the active GenAI provider (Azure OpenAI) and the MCP server
+              endpoints used by the assessment app.
             </p>
           </div>
           <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800">
@@ -97,17 +97,16 @@ export default async function AiEnginePage() {
       </section>
 
       <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900 shadow-sm dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
-        <h2 className="font-bold">Deployment validation required</h2>
+        <h2 className="font-bold">Deployment validation</h2>
         <p className="mt-2">
-          Azure deployments treat Foundry Claude as the Terraform-managed private provider.
-          Operators must validate that the Foundry Messages API host resolves through the
-          private endpoint path from inside the CNA VNet and that managed identity inference
-          succeeds without API-key fallback.
+          Azure OpenAI is the Terraform-managed GenAI provider: a private endpoint into
+          the CNA VNet, RBAC via the app&apos;s managed identity, the model deployment, and
+          the app environment variables are all provisioned by Terraform.
         </p>
         <p className="mt-2">
-          Azure OpenAI remains optional and out-of-band until it is implemented as a
-          first-class provider with Terraform-managed networking, RBAC, model deployment,
-          and app environment variables.
+          Operators should confirm the Azure OpenAI host resolves through the private
+          endpoint from inside the VNet and that managed-identity inference succeeds (no
+          API-key fallback — local auth is disabled on the account).
         </p>
       </section>
 

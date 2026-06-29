@@ -6,22 +6,18 @@ findings, topology classification). No fabrication, no client environment
 access (DD-008) — this agent never queries Azure; it reasons over data
 already persisted by discovery + analysis.
 
-LLM transport mirrors apps/cna-web/lib/ai-engine.ts exactly — the same two
-Azure AI Foundry-hosted engines, the same env vars, the same wire formats:
+LLM transport mirrors apps/cna-web/lib/ai-engine.ts exactly — the same
+Azure OpenAI engine, the same env vars, the same wire format:
 
-  foundry-claude  — Anthropic Messages-compatible Foundry deployment.
-                    POST {FOUNDRY_CLAUDE_ENDPOINT} with Microsoft Entra
-                    bearer token by default, or api-key/x-api-key only when
-                    FOUNDRY_CLAUDE_API_KEY is explicitly configured.
-                    Env: FOUNDRY_CLAUDE_ENDPOINT, FOUNDRY_CLAUDE_MODEL
-                    (default claude-sonnet-4-6), optional
-                    FOUNDRY_CLAUDE_API_KEY.
   azure-openai    — Azure OpenAI chat completions via managed identity
                     (DefaultAzureCredential bearer token, same scope as
                     lib/ai-engine.ts getAzureClient()).
                     Env: AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_DEPLOYMENT
-                    (default gpt-5.2-chat), AZURE_OPENAI_API_VERSION
+                    (default gpt-chat-latest), AZURE_OPENAI_API_VERSION
                     (default 2024-12-01-preview).
+
+Anthropic/Claude on Foundry was removed (no model deployment in this tenant);
+see docs/adr/0001.
 
 No new provider or SDK is introduced: httpx (already used by
 cna.ai_engine.mcp_client) carries both engines, tenacity (already a
@@ -50,12 +46,10 @@ _HTTP_TOO_MANY_REQUESTS = 429
 _HTTP_SERVER_ERROR = 500
 
 # Engine ids — keep in sync with apps/cna-web/lib/ai-engine.ts VALID_ENGINES
-ENGINE_FOUNDRY_CLAUDE = "foundry-claude"
 ENGINE_AZURE_OPENAI = "azure-openai"
-VALID_ENGINES = {ENGINE_FOUNDRY_CLAUDE, ENGINE_AZURE_OPENAI}
+VALID_ENGINES = {ENGINE_AZURE_OPENAI}
 
-DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-6"
-DEFAULT_AZURE_DEPLOYMENT = "gpt-5.2-chat"
+DEFAULT_AZURE_DEPLOYMENT = "gpt-chat-latest"
 DEFAULT_AZURE_API_VERSION = "2024-12-01-preview"
 
 MAX_COMPLETION_TOKENS = 1200
@@ -87,8 +81,8 @@ def resolve_engine(stored_engine: str | None = None) -> str:
 
     Mirrors getActiveAiEngine() in lib/ai-engine.ts: a valid stored
     AppSetting 'ai.activeEngine' value wins, then CNA_AI_ENGINE_DEFAULT,
-    then azure-openai (the only provider with a deployed model;
-    Anthropic/Claude on Foundry is unavailable in this tenant, pending removal).
+    then azure-openai (the only supported provider; Anthropic/Claude on
+    Foundry was removed — see docs/adr/0001).
     """
     stored = _clean(stored_engine)
     if stored in VALID_ENGINES:
@@ -102,8 +96,6 @@ def resolve_engine(stored_engine: str | None = None) -> str:
 def engine_configured(engine: str) -> bool:
     """Whether the engine's required env vars are present (parity with
     getAiEngineStatuses() configured flags)."""
-    if engine == ENGINE_FOUNDRY_CLAUDE:
-        return bool(_clean(os.environ.get("FOUNDRY_CLAUDE_ENDPOINT")))
     if engine == ENGINE_AZURE_OPENAI:
         return bool(_clean(os.environ.get("AZURE_OPENAI_ENDPOINT")))
     return False
@@ -323,7 +315,7 @@ def extract_citations(text: str, context: GroundingContext) -> list[Citation]:
 
 
 # ---------------------------------------------------------------------------
-# Transport — mirrors completeWithClaude / completeWithAzure in ai-engine.ts
+# Transport — mirrors completeWithAzure in ai-engine.ts
 # ---------------------------------------------------------------------------
 
 
@@ -347,9 +339,8 @@ class GroundedChatAgent:
             fallback = next((e for e in VALID_ENGINES if engine_configured(e)), None)
             if fallback is None:
                 raise ChatConfigError(
-                    "No AI engine is configured. Set FOUNDRY_CLAUDE_ENDPOINT "
-                    "or AZURE_OPENAI_ENDPOINT, or configure "
-                    "an engine on the admin AI Engine page."
+                    "No AI engine is configured. Set AZURE_OPENAI_ENDPOINT, "
+                    "or configure an engine on the admin AI Engine page."
                 )
             self.engine = fallback
 
@@ -370,72 +361,12 @@ class GroundedChatAgent:
         if not turns:
             turns = [{"role": "user", "content": ""}]
 
-        if self.engine == ENGINE_AZURE_OPENAI:
-            text = self._complete_azure(system_prompt, turns)
-        else:
-            text = self._complete_claude(system_prompt, turns)
+        text = self._complete_azure(system_prompt, turns)
 
         return ChatAnswer(
             text=text,
             citations=extract_citations(text, context),
             engine=self.engine,
-        )
-
-    # -------------------------------------------------------------- foundry
-
-    @retry(
-        retry=retry_if_exception(_is_transient),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential_jitter(initial=1.0, max=15.0),
-        reraise=True,
-    )
-    def _complete_claude(self, system_prompt: str, turns: list[dict]) -> str:
-        """Anthropic Messages-compatible Foundry call — wire format identical
-        to completeWithClaude() in lib/ai-engine.ts."""
-        endpoint = _clean(os.environ.get("FOUNDRY_CLAUDE_ENDPOINT"))
-        api_key = _clean(os.environ.get("FOUNDRY_CLAUDE_API_KEY"))
-        model = _clean(os.environ.get("FOUNDRY_CLAUDE_MODEL")) or DEFAULT_CLAUDE_MODEL
-        if not endpoint:
-            raise ChatConfigError("Foundry Claude endpoint must be configured before use.")
-
-        headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "anthropic-version": "2023-06-01",
-        }
-        if api_key:
-            headers["api-key"] = api_key
-            headers["x-api-key"] = api_key
-        else:
-            from azure.identity import DefaultAzureCredential
-
-            token = DefaultAzureCredential().get_token(
-                "https://cognitiveservices.azure.com/.default"
-            )
-            headers["Authorization"] = f"Bearer {token.token}"
-
-        response = httpx.post(
-            endpoint,
-            headers=headers,
-            json={
-                "model": model,
-                "max_tokens": MAX_COMPLETION_TOKENS,
-                "system": system_prompt,
-                "messages": turns,
-            },
-            timeout=REQUEST_TIMEOUT_SECONDS,
-        )
-        response.raise_for_status()
-        data = response.json()
-
-        # Same response-shape tolerance as the web client
-        if isinstance(data.get("output_text"), str):
-            return data["output_text"]
-        choices = data.get("choices") or []
-        if choices and isinstance(choices[0].get("message", {}).get("content"), str):
-            return choices[0]["message"]["content"]
-        return "\n".join(
-            part.get("text", "") for part in (data.get("content") or []) if part.get("text")
         )
 
     # --------------------------------------------------------- azure openai

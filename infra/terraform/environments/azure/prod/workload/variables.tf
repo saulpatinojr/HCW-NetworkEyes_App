@@ -117,14 +117,20 @@ variable "credential_encryption_key" {
 
 # ─── AI Engine + MCP configuration ────────────────────────────────────────────
 variable "ai_engine_default" {
-  description = "Default global GenAI engine when no database setting exists. Azure OpenAI is the default (Anthropic/Claude on Foundry is not available in this tenant and is pending removal)."
+  description = "Default global GenAI engine when no database setting exists. Azure OpenAI is the only supported engine; Anthropic/Claude on Foundry is not available in this tenant and was removed (see docs/adr/0001)."
   type        = string
   default     = "azure-openai"
 
   validation {
-    condition     = contains(["azure-openai", "foundry-claude"], var.ai_engine_default)
-    error_message = "ai_engine_default must be azure-openai or foundry-claude."
+    condition     = contains(["azure-openai"], var.ai_engine_default)
+    error_message = "ai_engine_default must be azure-openai."
   }
+}
+
+variable "foundry_location" {
+  description = "Azure region for the Foundry/AIServices account. Defaults to eastus2 (model + capacity availability); override per environment if needed."
+  type        = string
+  default     = "eastus2"
 }
 
 # ─── Azure OpenAI (default engine) ────────────────────────────────────────────
@@ -147,18 +153,6 @@ variable "azure_openai_api_version" {
   description = "Azure OpenAI API version."
   type        = string
   default     = "2024-12-01-preview"
-}
-
-variable "foundry_claude_endpoint" {
-  description = "Foundry Claude Messages API endpoint for the web app. UNUSED — Anthropic on Foundry is not available in this tenant; pending removal."
-  type        = string
-  default     = ""
-}
-
-variable "foundry_claude_model" {
-  description = "Foundry Claude model identifier. UNUSED — pending removal."
-  type        = string
-  default     = "claude-sonnet-4-6"
 }
 
 variable "azure_mcp_endpoint" {
