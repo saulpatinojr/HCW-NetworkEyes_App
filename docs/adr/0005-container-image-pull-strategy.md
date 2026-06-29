@@ -3,8 +3,8 @@
 - **Status:** Accepted (2026-06-29) — interim decision; target state tracked by a
   follow-up issue
 - **Deciders:** CNA platform
-- **Related:** best-practice review (this PR); follow-up issue "Adopt ACR + managed
-  identity for Container Apps image pull"
+- **Related:** best-practice review (this PR); follow-up issue #103 "Adopt ACR +
+  managed identity for Container Apps image pull"
 
 ## Context
 

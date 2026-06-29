@@ -3,8 +3,8 @@
 - **Status:** Accepted (2026-06-29) — target state; implementation tracked by a
   follow-up issue
 - **Deciders:** CNA platform
-- **Related:** best-practice review (this PR); follow-up issue "Key Vault: disable
-  public network access (PE-only) with a VNet-joined deploy agent"
+- **Related:** best-practice review (this PR); follow-up issue #102 "Key Vault:
+  disable public network access (PE-only) with a VNet-joined deploy agent"
 
 ## Context
 
