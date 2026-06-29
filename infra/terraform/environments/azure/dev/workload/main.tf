@@ -63,6 +63,15 @@ module "identity" {
   key_vault_name_suffix                = "2"
 }
 
+module "registry" {
+  source              = "../../../../providers/azure/registry"
+  resource_group_name = data.azurerm_resource_group.this.name
+  location            = data.azurerm_resource_group.this.location
+  name_prefix         = local.name_prefix
+  sku                 = "Basic"
+  tags                = local.tags
+}
+
 module "compute" {
   source                               = "../../../../providers/azure/compute"
   resource_group_name                  = data.azurerm_resource_group.this.name
@@ -217,6 +226,33 @@ resource "azurerm_role_assignment" "api_foundry_user" {
 resource "azurerm_role_assignment" "uai_foundry_user" {
   scope                = module.ai.foundry_account_id
   role_definition_name = "Cognitive Services User"
+  principal_id         = module.identity.managed_identity_principal_id
+}
+
+# ACR image pull via managed identity (replaces Docker Hub username/password).
+# Each app's system-assigned identity pulls its own image; the UAI covers the
+# migration/probe Container Apps Jobs that run under the user-assigned identity.
+resource "azurerm_role_assignment" "web_acr_pull" {
+  scope                = module.registry.id
+  role_definition_name = "AcrPull"
+  principal_id         = module.compute.web_principal_id
+}
+
+resource "azurerm_role_assignment" "api_acr_pull" {
+  scope                = module.registry.id
+  role_definition_name = "AcrPull"
+  principal_id         = module.compute.api_principal_id
+}
+
+resource "azurerm_role_assignment" "worker_acr_pull" {
+  scope                = module.registry.id
+  role_definition_name = "AcrPull"
+  principal_id         = module.compute.worker_principal_id
+}
+
+resource "azurerm_role_assignment" "uai_acr_pull" {
+  scope                = module.registry.id
+  role_definition_name = "AcrPull"
   principal_id         = module.identity.managed_identity_principal_id
 }
 

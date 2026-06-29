@@ -10,6 +10,16 @@ output "storage_account_name" {
   value = module.storage.storage_account_name
 }
 
+output "registry_login_server" {
+  description = "ACR login server (e.g. acrcnaprodscus.azurecr.io) for the build pipeline image-pull cutover."
+  value       = module.registry.login_server
+}
+
+output "registry_name" {
+  description = "ACR name."
+  value       = module.registry.name
+}
+
 output "storage_web_endpoint" {
   value = module.storage.primary_web_endpoint
 }
