@@ -1,73 +1,83 @@
-# 0004 — Key Vault network hardening (private-endpoint-only target)
+# 0004 — Key Vault network hardening (deny-by-default; PE-only deferred)
 
-- **Status:** Accepted (2026-06-29) — target state; implementation tracked by a
-  follow-up issue
+- **Status:** Accepted (2026-06-29); **deny-by-default implemented** 2026-06-29
+  (issue #102). Literal public-access-disabled (PE-only) remains a separate later item.
 - **Deciders:** CNA platform
-- **Related:** best-practice review (this PR); follow-up issue #102 "Key Vault:
-  disable public network access (PE-only) with a VNet-joined deploy agent"
+- **Related:** issue #102; SME review (2026-06-29)
 
 ## Context
 
-The workload Key Vault (`infra/terraform/providers/azure/identity/main.tf`) is created
-with:
+The workload Key Vault (`infra/terraform/providers/azure/identity/main.tf`) holds
+high-value material: the database connection string, the Auth.js signing secret, the
+Entra OAuth client secret, and the AES-256 credential-encryption key. It already has a
+**private endpoint** (security module) and uses **RBAC authorization**
+(`rbac_authorization_enabled = true`), so a data-plane operation always requires an
+Entra token holding a Key Vault role — regardless of network position.
 
-```hcl
-public_network_access_enabled = true
-network_acls {
-  bypass         = "AzureServices"
-  default_action = "Allow"   # <- least secure
-}
-```
+It was nonetheless created with `network_acls.default_action = "Allow"`, i.e. the
+data-plane *endpoint* was reachable from any network. RBAC means this did not expose
+secret **values**, but it left a public network attack surface (leaked-token replay
+reachable from anywhere, exposure of the auth/throttling layer) and failed the
+Microsoft Key Vault security baseline (NS-2) and Well-Architected guidance, both of
+which call for `default_action = Deny` when a private endpoint exists.
 
-It already has a **private endpoint** (in the security module) and uses RBAC
-authorization. But `default_action = "Allow"` means the vault accepts data-plane
-traffic from any network, which contradicts the Microsoft Key Vault security baseline
-and the Azure Verified Module default (`default_action = "Deny"`).
+**Correcting the original premise.** An earlier draft of this ADR (and issue #102)
+claimed the flip was blocked because CI ran on *GitHub-hosted runners with ephemeral
+IPs*. That is **not the case** — all workflows run `runs-on: self-hosted`, and
+`211-deploy-azure-split.yml` already implements an imperative "open a deny-by-default
+firewall window, add the runner IP, remove it afterwards" pattern around the Terraform
+apply (the data-plane secret writes in the `runtime` module).
 
-The reason it was left open: **Terraform writes and reads KV secrets over the data
-plane** during `apply` (the `runtime` module's `azurerm_key_vault_secret` resources)
-and during `plan` refresh (drift workflows). The CI runs on **GitHub-hosted runners**,
-which:
-
-- are **not** on Microsoft's Key Vault *trusted services* list (so `bypass =
-  AzureServices` does not admit them), and
-- have **ephemeral public egress IPs**, so pinning them in `network_acls.ip_rules`
-  via Terraform causes **perpetual drift** and breaks any run whose runner IP isn't
-  allow-listed.
+The real defect was a **Terraform/runtime conflict**: the module declared
+`default_action = "Allow"` with no `lifecycle.ignore_changes`, so every `terraform
+apply` reverted the imperatively-set `Deny` back to `Allow`. The 211 hardening was
+therefore a no-op between deploys, and the 350/360 drift jobs would perpetually try to
+reconcile it.
 
 ## Decision
 
-**Target best-practice posture:** disable public network access and use **private
-endpoints only** (`public_network_access_enabled = false`, `default_action = "Deny"`),
-with secret provisioning performed by a **VNet-joined deploy agent** (a self-hosted
-GitHub runner in the workload VNet, or an in-VNet job) so the data-plane writes reach
-the vault over the private endpoint / Microsoft backbone.
+Make **deny-by-default** the Terraform-managed steady state and stop the two layers
+from fighting:
 
-**This PR does not flip the setting.** Doing so blindly would break every deploy and
-drift job (data-plane secret read/write from public runners would be denied), and the
-change is only verifiable against a live environment. It is therefore deferred to a
-dedicated, testable follow-up issue, with this ADR recording the decision.
+- `infra/terraform/providers/azure/identity/main.tf`: `network_acls.default_action =
+  "Deny"` (keep `bypass = "AzureServices"` for the Front Door cert path), and
+  `lifecycle { ignore_changes = [network_acls[0].ip_rules] }` so the transient runner
+  IP added by the workflows does not show as drift. `default_action`/`bypass` remain
+  Terraform-managed and drift-detected.
+- `public_network_access_enabled` **stays `true`**: the self-hosted runner reaches the
+  vault over the *public* endpoint through the temporary IP allow-rule, so literal
+  "Disabled" is mutually exclusive with the public-runner window. The runner today is an
+  external VPS, not VNet-joined.
+- Drift workflows `350-drift-dev.yml` / `360-drift-prod.yml` gained the same
+  "add runner IP before the workload plan / remove on `always()`" steps (they refresh
+  KV secret resources over the data plane and previously had no window).
+
+The Container Apps are unaffected — they reach the vault over the existing private
+endpoint via the user-assigned managed identity, independent of `default_action`.
+
+**Deferred (separate, later):** literal `public_network_access = Disabled` (true
+PE-only), which requires moving the deploy runner **into the workload VNet** (self-hosted
+runner on a VNet-joined VM/VMSS, or an in-VNet secret-provisioning job). Tracked as a
+follow-up under #102.
 
 ## Consequences
 
-- **Good (when implemented):** the vault is unreachable from the public internet;
-  all data-plane traffic flows over Private Link. Matches the KV security baseline's
-  most-restrictive tier.
-- **Cost / effort:** requires standing up a VNet-joined deploy agent (or moving secret
-  creation into an in-VNet job). This is the real work captured by the follow-up issue.
-- **Interim posture:** the vault keeps `default_action = "Allow"` until the VNet agent
-  exists. RBAC authorization still gates every data-plane operation, so access is not
-  open — only the *network* is.
+- **Good:** the vault denies public traffic by default in steady state; the only public
+  reach is the brief, self-removing runner window during deploy/drift. Satisfies the
+  KV firewall baseline (CKV_AZURE_109). Fixes the perpetual-drift / no-op bug.
+- **Residual:** `public_network_access` is still `Enabled` (CKV_AZURE_189 skip retained)
+  because the runner is not VNet-joined. The window is short and the IP is removed on
+  `always()`, but it is a real (if small) exposure until the VNet-runner work lands.
+- **Verification (live):** after a 211 dev run, `az keyvault show` reports
+  `defaultAction=Deny` with the runner IP removed; a 350 dev run reads secrets during
+  plan and reports **no** `network_acls` drift; a secret read from an unlisted public IP
+  returns `Forbidden`.
 
 ## Alternatives considered
 
-- **`default_action = Deny` + allow-list the ephemeral runner IP in Terraform** — the
-  approach originally sketched; rejected: ephemeral IPs cause perpetual drift and
-  break runs whose IP isn't listed.
-- **`default_action = Deny` + imperative `az keyvault network-rule add/remove` window
-  around KV ops, with `lifecycle { ignore_changes = [network_acls] }`** — a valid
-  *interim workaround* that hardens without a VNet agent, but it still uses public
-  egress, touches three workflows (211 apply, 350/360 drift), and is only verifiable on
-  a live run. Documented here as the fallback if PE-only is not yet feasible.
-- **Stable egress (NAT gateway / fixed IP) allow-listed in `ip_rules`** — works only
-  once a stable deploy egress exists; folded into the follow-up issue's options.
+- **`default_action = Deny` + allow-list a runner IP *in Terraform*** — rejected:
+  even with self-hosted runners the IP can rotate, and a TF-managed `ip_rules` fights
+  the imperative window. `ignore_changes` on `ip_rules` is the correct split.
+- **PE-only now (public access Disabled) + VNet-joined runner** — the true
+  best-practice end-state; deferred because the runner is currently an external VPS and
+  the move is non-trivial infra work, separately testable.

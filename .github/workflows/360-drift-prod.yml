@@ -72,6 +72,31 @@ jobs:
             -backend-config="key=prod.workload.terraform.tfstate" \
             -backend-config="use_oidc=true"
 
+      # Key Vault is deny-by-default (default_action = Deny). The workload drift
+      # plan refreshes KV secret resources over the data plane, so the self-hosted
+      # runner's IP must be allow-listed first (removed again at the end).
+      - name: Ensure Key Vault is reachable during drift plan
+        env:
+          REGION_SHORT: ${{ vars.AZURE_REGION_SHORT }}
+        run: |
+          if [[ -n "$TFSTATE_RESOURCE_GROUP" && "$TFSTATE_RESOURCE_GROUP" == *-tfstate ]]; then
+            WORKLOAD_RG="${TFSTATE_RESOURCE_GROUP%-tfstate}"
+          elif [[ -n "$REGION_SHORT" ]]; then
+            WORKLOAD_RG="rg-cna-prod-${REGION_SHORT}"
+          else
+            echo "::error::AZURE_REGION_SHORT is required when TFSTATE_RESOURCE_GROUP is not set."
+            exit 1
+          fi
+          KEY_VAULT_NAME="${WORKLOAD_RG#rg-}-kv"
+          if az keyvault show --name "$KEY_VAULT_NAME" --resource-group "$WORKLOAD_RG" --only-show-errors > /dev/null 2>&1; then
+            RUNNER_IP=$(curl -s https://api.ipify.org || echo "")
+            if [ -n "$RUNNER_IP" ]; then
+              az keyvault network-rule add --name "$KEY_VAULT_NAME" --resource-group "$WORKLOAD_RG" --ip-address "$RUNNER_IP" --only-show-errors > /dev/null
+            fi
+          else
+            echo "Key Vault $KEY_VAULT_NAME does not exist yet; nothing to open."
+          fi
+
       - name: Terraform drift plan (workload)
         working-directory: infra/terraform/environments/azure/prod/workload
         # Secrets passed via TF_VAR_* env so they never appear in the process
@@ -123,4 +148,20 @@ jobs:
             || EXIT=$?
           if [ "${EXIT:-0}" -eq 2 ]; then
             echo "::warning::Drift detected in prod/workload state."
+          fi
+
+      - name: Remove Runner IP from Key Vault
+        if: always()
+        env:
+          REGION_SHORT: ${{ vars.AZURE_REGION_SHORT }}
+        run: |
+          if [[ -n "$TFSTATE_RESOURCE_GROUP" && "$TFSTATE_RESOURCE_GROUP" == *-tfstate ]]; then
+            WORKLOAD_RG="${TFSTATE_RESOURCE_GROUP%-tfstate}"
+          else
+            WORKLOAD_RG="rg-cna-prod-${REGION_SHORT}"
+          fi
+          KEY_VAULT_NAME="${WORKLOAD_RG#rg-}-kv"
+          RUNNER_IP=$(curl -s https://api.ipify.org || echo "")
+          if [ -n "$RUNNER_IP" ]; then
+            az keyvault network-rule remove --name "$KEY_VAULT_NAME" --resource-group "$WORKLOAD_RG" --ip-address "$RUNNER_IP" --only-show-errors >/dev/null 2>&1 || true
           fi
