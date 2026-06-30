@@ -88,12 +88,19 @@ module "compute" {
   log_analytics_workspace_id = data.azurerm_log_analytics_workspace.platform.id
 
   # ── Plain env vars injected at container start ──────────────────────────────
+  # Foundry recommendation agent (portal-configured: MCP tools + instructions).
+  # Empty values keep the agent transport off; RecommendationEngine then uses the
+  # direct MCP clients and the offline library.
   api_env_vars = {
-    CNA_STORAGE_ACCOUNT_NAME = module.storage.storage_account_name
+    CNA_STORAGE_ACCOUNT_NAME        = module.storage.storage_account_name
+    FOUNDRY_PROJECT_ENDPOINT        = var.foundry_project_endpoint
+    FOUNDRY_RECOMMENDATION_AGENT_ID = var.foundry_recommendation_agent_id
   }
 
   worker_env_vars = {
-    CNA_STORAGE_ACCOUNT_NAME = module.storage.storage_account_name
+    CNA_STORAGE_ACCOUNT_NAME        = module.storage.storage_account_name
+    FOUNDRY_PROJECT_ENDPOINT        = var.foundry_project_endpoint
+    FOUNDRY_RECOMMENDATION_AGENT_ID = var.foundry_recommendation_agent_id
   }
 
   web_env_vars = {
@@ -212,6 +219,27 @@ resource "azurerm_role_assignment" "api_foundry_user" {
 resource "azurerm_role_assignment" "uai_foundry_user" {
   scope                = module.ai.foundry_account_id
   role_definition_name = "Cognitive Services User"
+  principal_id         = module.identity.managed_identity_principal_id
+}
+
+# Foundry Agent Service (data plane: threads/runs) for recommendation enrichment.
+# Cognitive Services User covers inference; the agents API needs Azure AI User.
+# The web app does not call the agent, so only api + worker + the UAI get it.
+resource "azurerm_role_assignment" "api_foundry_ai_user" {
+  scope                = module.ai.foundry_account_id
+  role_definition_name = "Azure AI User"
+  principal_id         = module.compute.api_principal_id
+}
+
+resource "azurerm_role_assignment" "worker_foundry_ai_user" {
+  scope                = module.ai.foundry_account_id
+  role_definition_name = "Azure AI User"
+  principal_id         = module.compute.worker_principal_id
+}
+
+resource "azurerm_role_assignment" "uai_foundry_ai_user" {
+  scope                = module.ai.foundry_account_id
+  role_definition_name = "Azure AI User"
   principal_id         = module.identity.managed_identity_principal_id
 }
 

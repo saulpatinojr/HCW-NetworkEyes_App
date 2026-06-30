@@ -479,6 +479,8 @@ jobs:
           AWS_MCP_ENDPOINT=$(optional_var "${{ vars.CNA_AWS_MCP_ENDPOINT }}")
           AWS_MCP_TRANSPORT=$(optional_var "${{ vars.CNA_AWS_MCP_TRANSPORT }}")
           DRAWIO_MCP_URL=$(optional_var "${{ vars.CNA_DRAWIO_MCP_URL }}")
+          FOUNDRY_PROJECT_ENDPOINT=$(optional_var "${{ vars.FOUNDRY_PROJECT_ENDPOINT }}")
+          FOUNDRY_RECOMMENDATION_AGENT_ID=$(optional_var "${{ vars.FOUNDRY_RECOMMENDATION_AGENT_ID }}")
           SECRET_EXPIRY=$(date -u -d "+90 days" "+%Y-%m-%dT%H:%M:%SZ")
 
           terraform plan -out=tfplan \
@@ -496,6 +498,8 @@ jobs:
             -var="aws_mcp_endpoint=${AWS_MCP_ENDPOINT}" \
             -var="aws_mcp_transport=${AWS_MCP_TRANSPORT:-streamable-http}" \
             -var="drawio_mcp_url=${DRAWIO_MCP_URL}" \
+            -var="foundry_project_endpoint=${FOUNDRY_PROJECT_ENDPOINT}" \
+            -var="foundry_recommendation_agent_id=${FOUNDRY_RECOMMENDATION_AGENT_ID}" \
             -var="secret_expiration_date=${SECRET_EXPIRY}"
 
       - name: Create deployment manifest
@@ -727,6 +731,8 @@ jobs:
           AWS_MCP_ENDPOINT=$(optional_var "${{ vars.CNA_AWS_MCP_ENDPOINT }}")
           AWS_MCP_TRANSPORT=$(optional_var "${{ vars.CNA_AWS_MCP_TRANSPORT }}")
           DRAWIO_MCP_URL=$(optional_var "${{ vars.CNA_DRAWIO_MCP_URL }}")
+          FOUNDRY_PROJECT_ENDPOINT=$(optional_var "${{ vars.FOUNDRY_PROJECT_ENDPOINT }}")
+          FOUNDRY_RECOMMENDATION_AGENT_ID=$(optional_var "${{ vars.FOUNDRY_RECOMMENDATION_AGENT_ID }}")
           SECRET_EXPIRY=$(date -u -d "+90 days" "+%Y-%m-%dT%H:%M:%SZ")
 
           terraform plan -out=tfplan \
@@ -744,6 +750,8 @@ jobs:
             -var="aws_mcp_endpoint=${AWS_MCP_ENDPOINT}" \
             -var="aws_mcp_transport=${AWS_MCP_TRANSPORT:-streamable-http}" \
             -var="drawio_mcp_url=${DRAWIO_MCP_URL}" \
+            -var="foundry_project_endpoint=${FOUNDRY_PROJECT_ENDPOINT}" \
+            -var="foundry_recommendation_agent_id=${FOUNDRY_RECOMMENDATION_AGENT_ID}" \
             -var="secret_expiration_date=${SECRET_EXPIRY}"
 
       - name: Terraform apply (workload)

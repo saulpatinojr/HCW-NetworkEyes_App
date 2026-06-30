@@ -133,6 +133,18 @@ variable "foundry_location" {
   default     = "eastus2"
 }
 
+variable "foundry_project_endpoint" {
+  description = "Azure AI Foundry project endpoint for the recommendation agent (portal-managed). Empty disables the agent transport; RecommendationEngine then uses the direct MCP clients + offline library."
+  type        = string
+  default     = ""
+}
+
+variable "foundry_recommendation_agent_id" {
+  description = "Id of the portal-configured Foundry recommendation agent (MCP tools + instructions). Empty disables the agent transport."
+  type        = string
+  default     = ""
+}
+
 # ─── Azure OpenAI (default engine) ────────────────────────────────────────────
 # Auth is AAD/managed-identity only. NOTE: prod needs its own model deployment on
 # cna-prod-eus2-aif before this engine works — dev's gpt-chat-latest deployment is

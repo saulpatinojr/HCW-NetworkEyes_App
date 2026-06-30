@@ -17,6 +17,11 @@ from __future__ import annotations
 
 import logging
 
+from cna.ai_engine.foundry_agent_client import (
+    FoundryAgentClient,
+    FoundryAgentError,
+    agent_configured,
+)
 from cna.ai_engine.mcp_client.mcp_router import MCPRouter
 from cna.core.findings_schema import FindingRecommendation, FindingsReport
 
@@ -28,10 +33,28 @@ class RecommendationEngine:
 
     Contract: called AFTER AnalysisEngine.run() — never before.
     Modifies findings in-place. Returns updated report.
+
+    Transport fallback chain (first non-empty result wins):
+      1. Foundry Agent Service (when FOUNDRY_PROJECT_ENDPOINT + agent id are set) —
+         a portal-configured agent with MCP tools + instructions.
+      2. MCPRouter — CNA's direct Azure/AWS MCP HTTP clients.
+      3. Curated offline library — guarantees a finding is never left without guidance.
     """
 
-    def __init__(self, router: MCPRouter | None = None):
+    def __init__(
+        self,
+        router: MCPRouter | None = None,
+        agent_client: FoundryAgentClient | None = None,
+    ):
         self._router = router or MCPRouter()
+        # Prefer the Foundry agent transport when configured; otherwise leave it off so
+        # the engine behaves exactly as before (MCPRouter -> offline).
+        if agent_client is not None:
+            self._agent: FoundryAgentClient | None = agent_client
+        elif agent_configured():
+            self._agent = FoundryAgentClient()
+        else:
+            self._agent = None
 
     def enrich(self, report: FindingsReport) -> FindingsReport:
         """Inject recommendations into all findings in a report.
@@ -39,45 +62,78 @@ class RecommendationEngine:
         Findings are modified in-place. Report is returned for chaining.
         """
         total = len(report.findings)
-        enriched = 0
-        fallback = 0
+        counts = {"agent": 0, "mcp": 0, "offline": 0}
 
         for finding in report.findings:
+            cloud = self._cloud_for(finding.resource_type or "")
+            recs, source = self._recommend(cloud, finding)
+            finding.recommendations = recs
+            counts[source] += 1
+
+        logger.info(
+            "Recommendation enrichment complete (%d findings): %d agent, %d MCP, %d offline",
+            total,
+            counts["agent"],
+            counts["mcp"],
+            counts["offline"],
+        )
+        return report
+
+    @staticmethod
+    def _cloud_for(resource_type: str) -> str:
+        rt = resource_type
+        if rt.startswith("AWS") or rt.lower().startswith("aws/"):
+            return "aws"
+        if rt.startswith("Microsoft.") or rt.lower().startswith("azure/"):
+            return "azure"
+        if "/" in rt:
+            return rt.split("/")[0].lower()
+        return "aws"
+
+    def _recommend(self, cloud: str, finding) -> tuple[list[FindingRecommendation], str]:
+        """Resolve recommendations for one finding via the fallback chain.
+
+        Returns (recommendations, source_label). Never raises — the offline library is
+        the guaranteed terminal fallback.
+        """
+        # 1. Foundry agent (portal-configured MCP tools + instructions).
+        if self._agent is not None:
             try:
-                rt = finding.resource_type or ""
-                if rt.startswith("AWS") or rt.lower().startswith("aws/"):
-                    cloud = "aws"
-                elif rt.startswith("Microsoft.") or rt.lower().startswith("azure/"):
-                    cloud = "azure"
-                elif "/" in rt:
-                    cloud = rt.split("/")[0].lower()
-                else:
-                    cloud = "aws"
-                recs = self._router.get_recommendations(
+                recs = self._agent.get_recommendations(
                     cloud=cloud,
                     rule_id=finding.rule_id,
                     resource_type=finding.resource_type,
                     finding_title=finding.title,
                 )
-                finding.recommendations = recs
-                enriched += 1
-            except Exception as e:
+                if recs:
+                    return recs, "agent"
+            except FoundryAgentError as e:
                 logger.warning(
-                    "MCP recommendation fetch failed for %s on %s: %s. Using offline fallback.",
+                    "Foundry agent enrichment failed for %s: %s. Falling back to MCP.",
                     finding.rule_id,
-                    finding.resource_id,
                     e,
                 )
-                finding.recommendations = self._offline_fallback(finding.rule_id)
-                fallback += 1
 
-        logger.info(
-            "Recommendation enrichment complete: %d/%d from MCP, %d from offline fallback",
-            enriched,
-            total,
-            fallback,
-        )
-        return report
+        # 2. Direct MCP clients.
+        try:
+            recs = self._router.get_recommendations(
+                cloud=cloud,
+                rule_id=finding.rule_id,
+                resource_type=finding.resource_type,
+                finding_title=finding.title,
+            )
+            if recs:
+                return recs, "mcp"
+        except Exception as e:  # noqa: BLE001 — fall through to offline
+            logger.warning(
+                "MCP recommendation fetch failed for %s on %s: %s. Using offline fallback.",
+                finding.rule_id,
+                finding.resource_id,
+                e,
+            )
+
+        # 3. Curated offline library (terminal fallback).
+        return self._offline_fallback(finding.rule_id), "offline"
 
     @staticmethod
     def _offline_fallback(rule_id: str) -> list[FindingRecommendation]:
