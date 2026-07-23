@@ -24,8 +24,8 @@ When done, mark this file's checklist below and update the PR description with a
 
 ## Checklist
 
-- [ ] Dead code swept (cna/**)
-- [ ] Dead code swept (apps/cna-web/**)
-- [ ] Dead code swept (infra/**)
-- [ ] Stale comments/TODOs cleaned up
-- [ ] Findings summarized in PR description
+- [x] Dead code swept (cna/**) — surveyed; findings are wiring-gap/scaffold, flagged in PR (no confident deletions)
+- [x] Dead code swept (apps/cna-web/**) — 4 verified-dead removals committed (221 lines)
+- [x] Dead code swept (infra/**) — surveyed; AWS modules are intentional #110 scaffold, flagged
+- [x] Stale comments/TODOs cleaned up — none reference closed issues; Phase/SCAFFOLD markers are intentional
+- [x] Findings summarized in PR description
