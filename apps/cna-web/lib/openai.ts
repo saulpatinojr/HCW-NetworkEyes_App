@@ -329,15 +329,6 @@ ${FINDING_SCHEMA}`;
   return parsed.findings ?? [];
 }
 
-// ── Legacy wrapper — kept for backward compatibility ──────────────────────────
-
-export async function analyzeDocuments(
-  documents: { fileName: string; text: string }[],
-  focus: AnalysisFocus = "general",
-): Promise<RawFinding[]> {
-  return analyzeEngagement({ documents, focus });
-}
-
 // ── Deliverable generation ────────────────────────────────────────────────────
 
 export type DeliverableType =
