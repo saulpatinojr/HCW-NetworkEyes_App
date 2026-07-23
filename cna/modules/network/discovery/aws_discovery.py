@@ -125,12 +125,12 @@ class AWSDiscovery:
         orgs = self._mgmt_session.client("organizations")
         accounts = []
         cursor = PaginationCursor()
-        while True:
+        while cursor.has_more:
             kwargs = {"MaxResults": 20}
-            if cursor.next_token:
-                kwargs["NextToken"] = cursor.next_token
+            if cursor.token:
+                kwargs["NextToken"] = cursor.token
             try:
-                resp = with_retry(orgs.list_accounts, **kwargs)
+                resp = with_retry()(orgs.list_accounts)(**kwargs)
             except botocore.exceptions.ClientError as e:
                 if e.response["Error"]["Code"] == "AWSOrganizationsNotInUseException":
                     logger.warning(
@@ -149,16 +149,13 @@ class AWSDiscovery:
                         account_name=a["Name"],
                     )
                 )
-            cursor.next_token = resp.get("NextToken")
-            if not cursor.next_token:
-                break
+            cursor.advance(resp.get("NextToken"))
         return accounts
 
     def _get_enabled_regions(self, session: boto3.Session) -> list[str]:
         """Return all enabled regions, optionally filtered."""
         ec2 = session.client("ec2", region_name="us-east-1")
-        resp = with_retry(
-            ec2.describe_regions,
+        resp = with_retry()(ec2.describe_regions)(
             Filters=[{"Name": "opt-in-status", "Values": ["opt-in-not-required", "opted-in"]}],
         )
         regions = [r["RegionName"] for r in resp["Regions"]]
@@ -308,8 +305,7 @@ class AWSDiscovery:
 
     def _collect_igws(self, ec2, vpc_id: str) -> list[InternetGateway]:
         igws = []
-        resp = with_retry(
-            ec2.describe_internet_gateways,
+        resp = with_retry()(ec2.describe_internet_gateways)(
             Filters=[{"Name": "attachment.vpc-id", "Values": [vpc_id]}],
         )
         for igw in resp.get("InternetGateways", []):
@@ -509,7 +505,7 @@ class AWSDiscovery:
     def _collect_dx(self, dc, account_id: str, region: str) -> list[DirectConnectConnection]:
         connections = []
         try:
-            resp = with_retry(dc.describe_connections)
+            resp = with_retry()(dc.describe_connections)()
             for c in resp.get("connections", []):
                 connections.append(
                     DirectConnectConnection(
@@ -532,7 +528,7 @@ class AWSDiscovery:
     def _collect_vpn_gateways(self, ec2, account_id: str, region: str) -> list[VpnGateway]:
         vgws = []
         try:
-            resp = with_retry(ec2.describe_vpn_gateways)
+            resp = with_retry()(ec2.describe_vpn_gateways)()
             for v in resp.get("VpnGateways", []):
                 attachments = v.get("VpcAttachments", [])
                 vpc_id = attachments[0]["VpcId"] if attachments else None
@@ -774,7 +770,7 @@ class AWSDiscovery:
 
         # 1. Establish management account session
         self._mgmt_session = boto3.Session()
-        identity = with_retry(self._mgmt_session.client("sts").get_caller_identity)
+        identity = with_retry()(self._mgmt_session.client("sts").get_caller_identity)()
         mgmt_account_id = identity["Account"]
         logger.info("Management account: %s", mgmt_account_id)
 
