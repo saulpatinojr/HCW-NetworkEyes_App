@@ -90,7 +90,7 @@ variable "enable_scale_to_zero" {
 variable "api_target_port" {
   description = "Ingress target port for API container app"
   type        = number
-  default     = 80
+  default     = 8080
 }
 
 variable "web_target_port" {

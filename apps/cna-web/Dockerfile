@@ -1,5 +1,5 @@
 # ── Stage 1: deps ────────────────────────────────────────────────────────────
-FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS deps
+FROM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS deps
 WORKDIR /app
 
 # Install native build tools (needed by some optional Prisma packages).
@@ -9,7 +9,7 @@ COPY package.json package-lock.json* ./
 RUN npm ci --legacy-peer-deps
 
 # ── Stage 2: builder ─────────────────────────────────────────────────────────
-FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS builder
+FROM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS builder
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
@@ -31,10 +31,15 @@ RUN npm run build
 # Standalone image used exclusively to run `prisma migrate deploy` once per
 # deployment (via workflow 210). Keeping CLI deps out of the runtime image avoids
 # chasing Prisma's transitive dep tree (effect, fast-check, etc.) across upgrades.
-FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS migrator
+FROM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS migrator
 WORKDIR /app
 
 RUN apk add --no-cache libc6-compat
+
+# The bundled npm CLI is unused here (prisma is invoked directly via
+# node_modules/.bin) and periodically carries fixable CVEs in its own
+# vendored deps (tar, brace-expansion, undici) — strip it.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules ./node_modules
@@ -42,7 +47,7 @@ COPY --from=builder /app/node_modules ./node_modules
 CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && node prisma/seed-local-admin.js"]
 
 # ── Stage 4: runner ──────────────────────────────────────────────────────────
-FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS runner
+FROM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -53,6 +58,11 @@ ENV HOSTNAME="0.0.0.0"
 # Add a non-root user for Container Apps security best practices.
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
+
+# The bundled npm CLI is unused here (CMD invokes node directly) and
+# periodically carries fixable CVEs in its own vendored deps (tar,
+# brace-expansion, undici) — strip it.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 
 # Because outputFileTracingRoot is set to the repo root (two levels above the
 # app dir), Next.js mirrors the /app path inside .next/standalone — so the

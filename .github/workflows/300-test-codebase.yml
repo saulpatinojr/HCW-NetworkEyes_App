@@ -18,6 +18,13 @@ on:
     branches: [main, develop]
   workflow_dispatch:  # allow manual trigger for testing
 
+# A newer push to the same branch/PR makes the previous run's result moot —
+# cancel it instead of letting it finish and burn runner time. Group by PR
+# number when present so concurrent PRs don't cancel each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   pull-requests: read

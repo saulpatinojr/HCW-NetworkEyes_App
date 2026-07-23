@@ -29,7 +29,7 @@ resource "aws_ecs_task_definition" "api" {
   container_definitions = jsonencode([{
     name  = "cna-api"
     image = var.api_image
-    portMappings = [{ containerPort = 80, protocol = "tcp" }]
+    portMappings = [{ containerPort = 8080, protocol = "tcp" }]
 
     repositoryCredentials = var.dockerhub_username != "" ? {
       credentialsParameter = aws_secretsmanager_secret.dockerhub[0].arn
@@ -56,7 +56,7 @@ resource "aws_ecs_task_definition" "api" {
     }
 
     healthCheck = {
-      command     = ["CMD-SHELL", "curl -f http://localhost:80/health || exit 1"]
+      command     = ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
       interval    = 30
       timeout     = 5
       retries     = 3
@@ -81,7 +81,7 @@ resource "aws_ecs_service" "api" {
   load_balancer {
     target_group_arn = aws_lb_target_group.api.arn
     container_name   = "cna-api"
-    container_port   = 80
+    container_port   = 8080
   }
 
   depends_on = [aws_lb_listener.https]
@@ -165,7 +165,7 @@ resource "aws_ecs_task_definition" "web" {
       { name = "AUTH_TRUST_HOST", value = "true" },
       { name = "AZURE_AD_TENANT_ID", value = var.entra_tenant_id },
       { name = "AZURE_AD_CLIENT_ID", value = var.entra_client_id },
-      { name = "CNA_API_INTERNAL_URL", value = "http://${local.name_prefix}-api.${local.name_prefix}:80" },
+      { name = "CNA_API_INTERNAL_URL", value = "http://${local.name_prefix}-api.${local.name_prefix}:8080" },
       { name = "CNA_STORAGE_BUCKET", value = aws_s3_bucket.artifacts.id },
       { name = "AWS_REGION", value = var.aws_region },
       { name = "OPENAI_ENDPOINT", value = var.openai_endpoint },

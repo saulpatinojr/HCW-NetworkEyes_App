@@ -44,22 +44,6 @@ export function applyFilters(
   );
 }
 
-/** Sum a measure grouped by a single dimension. */
-export function groupBy(
-  records: StatMasterRecord[],
-  dimension: StatDimension,
-  measure: StatMeasure,
-): { key: string; value: number }[] {
-  const acc = new Map<string, number>();
-  for (const r of records) {
-    const key = String(r[dimension]);
-    acc.set(key, (acc.get(key) ?? 0) + (r[measure] ?? 0));
-  }
-  return [...acc.entries()]
-    .map(([key, value]) => ({ key, value }))
-    .sort((a, b) => b.value - a.value);
-}
-
 /** Distinct values of a dimension, sorted alphabetically. */
 export function distinctValues(
   records: StatMasterRecord[],
