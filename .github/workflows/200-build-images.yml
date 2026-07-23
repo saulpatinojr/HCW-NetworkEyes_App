@@ -78,6 +78,7 @@ jobs:
             type=sha,prefix=${{ matrix.sha_prefix }}
 
       - name: Build and push ${{ matrix.name }} image
+        id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
         with:
           context: .
@@ -90,11 +91,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Scout by digest, not by the mutable `:${{ matrix.raw_tag }}` tag: buildx
+      # --push never loads the image into the runner's local Docker daemon, and
+      # docker/scout-action can silently fall back to resolving a floating tag
+      # against a stale image the daemon already has cached locally (e.g. from a
+      # much older build), scanning the wrong content entirely.
       - name: Docker Scout — fail on fixable critical/high CVEs
         uses: docker/scout-action@2688993af7bafd6ba8c6a74ec652442be91dd82b  # v1.23.1
         with:
           command: cves
-          image: docker.io/${{ env.DOCKERHUB_NAMESPACE }}/cna:${{ matrix.raw_tag }}
+          image: docker.io/${{ env.DOCKERHUB_NAMESPACE }}/cna@${{ steps.build.outputs.digest }}
           only-severities: critical,high
           only-fixed: true
           exit-code: true
@@ -156,6 +162,7 @@ jobs:
           }
 
       - name: Build and push Web image
+        id: build_web
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
         with:
           context: apps/cna-web
@@ -169,16 +176,22 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Scout by digest, not by the mutable `:web-latest` tag — see comment on
+      # the CLI/API/Worker Scout step above for why: buildx --push never loads
+      # the image into the runner's local daemon, so a floating-tag reference
+      # can resolve against a stale locally-cached image instead of the one
+      # just pushed.
       - name: Docker Scout — fail on fixable critical/high CVEs (Web)
         uses: docker/scout-action@2688993af7bafd6ba8c6a74ec652442be91dd82b  # v1.23.1
         with:
           command: cves
-          image: docker.io/${{ env.DOCKERHUB_NAMESPACE }}/cna:web-latest
+          image: docker.io/${{ env.DOCKERHUB_NAMESPACE }}/cna@${{ steps.build_web.outputs.digest }}
           only-severities: critical,high
           only-fixed: true
           exit-code: true
 
       - name: Build and push Migrator image
+        id: build_migrator
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
         with:
           context: apps/cna-web
@@ -195,13 +208,19 @@ jobs:
         uses: docker/scout-action@2688993af7bafd6ba8c6a74ec652442be91dd82b  # v1.23.1
         with:
           command: cves
-          image: docker.io/${{ env.DOCKERHUB_NAMESPACE }}/cna:migrator-latest
+          image: docker.io/${{ env.DOCKERHUB_NAMESPACE }}/cna@${{ steps.build_migrator.outputs.digest }}
           only-severities: critical,high
           only-fixed: true
           exit-code: true
 
       - name: Smoke test — /api/health returns 200
+        env:
+          WEB_DIGEST: ${{ steps.build_web.outputs.digest }}
         run: |
+          # Run by digest, not the mutable `:web-latest` tag: `docker run` also
+          # prefers a stale locally-cached image over pulling the one just
+          # pushed (same issue as the Docker Scout steps above), which would
+          # smoke-test the wrong image entirely.
           docker run -d --name cna-web-smoke \
             -e DATABASE_URL="postgresql://test:test@localhost:5432/test?sslmode=disable" \
             -e NEXTAUTH_URL="http://localhost:3000" \
@@ -210,7 +229,7 @@ jobs:
             -e AZURE_AD_CLIENT_SECRET="ci-placeholder" \
             -e AZURE_AD_TENANT_ID="00000000-0000-0000-0000-000000000000" \
             -p 3000:3000 \
-            docker.io/${DOCKERHUB_NAMESPACE}/cna:web-latest
+            "docker.io/${DOCKERHUB_NAMESPACE}/cna@${WEB_DIGEST}"
           sleep 15
           # Always dump logs so we can diagnose crashes even on failure
           echo "--- container status ---"
