@@ -53,6 +53,9 @@ addopts = "-ra -q"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# .claude and .agents are vendored Claude Code agent/skill configuration,
+# not this repo's own source — they aren't held to project lint standards.
+extend-exclude = [".claude", ".agents"]
 
 [tool.ruff.lint]
 select = [
