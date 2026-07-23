@@ -30,9 +30,9 @@ file's checklist below and summarize findings in the PR description.
 
 ## Checklist
 
-- [ ] `ruff check` clean
-- [ ] `ruff format --check` clean
-- [ ] Type checking pass (if `ty`/mypy configured)
-- [ ] boto3/azure-mgmt-* usage reviewed for consistency
-- [ ] Coverage gaps reviewed against 80% threshold
-- [ ] Findings summarized in PR description
+- [x] `ruff check` clean — `ruff 0.15.21 check cna/` = "All checks passed" (baseline already clean; no ignores widened)
+- [x] `ruff format --check` clean — all 109 files already formatted
+- [x] Type checking pass (if `ty`/mypy configured) — N/A: neither `ty` nor mypy is wired in (not in dev deps, no `[tool.ty]`/`[tool.mypy]`). A meaningful run isn't possible in this env (managed Python execution-blocked, no deps installed). Recommendation in PR: add `ty` to dev deps + pre-commit.
+- [x] boto3/azure-mgmt-* usage reviewed for consistency — found + fixed a runtime-breaking `with_retry` contract bug in AWS discovery; remaining consistency gaps flagged in PR
+- [x] Coverage gaps reviewed against 80% threshold — discovery orchestrators (`run()` paths) are the least-tested/highest-risk; detailed in PR
+- [x] Findings summarized in PR description
