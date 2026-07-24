@@ -260,6 +260,31 @@ class AWSWAFWebACL(BaseModel):
     tags: dict = Field(default_factory=dict)
 
 
+class AWSSecurityFinding(BaseModel):
+    """A single AWS security-posture finding.
+
+    Cross-service analog of Azure's DefenderAssessment — normalizes findings from
+    Security Hub, GuardDuty, and Config into one actionable shape so the AWS path
+    reports security posture the same way the Azure path reports Defender
+    assessments. Observed state only (DD-002): no inferred severities.
+    """
+
+    finding_id: str
+    source: str = "SecurityHub"  # "SecurityHub" | "GuardDuty" | "Config"
+    title: str
+    description: str | None = None
+    remediation: str | None = None
+    status: str = "ACTIVE"  # normalized record/workflow state
+    severity: str = "MEDIUM"  # "INFORMATIONAL" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
+    resource_id: str | None = None
+    resource_type: str | None = None
+    category: str | None = None  # e.g. "Network Reachability" | "Software and Configuration"
+    region: str | None = None
+    account_id: str | None = None
+    types: list[str] = Field(default_factory=list)
+    first_observed_at: str | None = None
+
+
 class AWSRegionTopology(BaseModel):
     account_id: str
     region: str
@@ -270,6 +295,7 @@ class AWSRegionTopology(BaseModel):
     network_firewalls: list[NetworkFirewallPolicy] = Field(default_factory=list)
     aws_network_firewalls: list[AWSNetworkFirewall] = Field(default_factory=list)
     waf_web_acls: list[AWSWAFWebACL] = Field(default_factory=list)
+    security_findings: list[AWSSecurityFinding] = Field(default_factory=list)
     discovery_blocked: bool = False
     block_reason: str | None = None
 

@@ -1,7 +1,9 @@
-"""AWS network topology discovery.
+"""AWS network module — re-exports AWSDiscovery for Phase C compatibility.
 
-Phase C implementation.
-DD-006: Enumerates ALL active regions dynamically — no hardcoded region lists.
-DD-002: Stores observed state only — no assumptions or inferences.
+Mirrors cna.modules.network.discovery.azure_network, which re-exports
+AzureDiscovery. The network topology collection itself lives in aws_discovery.
 """
-# TODO: Phase C
+
+from cna.modules.network.discovery.aws_discovery import AWSDiscovery
+
+__all__ = ["AWSDiscovery"]
