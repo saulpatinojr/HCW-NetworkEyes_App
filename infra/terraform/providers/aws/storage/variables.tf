@@ -1,15 +1,5 @@
-# SCAFFOLD -- foundation only, no resources declared yet.
-#
-# Mirrors infra/terraform/providers/azure/storage/ in shape (same five
-# files, same name_prefix/tags contract) but intentionally holds no AWS
-# resources: AWS analog TBD (default direction: S3 with static website hosting + lifecycle policies, matching the Azure storage account 1:1 -- same four logical buckets/containers: raw-artifacts, normalized-artifacts, deliverables, static-site).
-#
-# Tracked in https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/issues/110
-# (AWS Terraform provider modules) -- service selection for this module is a
-# per-module follow-up issue, not decided here.
-
 variable "name_prefix" {
-  description = "Normalized name prefix for storage resources"
+  description = "Normalized name prefix for storage resources (e.g. cna-dev-use1)"
   type        = string
 }
 
@@ -18,4 +8,21 @@ variable "tags" {
   type        = map(string)
   default     = {}
   nullable    = false
+}
+
+variable "kms_key_arn" {
+  description = "ARN of the customer-managed KMS key (from the identity module) used for S3 server-side encryption."
+  type        = string
+}
+
+variable "raw_artifact_retention_days" {
+  description = "Days before raw-artifacts/ objects expire. Objects transition to STANDARD_IA after 30 days."
+  type        = number
+  default     = 365
+}
+
+variable "deliverable_retention_days" {
+  description = "Days before deliverables/ objects transition to STANDARD_IA. Deliverables are retained indefinitely (no expiration)."
+  type        = number
+  default     = 90
 }

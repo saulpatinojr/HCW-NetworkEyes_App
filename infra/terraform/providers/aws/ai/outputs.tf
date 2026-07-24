@@ -1,11 +1,14 @@
-# SCAFFOLD -- foundation only, no resources declared yet.
-#
-# Mirrors infra/terraform/providers/azure/ai/ in shape (same five
-# files, same name_prefix/tags contract) but intentionally holds no AWS
-# resources: AWS AI service TBD (default direction: Amazon Bedrock, per the wiki's Provider Selection Notes -- AWS AI = Bedrock).
-#
-# Tracked in https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/issues/110
-# (AWS Terraform provider modules) -- service selection for this module is a
-# per-module follow-up issue, not decided here.
+output "task_bedrock_policy_json" {
+  description = "IAM policy JSON granting bedrock:InvokeModel on the configured foundation models. Consumed by the identity module and attached to the ECS task role."
+  value       = data.aws_iam_policy_document.bedrock_invoke.json
+}
 
-# Outputs land here once main.tf declares resources to reference.
+output "guardrail_id" {
+  description = "Bedrock guardrail ID, or null when enable_guardrail is false."
+  value       = one(aws_bedrock_guardrail.this[*].guardrail_id)
+}
+
+output "guardrail_arn" {
+  description = "Bedrock guardrail ARN, or null when enable_guardrail is false."
+  value       = one(aws_bedrock_guardrail.this[*].guardrail_arn)
+}

@@ -1,21 +1,68 @@
-# SCAFFOLD -- foundation only, no resources declared yet.
-#
-# Mirrors infra/terraform/providers/azure/runtime/ in shape (same five
-# files, same name_prefix/tags contract) but intentionally holds no AWS
-# resources: thin post-creation wiring layer TBD -- mirrors Azure runtime's job of writing secret values and role assignments after identity/compute/database exist (e.g. writing DATABASE_URL into Secrets Manager, wiring the ECS task role to it).
-#
-# Tracked in https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/issues/110
-# (AWS Terraform provider modules) -- service selection for this module is a
-# per-module follow-up issue, not decided here.
-
 variable "name_prefix" {
-  description = "Normalized name prefix for runtime wiring resources"
+  description = "Normalized name prefix for runtime resources (e.g. cna-dev-use1). Also the secret namespace: ${name_prefix}/<secret>."
   type        = string
 }
 
 variable "tags" {
-  description = "Tags applied to runtime wiring resources"
+  description = "Tags applied to runtime resources"
   type        = map(string)
   default     = {}
   nullable    = false
+}
+
+variable "environment" {
+  description = "Deployment environment (dev or prod). Controls the secret recovery window (0 in dev, 30 in prod)."
+  type        = string
+}
+
+variable "db_endpoint" {
+  description = "RDS endpoint in host:port form (from the database module) used to build the DATABASE_URL connection string."
+  type        = string
+}
+
+variable "db_username" {
+  description = "Database master username used in the DATABASE_URL connection string."
+  type        = string
+}
+
+variable "db_password" {
+  description = "Database master password used in the DATABASE_URL connection string."
+  type        = string
+  sensitive   = true
+}
+
+variable "db_name" {
+  description = "Database name used in the DATABASE_URL connection string."
+  type        = string
+}
+
+variable "nextauth_secret" {
+  description = "Auth.js JWT signing secret."
+  type        = string
+  sensitive   = true
+}
+
+variable "entra_client_secret" {
+  description = "Entra ID OAuth client secret."
+  type        = string
+  sensitive   = true
+}
+
+variable "credential_encryption_key" {
+  description = "Base64-encoded AES-256 key for encrypting stored credentials."
+  type        = string
+  sensitive   = true
+}
+
+variable "dockerhub_username" {
+  description = "Docker Hub username for private image pulls. Empty string disables the Docker Hub secret."
+  type        = string
+  default     = ""
+}
+
+variable "dockerhub_token" {
+  description = "Docker Hub access token for private image pulls."
+  type        = string
+  sensitive   = true
+  default     = ""
 }

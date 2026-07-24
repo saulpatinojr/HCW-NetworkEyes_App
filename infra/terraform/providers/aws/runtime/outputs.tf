@@ -1,11 +1,49 @@
-# SCAFFOLD -- foundation only, no resources declared yet.
-#
-# Mirrors infra/terraform/providers/azure/runtime/ in shape (same five
-# files, same name_prefix/tags contract) but intentionally holds no AWS
-# resources: thin post-creation wiring layer TBD -- mirrors Azure runtime's job of writing secret values and role assignments after identity/compute/database exist (e.g. writing DATABASE_URL into Secrets Manager, wiring the ECS task role to it).
-#
-# Tracked in https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/issues/110
-# (AWS Terraform provider modules) -- service selection for this module is a
-# per-module follow-up issue, not decided here.
+output "database_url_secret_arn" {
+  description = "ARN of the DATABASE_URL secret."
+  value       = aws_secretsmanager_secret.database_url.arn
+}
 
-# Outputs land here once main.tf declares resources to reference.
+output "database_url_secret_name" {
+  description = "Name of the DATABASE_URL secret."
+  value       = aws_secretsmanager_secret.database_url.name
+}
+
+output "nextauth_secret_arn" {
+  description = "ARN of the Auth.js signing-secret secret."
+  value       = aws_secretsmanager_secret.nextauth_secret.arn
+}
+
+output "nextauth_secret_name" {
+  description = "Name of the Auth.js signing-secret secret."
+  value       = aws_secretsmanager_secret.nextauth_secret.name
+}
+
+output "entra_client_secret_arn" {
+  description = "ARN of the Entra ID client-secret secret."
+  value       = aws_secretsmanager_secret.entra_client_secret.arn
+}
+
+output "entra_client_secret_name" {
+  description = "Name of the Entra ID client-secret secret."
+  value       = aws_secretsmanager_secret.entra_client_secret.name
+}
+
+output "credential_encryption_key_secret_arn" {
+  description = "ARN of the credential-encryption-key secret."
+  value       = aws_secretsmanager_secret.credential_encryption_key.arn
+}
+
+output "credential_encryption_key_secret_name" {
+  description = "Name of the credential-encryption-key secret."
+  value       = aws_secretsmanager_secret.credential_encryption_key.name
+}
+
+output "dockerhub_secret_arn" {
+  description = "ARN of the Docker Hub credentials secret, or null when Docker Hub is not configured."
+  value       = one(aws_secretsmanager_secret.dockerhub[*].arn)
+}
+
+output "dockerhub_secret_name" {
+  description = "Name of the Docker Hub credentials secret, or null when Docker Hub is not configured."
+  value       = one(aws_secretsmanager_secret.dockerhub[*].name)
+}

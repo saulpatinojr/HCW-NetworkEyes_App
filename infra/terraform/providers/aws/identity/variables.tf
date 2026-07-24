@@ -1,15 +1,5 @@
-# SCAFFOLD -- foundation only, no resources declared yet.
-#
-# Mirrors infra/terraform/providers/azure/identity/ in shape (same five
-# files, same name_prefix/tags contract) but intentionally holds no AWS
-# resources: AWS analog TBD (default direction: Secrets Manager for Key Vault's role, IAM roles/policies for managed identity -- see Development-Provider-Selection-Notes.md).
-#
-# Tracked in https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/issues/110
-# (AWS Terraform provider modules) -- service selection for this module is a
-# per-module follow-up issue, not decided here.
-
 variable "name_prefix" {
-  description = "Normalized name prefix for identity resources"
+  description = "Normalized name prefix for identity resources (e.g. cna-dev-use1)"
   type        = string
 }
 
@@ -18,4 +8,43 @@ variable "tags" {
   type        = map(string)
   default     = {}
   nullable    = false
+}
+
+variable "environment" {
+  description = "Deployment environment (dev or prod)"
+  type        = string
+}
+
+variable "project_name" {
+  description = "Project name used for tag-scoped deploy permissions (matches the Project default tag)"
+  type        = string
+}
+
+variable "kms_deletion_window_days" {
+  description = "Waiting period, in days, before the customer-managed KMS key is deleted after destroy (7-30)."
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.kms_deletion_window_days >= 7 && var.kms_deletion_window_days <= 30
+    error_message = "kms_deletion_window_days must be between 7 and 30."
+  }
+}
+
+variable "github_owner" {
+  description = "GitHub organization or user that owns the repository allowed to assume the deploy role via OIDC."
+  type        = string
+  default     = "<GITHUB_OWNER_PLACEHOLDER>"
+}
+
+variable "github_repository" {
+  description = "GitHub repository name (without owner) allowed to assume the deploy role via OIDC."
+  type        = string
+  default     = "<GITHUB_REPO_PLACEHOLDER>"
+}
+
+variable "task_bedrock_policy_json" {
+  description = "Optional IAM policy JSON (produced by the ai module) granting the ECS task role Bedrock InvokeModel access. When null, no Bedrock policy is attached to the task role."
+  type        = string
+  default     = null
 }

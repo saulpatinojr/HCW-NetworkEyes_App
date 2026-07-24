@@ -1,11 +1,29 @@
-# SCAFFOLD -- foundation only, no resources declared yet.
-#
-# Mirrors infra/terraform/providers/azure/database/ in shape (same five
-# files, same name_prefix/tags contract) but intentionally holds no AWS
-# resources: engine TBD (default direction: RDS for PostgreSQL, matching Azure's Postgres Flexible Server 1:1 so the existing Prisma schema needs no changes).
-#
-# Tracked in https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/issues/110
-# (AWS Terraform provider modules) -- service selection for this module is a
-# per-module follow-up issue, not decided here.
+output "instance_id" {
+  description = "RDS instance identifier."
+  value       = aws_db_instance.this.id
+}
 
-# Outputs land here once main.tf declares resources to reference.
+output "instance_arn" {
+  description = "RDS instance ARN."
+  value       = aws_db_instance.this.arn
+}
+
+output "address" {
+  description = "RDS instance hostname (no port). Passed to runtime for the DATABASE_URL secret."
+  value       = aws_db_instance.this.address
+}
+
+output "endpoint" {
+  description = "RDS connection endpoint in host:port form."
+  value       = aws_db_instance.this.endpoint
+}
+
+output "port" {
+  description = "RDS listening port."
+  value       = aws_db_instance.this.port
+}
+
+output "db_name" {
+  description = "Initial database name."
+  value       = aws_db_instance.this.db_name
+}

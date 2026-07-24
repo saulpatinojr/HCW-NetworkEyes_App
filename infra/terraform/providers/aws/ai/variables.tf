@@ -1,15 +1,5 @@
-# SCAFFOLD -- foundation only, no resources declared yet.
-#
-# Mirrors infra/terraform/providers/azure/ai/ in shape (same five
-# files, same name_prefix/tags contract) but intentionally holds no AWS
-# resources: AWS AI service TBD (default direction: Amazon Bedrock, per the wiki's Provider Selection Notes -- AWS AI = Bedrock).
-#
-# Tracked in https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/issues/110
-# (AWS Terraform provider modules) -- service selection for this module is a
-# per-module follow-up issue, not decided here.
-
 variable "name_prefix" {
-  description = "Normalized name prefix for AI resources"
+  description = "Normalized name prefix for AI resources (e.g. cna-dev-use1)"
   type        = string
 }
 
@@ -18,4 +8,17 @@ variable "tags" {
   type        = map(string)
   default     = {}
   nullable    = false
+}
+
+variable "model_ids" {
+  description = "Bedrock foundation model IDs the task role may invoke. NOTE: model access must be enabled manually in the Bedrock console per region/account before invocation succeeds."
+  type        = list(string)
+  default     = ["anthropic.claude-3-5-sonnet-20240620-v1:0"]
+  nullable    = false
+}
+
+variable "enable_guardrail" {
+  description = "Create a Bedrock guardrail. Left off by default; the platform may keep using external OpenAI, in which case only the IAM policy document is consumed."
+  type        = bool
+  default     = false
 }

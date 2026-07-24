@@ -38,7 +38,7 @@ backed by PostgreSQL and authenticated via Microsoft Entra ID.
 | Repository hygiene | ✅ Clean | No open GitHub PRs; #113 resolved-by-decision (keep the `hub` approval-gate indirection); #110 foundation scaffolded as of 2026-07-23 |
 | Azure Terraform hardening | ✅ Merged | AVM + Microsoft Learn review pass: RBAC-propagation fixes, Postgres HA, provider version pinning |
 | Azure deployment | ⏳ Beta validation pending | Live workflow execution and customer-like validation remain |
-| AWS Terraform | 🏗️ Foundation scaffolded | Tracked in [#110](https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/issues/110) — `infra/terraform/providers/aws/` (8 modules) and `infra/terraform/environments/aws/` exist and `terraform validate` clean, but declare no resources yet; service selection (ECS vs Lambda, RDS vs Aurora, etc.) is tracked per-module. Discovery engine (`cna/modules/`) already supports AWS |
+| AWS Terraform | 🏗️ Resources authored, not yet deployed | Tracked in [#110](https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/issues/110) — `infra/terraform/providers/aws/` (8 modules) and `infra/terraform/environments/aws/{dev,prod}/{platform,workload}/` now declare real resources (ECS Fargate, ALB, RDS PostgreSQL, S3, Secrets Manager, CloudFront+WAF, IAM/OIDC, KMS, CloudWatch), mirroring the Azure module boundaries. Code-generation only — not yet applied; human AWS account/IAM/OIDC/backend setup is required first (see [`AWS_SETUP_TODO.md`](AWS_SETUP_TODO.md)). Discovery engine (`cna/modules/`) already supports AWS |
 
 ---
 
@@ -114,7 +114,7 @@ cna/
 └── diagram_engine/   Draw.io generator, future-state model
 infra/terraform/
 ├── environments/azure/{dev,prod}/{platform,workload}/  Azure env composition (deployable)
-├── environments/aws/{dev,prod}/{platform,workload}/    AWS env composition (scaffold, no resources — #110)
+├── environments/aws/{dev,prod}/{platform,workload}/    AWS env composition (resources authored, pending deploy — #110)
 ├── providers/azure/          Reusable modules: ai, compute, database, identity,
 │                             security, storage, runtime, observability (deployable)
 └── providers/aws/            Same 8 module boundaries, mirrored (scaffold, no resources — #110)

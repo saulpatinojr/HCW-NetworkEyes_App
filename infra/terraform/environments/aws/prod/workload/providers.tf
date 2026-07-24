@@ -21,6 +21,21 @@ terraform {
 
 provider "aws" {
   region = var.region
+
+  default_tags {
+    tags = local.tags
+  }
+}
+
+# CloudFront-scoped WAF must be created in us-east-1. Passed to the security
+# module as providers = { aws.us_east_1 = aws.us_east_1 }.
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+
+  default_tags {
+    tags = local.tags
+  }
 }
 
 provider "github" {
