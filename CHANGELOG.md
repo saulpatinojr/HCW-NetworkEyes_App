@@ -10,7 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Added Architecture Decision Records under `docs/adr/` (0001–0005) covering the Anthropic removal, smoke-test removal, Entra redirect-URI ownership, Key Vault network hardening target, and the container image-pull strategy.
+- Added Architecture Decision Records ADR-0001 through ADR-0005 to the GitHub Wiki, covering the Anthropic removal, smoke-test removal, Entra redirect-URI ownership, Key Vault network hardening target, and the container image-pull strategy.
+- Added `REVIEW.md` — the repository-wide record of blockers that require a human decision, approval, or access grant, with an owner and a required action for each.
+- Added `TODO.md` — the authoritative engineering work queue, phased and dependency-ordered for engineer handoff.
+- Added AWS Terraform under `infra/terraform/providers/aws/` (eight modules mirroring the Azure module boundaries) and `infra/terraform/environments/aws/{dev,prod}/{platform,workload}/`, declaring ECS Fargate, ALB, RDS PostgreSQL, S3, Secrets Manager, CloudFront + WAFv2, IAM/OIDC, KMS, CloudWatch, X-Ray tracing, Bedrock inference profiles, nine VPC endpoints, and Application Auto Scaling with scale-to-zero. Code generation only — nothing has been applied.
 - Made the Foundry/AIServices account region configurable via a `foundry_location` workload variable (default `eastus2`) instead of a hardcoded literal.
 - Wired live MCP endpoint defaults for Azure and AWS recommendation enrichment through Terraform variables, `.env.example`, and the existing GitHub variable bootstrap flow.
 - Added streamable HTTP JSON-RPC tool-call support for the Azure and AWS MCP clients while preserving offline recommendation fallback when endpoints are unavailable.
@@ -28,16 +31,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `.reports/` to `.gitignore` — the bootstrap script's one-time plaintext local-admin password report was writing to a path that wasn't excluded from version control.
 
 ### Changed
-- Consolidated the active task list into this changelog and deployment workflow validation. Live Azure prerequisite, image build, deploy, runtime, teardown, beta acceptance, and cost/footprint checks are now validated through the numbered GitHub Actions workflows and deployment evidence rather than a local TODO file.
+- Moved live Azure prerequisite, image build, deploy, runtime, teardown, beta acceptance, and cost/footprint validation onto the numbered GitHub Actions workflows and their deployment evidence artifacts, rather than a hand-maintained checklist.
 - Aligned MCP configuration defaults on `https://mcp.azure.com`, `https://aws-mcp.us-east-1.api.aws/mcp`, and `streamable-http` transport.
 - Signed off on the narrowed Front Door WAF `/auth/*` exclusion policy ([#111](https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/issues/111)) and the break-glass local admin login ([#112](https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/issues/112)); `frontdoor_waf_mode` now defaults to `Prevention` in both dev and prod (previously `Detection`, pending review).
 - Renamed `scripts/cleanup-stale-ai-resources.ps1` to `scripts/Remove-CnaStaleAiResources.ps1` to follow PowerShell's Verb-Noun naming convention, matching `scripts/Initialize-CnaGitHubSecrets.ps1`.
+- Completed the Python code review that gated issue #110 (#140): `ruff check` and `ruff format --check` are clean across `cna/` with no ignore-list widening, boto3 and azure-mgmt client usage was reviewed for consistency across the AWS and Azure discovery paths, and coverage was assessed against the 80% threshold. A runtime-breaking `with_retry` contract bug in the AWS discovery path was found and fixed; the remaining consistency, typing, and coverage gaps were recorded as engineering work.
+- Completed the dead and stale code sweep that gated issue #110 (#139): four verified-dead items were removed from `apps/cna-web/` (221 lines), `cna/` and `infra/` were surveyed without further deletions, and no `TODO`/`FIXME` comment was found referencing a closed issue.
+- Consolidated repository documentation onto four authoritative documents — `README.md` (repository purpose), `CHANGELOG.md` (completed work), `REVIEW.md` (human-resolvable blockers), and `TODO.md` (engineering work queue) — with the GitHub Wiki as the destination for all long-form documentation. `README.md` was reduced to purpose, quick start, configuration, and navigation; `AWS_SETUP_TODO.md` and `REVIEW_TASK.md` were absorbed into `REVIEW.md`, `TODO.md`, and this changelog and removed.
 
 ### Removed
-- Removed the Anthropic / Foundry-Claude inference path end-to-end (#100): the `foundry-claude` engine and its wire format in `apps/cna-web/lib/ai-engine.ts` and `cna/ai_engine/chat_agent.py`, the `foundry_claude_*` Terraform variables/outputs and `FOUNDRY_CLAUDE_*` container env vars (dev + prod), and the `FOUNDRY_CLAUDE_*` references in `.env.example`, the bootstrap script, and the drift/sync workflows. Azure OpenAI (`gpt-chat-latest`) is now the only supported engine. See `docs/adr/0001`.
-- Removed the Foundry private-access smoke test (#98/#99): `scripts/ci/validate_foundry_private_access.sh`, its `211-deploy-azure-split.yml` step, and the associated evidence wiring. See `docs/adr/0002`.
-- Removed the deploy-time "Sync Entra app web URLs" step (#101); the NextAuth redirect URI is owned by the Graph-capable bootstrap script on the application object, keeping the deploy identity least-privilege. See `docs/adr/0003`.
-- Removed `TODO.md` after migrating completed work and deployment-gated follow-up context into the changelog.
+- Removed the Anthropic / Foundry-Claude inference path end-to-end (#100): the `foundry-claude` engine and its wire format in `apps/cna-web/lib/ai-engine.ts` and `cna/ai_engine/chat_agent.py`, the `foundry_claude_*` Terraform variables/outputs and `FOUNDRY_CLAUDE_*` container env vars (dev + prod), and the `FOUNDRY_CLAUDE_*` references in `.env.example`, the bootstrap script, and the drift/sync workflows. Azure OpenAI (`gpt-chat-latest`) is now the only supported engine. See ADR-0001 in the GitHub Wiki.
+- Removed the Foundry private-access smoke test (#98/#99): `scripts/ci/validate_foundry_private_access.sh`, its `211-deploy-azure-split.yml` step, and the associated evidence wiring. See ADR-0002 in the GitHub Wiki.
+- Removed the deploy-time "Sync Entra app web URLs" step (#101); the NextAuth redirect URI is owned by the Graph-capable bootstrap script on the application object, keeping the deploy identity least-privilege. See ADR-0003 in the GitHub Wiki.
+- Removed `AWS_SETUP_TODO.md` and `REVIEW_TASK.md` from the repository root after migrating their content into `REVIEW.md`, `TODO.md`, and this changelog.
 
 ---
 

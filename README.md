@@ -4,131 +4,64 @@
 [![Release](https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/actions/workflows/310-release-version.yml/badge.svg)](https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/actions/workflows/310-release-version.yml)
 
 A CNA-branded, multi-user web platform for cloud network assessments across AWS and Azure.
-Analysts run network discoveries, AI-powered analysis, and generate presentation-ready deliverables
-including an encyclopedia-grade network report. Clients receive deliverables through a
-time-limited authenticated portal. Deployed as three Azure Container Apps behind Azure Front Door,
-backed by PostgreSQL and authenticated via Microsoft Entra ID.
-
-> **Current status — 0.8 beta, June 2026:** Code, Terraform, workflows, ADFs, changelog, and GitHub Wiki are aligned on `main`. The remaining beta gate is live Azure execution through the numbered GitHub Actions workflows: prerequisite validation, dev deploy, Entra redirect update, runtime validation, and customer-like beta acceptance.
+Analysts run network discoveries, AI-powered analysis, and generate presentation-ready
+deliverables including an encyclopedia-grade network report. Clients receive deliverables through
+a time-limited authenticated portal. The platform deploys as three containerized services behind a
+managed edge, backed by PostgreSQL and authenticated via Microsoft Entra ID.
 
 ---
 
-## Platform Status
+## Documentation map
 
-| Area | Status | Notes |
-|---|---|---|
-| Platform foundation + CLI | ✅ Beta-ready | Python `cna` package |
-| Azure discovery engine | ✅ Beta-ready | VNet, peerings, gateways, firewall, NSG, UDR, flow logs |
-| AWS discovery stubs | ✅ Beta-ready | VPC, TGW, security groups |
-| AI analysis engine | ✅ Beta-ready | Azure OpenAI (gpt-chat-latest) via managed identity, Terraform-managed |
-| Web platform (Next.js) | ✅ Beta-ready | Entra ID auth, engagement workflow |
-| CNA visual system | ✅ Merged | Navy/teal palette, Aeonik font, SVG brand assets |
-| East-West / North-South taxonomy | ✅ Merged | `traffic_direction` on all findings |
-| FinOps signals (AZ-COST-001–005) | ✅ Merged | Orphaned PIPs, idle gateways, oversized SKUs, NAT/FW waste |
-| BC/DR signals (AZ-BCDR-001–005) | ✅ Merged | Zone redundancy, active-active, single-gateway gaps |
-| Topology classifier | ✅ Merged | mesh / hub_spoke / vwan / isolated |
-| Future-state Draw.io | ✅ Merged | Recommended topology diff, dashed bright-teal new resources |
-| Stat Masters pivot layer | ✅ Merged | PowerBI-style aggregation, TanStack pivot grid |
-| Encyclopedia report | ✅ Merged | 6-chapter, Condensed + Expanded editions, WeasyPrint PDF |
-| Grounded copilot chat | ✅ Merged | Azure Foundry, stat-master context, citation chips |
-| Frontend UX journey (8 steps) | ✅ Merged | Traffic, FinOps, Resilience, Discovery, Book Mode pages |
-| CAF naming convention | ✅ Merged | `cna-[env]-[region_short]`, single workload RG per env |
-| Teardown workflow (220) | ✅ Merged | `DESTROY`-gated, optional state wipe |
-| CI — lint/test | ✅ Passing | ruff, pytest 3.13 + 3.14, Docker build smoke |
-| Repository hygiene | ✅ Clean | No open GitHub PRs; #113 resolved-by-decision (keep the `hub` approval-gate indirection); #110 foundation scaffolded as of 2026-07-23 |
-| Azure Terraform hardening | ✅ Merged | AVM + Microsoft Learn review pass: RBAC-propagation fixes, Postgres HA, provider version pinning |
-| Azure deployment | ⏳ Beta validation pending | Live workflow execution and customer-like validation remain |
-| AWS Terraform | 🏗️ Resources authored, not yet deployed | Tracked in [#110](https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/issues/110) — `infra/terraform/providers/aws/` (8 modules) and `infra/terraform/environments/aws/{dev,prod}/{platform,workload}/` now declare real resources (ECS Fargate, ALB, RDS PostgreSQL, S3, Secrets Manager, CloudFront+WAF, IAM/OIDC, KMS, CloudWatch), mirroring the Azure module boundaries. Full parity with Azure achieved: X-Ray distributed tracing, Bedrock inference profiles, Auth.js WAF exclusions, VPC endpoints (S3/DynamoDB Gateway + Secrets Manager/Logs/ECR/Bedrock/STS/X-Ray Interface), and Application Auto Scaling with scale-to-zero. Code-generation only — not yet applied; human AWS account/IAM/OIDC/backend setup is required first (see [`AWS_SETUP_TODO.md`](AWS_SETUP_TODO.md)). Discovery engine (`cna/modules/`) already supports AWS |
+This repository keeps exactly four documents. Everything else lives in the
+[GitHub Wiki](https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/wiki).
+
+| Document | Contains |
+|---|---|
+| `README.md` (this file) | Repository purpose, quick start, configuration, navigation |
+| [`CHANGELOG.md`](CHANGELOG.md) | Completed work, by release |
+| [`REVIEW.md`](REVIEW.md) | Blockers that require a human decision, approval, or access grant |
+| [`TODO.md`](TODO.md) | The engineering work queue — every actionable item, phased |
+| [GitHub Wiki](https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/wiki) | Architecture, ADRs, runbooks, workflow reference, security posture, deployment guides |
+
+If you are picking up work on this repository, start with `TODO.md`. If you are waiting on
+someone, check `REVIEW.md`.
 
 ---
 
-## Architecture
-
-### Container topology
-
-```
-                    ┌──────────────────────────────────────────┐
-                    │          Azure Front Door Premium         │
-                    │    WAF · CDN · TLS · Custom Domain (opt.) │
-                    └─────────────────────┬────────────────────┘
-                                          │ HTTPS
-                    ┌─────────────────────▼────────────────────┐
-                    │        cna-[env]-[region]-ca-web          │
-                    │        Next.js 19 / React 19              │
-                    │  • Entra ID login (NextAuth v5)           │
-                    │  • 8-step engagement journey              │
-                    │  • Book Mode encyclopedia report          │
-                    │  • Copilot chat panel (grounded)          │
-                    └───────────┬──────────────────┬───────────┘
-                                │ internal         │ Prisma ORM
-              ┌─────────────────▼────────┐  ┌──────▼─────────────────┐
-              │  cna-[env]-[region]-ca-api │  │  cna-[env]-[region]-psql │
-              │  FastAPI — internal only  │  │  PostgreSQL Flexible    │
-              │  /metrics  /chat  /reports│  │  VNet-delegated         │
-              └─────────────────┬─────────┘  └────────────────────────┘
-                                │
-              ┌─────────────────▼────────┐
-              │  cna-[env]-[region]-ca-worker       │
-              │  Python background worker │
-              │  Discovery · AI analysis  │
-              │  Report generation (PDF)  │
-              └──────────────────────────┘
-```
-
-### Resource group layout (single RG per environment)
-
-All resources — including AI Foundry (deployed to `eastus2`) — share one resource group:
-
-```
-rg-cna-dev-scus
-├── cna-dev-scus-vnet               Virtual network
-├── cna-dev-scus-cae                Container Apps Environment
-├── cna-dev-scus-ca-api             Container App (API)
-├── cna-dev-scus-ca-worker          Container App (worker)
-├── cna-dev-scus-ca-web             Container App (web)
-├── cna-dev-scus-psql               PostgreSQL Flexible Server
-├── cna-dev-scus-kv                 Key Vault
-├── cna-dev-scus-id                 Managed Identity
-├── cnadevscusst                    Storage Account
-├── cna-dev-scus-afd                Front Door profile
-├── cnadevscusfdfp                  Front Door WAF policy
-├── cna-dev-scus-nsg                Network Security Group
-├── cna-dev-scus-log                Log Analytics workspace
-├── cna-dev-scus-appi               Application Insights
-├── cna-dev-eus2-aif                AI Foundry account
-└── cna-dev-eus2-aif-proj           AI Foundry project
-```
-
-### Repository layout
+## Repository layout
 
 ```
 apps/
-├── cna-web/          Next.js 19 web platform (8-step journey, encyclopedia, copilot)
+├── cna-web/          Next.js web platform (8-step journey, encyclopedia, copilot)
 ├── cna-api/          FastAPI — metrics, chat, reports, discovery routers
 └── cna-worker/       Python background worker — discovery + report generation
-cna/
+cna/                  Python package, installed as the `cna` CLI
 ├── core/             topology_schema · findings_schema · stat_masters · engagement
 ├── modules/          AWS + Azure discovery, FinOps signals, BC/DR signals, topology classifier
-├── ai_engine/        Analysis engine, recommendation engine, chat agent (Foundry)
+├── ai_engine/        Analysis engine, recommendation engine, chat agent
 ├── report_engine/    Encyclopedia renderer, WeasyPrint PDF, radar chart SVG
-└── diagram_engine/   Draw.io generator, future-state model
+├── diagram_engine/   Draw.io generator, future-state model
+├── delivery_portal/  Client deliverable delivery
+└── cli/              Command-line entry point
 infra/terraform/
-├── environments/azure/{dev,prod}/{platform,workload}/  Azure env composition (deployable)
-├── environments/aws/{dev,prod}/{platform,workload}/    AWS env composition (resources authored, pending deploy — #110)
-├── providers/azure/          Reusable modules: ai, compute, database, identity,
-│                             security, storage, runtime, observability (deployable)
-└── providers/aws/            Same 8 module boundaries, mirrored (scaffold, no resources — #110)
-.github/workflows/            000–320 banded workflow sequence
-GitHub Wiki                   All documentation, runbooks, blogs, and ADRs live in https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/wiki (no in-repo docs/ directory)
-CHANGELOG.md                  Release history and deployment-gated follow-up context
-scripts/                      bootstrap, validation, cleanup, and CI helper scripts
+├── environments/azure/{dev,prod}/{platform,workload}/   Azure environment composition
+├── environments/aws/{dev,prod}/{platform,workload}/     AWS environment composition
+├── providers/azure/   Reusable modules: ai, compute, database, identity,
+│                      security, storage, runtime, observability
+└── providers/aws/     The same eight module boundaries, mirrored
+migrate/              Superseded standalone AWS Terraform root — see TODO.md → T-401
+scripts/              Bootstrap, validation, cleanup, and CI helper scripts
+tests/                unit/ and integration/
+.github/workflows/    Numbered workflow sequence (see conventions below)
+.claude/ .agents/ .codex/   Vendored agent configuration — not project source
 ```
 
 ---
 
 ## Quick start
 
-### Local development (web)
+### Web platform, locally
 
 ```bash
 cd apps/cna-web
@@ -139,109 +72,71 @@ npm run db:migrate
 npm run dev          # http://localhost:3000
 ```
 
-### Local development (Python CLI)
+Other useful scripts: `npm run build`, `npm run lint`, `npm run db:studio`, `npm run db:generate`.
+
+### Python CLI, locally
+
+Requires Python 3.11 or newer.
 
 ```bash
 pip install -e .[dev]
 pre-commit install
 cp .env.example .env
+cna --help
 ```
 
-### Clean deployment (first time or after teardown)
+Lint and test the Python package with `ruff check cna/`, `ruff format --check`, and `pytest`.
 
-```
-1. Run `.\scripts\Initialize-CnaGitHubSecrets.ps1` — seed GitHub secrets/variables, create the workload RG using the standard naming convention, prepare tfstate backend resources, and dispatch workflow 000 bootstrap
-   → The script creates the `CNA Assessment Tool` GitHub App and captures its generated private key; if that app name already exists, delete the existing app before rerunning the bootstrap
-   → For Docker Hub, the script asks for `DOCKERHUB_NAMESPACE` and an organization access token saved as `DOCKERHUB_TOKEN`; the namespace is the Docker login identity
-2. Let workflow 000 complete — initialize Terraform remote state and import the existing workload RG into state (one-time per environment)
-3. Run workflow 100 — validate all secrets, variables, Azure OIDC
-4. Push to main   — workflow 200 auto-builds the CLI plus all three app container images
-5. Run workflow 211 (environment: dev) — Terraform apply (~20 min)
-   → Copy Front Door hostname from outputs
-   → Workflow 211 now updates `CNA_NEXTAUTH_URL`, `KEY_VAULT_NAME`, and `APPLICATION_INSIGHTS_NAME`
-   → Workflow 211 also syncs the Entra app home page URL and redirect URI to the Front Door hostname
-   → Re-run 211 to apply updated NextAuth URL
-6. Navigate to https://<frontdoor-hostname> — sign in with Entra ID
-```
+### Deploying an environment
 
-To wipe an environment and redeploy clean:
+Deployment runs through the numbered GitHub Actions workflows, in band order: bootstrap the
+Terraform backend, validate prerequisites, build images, then deploy. The full step-by-step
+procedure — including the Entra redirect-URI sync and the teardown sequence — is in the Wiki's
+**Deployment Guide**.
 
-```
-1. Run workflow 330 — type DESTROY to confirm teardown
-2. Leave `delete_drifted_resources=false` on the first run and review the cleanup preview
-3. Re-run workflow 330 with `delete_drifted_resources=true` only after confirming the preview lists only CNA-owned targets
-4. Keep `destroy_tfstate_backend=false` unless intentionally resetting Terraform state
-5. Follow deployment steps above
-```
+Azure is the deployable path today. The AWS Terraform is authored but has never been applied; its
+prerequisites are tracked in [`REVIEW.md`](REVIEW.md) and its remaining work in
+[`TODO.md`](TODO.md).
 
 ---
 
-## CI/CD workflows
+## Configuration
 
-| File | Trigger | Purpose |
-|---|---|---|
-| `000-bootstrap-backend.yml` | Manual (one-time per environment) | Creates workload RG, provisions tfstate backend in a separate convention-based RG, imports app RG into state |
-| `100-validate-prereqs.yml` | Manual | Validates all secrets, variables, OIDC |
-| `200-build-images.yml` | Push to `main` | Builds + pushes cna, cna-api, cna-worker, cna-web, and cna-migrator to Docker Hub |
-| `211-deploy-azure-split.yml` | Manual + nightly | Terraform plan → apply → migrate → health verification |
-| `212-deploy-aws-split.yml` | Manual | **Scaffold, not functional** — mirrors 211's input contract and job shape; each job fails fast pointing to [#110](https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/issues/110) until the AWS provider modules have real resources |
-| `220-fast-redeploy.yml` | Manual | Fast image update via `az containerapp update` — no Terraform apply, ~2 min vs ~10+ min for a full deploy |
-| `300-test-codebase.yml` | Push/PR to `main` | Secret scan → ruff lint → pytest → Docker smoke |
-| `310-release-version.yml` | `git tag v*.*.*` | Tags Docker Hub CLI image + creates GitHub Release |
-| `320-publish-portal.yml` | Manual | Delivers reports to client portals from the CLI image, with artifact-backed engagement content and Azure/AWS storage support |
-| `330-teardown.yml` | Manual (`DESTROY`) | Full environment teardown with safety gate |
-| `340-sync-keys.yml` | Manual | Pulls Key Vault secrets → `.env` artifact |
-| `350-drift-dev.yml` | Nightly + manual | Terraform drift detection against dev |
-| `360-drift-prod.yml` | Manual | Terraform drift detection against prod |
+Configuration comes from three places, in this order of authority:
+
+1. **GitHub Secrets and Variables** — the source of truth for deployments. Cloud credentials use
+   OIDC; there are no long-lived keys.
+2. **Azure Key Vault** — runtime secrets for a deployed environment. Workflow `340-sync-keys.yml`
+   can pull them into a short-lived `.env` artifact.
+3. **`.env` / `.env.local`** — local development only, never committed.
+
+`.env.example` at the repository root is the complete inventory: every GitHub secret, every GitHub
+variable, and every local environment variable, each with a one-line description.
+`apps/cna-web/.env.example` covers the web application specifically. The Wiki's **Secrets
+Reference** explains each value in full.
 
 ---
 
-## Design contracts (enforced in code)
+## Repository conventions
 
-| DD | Contract | Enforced in |
-|---|---|---|
-| DD-002 | `observed_state` = discovered fact only | `ObservedStateEnforcer` |
-| DD-003 | Findings and recommendations are separate paths | `AnalysisEngine` vs `RecommendationEngine` |
-| DD-008 | AI engine reads from store only | `AnalysisEngine` |
-| DD-009 | `review_complete=True` required before PDF render | `RenderPipeline._enforce_review_gate()` |
-| DD-013 | Deliverable staleness via SHA-256 checksum | `DeliverableManifest` |
-| DD-019 | 90-day retention enforced | `RetentionEngine.check()` |
-
----
-
-## Security
-
-- All GitHub Actions pinned to SHA digest
-- `gitleaks` + `detect-secrets` on every commit and CI push
-- Containers run as non-root (uid 1001)
-- OIDC for all CI/CD cloud credentials — no long-lived keys
-- Azure release gated by direct Azure Monitor + App Insights evidence
-- Encyclopedia/branded reports flagged `[REVIEW REQUIRED]` before client delivery
-- Cost estimates in FinOps findings flagged `[VERIFY]` for analyst review
-- Terraform hardened per an AVM + Microsoft Learn review pass (2026-07-01): managed-identity Key Vault RBAC grants are propagation-gated, Key Vault purge protection defaults to `true`, Postgres Flexible Server supports zone-redundant HA (enabled in prod), and the Front Door WAF's auth-path exception was narrowed from a blanket bypass to field-specific exclusions, signed off in [#111](https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/issues/111) — the policy now runs in `Prevention` mode in both dev and prod
-- Break-glass local admin login (`/local-admin`, isolated from Entra ID SSO) reviewed and hardened before first live use ([#112](https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/issues/112)): rate limiting keys off Front Door's `X-Azure-ClientIP` (non-spoofable) rather than the client-supplied `X-Forwarded-For`, and the bootstrap script's one-time plaintext password report is `.gitignore`d
-
----
-
-## Backlog
-
-- **AWS Terraform** — [#110](https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/issues/110): AWS Terraform is now at **full architectural parity** with the Azure stack. All 8 provider modules (`infra/terraform/providers/aws/`) declare real resources mirroring Azure's module boundaries, plus:
-  - **Observability**: X-Ray distributed tracing (daemon sidecar, sampling rules), CloudWatch metric filters (errors, latency), Contributor Insights, and expanded alarms (error rates, p99 latency, RDS connections)
-  - **AI**: Bedrock inference profile (stable model endpoint mirroring Azure's `cognitive_deployment`), optional provisioned throughput, and guardrails
-  - **WAF**: Auth.js v5-specific exclusion rules (OAuth query params, session cookies, Next-Action header) preventing false positives on sign-in flows
-  - **Private networking**: 9 VPC endpoints (S3/DynamoDB Gateway + Secrets Manager/Logs/ECR API/ECR Docker/Bedrock Runtime/STS/X-Ray Interface) keeping all service traffic within the VPC
-  - **Autoscaling**: Application Auto Scaling with scale-to-zero (CPU, memory, ALB request count target-tracking policies for all 3 ECS services)
-
-  **Remaining before first deploy**: human AWS account/IAM/OIDC/backend setup per [`AWS_SETUP_TODO.md`](AWS_SETUP_TODO.md), ACM certificate creation, Bedrock model access console opt-in, and live workflow execution (212).
+- **Four documents, one wiki.** `README.md`, `CHANGELOG.md`, `REVIEW.md`, and `TODO.md` are the
+  only markdown files in the repository. Long-form documentation goes to the Wiki. Content
+  determines destination, not filename.
+- **Numbered workflows.** `.github/workflows/` uses numeric bands: `000` bootstrap, `100`
+  validation, `200` build and deploy, `300` test, release, and operations. Within a band, the
+  number is stable — reference workflows by filename, not by position. Per-workflow detail is in
+  the Wiki's **Workflows Guide**.
+- **Resource naming.** Azure resources follow `cna-[env]-[region_short]`, with a single workload
+  resource group per environment and a separate resource group for Terraform state.
+- **Split state.** Every environment has a `platform` root and a `workload` root with separate
+  state files. Platform applies first; workload consumes its outputs through explicit variables.
+- **PowerShell scripts** use Verb-Noun naming (`Initialize-CnaGitHubSecrets.ps1`).
+- **All GitHub Actions are pinned to a SHA digest**, and `gitleaks` plus `detect-secrets` run on
+  every commit and CI push.
+- **Vendored agent configuration** under `.claude/`, `.agents/`, and `.codex/` is configuration,
+  not project source. It is excluded from lint (see `pyproject.toml`) and from the documentation
+  model, and it must never contain project-specific facts.
 
 ---
 
 *Maintained by Saul Patino Jr. — AWS SA Professional | Azure Solutions Architect Expert*
-*CNA Platform · June 2026*
-## Azure Notes
-
-- Container Apps creates a separate Azure-managed infrastructure resource group for the managed environment. This repo now names it deterministically as `rg-cna-<environment>-<region_short>-cae-managed`, for example `rg-cna-dev-scus-cae-managed`.
-- This managed RG is expected and separate from the workload RG. It contains Azure-managed infrastructure such as the Container Apps environment load balancer and public IP.
-- The Terraform state backend remains separate in `rg-cna-<environment>-<region_short>-tfstate` to avoid backend/self-destroy lifecycle problems.
-- The subscription must have `Microsoft.AlertsManagement` registered before `211` so Application Insights smart-detection alert deployment does not fail.
-- Workflow `211-deploy-azure-split.yml` syncs the Entra app home page URL and redirect URI from the current Front Door hostname after Terraform apply.
