@@ -18,7 +18,7 @@ Anything an engineer can solve without external input belongs in [`TODO.md`](TOD
 | [R-006](#r-006--runtime-secrets-have-no-defaults-and-must-be-supplied) | Runtime secrets supplied at apply time | Security / secret owner | Open |
 | [R-007](#r-007--azure-subscription-resource-provider-registration) | `Microsoft.AlertsManagement` provider registration | Azure subscription owner | Open |
 | [R-008](#r-008--live-azure-beta-acceptance-sign-off) | 0.8 beta exit — live Azure acceptance sign-off | Product owner | Open |
-| [R-009](#r-009--github-wiki-write-access-for-documentation-migration) | GitHub Wiki write access for documentation migration | Repository owner | Open |
+| [R-009](#r-009--github-wiki-write-access-for-documentation-migration) | GitHub Wiki write access to publish prepared pages | Repository owner | Open — not blocking |
 
 ---
 
@@ -328,33 +328,39 @@ Book the deploy window. R-007 must be cleared first or the run will fail during 
 
 **Problem**
 The documentation model designates the GitHub Wiki as the destination for all long-form
-documentation. Two in-repo documents are classified for the Wiki and cannot be migrated:
-`infra/terraform/MIGRATION-workspace-to-platform.md` and `migrate/README.md`. Wiki write access
-is not available to the automation performing the consolidation.
+documentation. Seven validated pages were prepared during the consolidation and cannot be
+published: the wiki remote returns HTTP 401 to the automation performing the work, while the
+repository itself authenticates normally. Wiki write access is scoped out.
 
 **Why it blocks progress**
-The governance model forbids deleting a source document before its migration is completed and
-verified. Without Wiki write access the migration cannot complete, so those files must remain in
-the repository and the repository cannot converge on the four-document end state.
+This no longer blocks the repository — it converged on the four-document end state without the
+Wiki. The long-form content that had nowhere else to go was migrated into `TODO.md` handoff notes
+instead (T-304 carries the Log Analytics state-migration runbook, T-401 the `migrate/` reference),
+and both source files were deleted after that migration was verified. What remains blocked is
+putting that documentation in its proper home. Until then, operational runbook content lives in
+the engineering backlog, which is the right fallback but the wrong destination.
 
 **Required owner**
 Repository owner.
 
 **Required action**
 Either grant Wiki write access to the account performing documentation consolidation, or publish
-the prepared page content manually. The prepared, validated page content is attached to the pull
-request that introduced this file; the corresponding cleanup tasks are `TODO.md` → T-601 and
-T-602.
+the seven prepared pages manually. The validated page content is attached to the pull request that
+introduced this file. The corresponding tasks are `TODO.md` → T-601 (publish) and T-602 (trim the
+inline copies once the Wiki has them).
 
 **Impact if unresolved**
-Documentation sprawl persists: two competing long-form sources of truth remain in the repository,
-one of them a non-root `README.md` that the model explicitly disallows.
+Low and contained. No information is lost and no competing source of truth exists — every fact is
+either in the repository or in a TODO item's handoff notes. The cost is discoverability: an
+operator looking for a state-migration runbook will not think to look in the engineering backlog,
+and `TODO.md` carries roughly 80 lines of procedure that do not belong in a work queue.
 
 **References**
-- `infra/terraform/MIGRATION-workspace-to-platform.md`
-- `migrate/README.md`
-- [`TODO.md`](TODO.md) → Phase 6
+- [`TODO.md`](TODO.md) → T-304, T-401 (the content), T-601, T-602 (the cleanup)
+- [`README.md`](README.md) → documentation map, where the Wiki links belong
 
 **Recommended next step**
-Confirm the Wiki page names before publishing so the cross-links added to `README.md` resolve:
-`Runbook: Log Analytics Workspace State Migration` and `Legacy AWS Migrate Root`.
+Confirm the Wiki page names before publishing so the cross-links resolve — in particular
+`Runbook: Log Analytics Workspace State Migration` and `Legacy AWS Migrate Root`. `Workflows
+Guide` and `Secrets Reference` are already referenced by `.env.example` and may already exist;
+merge rather than create.

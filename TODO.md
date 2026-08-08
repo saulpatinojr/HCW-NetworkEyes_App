@@ -16,7 +16,7 @@ in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG
 | [Phase 3](#phase-3--deployment-readiness) | Deployment readiness | T-301 – T-305 |
 | [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-405 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements | T-501 – T-502 |
-| [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-605 |
+| [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-604 |
 
 ---
 
@@ -225,15 +225,81 @@ order; do not reorder it.
   log data.
 - **Dependencies:** Only applies to an environment already deployed with the old layout. As of the
   last check no environment was deployed, so this is a no-op for the initial rollout.
-- **Recommended action:** Follow the state-migration runbook before the next apply in any affected
-  environment. The runbook currently lives at
-  `infra/terraform/MIGRATION-workspace-to-platform.md` and is queued for Wiki migration (T-601).
+- **Recommended action:** Follow the runbook below before the next apply in any affected
+  environment. Run it **once per environment** (dev, then prod).
 - **Status:** Not started — not currently applicable
-- **Notes for future engineers:** Short version: back up both states with `terraform state pull`,
-  `terraform state rm 'module.compute.azurerm_log_analytics_workspace.compute'` from workload,
-  `terraform import 'azurerm_log_analytics_workspace.platform' <resource-id>` into platform, verify
-  both plans are clean, then apply platform before workload. Stop and investigate if platform still
-  wants to *create* the workspace or workload still wants to *destroy* it.
+- **Notes for future engineers:**
+
+  **Why the workspace moved.** The workspace used to be created by the `compute` module, which
+  lives in workload state. It moved to the platform landing zone so that platform-owned resources
+  (firewall, NSGs, VNet flow logs) send diagnostics to a workspace in the same state that creates
+  them, removing the cross-state dependency. The code change is done; in an already-deployed
+  environment the resource still physically sits in workload state.
+
+  **Preconditions**
+  - Azure CLI authenticated with rights to the tfstate storage account.
+  - `terraform` 1.14.x on PATH.
+  - Both roots initialized against their real backends. The deploy pipeline does this; locally,
+    `terraform init -backend-config=...` with the same keys the workflow uses — see
+    `211-deploy-azure-split.yml`.
+  - **Take a state backup first.**
+
+  **State addresses**
+
+  | | Address |
+  |---|---|
+  | Source (workload state) | `module.compute.azurerm_log_analytics_workspace.compute` |
+  | Destination (platform state) | `azurerm_log_analytics_workspace.platform` |
+
+  The Azure resource ID is unchanged — only which state file tracks it changes:
+  `/subscriptions/<SUB>/resourceGroups/rg-<name_prefix>/providers/Microsoft.OperationalInsights/workspaces/<name_prefix>-log`
+
+  **Procedure.** Replace `<env>` with `dev` or `prod`. Backend keys mirror the deploy workflow:
+  platform = `<env>.terraform.tfstate`, workload = `<env>.workload.terraform.tfstate`.
+
+  1. Back up both states:
+     ```bash
+     cd infra/terraform/environments/azure/<env>/workload
+     terraform state pull > /tmp/backup-workload-<env>.tfstate
+     cd ../platform
+     terraform state pull > /tmp/backup-platform-<env>.tfstate
+     ```
+  2. Remove the workspace from workload state — do **not** destroy. `state rm` forgets the
+     resource in Terraform without touching Azure; the workspace keeps running and retains its
+     data:
+     ```bash
+     cd infra/terraform/environments/azure/<env>/workload
+     terraform state rm 'module.compute.azurerm_log_analytics_workspace.compute'
+     ```
+  3. Import the existing workspace into platform state. `name_prefix` = `cna-<env>-scus`; get
+     `<SUB>` from `az account show --query id -o tsv`:
+     ```bash
+     cd ../platform
+     terraform import 'azurerm_log_analytics_workspace.platform' \
+       "/subscriptions/<SUB>/resourceGroups/rg-<name_prefix>/providers/Microsoft.OperationalInsights/workspaces/<name_prefix>-log"
+     ```
+  4. Verify both plans are clean:
+     ```bash
+     cd ../platform && terraform plan    # workspace: NO changes. It WILL want to CREATE the new
+                                         # flow-logs storage account + observability diagnostic
+                                         # settings — expected and correct.
+     cd ../workload && terraform plan    # NO destroy of the workspace. compute env now reads it
+                                         # via data source; observability is app-only.
+     ```
+     **Stop and investigate if the platform plan wants to _create_ the workspace, or the workload
+     plan wants to _destroy_ it** — that means the `rm`/`import` did not take.
+  5. Apply platform first, then workload. Platform must apply before workload so the workspace and
+     its outputs exist for the workload's `data.azurerm_log_analytics_workspace.platform` lookup.
+     This matches the deploy order in `211-deploy-azure-split.yml`.
+
+  **Also worth knowing**
+  - The dedicated flow-logs storage account (`<name_prefix>flowlog`) and the firewall/NSG/flow-log
+    diagnostic settings are **new** platform resources — no migration needed, they appear on the
+    first platform apply.
+  - Retention is 30 days in `platform/locals.tf` for both environments, reduced from prod's
+    previous 90 during the FinOps pass. Reviewed and approved.
+  - If you would rather not do state surgery, the alternative is accepting a one-time workspace
+    recreation and the loss of log history. Not recommended for prod.
 
 ### T-305 — Verify the AWS parity claims against a live deployment
 
@@ -277,17 +343,40 @@ order; do not reorder it.
   and duplicates `infra/terraform/{providers,environments}/aws/`. Two AWS deployment paths exist
   in one repository, with different naming, different IAM, and an obsolete OIDC thumbprint. This
   is the single largest source-of-truth conflict left in the repository.
-- **Dependencies:** T-203 benefits from resolving this; T-602 (Wiki migration of
-  `migrate/README.md`) must complete before the directory is deleted.
-- **Recommended action:** Confirm `migrate/` is fully superseded, extract anything the current
-  modules lack — the three assessment-level IAM policies it documents (`ReadOnlyAccess` /
-  Global Reader, `SecurityAudit` / Security Reader, `AWSBillingReadOnlyAccess` / Billing Reader)
-  are worth checking against the current `identity` module — then delete the directory and its
+- **Dependencies:** T-203 benefits from resolving this.
+- **Recommended action:** Confirm `migrate/` is fully superseded, check the assessment-level IAM
+  policies below against the current `identity` module, then delete the directory and its
   bootstrap script.
 - **Status:** Not started
 - **Notes for future engineers:** The current stack supersedes `migrate/` on every axis: eight
   module boundaries mirroring Azure, split platform/workload state, VPC endpoints, X-Ray, Bedrock,
-  and autoscaling. `migrate/` has none of those. Treat it as history, not as an alternative.
+  and autoscaling. `migrate/` has none of those. Treat it as history, not as an alternative. The
+  Azure→AWS service mapping it documented is the same one recorded under T-305, so it is not
+  repeated here.
+
+  **The part worth keeping — assessment-level IAM.** The `migrate/` deploy role carried three
+  read-only policies giving the assessment engine the access it needs, deliberately mirroring the
+  Azure reader roles. Verify the current `identity` module grants equivalents before deleting:
+
+  | AWS policy | Azure equivalent | Purpose |
+  |---|---|---|
+  | `ReadOnlyAccess` | Global Reader | Enumerate all resources |
+  | `SecurityAudit` | Security Reader | Security findings |
+  | `AWSBillingReadOnlyAccess` | Billing Reader | Cost and usage for FinOps |
+
+  Plus a scoped write policy for Terraform to manage CNA infrastructure. If the current `identity`
+  module lacks the billing or security-audit grant, the AWS FinOps and security signals will come
+  back empty at runtime rather than failing loudly at apply — check this explicitly.
+
+  **What is in the directory.** A single flat Terraform root — `providers.tf` (Terraform + AWS and
+  GitHub providers, S3 backend), `variables.tf`, `locals.tf`, `vpc.tf`, `security_groups.tf`,
+  `alb.tf`, `ecs.tf`, `rds.tf`, `s3.tf`, `secrets.tf`, `cloudfront.tf`, `iam.tf`, `outputs.tf`,
+  `terraform.tfvars.example` — plus `scripts/Initialize-Migration.ps1`, a bootstrap script that
+  created the OIDC provider, deploy role, policies, S3 state bucket, DynamoDB lock table, and
+  GitHub secrets in one pass. That bootstrap script is the closest thing the repository has to
+  Azure's `000-bootstrap-backend.yml` for AWS, so read it before writing the AWS bootstrap
+  (`REVIEW.md` → R-002) — but do not run it: it provisions the superseded topology, and its
+  `iam.tf` contains the obsolete OIDC thumbprint called out in T-203.
 
 ### T-402 — Wire a type checker into dev dependencies and pre-commit
 
@@ -388,72 +477,66 @@ order; do not reorder it.
 
 ## Phase 6 — Documentation improvements
 
-### T-601 — Migrate the workspace state-migration runbook to the Wiki
+### T-601 — Publish the seven prepared Wiki pages
 
 - **Priority:** Medium
-- **Description:** `infra/terraform/MIGRATION-workspace-to-platform.md` is an operational runbook.
-  Operational runbooks belong in the GitHub Wiki, not in the repository tree.
+- **Description:** The documentation consolidation displaced long-form content from `README.md`
+  and from two non-root documents. Seven validated, ready-to-publish pages were prepared. They are
+  not committed to the repository — publishing requires Wiki write access, which the automation
+  performing the consolidation does not have.
 - **Dependencies:** `REVIEW.md` → R-009 (Wiki write access).
-- **Recommended action:** Publish as the Wiki page **`Runbook: Log Analytics Workspace State
-  Migration`**, verify the page renders and its code blocks and state addresses survived intact,
-  update the `TODO.md` → T-304 pointer to the Wiki URL, then delete the source file.
-- **Status:** Blocked on R-009
-- **Notes for future engineers:** Do not delete the source file before the Wiki page is confirmed
-  published. Validated page content was prepared alongside this backlog and attached to the pull
-  request that introduced it.
+- **Recommended action:** Publish, or merge into existing pages:
 
-### T-602 — Migrate the non-root `migrate/README.md` to the Wiki
+  | Page | Content |
+  |---|---|
+  | `Architecture` | Container topology, RG layout, split-state model, AWS topology, design contracts DD-002…DD-019, capability inventory, naming convention |
+  | `Security Posture` | Standing controls, the 2026-07-01 AVM/Learn hardening pass (#111), break-glass login hardening (#112), AWS-side controls |
+  | `Workflows Guide` | Per-workflow reference for 000–370, clean-deploy sequence, teardown sequence |
+  | `Azure Operating Notes` | Managed RG naming, tfstate RG separation, provider registration, Entra sync, workspace ownership, retention |
+  | `AWS Deployment Setup` | Parity matrix, backend bootstrap, identity, secrets, ACM, Bedrock, deploy order, nine VPC endpoints |
+  | `Runbook: Log Analytics Workspace State Migration` | The state-surgery procedure now held in T-304 |
+  | `Legacy AWS Migrate Root` | The superseded `migrate/` root, IAM policy mapping preserved |
 
-- **Priority:** Medium
-- **Description:** `migrate/README.md` is a non-root README, which the documentation model treats
-  as documentation rather than repository metadata. Its content is the architecture mapping, IAM
-  model, bootstrap procedure, and deployment steps for the superseded `migrate/` Terraform root.
-- **Dependencies:** `REVIEW.md` → R-009. Interacts with T-401 — if `migrate/` is deleted outright,
-  the page becomes historical reference rather than a live procedure.
-- **Recommended action:** Publish as the Wiki page **`Legacy AWS Migrate Root`**, clearly marked
-  superseded by `infra/terraform/{providers,environments}/aws/`, then delete the source file.
-- **Status:** Blocked on R-009
-- **Notes for future engineers:** The one genuinely useful thing in that document is the
-  assessment-level IAM policy mapping (`ReadOnlyAccess` ↔ Global Reader, `SecurityAudit` ↔
-  Security Reader, `AWSBillingReadOnlyAccess` ↔ Billing Reader). Preserve it — and check it against
-  the current `identity` module while you are there (T-401).
-
-### T-603 — Publish the long-form pages displaced from `README.md`
-
-- **Priority:** Medium
-- **Description:** `README.md` was reduced to repository purpose, quick start, configuration, and
-  navigation. The architecture description, design contracts, security posture detail, per-workflow
-  reference, Azure operating notes, and the AWS deployment-setup reference were displaced and need
-  Wiki homes.
-- **Dependencies:** `REVIEW.md` → R-009.
-- **Recommended action:** Publish or merge into: **`Architecture`** (container topology, resource
-  group layout, design contracts DD-002/003/008/009/013/019), **`Security Posture`** (CI pinning,
-  secret scanning, non-root containers, OIDC, WAF and break-glass hardening history),
-  **`Workflows Guide`** (per-workflow reference for 000–370), **`Azure Operating Notes`** (managed
-  RG naming, tfstate RG separation, provider registration, Entra sync), and
-  **`AWS Deployment Setup`** (backend bootstrap, identity, secrets, certificates, Bedrock, deploy
-  order, VPC endpoints). Then add the links to `README.md`'s documentation map.
+  Then add the links to `README.md`'s documentation map.
 - **Status:** Blocked on R-009
 - **Notes for future engineers:** `Workflows Guide` and `Secrets Reference` are already referenced
-  by `.env.example`, so those two pages likely exist — merge rather than create, and do not
-  duplicate.
+  by `.env.example`, so those pages likely exist — merge rather than create, and do not duplicate.
+  The page content is attached to the pull request that introduced this backlog. Nothing is lost
+  if it is never published: every fact in those pages is either still in the repository or carried
+  in a TODO item's handoff notes.
 
-### T-604 — Add a CI guard for the documentation model
+### T-602 — Trim the long-form runbook content out of TODO.md once the Wiki has it
+
+- **Priority:** Low
+- **Description:** `TODO.md` → T-304 currently carries the full Log Analytics workspace state
+  migration runbook, and T-401 carries the `migrate/` directory reference. That content is
+  operational documentation living in the engineering backlog because the Wiki was unreachable
+  when the two source files were removed. It is the right fallback, not the right home.
+- **Dependencies:** T-601 (the Wiki pages must exist first).
+- **Recommended action:** Once `Runbook: Log Analytics Workspace State Migration` and
+  `Legacy AWS Migrate Root` are published and verified, replace the inline procedures in T-304 and
+  T-401 with a one-line summary plus the Wiki link.
+- **Status:** Blocked on T-601
+- **Notes for future engineers:** Do not trim before the Wiki pages are confirmed published and
+  rendering. These notes are currently the only copy of that content in the repository.
+
+### T-603 — Add a CI guard for the documentation model
 
 - **Priority:** Low
 - **Description:** Nothing prevents documentation sprawl from returning. The model allows exactly
   four markdown files in the repository — `README.md`, `CHANGELOG.md`, `REVIEW.md`, `TODO.md` —
   plus platform-required files under `.github/`.
-- **Dependencies:** T-601, T-602 (the guard cannot pass until the two Wiki-bound files are gone).
+- **Dependencies:** None — the repository already satisfies the rule, so the guard can be added
+  and will pass immediately.
 - **Recommended action:** Add a check to `300-test-codebase.yml` that fails when a markdown file
   appears outside that allow-list. Exclude the vendored agent configuration under `.claude/` and
   `.agents/`, matching the exclusion `pyproject.toml` already applies to ruff.
-- **Status:** Blocked on T-601, T-602
+- **Status:** Not started
 - **Notes for future engineers:** The allow-list must also permit the platform-required
   `.github/` documents (`PULL_REQUEST_TEMPLATE.md`, `SECURITY.md`, `CONTRIBUTING.md`, and the
   like) if any are added later — none exist today.
 
-### T-605 — Keep vendored agent configuration free of project documentation
+### T-604 — Keep vendored agent configuration free of project documentation
 
 - **Priority:** Low
 - **Description:** `.claude/` and `.agents/` hold a vendored, deliberately project-neutral Claude
@@ -462,7 +545,7 @@ order; do not reorder it.
   configuration, not this repo's own source", and the pack's own documentation states that nothing
   in `.claude/` may name a client, tenant, or account. They are treated as configuration, not
   documentation, and are out of scope for the documentation model.
-- **Dependencies:** T-604 (the guard's exclusion list encodes this decision).
+- **Dependencies:** T-603 (the guard's exclusion list encodes this decision).
 - **Recommended action:** Periodically confirm no project-specific documentation has been written
   into either directory. If any appears, classify it by content and move it to `README.md`,
   `CHANGELOG.md`, `REVIEW.md`, `TODO.md`, or the Wiki as the model requires.

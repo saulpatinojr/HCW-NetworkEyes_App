@@ -44,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed the Foundry private-access smoke test (#98/#99): `scripts/ci/validate_foundry_private_access.sh`, its `211-deploy-azure-split.yml` step, and the associated evidence wiring. See ADR-0002 in the GitHub Wiki.
 - Removed the deploy-time "Sync Entra app web URLs" step (#101); the NextAuth redirect URI is owned by the Graph-capable bootstrap script on the application object, keeping the deploy identity least-privilege. See ADR-0003 in the GitHub Wiki.
 - Removed `AWS_SETUP_TODO.md` and `REVIEW_TASK.md` from the repository root after migrating their content into `REVIEW.md`, `TODO.md`, and this changelog.
+- Removed `infra/terraform/MIGRATION-workspace-to-platform.md` and the non-root `migrate/README.md` after migrating their content into `TODO.md` — the Log Analytics workspace state-migration runbook into T-304, and the superseded `migrate/` root's assessment-level IAM policy mapping and directory inventory into T-401. Both are queued for the GitHub Wiki, which is their proper destination; `TODO.md` → T-601 publishes them and T-602 trims the inline copies once it has.
 
 ---
 
