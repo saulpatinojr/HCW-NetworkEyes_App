@@ -166,6 +166,8 @@ jobs:
         run: python3 scripts/validate_module_deps.py
       - name: Validate draw.io shape catalog
         run: python3 scripts/validate_shape_catalog.py
+      - name: Validate documentation model
+        run: python3 scripts/validate_documentation_model.py
 
   # ------------------------------------------------------------------
   # 5. Docker build smoke test

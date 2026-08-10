@@ -6,7 +6,7 @@ that belongs to a named owner outside the engineering task itself.
 
 Anything an engineer can solve without external input belongs in [`TODO.md`](TODO.md), not here.
 
-**Last reviewed:** 2026-08-07
+**Last reviewed:** 2026-08-10
 
 | ID | Blocker | Owner | Status |
 |---|---|---|---|

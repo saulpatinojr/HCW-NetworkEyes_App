@@ -7,7 +7,7 @@ can pick up work without rediscovering the findings.
 Items requiring external input — an approval, an account, a credential, an access grant — belong
 in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG.md`](CHANGELOG.md).
 
-**Last reviewed:** 2026-08-07
+**Last reviewed:** 2026-08-10
 
 | Phase | Theme | Items |
 |---|---|---|
@@ -54,7 +54,12 @@ Each one actively misleads an engineer or a workflow run.
 - **Dependencies:** None.
 - **Recommended action:** Correct the reference to `340-sync-keys.yml`. While in the file, verify
   the other two workflow references it makes against `.github/workflows/`.
-- **Status:** Not started
+- **Status:** Done — `.env.example` lines 6 and 35 corrected (`110-sync-keys.yml` →
+  `340-sync-keys.yml`; the variables comment now names the real consumers 000, 100, 211, 220,
+  330–360). The suggested grep across `scripts/` and `.github/` found two further stale names in
+  `scripts/Initialize-CnaGitHubSecrets.ps1` (`210-deploy-azure.yml` → `211-deploy-azure-split.yml`,
+  `110-sync-keys.yml` → `340-sync-keys.yml`); both corrected. `.env.example` line 164's reference
+  to workflow 320 was verified as valid. Recorded in [`CHANGELOG.md`](CHANGELOG.md) → Unreleased.
 - **Notes for future engineers:** The workflow numbering was rebanded at some point (the 000/100/
   200/300 bands). Other stale numeric references may exist in scripts — grep for `\b0[0-9]{2}-`
   and `\b1[0-9]{2}-` across `scripts/` and `.github/` when fixing this.
@@ -531,7 +536,11 @@ order; do not reorder it.
 - **Recommended action:** Add a check to `300-test-codebase.yml` that fails when a markdown file
   appears outside that allow-list. Exclude the vendored agent configuration under `.claude/` and
   `.agents/`, matching the exclusion `pyproject.toml` already applies to ruff.
-- **Status:** Not started
+- **Status:** Done — `scripts/validate_documentation_model.py` added and wired into the
+  `repository-guardrails` job of `300-test-codebase.yml`, alongside the existing module-dependency
+  and shape-catalog guards. It excludes `.claude/`, `.agents/`, and `.codex/`, and pre-allows the
+  platform-required `.github/` documents named in the notes below. Recorded in
+  [`CHANGELOG.md`](CHANGELOG.md) → Unreleased.
 - **Notes for future engineers:** The allow-list must also permit the platform-required
   `.github/` documents (`PULL_REQUEST_TEMPLATE.md`, `SECURITY.md`, `CONTRIBUTING.md`, and the
   like) if any are added later — none exist today.

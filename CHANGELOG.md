@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Added `scripts/validate_documentation_model.py` and a `Validate documentation model` step to the `repository-guardrails` job in `300-test-codebase.yml` — CI now fails if a markdown file appears outside the four-document model (`TODO.md` → T-603). Vendored agent configuration (`.claude/`, `.agents/`, `.codex/`) is excluded, and platform-required `.github/` documents are pre-allowed.
+- Added a project-neutral `documentation-curator` agent to the vendored agent pack (`.claude/agents/documentation-curator.md`). It reads the documentation model a repository's `README.md` declares and enforces placement, cross-reference integrity, staleness, and single-source-of-truth on documentation changes — usable here and drop-in reusable elsewhere, per the pack's project-neutrality rule (`TODO.md` → T-604).
 - Added Architecture Decision Records ADR-0001 through ADR-0005 to the GitHub Wiki, covering the Anthropic removal, smoke-test removal, Entra redirect-URI ownership, Key Vault network hardening target, and the container image-pull strategy.
 - Added `REVIEW.md` — the repository-wide record of blockers that require a human decision, approval, or access grant, with an owner and a required action for each.
 - Added `TODO.md` — the authoritative engineering work queue, phased and dependency-ordered for engineer handoff.
@@ -22,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a break-glass local admin login (`/local-admin`, isolated from Entra ID SSO), PBKDF2-HMAC-SHA256 password hashing, and the supporting Terraform/Key Vault/migrator wiring so an environment can be signed into if Entra ID SSO is ever unavailable.
 
 ### Fixed
+- Corrected stale workflow references left over from the workflow renumbering (`TODO.md` → T-102): `.env.example` pointed at a non-existent `110-sync-keys.yml` (now `340-sync-keys.yml`) and listed retired workflow numbers as variable consumers (now 000, 100, 211, 220, 330–360), and `scripts/Initialize-CnaGitHubSecrets.ps1`'s bootstrap report referenced `210-deploy-azure.yml` and `110-sync-keys.yml` (now `211-deploy-azure-split.yml` and `340-sync-keys.yml`).
 - Fixed Key Vault Firewall Circumvention in `211-deploy-azure-split.yml` by dynamically adding/removing the GitHub runner's public IP.
 - Fixed Missing Azure CLI Version Pinning in `211-deploy-azure-split.yml` by injecting an installation step.
 - Removed fragile Private IP guessing script since Terraform now natively manages the PostgreSQL private DNS zone.

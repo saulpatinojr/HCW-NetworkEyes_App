@@ -1204,8 +1204,8 @@ $credentialsText
 
 1. Run workflow `100-validate-prereqs.yml`.
 2. Run workflow `200-build-images.yml`.
-3. Run workflow `210-deploy-azure.yml`.
-4. Review workflow `110-sync-keys.yml` after Key Vault is available.
+3. Run workflow `211-deploy-azure-split.yml`.
+4. Review workflow `340-sync-keys.yml` after Key Vault is available.
 "@
 
     Set-Content -Path $Path -Value $content -Encoding UTF8
