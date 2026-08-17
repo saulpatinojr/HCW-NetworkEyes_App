@@ -69,6 +69,16 @@ def generate(  # noqa: PLR0913
         --engagement-id acme-20260305-a3f2 \\
         --regional-ja --ja-review-complete
     """
+    # SCAFFOLD — not implemented (TODO.md T-412).
+    #
+    # Calls EngagementStore.load_findings_report(), and RenderPipeline finishes
+    # by calling write_deliverable_manifest(). Neither exists on
+    # EngagementStore, so this died with an unhandled AttributeError.
+    raise NotImplementedError(
+        "`cna report generate` is not implemented yet. It needs EngagementStore "
+        "methods load_findings_report() and write_deliverable_manifest(), neither "
+        "of which exists — see TODO.md T-412."
+    )
     from cna.core.persistence import EngagementStore
     from cna.report_engine.render_pipeline import (
         RenderOptions,
@@ -137,6 +147,14 @@ def preview(engagement_id, data_dir, output):
     Example:
       cna report preview --engagement-id acme-20260305-a3f2
     """
+    # SCAFFOLD — not implemented (TODO.md T-412).
+    #
+    # Calls EngagementStore.load_findings_report(), which does not exist.
+    raise NotImplementedError(
+        "`cna report preview` is not implemented yet. It needs "
+        "EngagementStore.load_findings_report(), which does not exist — "
+        "see TODO.md T-412."
+    )
     from cna.core.persistence import EngagementStore
     from cna.report_engine.html_preview import HtmlPreviewRenderer
 

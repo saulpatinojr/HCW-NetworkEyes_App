@@ -50,6 +50,18 @@ def run(engagement_id, cloud, bucket, s3_prefix, storage_account, container, ttl
         --storage-account cnadeliveries \\
         --container acme-20260305-a3f2
     """
+    # SCAFFOLD — not implemented (TODO.md T-412).
+    #
+    # Calls EngagementStore.get_delivery_date(), load_deliverable_manifest(),
+    # load_findings_report_json(), write_access_record(), and
+    # load_access_record() — five methods, none of which exist, so this died
+    # with an unhandled AttributeError.
+    raise NotImplementedError(
+        "`cna publish run` is not implemented yet. It needs five EngagementStore "
+        "methods that do not exist: get_delivery_date(), "
+        "load_deliverable_manifest(), load_findings_report_json(), "
+        "write_access_record(), and load_access_record() — see TODO.md T-412."
+    )
     from cna.core.persistence import EngagementStore
     from cna.delivery_portal.access_manager import AccessManager
     from cna.delivery_portal.portal_generator import PortalGenerator
@@ -202,6 +214,14 @@ def status(engagement_id, data_dir):
     Example:
       cna publish status --engagement-id acme-20260305-a3f2
     """
+    # SCAFFOLD — not implemented (TODO.md T-412).
+    #
+    # Calls EngagementStore.load_access_record(), which does not exist.
+    raise NotImplementedError(
+        "`cna publish status` is not implemented yet. It needs "
+        "EngagementStore.load_access_record(), which does not exist — "
+        "see TODO.md T-412."
+    )
     from cna.core.persistence import EngagementStore
     from cna.delivery_portal.access_manager import AccessRecord
 

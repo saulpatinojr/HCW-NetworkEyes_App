@@ -971,7 +971,24 @@ order; do not reorder it.
   `output_paths` show the intended on-disk layout to read back. Cover each with a unit test using a
   real `EngagementStore` on `tmp_path` — a `MagicMock` store accepts any method name and is exactly
   why this survived.
-- **Status:** Not started
+- **Status:** Done as scaffold guards — the repository owner confirmed these commands are Phase D
+  scaffold, not intended to work today, so each now fails honestly instead of dying with an
+  unhandled `AttributeError`. **Five** commands are guarded, not three: the original survey missed
+  `cna report preview` and `cna publish status`, which live in the same groups and call
+  `load_findings_report()` and `load_access_record()` respectively.
+  Each guard raises `NotImplementedError` naming the exact missing `EngagementStore` methods, so
+  the message tells a caller what would have to be built. Verified with `click.testing.CliRunner`:
+  all five raise `NotImplementedError` rather than `AttributeError`.
+  A useful side effect: `ty` treats code after an unconditional `raise` as unreachable, so guarding
+  the commands also removed nine of the eleven findings this item owns — confirmed with a minimal
+  probe before relying on it. The count fell 60 → 49.
+  **Two call sites deliberately remain**, and they are the real remaining work:
+  `analysis_engine.py:1736` (`write_findings_report`) and `render_pipeline.py:245`
+  (`write_deliverable_manifest`). Both sit at the end of engines that genuinely work and are
+  covered by tests — `AnalysisEngine.run()` alone is exercised by a dozen cases — so guarding them
+  would delete working functionality to silence a checker. They are unreachable in production now
+  that the CLI is guarded, and they are exactly the two writes that must be implemented first when
+  these commands become real.
 - **Notes for future engineers:** The existing tests never caught this because they mock the store.
   That is also how the `write_audit_event` `TypeError` fixed under T-402 survived. When testing
   anything that touches persistence, prefer a real `EngagementStore` pointed at `tmp_path`.
