@@ -16,6 +16,7 @@ Tests cover:
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -455,3 +456,39 @@ class TestRegionLookupEndpoint:
         discovery.opts.regions = []
         discovery._get_enabled_regions(session)
         assert session.client.call_args.kwargs["region_name"] == "eu-west-1"
+
+
+class TestAccessDeniedAuditEvent:
+    """`_discover_account()` access-denied path (TODO.md T-402).
+
+    This path called `write_audit_event(engagement_id, "aws", event={...})`, but
+    the method takes `(engagement_id, event)` — so "aws" bound to `event` and the
+    keyword raised `TypeError: got multiple values for argument 'event'`. It fired
+    whenever an account could not be assumed, which is routine in org-wide
+    discovery. `ty` found it on its first run; the real store is used here rather
+    than a MagicMock, because a mock accepts any signature and would not have
+    caught it.
+    """
+
+    def test_records_the_event_instead_of_raising_typeerror(self, discovery, tmp_path):
+        from cna.core.persistence import EngagementStore
+
+        store = EngagementStore(data_dir=tmp_path)
+        engagement_id = "test-20260305-0003"
+        store.engagement_dir(engagement_id).mkdir(parents=True, exist_ok=True)
+        discovery.store = store
+
+        account = AWSAccount(account_id="222222222222", account_name="denied")
+        topology = MagicMock()
+        with patch.object(discovery, "_assume_role", side_effect=CNAAuthError("AssumeRole failed")):
+            discovery._discover_account(account, "CNA-ReadOnly", topology, engagement_id)
+
+        audit = store.engagement_dir(engagement_id) / store.AUDIT_LOG_FILE
+        assert audit.is_file(), "access-denied path wrote no audit event"
+        events = [json.loads(line) for line in audit.read_text().splitlines() if line.strip()]
+        assert len(events) == 1
+        assert events[0]["type"] == "access_denied"
+        assert events[0]["cloud"] == "aws", "the cloud label must survive inside the event"
+        assert events[0]["account"] == "222222222222"
+        assert "AssumeRole failed" in events[0]["error"]
+        assert "timestamp" in events[0]

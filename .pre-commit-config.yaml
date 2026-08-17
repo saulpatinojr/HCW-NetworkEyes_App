@@ -48,3 +48,25 @@ repos:
       - id: no-commit-to-branch
         args: [--branch, main]
         name: no direct commit to main
+
+  # --- Type checking (TODO.md T-402) ---
+  # `repo: local` / `language: system` so this runs the exact `ty` version
+  # pinned in pyproject.toml's `dev` group — no second place to bump, and no
+  # third-party rev to pin.
+  #
+  # NOT gating yet: `ty check cna/` currently reports 96 diagnostics. T-402 is
+  # explicit that ignore lists must not be widened to force a green first run,
+  # so the backlog is tracked in TODO.md T-410 and fixed instead. Run it with:
+  #
+  #     pre-commit run ty --hook-stage manual --all-files
+  #
+  # When T-410 closes, delete the `stages:` line so it gates like the rest.
+  - repo: local
+    hooks:
+      - id: ty
+        name: ty (type check — not yet gating, see TODO.md T-410)
+        entry: ty check
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]

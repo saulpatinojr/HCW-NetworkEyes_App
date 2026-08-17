@@ -14,7 +14,7 @@ in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG
 | [Phase 1](#phase-1--critical-fixes) | Critical fixes — repository states something untrue | T-101 – T-104 |
 | [Phase 2](#phase-2--security-improvements) | Security improvements | T-201 – T-204 |
 | [Phase 3](#phase-3--deployment-readiness) | Deployment readiness | T-301 – T-305 |
-| [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-409 |
+| [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-411 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements | T-501 – T-502 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
 
@@ -496,10 +496,38 @@ order; do not reorder it.
 - **Recommended action:** Add `ty` to the `dev` optional-dependency group and a corresponding
   `pre-commit` hook, then fix or explicitly ignore the initial findings in one pass so the check
   starts green.
-- **Status:** Not started
+- **Status:** Partly done — the tooling is wired; the "starts green" half is **not** achieved, and
+  deliberately so. `ty>=0.0.72` is in the `dev` group with a `[tool.ty]` section in
+  `pyproject.toml` (py311, `include = ["cna"]`, vendored packs excluded, **no rule suppressed**),
+  and a `ty` hook was **appended** to the existing `.pre-commit-config.yaml`, which already carried
+  13 hooks across 4 repos (gitleaks, detect-secrets, ruff, ruff-format, and eight hygiene hooks
+  including `mixed-line-ending --fix=lf` and `no-commit-to-branch --branch main`). The `ty` hook is
+  `repo: local` / `language: system` so it runs the version pinned in the `dev` group; the existing
+  remote hooks were left exactly as they were.
+  `ty check cna/` reports **96 diagnostics**, so the hook is registered at `stages: [manual]`
+  rather than gating. Forcing it green would have meant widening ignore lists, which this item
+  explicitly forbids; the backlog is tracked in T-410 instead and the hook becomes gating by
+  deleting one line once that clears. Of the original 98, **45 are `unresolved-import` for packages
+  that *are* declared dependencies** simply absent from the review container — environment
+  artifacts, not defects.
+  The first run immediately earned its keep: it found a **guaranteed `TypeError` in production
+  code**, now fixed. `aws_discovery.py` called
+  `store.write_audit_event(engagement_id, "aws", event={...})`, but that method takes
+  `(engagement_id, event)` — so `"aws"` bound to `event` and the keyword raised
+  `TypeError: got multiple values for argument 'event'`. It was the only call site, and it sits in
+  the access-denied branch that fires whenever an account cannot be assumed, which is routine in
+  org-wide discovery. The cloud label now travels inside the event dict, and
+  `TestAccessDeniedAuditEvent` covers it using a **real** `EngagementStore` rather than a
+  `MagicMock`, since a mock accepts any signature and would not have caught it. Verified by
+  reverting the fix and watching the test fail.
 - **Notes for future engineers:** `ruff` is already clean across `cna/` (109 files formatted, all
   checks passing) with `select = E,W,F,I,B,C4,UP,S,N` and `target-version = "py311"`. Match that
   strictness posture. Do not widen ignore lists to make the first type-check run pass.
+  `.pre-commit-config.yaml` already existed — an earlier note under T-406 claiming otherwise was
+  wrong and has been corrected. Check before adding: it holds gitleaks, detect-secrets, ruff, and
+  the pre-commit-hooks hygiene set. Note `mixed-line-ending --fix=lf` in particular, which rewrites
+  CRLF to LF on commit; a number of tracked files are currently CRLF (`package.json`, several
+  `.tf` and test files), so that hook and the tree disagree today.
 
 ### T-403 — Close the coverage gap on discovery orchestrator `run()` paths
 
@@ -619,9 +647,10 @@ order; do not reorder it.
 - **Notes for future engineers:** All three scripts follow the same shape — a `validate()`/`main()`
   returning a bool/int and `sys.exit()` in `__main__` — so one parametrised test can cover them.
   The stream inconsistency noted here was closed by T-607; all three now report failures on
-  `stderr`. The `pre-commit` hook (recommended action 3) was deliberately left undone — this
-  repository has no `.pre-commit-config.yaml` and adding one is a separate decision about local
-  tooling, not part of closing the test gap. `validate_shape_catalog.py` is covered only by a
+  `stderr`. The `pre-commit` hook (recommended action 3) was left undone, but the reason
+  recorded here originally was **wrong**: it claimed the repository has no
+  `.pre-commit-config.yaml`. It does, and always did — 13 hooks across 4 repos. Adding the three
+  guard scripts to it is a small, still-open follow-up, not a new-file decision. `validate_shape_catalog.py` is covered only by a
   "still passes against this repository" assertion; it reads a hardcoded catalog path and has no
   fixture seam, so a violating-fixture test for it needs a small refactor first.
 
@@ -728,6 +757,70 @@ order; do not reorder it.
   outcome: it pins provider versions for supply-chain reasons, matching what the Azure roots
   already do, and it is the CBTS standard of preferring pinned versions in security-sensitive
   dependencies.
+
+### T-410 — Clear the 96 `ty` findings so the type check can gate
+
+- **Priority:** Medium
+- **Category:** Type safety
+- **Description:** T-402 wired `ty` but could not make it green. `ty check cna/` reports 96
+  diagnostics, so the pre-commit hook sits at `stages: [manual]`. Breakdown of the 53
+  non-import findings at the time of writing: `unresolved-attribute` 22, `invalid-argument-type`
+  17, `unknown-argument` 3, `invalid-parameter-default` 2, and one each of `unsupported-operator`,
+  `pydantic-discarded-extra-argument`, `parameter-already-assigned` (**fixed** under T-402 — it was
+  a real `TypeError`), `no-matching-overload`, `missing-argument`, `invalid-type-form`,
+  `invalid-return-type`, `invalid-raise`, and `invalid-assignment`. Concentrated in
+  `aws_discovery.py` (10), `azure_discovery.py` (8), `analysis_engine.py` (8), and `cli/publish.py`
+  (7). The remaining ~43 are `unresolved-import` for declared-but-uninstalled packages, which
+  resolve wherever the dependencies are actually present.
+- **Dependencies:** None. Best done after T-403-style tests exist for whatever is touched, since
+  several fixes are in modules at 22–37% coverage.
+- **Recommended action:** Work rule by rule, not file by file — `unresolved-attribute` is the
+  largest group and the most likely to hide genuine bugs of the kind already found. Two worth
+  starting with: `analysis_engine.py:1428` reads `.vnet_id` off `AzureVirtualNetworkGateway`, which
+  has no such attribute, and `core/throttle.py:78` can `raise last_exc` while it is still `None`
+  (currently unreachable, but only by accident of the loop's structure). When the count reaches
+  zero, delete the `stages: [manual]` line from the `ty` hook so it gates.
+- **Status:** Not started
+- **Notes for future engineers:** Do not close this by widening ignore lists or adding
+  `# type: ignore` — T-402 is explicit on that point, and the one bug already found is the argument
+  for taking the findings seriously.
+
+### T-411 — Triage the 446 `detect-secrets` findings and close the secret-scanning gap
+
+- **Priority:** High
+- **Category:** Security
+- **Description:** Three related problems, found while wiring pre-commit under T-402.
+  1. **`.secrets.baseline` was corrupt** and had been for some time — invalid JSON, a `]` where a
+     `}` belonged on the `TwilioKeyDetector` entry, which broke the `plugins_used` array. Any tool
+     reading it failed with *"Unable to read baseline"*. **Fixed** under T-402.
+  2. **The corrupt baseline silently broke the commit-time hook.** `detect-secrets` *is* wired in
+     `.pre-commit-config.yaml` and has been, so the practical effect of (1) was that the hook
+     failed with *"Unable to read baseline"* for anyone who ran `pre-commit install` — a broken
+     control rather than a missing one, which is worse, because the config reads as protected.
+  3. **`detect-secrets` is not in CI.** It runs at commit time only. The CI `secret-scan` job uses
+     `gitleaks`, and that job is `continue-on-error: true` (it needs a paid licence on private
+     repos), so no secret scan can currently fail a build. `README.md`'s claim that both "run on
+     every commit and CI push" is accurate for commits and overstated for CI.
+  With a readable baseline, the first scan reports **446 findings across 325 files**, none ever
+  triaged. 367 come from the vendored `.claude/` and `.agents/` packs — third-party security
+  documentation full of example tokens — and the pre-commit hook already excludes those and
+  `.deployment-catalog/` (build manifests whose image digests trip the hex-entropy detector),
+  leaving **31 project findings**. By type across the whole scan: Secret Keyword 279, Hex High
+  Entropy String 127, Basic Auth Credentials 16, AWS Access Key 16, JSON Web Token 3, Private Key
+  2, IBM Cloud IAM Key 2, Slack Token 1.
+- **Dependencies:** None.
+- **Recommended action:** Triage the 31 project findings by hand — they look like Terraform
+  variable names, `.env.example` / `terraform.tfvars.example` placeholders, and test fixtures, but
+  *look like* is not good enough for a category that includes "AWS Access Key" and "Private Key".
+  Audit each, then record the verdicts with `detect-secrets scan --baseline .secrets.baseline` and
+  `detect-secrets audit .secrets.baseline`. The existing hook gates already — it just could not
+  read the baseline — so once the baseline is honest, verify `pre-commit run detect-secrets
+  --all-files` passes. Separately, decide the `gitleaks` question: either license it so the CI
+  job can drop `continue-on-error`, or stop presenting it as a build-blocking control.
+- **Status:** Not started
+- **Notes for future engineers:** Do **not** close this by regenerating the baseline in one step —
+  that marks all 446 as reviewed without anyone having reviewed them, which is worse than the
+  current state because it looks clean. The baseline is an audit record, not a suppression file.
 
 ---
 

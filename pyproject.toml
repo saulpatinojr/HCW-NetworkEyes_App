@@ -42,6 +42,7 @@ dev = [
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",               # coverage plugin (was missing from dev deps)
     "ruff>=0.15.21",
+    "ty>=0.0.72",                       # type checker (TODO.md T-402)
     "pre-commit>=4.6.0",               # pre-commit itself as a dev dep
     "detect-secrets>=1.5",           # used by pre-commit hook
 ]
@@ -49,6 +50,17 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra -q"
+
+# Type checking (TODO.md T-402). Matches the ruff posture: py311, project
+# source only, no widened ignore lists. `ty check cna/` is NOT yet green — see
+# TODO.md T-410 for the remaining findings, which are to be fixed rather than
+# silenced. Nothing here suppresses a rule.
+[tool.ty.environment]
+python-version = "3.11"
+
+[tool.ty.src]
+include = ["cna"]
+exclude = [".claude", ".agents", ".codex"]
 
 [tool.ruff]
 line-length = 100

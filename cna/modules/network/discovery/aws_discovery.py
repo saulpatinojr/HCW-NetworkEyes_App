@@ -754,10 +754,18 @@ class AWSDiscovery:
                 acct_session = self._assume_role(account_id, role_name)
         except CNAAuthError as e:
             logger.error("Cannot access account %s: %s", account_id, e)
+            # `cloud` travels inside the event dict: write_audit_event takes
+            # (engagement_id, event) only, and passing "aws" positionally bound
+            # it to `event`, so the following keyword raised TypeError — in the
+            # one path that handles an inaccessible account (TODO.md T-402).
             self.store.write_audit_event(
                 engagement_id,
-                "aws",
-                event={"type": "access_denied", "account": account_id, "error": str(e)},
+                {
+                    "type": "access_denied",
+                    "cloud": "aws",
+                    "account": account_id,
+                    "error": str(e),
+                },
             )
             return
 
