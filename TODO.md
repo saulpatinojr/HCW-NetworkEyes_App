@@ -494,11 +494,21 @@ order; do not reorder it.
      invoke each script as a subprocess so the test exercises the real entry point.
   3. Consider a local `pre-commit` hook (`repo: local`, `language: system`) for the three scripts so
      violations surface at commit time rather than at PR time.
-- **Status:** Not started
+- **Status:** Done — `validate_module_deps.py` now derives `MODULES_DIR` from `__file__` and fails
+  when the modules directory is missing or holds zero `module.yaml` files, so "nothing found" is
+  reported as a broken invocation instead of a clean bill of health. `tests/unit/test_guardrail_scripts.py`
+  covers all three validators (22 cases) — passing and violating fixtures built in `tmp_path` and
+  invoked as subprocesses, including an explicit cwd-independence test that reproduces the original
+  defect. The `pre-commit` hook in recommended action 3 was not added; see the notes below.
+  Recorded in [`CHANGELOG.md`](CHANGELOG.md) → Unreleased.
 - **Notes for future engineers:** All three scripts follow the same shape — a `validate()`/`main()`
   returning a bool/int and `sys.exit()` in `__main__` — so one parametrised test can cover them.
-  Note the diagnostics are inconsistent: `validate_shape_catalog.py` prints failures to `stderr`,
-  the other two to `stdout` (see T-607).
+  The stream inconsistency noted here was closed by T-607; all three now report failures on
+  `stderr`. The `pre-commit` hook (recommended action 3) was deliberately left undone — this
+  repository has no `.pre-commit-config.yaml` and adding one is a separate decision about local
+  tooling, not part of closing the test gap. `validate_shape_catalog.py` is covered only by a
+  "still passes against this repository" assertion; it reads a hardcoded catalog path and has no
+  fixture seam, so a violating-fixture test for it needs a small refactor first.
 
 ---
 
@@ -649,7 +659,11 @@ order; do not reorder it.
   ```
 
   Return `False` when either `missing` or `violations` is non-empty.
-- **Status:** Not started
+- **Status:** Done — `validate()` now builds a `missing` list from the enumerated root documents and
+  returns `False` when either `missing` or `violations` is non-empty, reporting both classes in one
+  run. Covered by `tests/unit/test_guardrail_scripts.py` (parametrised over each of the four
+  documents, plus the delete-all-four case that previously passed). Recorded in
+  [`CHANGELOG.md`](CHANGELOG.md) → Unreleased.
 - **Notes for future engineers:** `ALLOWED_ROOT_DOCUMENTS` is a `set`, so sort before printing —
   unordered output makes CI logs harder to diff between runs.
 
@@ -679,7 +693,11 @@ order; do not reorder it.
   Compare allow-list membership case-insensitively too, so `readme.md` is not treated as a fifth
   document. Keep the `is_excluded()` short-circuit ahead of the suffix test — the vendored packs
   hold ~5,700 markdown files and are the bulk of the walk.
-- **Status:** Not started
+- **Status:** Done — the glob was replaced by a case-folded `DOCUMENT_SUFFIXES` set (13 extensions;
+  the recommended six plus `.asciidoc`, `.textile`, `.rdoc`, `.org`, `.pod`, `.creole`, `.wiki`),
+  and root allow-list membership is compared case-insensitively. All four confirmed sprawl patterns
+  are now caught, each as a regression case in `tests/unit/test_guardrail_scripts.py`. Recorded in
+  [`CHANGELOG.md`](CHANGELOG.md) → Unreleased.
 - **Notes for future engineers:** Runtime is not a concern: the current full-repository walk over
   5,712 markdown files completes in ~0.12 s locally, and CI checks out clean so `node_modules/`
   is absent. Prefer correctness over cleverness here.
@@ -704,7 +722,12 @@ order; do not reorder it.
   `".codex"` to `extend-exclude` in `pyproject.toml` — making both statements true and future-proof
   if `.codex/` ever gains Python — or reword the README bullet and the docstring to name only the
   two directories ruff actually excludes. Adding the exclusion is the lower-maintenance option.
-- **Status:** Not started
+- **Status:** Done — both mismatches resolved. The violation report now prints to `stderr`, matching
+  `validate_shape_catalog.py` (asserted in `tests/unit/test_guardrail_scripts.py`, which checks
+  `stdout` is empty on failure). `".codex"` was added to `[tool.ruff] extend-exclude` in
+  `pyproject.toml` — the lower-maintenance option named in the recommended action — making the
+  docstring and the README bullet true as written. Recorded in [`CHANGELOG.md`](CHANGELOG.md) →
+  Unreleased.
 - **Notes for future engineers:** Decide this once and make the docstring, the README bullet, and
   `pyproject.toml` agree. This is precisely the drift class the `documentation-curator` agent added
   in the same commit is meant to catch, which makes it a useful first exercise for that agent.
@@ -754,7 +777,12 @@ order; do not reorder it.
   out of scope). If a git dependency is unwanted in this script, the minimum viable fix is adding
   `.pytest_cache`, `.ruff_cache`, `.mypy_cache`, `htmlcov`, `.next`, `dist`, and `build` to
   `EXCLUDED_DIRS` — but that list will drift again the next time a tool is added.
-- **Status:** Not started
+- **Status:** Done — candidates now come from `git ls-files -z` via a `tracked_files()` helper rather
+  than `REPO_ROOT.rglob`, so untracked scratch is out of scope by construction. Verified against the
+  exact reproduction: `.pytest_cache/README.md` present, guard exits 0. `EXCLUDED_DIRS` was kept
+  (not removed as the recommended action suggested) because `.claude/`, `.agents/`, and `.codex/`
+  hold *tracked* files that must still be excluded per T-604. Recorded in
+  [`CHANGELOG.md`](CHANGELOG.md) → Unreleased.
 - **Notes for future engineers:** `git ls-files` also fixes the reverse hole — a file that is
   committed but sits under a directory someone later adds to `EXCLUDED_DIRS` stops being checked.
   Note `subprocess` triggers ruff's `S603`, which `pyproject.toml` already ignores repository-wide.

@@ -53,9 +53,12 @@ addopts = "-ra -q"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-# .claude and .agents are vendored Claude Code agent/skill configuration,
-# not this repo's own source — they aren't held to project lint standards.
-extend-exclude = [".claude", ".agents"]
+# .claude, .agents, and .codex are vendored Claude Code agent/skill/tooling
+# configuration, not this repo's own source — they aren't held to project lint
+# standards. Kept in sync with EXCLUDED_DIRS in
+# scripts/validate_documentation_model.py and the README "Repository
+# conventions" section (TODO.md T-607).
+extend-exclude = [".claude", ".agents", ".codex"]
 
 [tool.ruff.lint]
 select = [
