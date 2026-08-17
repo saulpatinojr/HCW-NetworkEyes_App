@@ -537,10 +537,35 @@ order; do not reorder it.
 - **Recommended action:** Bring the AWS discovery module's session construction, retry decoration,
   and exception mapping in line with the Azure module's conventions. No hardcoded region or
   account values in either path.
-- **Status:** Not started
-- **Notes for future engineers:** The convention to converge on is the Azure one — it is the older
-  and more exercised path. Any behavioural change should be called out explicitly rather than
-  landed silently.
+- **Status:** Partly done — the "no hardcoded region or account values" half is closed; the
+  exception-mapping half was **deliberately not done** (see below).
+  `aws_discovery.py` called `session.client("ec2", region_name="us-east-1")` in
+  `_get_enabled_regions()`. `describe_regions()` must reach some enabled region before the region
+  list is known, but the literal is wrong in the `aws-us-gov` and `aws-cn` partitions, where
+  us-east-1 does not exist. It is now resolved by `_region_for_region_lookup()`, most specific
+  source first: the session's own configured region (`AWS_REGION`, profile, or instance metadata),
+  then the first explicitly requested region, then the new declared
+  `DiscoveryOptions.region_lookup_endpoint` — overridable, and a last resort rather than an inline
+  literal. Five tests in `TestRegionLookupEndpoint` cover the order and assert the resolved value
+  actually reaches `session.client()`. A sweep of `cna/` found no other inline region literal, no
+  hardcoded account ID, and no inline Azure location; the only region literals remaining are the
+  `_OPT_IN_REGIONS` set, which is a declared list, not a call-site value. The repository-wide rule
+  is now written down in `README.md` → "Repository conventions".
+  The other three asks were assessed and found to need no change: **retry decoration** is already
+  identical (both modules use the same inline `with_retry()(fn)(...)` idiom — 7 AWS sites, 2
+  Azure), and **session construction** is not meaningfully comparable, since a boto3 `Session` and
+  an Azure credential/client pair are not analogous objects and each follows its own SDK's idiom.
+- **Notes for future engineers:** This item said to converge on the Azure convention "because it is
+  the older and more exercised path". For **exception mapping that is backwards, and it was
+  deliberately not done.** AWS catches `botocore.exceptions.ClientError` and inspects the error code
+  to separate `AccessDenied` from everything else; Azure uses a bare `except Exception` in roughly
+  30 places. Converging AWS onto Azure would discard precise discrimination in favour of a catch-all
+  that swallows genuine bugs — including the `with_retry` contract defect that prompted this item
+  and T-403. Both paths already agree on what matters (raise `CNAAuthError`, with a message, using
+  `from e`); AWS simply gets there more precisely. If this is revisited, the convergence should run
+  the other way — narrow Azure's broad handlers toward AWS's — and that is a separate piece of work
+  against a module at 22% coverage, so it needs tests first. Any behavioural change should be
+  called out explicitly rather than landed silently.
 
 ### T-405 — Survey the scaffold/wiring gaps flagged during the dead-code sweep
 

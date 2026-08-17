@@ -403,3 +403,55 @@ class TestRun:
             discovery.run()
 
         assert discover.call_count == 0
+
+
+class TestRegionLookupEndpoint:
+    """`_region_for_region_lookup()` — no hardcoded region (TODO.md T-404).
+
+    `describe_regions()` has to be called against some enabled region before the
+    region list is known. That endpoint used to be the literal "us-east-1" at the
+    call site, which is wrong in the aws-us-gov and aws-cn partitions, where the
+    region does not exist. It is now resolved, with the declared option as a last
+    resort rather than a hardcoded value.
+    """
+
+    def test_prefers_the_sessions_own_configured_region(self, discovery):
+        """AWS_REGION / profile / instance metadata is always right for the partition."""
+        session = MagicMock()
+        session.region_name = "us-gov-west-1"
+        assert discovery._region_for_region_lookup(session) == "us-gov-west-1"
+
+    def test_falls_back_to_the_first_requested_region(self, discovery):
+        """No session region, but the caller named regions — use one of theirs."""
+        session = MagicMock()
+        session.region_name = None
+        discovery.opts.regions = ["cn-north-1", "cn-northwest-1"]
+        assert discovery._region_for_region_lookup(session) == "cn-north-1"
+
+    def test_uses_the_declared_option_as_a_last_resort(self, discovery):
+        session = MagicMock()
+        session.region_name = None
+        discovery.opts.regions = []
+        assert discovery._region_for_region_lookup(session) == "us-east-1"
+
+    def test_the_last_resort_is_overridable_for_other_partitions(self, store):
+        """The point of declaring it: aws-us-gov and aws-cn callers can change it."""
+        opts = DiscoveryOptions(
+            org_role_arn="arn:aws-us-gov:iam::123456789012:role/CNA-ReadOnly",
+            region_lookup_endpoint="us-gov-west-1",
+        )
+        d = AWSDiscovery(store=store, options=opts)
+        session = MagicMock()
+        session.region_name = None
+        assert d._region_for_region_lookup(session) == "us-gov-west-1"
+
+    def test_describe_regions_is_called_against_the_resolved_endpoint(self, discovery):
+        """The resolved value must actually reach session.client()."""
+        session = MagicMock()
+        session.region_name = "eu-west-1"
+        session.client.return_value.describe_regions.return_value = {
+            "Regions": [{"RegionName": "eu-west-1"}]
+        }
+        discovery.opts.regions = []
+        discovery._get_enabled_regions(session)
+        assert session.client.call_args.kwargs["region_name"] == "eu-west-1"

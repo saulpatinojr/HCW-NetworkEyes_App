@@ -130,6 +130,13 @@ Reference** explains each value in full.
   resource group per environment and a separate resource group for Terraform state.
 - **Split state.** Every environment has a `platform` root and a `workload` root with separate
   state files. Platform applies first; workload consumes its outputs through explicit variables.
+- **Never hardcode a value at a call site.** Regions, endpoints, account IDs, and every other
+  environment-specific value is *declared* — as a Terraform variable, a `DiscoveryOptions` field, or
+  a named module-level constant — and resolved at runtime, most specific source first. That is the
+  point of the declared lists: they record what to use later, and they can be overridden. A
+  declared default is a last resort, never an inline literal. Terraform variables carrying values a
+  human must supply take no default at all, so a plan fails rather than applying something
+  plausible-but-wrong.
 - **PowerShell scripts** use Verb-Noun naming (`Initialize-CnaGitHubSecrets.ps1`).
 - **All GitHub Actions are pinned to a SHA digest**, and `gitleaks` plus `detect-secrets` run on
   every commit and CI push.

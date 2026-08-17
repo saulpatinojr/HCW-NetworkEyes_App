@@ -81,6 +81,12 @@ class DiscoveryOptions:
     skip_opt_in_regions: bool = True
     resume: bool = False  # skip accounts with existing checkpoint
     max_concurrent_regions: int = 10
+    # Endpoint used only to reach EC2 for describe_regions(), which must be
+    # called against some enabled region before the region list is known.
+    # Declared here rather than inlined at the call site so the aws-us-gov and
+    # aws-cn partitions can override it — us-east-1 does not exist in either.
+    # It is a last resort: see AWSDiscovery._region_for_region_lookup().
+    region_lookup_endpoint: str = "us-east-1"
 
 
 class AWSDiscovery:
@@ -152,9 +158,27 @@ class AWSDiscovery:
             cursor.advance(resp.get("NextToken"))
         return accounts
 
+    def _region_for_region_lookup(self, session: boto3.Session) -> str:
+        """Pick the region whose EC2 endpoint answers describe_regions().
+
+        Resolution order, most specific first:
+          1. the session's own configured region (AWS_REGION, profile, or
+             instance metadata) — always correct for the caller's partition;
+          2. the first explicitly requested region, when the caller passed any;
+          3. ``opts.region_lookup_endpoint``, the declared default.
+
+        Never a literal at the call site: a hardcoded us-east-1 is wrong in the
+        aws-us-gov and aws-cn partitions, where that region does not exist.
+        """
+        if session.region_name:
+            return session.region_name
+        if self.opts.regions:
+            return self.opts.regions[0]
+        return self.opts.region_lookup_endpoint
+
     def _get_enabled_regions(self, session: boto3.Session) -> list[str]:
         """Return all enabled regions, optionally filtered."""
-        ec2 = session.client("ec2", region_name="us-east-1")
+        ec2 = session.client("ec2", region_name=self._region_for_region_lookup(session))
         resp = with_retry()(ec2.describe_regions)(
             Filters=[{"Name": "opt-in-status", "Values": ["opt-in-not-required", "opted-in"]}],
         )
