@@ -7,16 +7,16 @@ can pick up work without rediscovering the findings.
 Items requiring external input — an approval, an account, a credential, an access grant — belong
 in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG.md`](CHANGELOG.md).
 
-**Last reviewed:** 2026-08-10
+**Last reviewed:** 2026-08-17
 
 | Phase | Theme | Items |
 |---|---|---|
 | [Phase 1](#phase-1--critical-fixes) | Critical fixes — repository states something untrue | T-101 – T-104 |
 | [Phase 2](#phase-2--security-improvements) | Security improvements | T-201 – T-203 |
 | [Phase 3](#phase-3--deployment-readiness) | Deployment readiness | T-301 – T-305 |
-| [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-405 |
+| [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-406 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements | T-501 – T-502 |
-| [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-604 |
+| [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
 
 ---
 
@@ -442,6 +442,39 @@ order; do not reorder it.
   closed issue, and that the `Phase`/`SCAFFOLD` markers in the source are intentional. Do not
   treat those markers as stale on sight.
 
+### T-406 — Guardrail scripts are untested and one silently passes from the wrong directory
+
+- **Priority:** Medium
+- **Category:** Technical debt / CI reliability
+- **Description:** The `repository-guardrails` job runs three validators — `validate_module_deps.py`,
+  `validate_shape_catalog.py`, `validate_documentation_model.py` — and none of them has a single
+  test. Two concrete consequences were confirmed during review:
+  1. `scripts/validate_module_deps.py` resolves its target as a **relative** path
+     (`MODULES_DIR = Path("cna/modules")`, line 12). Run from anywhere other than the repository
+     root it finds no `module.yaml` files, prints `OK: 0 installed modules, all dependencies
+     satisfied.` and exits 0. Reproduced: `cd /tmp && python3 <repo>/scripts/validate_module_deps.py`
+     → exit 0. It passes in CI only because the job happens to start in the workspace root, so a
+     green check does not prove the dependency graph was actually validated.
+  2. `scripts/validate_documentation_model.py` (line 24) resolves its root from `__file__`
+     (`Path(__file__).resolve().parent.parent`) and is therefore cwd-independent — the correct
+     pattern. The three scripts should not disagree on something this basic.
+- **Dependencies:** None. Best landed together with T-605 – T-607, which touch the same script.
+- **Recommended action:**
+  1. Change `validate_module_deps.py` to derive its root from `__file__`, matching
+     `validate_documentation_model.py`, and make it fail rather than pass when the modules
+     directory is missing or contains zero modules — "nothing found" is a broken invocation, not a
+     clean bill of health.
+  2. Add `tests/unit/test_guardrail_scripts.py` covering all three validators: a passing fixture, a
+     violating fixture, and an assertion on the exit code. Build the fixtures in `tmp_path` and
+     invoke each script as a subprocess so the test exercises the real entry point.
+  3. Consider a local `pre-commit` hook (`repo: local`, `language: system`) for the three scripts so
+     violations surface at commit time rather than at PR time.
+- **Status:** Not started
+- **Notes for future engineers:** All three scripts follow the same shape — a `validate()`/`main()`
+  returning a bool/int and `sys.exit()` in `__main__` — so one parametrised test can cover them.
+  Note the diagnostics are inconsistent: `validate_shape_catalog.py` prints failures to `stderr`,
+  the other two to `stdout` (see T-607).
+
 ---
 
 ## Phase 5 — Feature enhancements
@@ -563,3 +596,140 @@ order; do not reorder it.
   *project-neutral*. Project-neutral agent knowledge stays in the pack — it is what lets the pack
   drop into another repository unchanged. Anything naming this platform, its subscriptions, or its
   clients does not belong there.
+
+### T-605 — The documentation-model guard enforces "at most four", not "exactly four"
+
+- **Priority:** Medium
+- **Category:** CI correctness / documentation model
+- **Description:** `scripts/validate_documentation_model.py` only reports markdown files that are
+  **not** on the allow-list. It never checks that the four required documents exist. Deleting
+  `README.md`, `CHANGELOG.md`, `REVIEW.md`, and `TODO.md` in the same commit leaves the guard
+  passing. Reproduced against a fixture repository containing only `scripts/` and no root
+  documents: exit 0, `Documentation model OK: no markdown files outside the allow-list.` Both
+  `README.md` → "Repository conventions" and T-603 state the model as *exactly* four documents, so
+  the guard currently enforces half of the rule it was added for — and the missing half is the one
+  that protects the single source of truth.
+- **Dependencies:** None.
+- **Recommended action:** Add a presence check to `validate()` before the sprawl scan, and report
+  both classes of violation in one run so a contributor sees the full picture:
+
+  ```python
+  missing = sorted(
+      name for name in ALLOWED_ROOT_DOCUMENTS if not (REPO_ROOT / name).is_file()
+  )
+  if missing:
+      print("Documentation model violation — required document(s) missing:")
+      for name in missing:
+          print(f"  {name}")
+  ```
+
+  Return `False` when either `missing` or `violations` is non-empty.
+- **Status:** Not started
+- **Notes for future engineers:** `ALLOWED_ROOT_DOCUMENTS` is a `set`, so sort before printing —
+  unordered output makes CI logs harder to diff between runs.
+
+### T-606 — The documentation-model guard misses mixed-case and non-`.md` documentation
+
+- **Priority:** Medium
+- **Category:** CI correctness / documentation model
+- **Description:** The scan is `REPO_ROOT.rglob("*.md")` (line 68), which on Linux is
+  case-sensitive and matches one extension. Four sprawl patterns were confirmed to pass the guard
+  against a fixture repository, each of which GitHub renders as a document:
+  `docs/ROADMAP.MD` (exit 0), `NOTES.Md` at the repository root (exit 0), `docs/NOTES.markdown`
+  (exit 0), and `docs/PLAN.rst` (exit 0). Only lowercase `.md` is caught. T-603's stated purpose is
+  that "nothing prevents documentation sprawl from returning"; a contributor on a
+  case-insensitive filesystem creating `ROADMAP.MD` reintroduces it without CI noticing.
+- **Dependencies:** T-605 (same function, land together).
+- **Recommended action:** Match on a case-folded suffix set rather than a glob pattern:
+
+  ```python
+  DOCUMENT_SUFFIXES = {".md", ".markdown", ".mdown", ".mkd", ".rst", ".adoc"}
+
+  candidates = (
+      p for p in REPO_ROOT.rglob("*")
+      if p.is_file() and p.suffix.lower() in DOCUMENT_SUFFIXES
+  )
+  ```
+
+  Compare allow-list membership case-insensitively too, so `readme.md` is not treated as a fifth
+  document. Keep the `is_excluded()` short-circuit ahead of the suffix test — the vendored packs
+  hold ~5,700 markdown files and are the bulk of the walk.
+- **Status:** Not started
+- **Notes for future engineers:** Runtime is not a concern: the current full-repository walk over
+  5,712 markdown files completes in ~0.12 s locally, and CI checks out clean so `node_modules/`
+  is absent. Prefer correctness over cleverness here.
+
+### T-607 — Align guard diagnostics and the `.codex` lint claim with what the code does
+
+- **Priority:** Low
+- **Category:** Consistency / documentation accuracy
+- **Description:** Two small mismatches introduced alongside the guard:
+  1. `validate_documentation_model.py` prints its failure report to `stdout`;
+     `validate_shape_catalog.py` prints failures to `stderr`. Two guards in the same CI job report
+     failures on different streams, so log capture and annotation behave differently per guard.
+  2. The script's module docstring says vendored directories are excluded "matching the ruff
+     exclusion in `pyproject.toml`", and `README.md` → "Repository conventions" says `.claude/`,
+     `.agents/`, and `.codex/` are "excluded from lint (see `pyproject.toml`)". `pyproject.toml`'s
+     `[tool.ruff] extend-exclude` lists only `.claude` and `.agents` — `.codex` is absent. The
+     claim is harmless today because `.codex/` contains only `.toml` files (0 `.py`, 0 `.md`), so
+     ruff would not lint it regardless, but the statement is not true as written.
+- **Dependencies:** None.
+- **Recommended action:** Print the violation report to `stderr` in
+  `validate_documentation_model.py`, matching `validate_shape_catalog.py`. Then either add
+  `".codex"` to `extend-exclude` in `pyproject.toml` — making both statements true and future-proof
+  if `.codex/` ever gains Python — or reword the README bullet and the docstring to name only the
+  two directories ruff actually excludes. Adding the exclusion is the lower-maintenance option.
+- **Status:** Not started
+- **Notes for future engineers:** Decide this once and make the docstring, the README bullet, and
+  `pyproject.toml` agree. This is precisely the drift class the `documentation-curator` agent added
+  in the same commit is meant to catch, which makes it a useful first exercise for that agent.
+
+### T-608 — The documentation-model guard fails on gitignored build artifacts
+
+- **Priority:** High
+- **Category:** CI correctness / developer experience
+- **Description:** The guard walks the **filesystem** (`REPO_ROOT.rglob`), not the set of files git
+  tracks, and `EXCLUDED_DIRS` is a hand-maintained list that covers `node_modules`, `.venv`, and
+  `venv` but not the tool caches this repository actually produces. Running the test suite creates
+  `.pytest_cache/README.md` — a file pytest writes itself, gitignored at `.gitignore:31` and
+  untracked — after which the guard fails:
+
+  ```
+  $ python3 -m pytest -q          # writes .pytest_cache/README.md
+  $ python3 scripts/validate_documentation_model.py
+  Documentation model violation — the repository keeps exactly four
+  markdown documents (README.md, CHANGELOG.md, REVIEW.md, TODO.md).
+    .pytest_cache/README.md
+  Move the content to one of the four documents or the Wiki
+  (content determines destination), then delete the file.          # exit 1
+  ```
+
+  The advice is nonsense for a pytest artifact, and the script's own docstring advertises that it
+  "can be run locally" — running the tests first is the normal developer sequence, so the guard
+  fails for most people who try it. CI is unaffected today only because `actions/checkout` runs
+  `git clean -ffdx` on the self-hosted workspace before the job. That makes this a latent CI
+  failure too: any tool cache created *during* a job before the guardrails step would trip it.
+- **Dependencies:** None. Land before or with T-605/T-606 — all three change the same scan.
+- **Recommended action:** Enumerate candidates from git rather than from the filesystem, which
+  matches the rule being enforced ("the *repository* keeps four documents" — untracked scratch is
+  not the repository) and removes the need to maintain `EXCLUDED_DIRS` at all:
+
+  ```python
+  import subprocess
+
+  def tracked_files() -> list[Path]:
+      out = subprocess.run(
+          ["git", "-C", str(REPO_ROOT), "ls-files", "-z"],
+          capture_output=True, text=True, check=True,
+      ).stdout
+      return [Path(p) for p in out.split("\0") if p]
+  ```
+
+  Keep the vendored-pack exclusion (`.claude/`, `.agents/`, `.codex/` are tracked and must stay
+  out of scope). If a git dependency is unwanted in this script, the minimum viable fix is adding
+  `.pytest_cache`, `.ruff_cache`, `.mypy_cache`, `htmlcov`, `.next`, `dist`, and `build` to
+  `EXCLUDED_DIRS` — but that list will drift again the next time a tool is added.
+- **Status:** Not started
+- **Notes for future engineers:** `git ls-files` also fixes the reverse hole — a file that is
+  committed but sits under a directory someone later adds to `EXCLUDED_DIRS` stops being checked.
+  Note `subprocess` triggers ruff's `S603`, which `pyproject.toml` already ignores repository-wide.
