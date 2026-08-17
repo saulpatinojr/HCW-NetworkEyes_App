@@ -793,7 +793,7 @@ order; do not reorder it.
   has no such attribute, and `core/throttle.py:78` can `raise last_exc` while it is still `None`
   (currently unreachable, but only by accident of the loop's structure). When the count reaches
   zero, delete the `stages: [manual]` line from the `ty` hook so it gates.
-- **Status:** In progress — 98 → **81** diagnostics (52 → **37** non-import). Thirteen fixed, each
+- **Status:** In progress — 98 → **71** diagnostics (52 → **27** non-import). Nineteen fixed, each
   a real defect rather than a style nit:
   `analysis_engine.py` used the builtin `callable` in a type expression (not a type at all) and
   `options: AnalysisOptions = None`; `render_pipeline.py` had the same `= None` on a non-Optional
@@ -849,7 +849,23 @@ order; do not reorder it.
   `str | None`. One finding without an account id raises
   `TypeError: '<' not supported between instances of 'str' and 'NoneType'` — reproduced directly.
   Both comprehensions now filter falsy ids.
-  **The remaining 37 are dominated by one systemic problem — see T-412.** 11 of the 22
+  A fifth pass closed the Optional-narrowing group, which was six findings sharing one shape.
+  `AWSDiscovery._mgmt_session` is `Session | None` because it does not exist until `run()` creates
+  it, so every per-account helper dereferenced a possibly-`None` session. A `_mgmt` property now
+  narrows it once and raises a named `RuntimeError` instead of letting it surface as
+  `AttributeError: 'NoneType' object has no attribute 'client'` several frames deeper. Both
+  discovery `run()` methods also took `self.store.engagement_id` — `str | None` — straight into
+  models that require `str`; they now fail early with a `ValueError` naming the fix, matching the
+  guard added to `render_pipeline._output_dir()`. And `PortalGenerator._filesizeformat` divided its
+  own `int` parameter into a float; it uses a local `float` now.
+  **Known false positive, deliberately not "fixed":** `cli/publish.py:173,176` reports
+  `generate_presigned_url` / `generate_sas_token` missing on the `S3Deployer | AzureBlobDeployer`
+  union. The code is correct — `--cloud` is a `click.Choice(["aws", "azure"])`, and the branch that
+  selects the method matches the branch that built the deployer. The checker simply cannot tie
+  `cloud` to the deployer's type. Narrowing it properly needs the two lazily-imported classes in
+  scope at the call site; do that as a small refactor if the noise becomes annoying, not by
+  suppressing the rule.
+  **The remaining 27 are dominated by one systemic problem — see T-412.** 11 of the 22
   `unresolved-attribute` findings are calls to `EngagementStore` methods that do not exist, which is
   not a typing nit but three broken CLI commands. Fixing those is that item's job, not this one's;
   what is left here afterwards is largely `invalid-argument-type` (17) and the Optional-narrowing

@@ -200,11 +200,13 @@ class PortalGenerator:
     @staticmethod
     def _filesizeformat(value: int) -> str:
         """Human-readable file size."""
+        # Division makes this a float, so it cannot be the int parameter itself.
+        size = float(value)
         for unit in ["B", "KB", "MB", "GB"]:
-            if value < _BYTES_PER_UNIT:
-                return f"{value:.0f} {unit}"
-            value /= _BYTES_PER_UNIT
-        return f"{value:.1f} TB"
+            if size < _BYTES_PER_UNIT:
+                return f"{size:.0f} {unit}"
+            size /= _BYTES_PER_UNIT
+        return f"{size:.1f} TB"
 
     @staticmethod
     def build_entries(

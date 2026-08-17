@@ -97,12 +97,29 @@ class AWSDiscovery:
         self.opts = options
         self._mgmt_session: boto3.Session | None = None
 
+    @property
+    def _mgmt(self) -> boto3.Session:
+        """The management-account session, established by ``run()``.
+
+        ``_mgmt_session`` is Optional because it does not exist until ``run()``
+        creates it. Every per-account helper runs after that, so a ``None`` here
+        is a programming error, not a runtime condition — surface it as one
+        rather than letting it become ``AttributeError: 'NoneType' object has no
+        attribute 'client'`` several frames deeper (TODO.md T-410).
+        """
+        if self._mgmt_session is None:
+            raise RuntimeError(
+                "AWS management session not established — call run() before "
+                "per-account discovery helpers."
+            )
+        return self._mgmt_session
+
     # ------------------------------------------------------------------ setup
 
     def _assume_role(self, account_id: str, role_name: str) -> boto3.Session:
         """Assume the CNA read-only role in a member account."""
         role_arn = f"arn:aws:iam::{account_id}:role/{role_name}"
-        sts = self._mgmt_session.client("sts")
+        sts = self._mgmt.client("sts")
         try:
             kwargs = {
                 "RoleArn": role_arn,
@@ -128,7 +145,7 @@ class AWSDiscovery:
 
     def _list_org_accounts(self) -> list[AWSAccount]:
         """List all accounts in the AWS Organization from the management account."""
-        orgs = self._mgmt_session.client("organizations")
+        orgs = self._mgmt.client("organizations")
         accounts = []
         cursor = PaginationCursor()
         while cursor.has_more:
@@ -749,7 +766,7 @@ class AWSDiscovery:
 
         try:
             if account.is_management_account:
-                acct_session = self._mgmt_session
+                acct_session = self._mgmt
             else:
                 acct_session = self._assume_role(account_id, role_name)
         except CNAAuthError as e:
@@ -802,6 +819,11 @@ class AWSDiscovery:
             CNAAuthError: If management account credentials fail.
         """
         engagement_id = self.store.engagement_id
+        if engagement_id is None:
+            raise ValueError(
+                "EngagementStore is not bound to an engagement_id; "
+                "construct it with EngagementStore(engagement_id=...) before discovery."
+            )
         logger.info("[%s] AWS discovery starting", engagement_id)
 
         # 1. Establish management account session

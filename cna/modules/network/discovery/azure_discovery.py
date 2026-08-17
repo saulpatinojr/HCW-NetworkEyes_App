@@ -2432,6 +2432,11 @@ class AzureDiscovery:
     def run(self) -> AzureTopology:
         """Execute full Azure discovery. Returns completed AzureTopology."""
         engagement_id = self.store.engagement_id
+        if engagement_id is None:
+            raise ValueError(
+                "EngagementStore is not bound to an engagement_id; "
+                "construct it with EngagementStore(engagement_id=...) before discovery."
+            )
         logger.info("[%s] Azure discovery starting (v1.2.0)", engagement_id)
 
         self.validate_access()
