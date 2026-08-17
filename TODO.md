@@ -793,7 +793,7 @@ order; do not reorder it.
   has no such attribute, and `core/throttle.py:78` can `raise last_exc` while it is still `None`
   (currently unreachable, but only by accident of the loop's structure). When the count reaches
   zero, delete the `stages: [manual]` line from the `ty` hook so it gates.
-- **Status:** In progress — 98 → **89** diagnostics (52 → **45** non-import). Nine fixed, each a
+- **Status:** In progress — 98 → **84** diagnostics (52 → **40** non-import). Eleven fixed, each a
   real defect rather than a style nit:
   `analysis_engine.py` used the builtin `callable` in a type expression (not a type at all) and
   `options: AnalysisOptions = None`; `render_pipeline.py` had the same `= None` on a non-Optional
@@ -821,7 +821,23 @@ order; do not reorder it.
   declared with a `SubnetType.UNKNOWN` default, so checkpoints written before it existed still
   deserialise, and the value survives the JSON round-trip the checkpoint path uses. Note the AWS
   `Subnet` model always had this field; only the Azure model was missing it.
-  **The remaining 45 are dominated by one systemic problem — see T-412.** 11 of the 22
+  A third pass found the most fundamental one yet: **`EngagementStore.init()` and `save()` could
+  never run.** Both called `config.model_dump(mode="json", default=str)`, and Pydantic v2's
+  `model_dump` has no `default` parameter, so both raised
+  `TypeError: BaseModel.model_dump() got an unexpected keyword argument 'default'` — an engagement
+  could not be created or persisted at all. The argument was redundant as well as invalid:
+  `_atomic_write` already passes `default=str` to `json.dump`, and `mode="json"` already renders
+  datetimes and enums. Dropping it makes the whole `init` → `save` → `load` cycle work.
+  `tests/unit/test_persistence.py` is new — `EngagementStore` had **no test file at all**, which is
+  precisely why three separate signature bugs survived a green suite. Ten tests, all against a real
+  store on `tmp_path`, including explicit guards that the two previously-wrong call shapes now raise
+  `TypeError`.
+  Also corrected an error introduced earlier in this same item: `progress_callback` was annotated
+  `Callable[[str], None]` on a guess, but `cli/analyze.py` passes
+  `progress(cloud, current, total, label)`. The annotation is now
+  `Callable[[str, int, int, str], None]`, which removes the two
+  `too-many-positional-arguments` findings that annotation had itself created.
+  **The remaining 40 are dominated by one systemic problem — see T-412.** 11 of the 22
   `unresolved-attribute` findings are calls to `EngagementStore` methods that do not exist, which is
   not a typing nit but three broken CLI commands. Fixing those is that item's job, not this one's;
   what is left here afterwards is largely `invalid-argument-type` (17) and the Optional-narrowing

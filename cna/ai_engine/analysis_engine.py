@@ -139,7 +139,8 @@ class AnalysisOptions:
     load_aws: bool = True
     load_azure: bool = True
     dry_run: bool = False  # produce findings but do not write to store
-    progress_callback: Callable[[str], None] | None = None
+    # (cloud, current, total, label) — see cli/analyze.py's `progress`
+    progress_callback: Callable[[str, int, int, str], None] | None = None
 
 
 class AnalysisEngine:

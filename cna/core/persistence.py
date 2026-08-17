@@ -88,7 +88,7 @@ class EngagementStore:
 
         state_path = eng_dir / self.ENGAGEMENT_FILE
         if not state_path.exists():
-            self._atomic_write(state_path, config.model_dump(mode="json", default=str))
+            self._atomic_write(state_path, config.model_dump(mode="json"))
             logger.info("Initialized engagement: %s", config.engagement_id)
         else:
             logger.info("Engagement already exists, skipping init: %s", config.engagement_id)
@@ -114,7 +114,7 @@ class EngagementStore:
     def save(self, config: EngagementConfig) -> None:
         """Persist updated engagement state atomically."""
         state_path = self.engagement_dir(config.engagement_id) / self.ENGAGEMENT_FILE
-        self._atomic_write(state_path, config.model_dump(mode="json", default=str))
+        self._atomic_write(state_path, config.model_dump(mode="json"))
 
     def acquire_lock(self, engagement_id: str, operator: str) -> None:
         """Write advisory lock file. Raises EngagementLockError if already locked."""
