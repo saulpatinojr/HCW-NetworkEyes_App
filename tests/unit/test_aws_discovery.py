@@ -20,8 +20,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from cna.core.topology_schema import AWSRegionTopology
+from cna.core.exceptions import CNAAuthError, CNARateLimitError
+from cna.core.topology_schema import AWSAccount, AWSRegionTopology
 from cna.modules.network.discovery.aws_discovery import AWSDiscovery, DiscoveryOptions
+
+MODULE = "cna.modules.network.discovery.aws_discovery"
 
 
 @pytest.fixture
@@ -245,3 +248,158 @@ class TestDiscoveryOptions:
         assert opts.resume is False
         assert opts.skip_opt_in_regions is True
         assert opts.max_concurrent_regions == 10
+
+
+class TestRun:
+    """`AWSDiscovery.run()` — the orchestrator entry point (TODO.md T-403).
+
+    `run()` had no coverage at all: it is excluded from measurement by
+    `[tool.coverage.run] omit` in pyproject.toml, so the `fail_under = 80` gate
+    never saw it. These tests exercise the real method with the boto3 session and
+    the two per-account helpers mocked, so no AWS call is made.
+    """
+
+    def _session(self, account_id="111111111111"):
+        """A mock boto3.Session whose STS client returns a caller identity."""
+        session = MagicMock()
+        session.client.return_value.get_caller_identity.return_value = {"Account": account_id}
+        return session
+
+    def test_returns_topology_for_the_management_account(self, discovery, store):
+        accounts = [AWSAccount(account_id="111111111111", account_name="mgmt")]
+        with (
+            patch(f"{MODULE}.boto3.Session", return_value=self._session()),
+            patch.object(discovery, "_list_org_accounts", return_value=accounts),
+            patch.object(discovery, "_discover_account") as discover,
+        ):
+            topology = discovery.run()
+
+        assert topology.engagement_id == store.engagement_id
+        assert topology.management_account_id == "111111111111"
+        assert [a.account_id for a in topology.accounts] == ["111111111111"]
+        assert discover.call_count == 1
+
+    def test_marks_the_management_account_even_when_org_does_not(self, discovery):
+        """The org listing reports is_management_account=False; run() must correct it."""
+        accounts = [
+            AWSAccount(account_id="111111111111", account_name="mgmt", is_management_account=False)
+        ]
+        with (
+            patch(f"{MODULE}.boto3.Session", return_value=self._session()),
+            patch.object(discovery, "_list_org_accounts", return_value=accounts),
+            patch.object(discovery, "_discover_account"),
+        ):
+            topology = discovery.run()
+
+        assert topology.accounts[0].is_management_account is True
+
+    def test_filters_to_the_requested_account_ids(self, discovery):
+        """opts.account_ids is ['123456789012'], so the other two are dropped."""
+        accounts = [
+            AWSAccount(account_id="123456789012", account_name="wanted"),
+            AWSAccount(account_id="222222222222", account_name="other"),
+            AWSAccount(account_id="333333333333", account_name="another"),
+        ]
+        with (
+            patch(f"{MODULE}.boto3.Session", return_value=self._session()),
+            patch.object(discovery, "_list_org_accounts", return_value=accounts),
+            patch.object(discovery, "_discover_account") as discover,
+        ):
+            topology = discovery.run()
+
+        assert [a.account_id for a in topology.accounts] == ["123456789012"]
+        assert discover.call_count == 1
+
+    def test_falls_back_to_the_management_account_when_the_filter_matches_nothing(self, discovery):
+        """Standalone accounts, or a filter matching nothing, must still discover something."""
+        accounts = [AWSAccount(account_id="999999999999", account_name="unrelated")]
+        with (
+            patch(f"{MODULE}.boto3.Session", return_value=self._session()),
+            patch.object(discovery, "_list_org_accounts", return_value=accounts),
+            patch.object(discovery, "_discover_account"),
+        ):
+            topology = discovery.run()
+
+        assert len(topology.accounts) == 1
+        synthesized = topology.accounts[0]
+        assert synthesized.account_id == "111111111111"
+        assert synthesized.account_name == "management"
+        assert synthesized.is_management_account is True
+
+    def test_passes_the_role_name_not_the_full_arn(self, discovery):
+        """org_role_arn is an ARN; _discover_account takes the bare role name."""
+        accounts = [AWSAccount(account_id="123456789012", account_name="wanted")]
+        with (
+            patch(f"{MODULE}.boto3.Session", return_value=self._session()),
+            patch.object(discovery, "_list_org_accounts", return_value=accounts),
+            patch.object(discovery, "_discover_account") as discover,
+        ):
+            discovery.run()
+
+        assert discover.call_args.args[1] == "CNA-ReadOnly"
+
+    def test_discovers_every_account_in_the_org(self, discovery, opts):
+        opts.account_ids = []
+        accounts = [
+            AWSAccount(account_id="111111111111", account_name="mgmt"),
+            AWSAccount(account_id="222222222222", account_name="dev"),
+            AWSAccount(account_id="333333333333", account_name="prod"),
+        ]
+        with (
+            patch(f"{MODULE}.boto3.Session", return_value=self._session()),
+            patch.object(discovery, "_list_org_accounts", return_value=accounts),
+            patch.object(discovery, "_discover_account") as discover,
+        ):
+            topology = discovery.run()
+
+        assert len(topology.accounts) == 3
+        assert discover.call_count == 3
+
+    def test_retries_the_caller_identity_call_on_rate_limit(self, discovery):
+        """run() wraps get_caller_identity in with_retry(); assert it actually retries.
+
+        T-403's notes: assert on retry behaviour, not just the happy path — a
+        `with_retry` contract bug in this path is what prompted the item.
+        """
+        session = MagicMock()
+        session.client.return_value.get_caller_identity.side_effect = [
+            CNARateLimitError("Throttling"),
+            {"Account": "111111111111"},
+        ]
+        with (
+            patch(f"{MODULE}.boto3.Session", return_value=session),
+            patch.object(discovery, "_list_org_accounts", return_value=[]),
+            patch.object(discovery, "_discover_account"),
+            patch("cna.core.throttle.time.sleep") as sleep,
+        ):
+            topology = discovery.run()
+
+        assert session.client.return_value.get_caller_identity.call_count == 2
+        assert topology.management_account_id == "111111111111"
+        assert sleep.call_count == 1
+
+    def test_gives_up_after_the_retry_budget_is_exhausted(self, discovery):
+        session = MagicMock()
+        session.client.return_value.get_caller_identity.side_effect = CNARateLimitError(
+            "Throttling"
+        )
+        with (
+            patch(f"{MODULE}.boto3.Session", return_value=session),
+            patch.object(discovery, "_discover_account"),
+            patch("cna.core.throttle.time.sleep"),
+            pytest.raises(CNARateLimitError),
+        ):
+            discovery.run()
+
+    def test_propagates_an_auth_failure_rather_than_returning_empty(self, discovery):
+        """The docstring promises CNAAuthError; a silent empty topology would be worse."""
+        session = MagicMock()
+        session.client.return_value.get_caller_identity.side_effect = CNAAuthError("bad creds")
+        with (
+            patch(f"{MODULE}.boto3.Session", return_value=session),
+            patch.object(discovery, "_discover_account") as discover,
+            pytest.raises(CNAAuthError),
+        ):
+            discovery.run()
+
+        assert discover.call_count == 0

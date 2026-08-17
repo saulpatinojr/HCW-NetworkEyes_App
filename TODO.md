@@ -14,7 +14,7 @@ in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG
 | [Phase 1](#phase-1--critical-fixes) | Critical fixes — repository states something untrue | T-101 – T-104 |
 | [Phase 2](#phase-2--security-improvements) | Security improvements | T-201 – T-204 |
 | [Phase 3](#phase-3--deployment-readiness) | Deployment readiness | T-301 – T-305 |
-| [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-407 |
+| [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-408 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements | T-501 – T-502 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
 
@@ -509,7 +509,19 @@ order; do not reorder it.
 - **Dependencies:** None.
 - **Recommended action:** Add unit coverage for the AWS and Azure discovery orchestrator entry
   points, including the error and retry branches, before adding further discovery features.
-- **Status:** Not started
+- **Status:** Done — a `TestRun` class was added to `tests/unit/test_aws_discovery.py` (9 cases) and
+  `tests/unit/test_azure_discovery.py` (10 cases), taking both `run()` entry points from **zero**
+  coverage to **100%**: `AWSDiscovery.run()` 21/21 statements, `AzureDiscovery.run()` 44/44,
+  measured with the omit lifted (see T-408). Every cloud SDK collaborator is mocked, so no AWS or
+  ARM call is made. Error and retry branches are covered as the notes below require: the AWS suite
+  asserts `get_caller_identity` is actually retried once on `CNARateLimitError` and that the retry
+  budget is eventually exhausted, and that `CNAAuthError` propagates rather than yielding a silently
+  empty topology. The Azure suite covers `validate_access` failing before any scan work, the
+  network-only-Reader path where `subscriptions.get()` fails and discovery proceeds with the ID as
+  the display name, `--resume` both skipping and not skipping, blocked subscriptions still being
+  recorded and checkpointed, and the progress callback being driven. File-level coverage moved from
+  32% → 37% (AWS) and 18% → 22% (Azure); the rest of those files is out of scope for this item.
+  Recorded in [`CHANGELOG.md`](CHANGELOG.md) → Unreleased.
 - **Notes for future engineers:** The same review found and fixed a runtime-breaking `with_retry`
   contract bug in the AWS discovery path — exactly the class of defect an orchestrator test would
   have caught. `tenacity` is already a dependency; assert on retry behaviour, not just the happy
@@ -611,6 +623,34 @@ order; do not reorder it.
   only and fails fast by design, so validation placed there would never run. It belongs in the
   push/PR test pipeline. Note also that the Azure roots would benefit from the same `fmt -check`
   sweep; scope it to `infra/terraform/` as a whole rather than AWS alone.
+
+### T-408 — The discovery orchestrators are omitted from coverage on a false premise
+
+- **Priority:** Medium
+- **Category:** Test integrity / CI
+- **Description:** `[tool.coverage.run] omit` in `pyproject.toml` excludes
+  `cna/modules/network/discovery/aws_discovery.py` and `azure_discovery.py`, with the comment
+  *"require live AWS/Azure API calls against real tenants. Covered by integration tests run against
+  sandboxed tenants."* That premise is false: `tests/unit/test_aws_discovery.py` and
+  `test_azure_discovery.py` already exercise both modules entirely with `MagicMock`/`patch` and make
+  no network call, and T-403 has now added 19 more such tests. The consequence is that the
+  `fail_under = 80` gate has never measured 1,542 statements — the code T-403 itself calls "the
+  least-tested and highest-risk in the package". A regression in either file cannot fail CI on
+  coverage grounds.
+- **Dependencies:** None, but see the measured cost below before acting.
+- **Recommended action:** Removing the two `omit` entries today would take total coverage from
+  **84% to 67%** and fail the 80% gate by 13 points (measured across the full suite: 4,240 → 5,782
+  statements, 697 → 1,912 missed). Closing that needs roughly **760 further covered statements**
+  across the two files. Land it incrementally: keep the entries, drive per-file coverage up with
+  mocked tests in the style T-403 established, and remove each `omit` line once its file clears
+  ~80% on its own. Do not remove them in one step and lower `fail_under` to compensate — that
+  weakens the gate for the whole package to accommodate two files.
+- **Status:** Not started
+- **Notes for future engineers:** To measure honestly while the entries are still in place, run
+  pytest with `--cov-config` pointing at a copy of the config with the two lines deleted; that is
+  how the figures above were obtained. Also correct the misleading comment when the entries go —
+  and note the same block omits `cna/diagram_engine/diagrams_generator.py` and the diagram modules
+  for a *genuine* reason (they need the graphviz binary), so do not delete the block wholesale.
 
 ---
 
