@@ -12,7 +12,7 @@ in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG
 | Phase | Theme | Items |
 |---|---|---|
 | [Phase 1](#phase-1--critical-fixes) | Critical fixes — repository states something untrue | T-101 – T-104 |
-| [Phase 2](#phase-2--security-improvements) | Security improvements | T-201 – T-203 |
+| [Phase 2](#phase-2--security-improvements) | Security improvements | T-201 – T-204 |
 | [Phase 3](#phase-3--deployment-readiness) | Deployment readiness | T-301 – T-305 |
 | [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-406 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements | T-501 – T-502 |
@@ -152,6 +152,31 @@ Each one actively misleads an engineer or a workflow run.
 - **Notes for future engineers:** AWS permits exactly one GitHub OIDC provider per account. If the
   target account already has one, the module must import it rather than create it — a duplicate
   create fails the whole apply.
+
+### T-204 — Triage the 8 open Dependabot advisories on the default branch
+
+- **Priority:** High
+- **Category:** Security / dependencies
+- **Description:** Pushing a branch during the 2026-08-17 review returned a GitHub advisory notice:
+  *"GitHub found 8 vulnerabilities on saulpatinojr/Work-Cloud_Network_Assessment's default branch
+  (7 high, 1 moderate)."* Nothing in `TODO.md` or `REVIEW.md` tracks dependency vulnerabilities, so
+  these are currently unowned. The individual advisories were not readable from the review
+  environment (no Dependabot access), so the affected packages and ecosystems are unconfirmed —
+  the repository ships both a Python dependency set (`pyproject.toml`) and a Node one
+  (`apps/cna-web/package.json`).
+- **Dependencies:** None.
+- **Recommended action:** Open
+  [the Dependabot alerts page](https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/security/dependabot),
+  triage each of the 8 alerts, and record the outcome here — patch, pin, or an explicit accepted-risk
+  note with a reason. Prioritise anything reachable from the web platform's request path. Check
+  whether `.github/dependabot.yml` covers both ecosystems (`pip` and `npm`) and both lockfiles; if
+  an ecosystem is unwatched, alerts for it will never be raised in the first place.
+- **Status:** Not started
+- **Notes for future engineers:** CI already runs a `pip-audit` job in `300-test-codebase.yml`,
+  which covers the Python side — check whether that job is passing before assuming the Python
+  dependencies are implicated. A green `pip-audit` alongside 7 high advisories would point at the
+  Node dependency tree. Per CBTS engineering standards, prefer pinned versions over ranges when
+  remediating security-sensitive dependencies.
 
 ---
 
