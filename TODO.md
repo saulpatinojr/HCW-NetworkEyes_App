@@ -14,7 +14,7 @@ in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG
 | [Phase 1](#phase-1--critical-fixes) | Critical fixes — repository states something untrue | T-101 – T-104 |
 | [Phase 2](#phase-2--security-improvements) | Security improvements | T-201 – T-204 |
 | [Phase 3](#phase-3--deployment-readiness) | Deployment readiness | T-301 – T-305 |
-| [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-412 |
+| [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-414 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements | T-501 – T-502 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
 
@@ -793,8 +793,9 @@ order; do not reorder it.
   has no such attribute, and `core/throttle.py:78` can `raise last_exc` while it is still `None`
   (currently unreachable, but only by accident of the loop's structure). When the count reaches
   zero, delete the `stages: [manual]` line from the `ty` hook so it gates.
-- **Status:** In progress — 98 → **60** diagnostics (52 → **16** non-import). Thirty fixed, each a
-  real defect rather than a style nit:
+- **Status:** In progress — 98 → **49** diagnostics as measured in a bare container, and **24**
+  once the declared dependencies are actually installed. Thirty fixed, each a real defect rather
+  than a style nit:
   `analysis_engine.py` used the builtin `callable` in a type expression (not a type at all) and
   `options: AnalysisOptions = None`; `render_pipeline.py` had the same `= None` on a non-Optional
   parameter, plus `Path("engagements") / self.store.engagement_id` where `engagement_id` is
@@ -881,7 +882,16 @@ order; do not reorder it.
   findings that both lack `rule_id` *and* `resource_id` collide and the second is silently
   deduplicated away. Both fields are Optional on `Finding`. Whether such a finding should exist at
   all is a schema decision rather than a typing one, so it is left here rather than papered over.
-  **The remaining 16 are dominated by one systemic problem — see T-412**, which owns 11 of them.
+  **The count was finally measured honestly.** Running `pip install -e .` and re-checking drops the
+  total to **24**, because all nine declared-but-uninstalled packages resolve. What remains is
+  **15 `unresolved-import`, every one of them an *undeclared* dependency** (T-414), and just **8**
+  real findings: the two T-412 engine writes, four in `foundry_agent_client.py` against an SDK API
+  that does not exist (T-413 — invisible until the dependency was installed), a `dict` variance
+  issue in the drawio MCP client, and an `EncyclopediaReportRenderer.render` parameter typed
+  `list[Finding | dict]` where callers pass `list[Finding]`.
+  So gating the hook is now blocked on T-413 and T-414, not on more of this item. Measure in an
+  environment with dependencies installed; a bare container overstates the count fourfold.
+  **T-412 owned 11 of the earlier findings** and is now resolved as scaffold guards.
   The rest are a scattered tail: a `dict[str, str | int]` variance issue in the drawio MCP client,
   an `EncyclopediaReportRenderer.render` parameter typed `list[Finding | dict]` where callers pass
   `list[Finding]`, and the two known-false-positive deployer-union findings described above. 11 of the 22
@@ -992,6 +1002,64 @@ order; do not reorder it.
 - **Notes for future engineers:** The existing tests never caught this because they mock the store.
   That is also how the `write_audit_event` `TypeError` fixed under T-402 survived. When testing
   anything that touches persistence, prefer a real `EngagementStore` pointed at `tmp_path`.
+
+### T-413 — `FoundryAgentClient` is written against azure-ai-projects 1.x, but 2.x is declared
+
+- **Priority:** High
+- **Category:** Correctness / dependency mismatch
+- **Description:** `cna/ai_engine/foundry_agent_client.py` drives the Foundry agent through
+  `agents.threads.create()`, `agents.messages.create()`, and `agents.runs.create_and_process()`.
+  Those belong to the **1.x** `azure-ai-projects` agents API. `pyproject.toml` declares
+  `azure-ai-projects>=2.3.0`, and 2.x replaced that surface entirely — the installed 2.4.0 exposes
+  `AgentsOperations` with `create_session`, `create_version`, `get`, `list`, and friends, and
+  `hasattr` confirms **no** `threads`, `messages`, or `runs`. Every call in `run()` therefore raises
+  `AttributeError` against the declared dependency.
+  The failure is disguised: the whole body sits in `except Exception`, which re-raises as
+  `FoundryAgentError("Foundry agent run failed: ...")`. A caller sees a generic agent failure, not a
+  version mismatch. This is live code — `RecommendationEngine.__init__` constructs a
+  `FoundryAgentClient` when none is injected. The existing tests pass because they only exercise the
+  static `_parse()` helper, never the SDK path.
+  Found only after `pip install -e .` made the real SDK available to the type checker; in a bare
+  container the import is unresolved and the whole module goes unchecked.
+- **Dependencies:** None.
+- **Recommended action:** Decide which API is intended. Either pin `azure-ai-projects>=1.0,<2` and
+  keep the current calls, or port `run()` and `_latest_assistant_text()` to the 2.x surface. Pinning
+  backwards deserves a check that nothing else needs 2.x. Whichever way, add one test that exercises
+  `run()` against a mocked client shaped like the *declared* SDK version, so the next divergence
+  fails a test rather than a deployment.
+- **Status:** Not started
+- **Notes for future engineers:** Note the interaction with the broad `except Exception` here. It is
+  what turned a clear `AttributeError` into an opaque runtime error, and it is the same
+  narrow-vs-broad question raised under T-404 — worth revisiting together.
+
+### T-414 — Ten imported packages are not declared as dependencies
+
+- **Priority:** High
+- **Category:** Packaging / silent feature loss
+- **Description:** `cna/` imports ten distributions that appear nowhere in `pyproject.toml`:
+  `azure-mgmt-monitor`, `azure-monitor-query`, `azure-mgmt-compute`, `azure-mgmt-security`,
+  `azure-mgmt-privatedns`, `azure-mgmt-managementgroups`, `azure-mgmt-loganalytics`,
+  `azure-mgmt-costmanagement`, `cairosvg`, and `mcp`. Confirmed by resolving every import against
+  the declared set, and again after `pip install -e .` — the nine *declared* packages resolved, all
+  ten of these did not.
+  Nothing crashes, which is the problem. Every one is imported lazily inside `try: ... except
+  ImportError:`, so on a clean install the features simply never activate: Log Analytics diagnostic
+  checks, alert-count collection, cost-management queries, private DNS and Compute enrichment,
+  security-centre checks, SVG→PNG conversion, and both MCP clients. A deployment looks healthy while
+  quietly producing a thinner assessment than the code can generate.
+- **Dependencies:** None. Related to T-413, which is the same class of problem from the other
+  direction — a *declared* dependency at a version the code cannot use.
+- **Recommended action:** Decide per package whether the feature is core or genuinely optional.
+  Core ones belong in `[project] dependencies`; optional ones belong in a named extra (say
+  `[project.optional-dependencies] enrichment`) with the `except ImportError` path logging a
+  message naming the extra to install, rather than passing silently. Pin versions, per the CBTS
+  standard for security-sensitive dependencies, and re-run `ty check cna/` afterwards — these ten
+  account for all 15 remaining `unresolved-import` findings under T-410.
+- **Status:** Not started
+- **Notes for future engineers:** The `except ImportError` blocks are doing real work — they keep a
+  partial install running — so do not simply delete them. The gap is that they are silent. A
+  one-line `logger.warning` naming the missing extra would have surfaced this years earlier than a
+  type checker did.
 
 ---
 
