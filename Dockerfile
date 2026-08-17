@@ -9,7 +9,7 @@
 #   7. .dockerignore referenced — see .dockerignore in repo root
 
 # python:3.12-slim digest pinned 2026-04-08
-FROM python:3.14-slim@sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6 AS builder
+FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4 AS builder
 
 ARG CNA_VERSION=dev
 WORKDIR /build
@@ -24,7 +24,7 @@ COPY cna/ cna/
 RUN pip install --no-cache-dir --prefix=/install .
 
 # ---- final stage ----
-FROM python:3.14-slim@sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6
+FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4
 
 ARG CNA_VERSION=dev
 LABEL org.opencontainers.image.title="CNA Platform" \

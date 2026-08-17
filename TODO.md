@@ -200,6 +200,22 @@ Each one actively misleads an engineer or a workflow run.
   all succeed; `next build` is clean; and the advisory's own case — two objects self-referencing
   through identical property paths — merges without stack exhaustion on 8.0.1 while ordinary merges
   are unchanged.
+- **Docker ecosystem (same-day follow-up):** both pinned base image digests were found stale against
+  their tags and refreshed — `node:24-alpine` `a0b9bf06…` → `d32cdf61…` and `python:3.14-slim`
+  `cea0e604…` → `ce407646…`, ten `FROM` lines across four Dockerfiles. This is the ecosystem neither
+  `npm audit` nor `pip-audit` sees, so it was checked by resolving each tag's current digest from the
+  registry and comparing. Note what that does and does not prove: a stale digest means the pin is
+  behind, **not** that it carried a CVE — confirming that needs an image scan. The bump could not be
+  build-verified locally (no Docker daemon in the review environment) and relies on CI's Docker build
+  smoke test plus the existing `docker/scout-action` step. Image internals could not be inspected
+  either: the registry's manifest endpoints are reachable through the agent proxy but blob fetches
+  redirect to a CDN host it blocks, so the Node/Python patch levels inside the new images were not
+  compared against the old ones.
+- **GitHub Actions ecosystem: still unverified.** 14 distinct actions are SHA-pinned across the
+  workflows. Whether those SHAs are current cannot be checked from an environment whose GitHub access
+  is scoped to this repository, since it requires reading the action repositories. Treat this
+  ecosystem as an open question, not as clean — it and Docker are the two places a Dependabot alert
+  can hide from both auditors.
 - **Notes for future engineers:** The alert *count* was never fully reconciled — the Dependabot REST
   API returns 403 for the automation token, so the alerts could not be enumerated and mapped
   one-to-one onto the advisories fixed here; alert #30 surfaced only because a human read the alerts
