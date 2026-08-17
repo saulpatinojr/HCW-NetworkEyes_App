@@ -56,15 +56,15 @@ variable "alb_arn_suffix" {
 variable "alarm_thresholds" {
   description = "Thresholds for the baseline alarms."
   type = object({
-    ecs_cpu_percent          = optional(number, 85)
-    ecs_memory_percent       = optional(number, 85)
-    rds_cpu_percent          = optional(number, 85)
-    rds_free_storage_bytes   = optional(number, 2147483648)
-    rds_max_connections      = optional(number, 80)
-    alb_5xx_count            = optional(number, 10)
-    alb_latency_p99_seconds  = optional(number, 5)
-    api_error_count          = optional(number, 20)
-    worker_error_count       = optional(number, 10)
+    ecs_cpu_percent         = optional(number, 85)
+    ecs_memory_percent      = optional(number, 85)
+    rds_cpu_percent         = optional(number, 85)
+    rds_free_storage_bytes  = optional(number, 2147483648)
+    rds_max_connections     = optional(number, 80)
+    alb_5xx_count           = optional(number, 10)
+    alb_latency_p99_seconds = optional(number, 5)
+    api_error_count         = optional(number, 20)
+    worker_error_count      = optional(number, 10)
   })
   default  = {}
   nullable = false

@@ -110,7 +110,7 @@ module "compute" {
   enable_autoscaling   = true
 
   # X-Ray tracing (mirrors Azure Application Insights)
-  enable_xray        = var.enable_xray
+  enable_xray         = var.enable_xray
   xray_log_group_name = module.observability.xray_log_group_name != null ? module.observability.xray_log_group_name : ""
 
   api_image    = var.api_image

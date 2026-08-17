@@ -170,7 +170,54 @@ jobs:
         run: python3 scripts/validate_documentation_model.py
 
   # ------------------------------------------------------------------
-  # 5. Docker build smoke test
+  # 5. Terraform format and validate (TODO.md T-407)
+  # ------------------------------------------------------------------
+  # The AWS Terraform had no fmt or validate coverage anywhere: the only
+  # terraform invocations lived in the Azure deploy and drift workflows, and
+  # 212-deploy-aws-split.yml fails fast before terraform runs. 90 resources
+  # across eight modules were unlinted.
+  #
+  # Neither check needs an AWS account or credentials, so this is deliberately
+  # independent of REVIEW.md R-001 - R-003. `validate` needs provider schemas
+  # but not state, which is what -backend=false buys: it works before the S3
+  # backend of R-002 exists.
+  terraform-checks:
+    name: Terraform Format and Validate
+    runs-on: self-hosted
+    timeout-minutes: 10
+    needs: [test]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e  # v4.0.1
+        with:
+          terraform_wrapper: false
+
+      # Formatting needs no provider download, so it covers both clouds.
+      - name: Terraform fmt check (all roots and modules)
+        run: terraform fmt -check -recursive infra/terraform/
+
+      # Scoped to the AWS roots: the Azure roots are already init'd and planned
+      # by 211 and the drift workflows on every deploy.
+      - name: Terraform validate (AWS roots)
+        run: |
+          set -euo pipefail
+          failed=0
+          for root in infra/terraform/environments/aws/*/*/; do
+            echo "::group::validate ${root}"
+            if terraform -chdir="${root}" init -backend=false -input=false -no-color \
+               && terraform -chdir="${root}" validate -no-color; then
+              echo "OK: ${root}"
+            else
+              echo "::error::terraform validate failed for ${root}"
+              failed=1
+            fi
+            echo "::endgroup::"
+          done
+          exit "${failed}"
+
+  # ------------------------------------------------------------------
+  # 6. Docker build smoke test
   # ------------------------------------------------------------------
   docker-build:
     name: Docker Build Smoke Test

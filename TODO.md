@@ -643,7 +643,23 @@ order; do not reorder it.
   -recursive` over `infra/terraform/` and `terraform init -backend=false && terraform validate`
   for each AWS root. `-backend=false` is the important flag: it makes validation possible with no
   state backend, which is exactly the situation until R-002 is resolved.
-- **Status:** Not started
+- **Status:** Done — a `terraform-checks` job was added to `300-test-codebase.yml`, so both checks
+  now run on every push and PR. `terraform fmt -check -recursive infra/terraform/` covers **both**
+  clouds (formatting needs no provider download), and `terraform validate` runs per AWS root after
+  `terraform init -backend=false`, which is what makes it possible before the R-002 state backend
+  exists. The loop reports each root under its own `::group::` and accumulates failures so one bad
+  root does not mask the others.
+  Closing this also required fixing four **pre-existing** `fmt` violations that would have turned
+  the new job red immediately — all pure alignment, none introduced by recent work:
+  `environments/aws/{dev,prod}/workload/main.tf` (an `enable_xray` assignment),
+  `providers/aws/observability/variables.tf` (the `alarm_thresholds` object), and
+  `providers/aws/security/locals.tf`. Verified with a real `terraform` 1.9.8 binary: `fmt -check
+  -recursive` is now clean across `infra/terraform/`, and LF endings are unchanged.
+  **`validate` has never actually executed.** It could not be verified locally because the agent
+  proxy blocks `registry.terraform.io` (403 on the provider discovery document), so providers
+  cannot be downloaded in the review environment. Its first real run is in CI, and it may fail —
+  these roots have never been validated by anything. That is the point of the job rather than an
+  argument against it; treat a first-run failure as the check doing its job.
 - **Notes for future engineers:** Do not fold this into 212 — that workflow is `workflow_dispatch`
   only and fails fast by design, so validation placed there would never run. It belongs in the
   push/PR test pipeline. Note also that the Azure roots would benefit from the same `fmt -check`
