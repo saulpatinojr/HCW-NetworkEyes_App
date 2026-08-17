@@ -2229,6 +2229,7 @@ class AzureDiscovery:
                 QueryDataset,
                 QueryDefinition,
                 QueryFilter,
+                QueryTimePeriod,
                 TimeframeType,
             )
 
@@ -2240,10 +2241,15 @@ class AzureDiscovery:
             query = QueryDefinition(
                 type="ActualCost",
                 timeframe=TimeframeType.CUSTOM,
-                time_period={
-                    "from": f"{mtd_start.isoformat()}T00:00:00Z",
-                    "to": f"{today.isoformat()}T23:59:59Z",
-                },
+                # QueryTimePeriod, not a dict: the field is declared
+                # `QueryTimePeriod | None` and its attribute map serialises
+                # from datetimes as iso-8601, so pre-formatted strings in a
+                # dict were relying on the serialiser to coerce them
+                # (TODO.md T-410).
+                time_period=QueryTimePeriod(
+                    from_property=_dt3.datetime.combine(mtd_start, _dt3.time.min, tzinfo=_dt3.UTC),
+                    to=_dt3.datetime.combine(today, _dt3.time(23, 59, 59), tzinfo=_dt3.UTC),
+                ),
                 dataset=QueryDataset(
                     granularity="None",
                     aggregation={"TotalCost": QueryAggregation(name="Cost", function="Sum")},

@@ -889,7 +889,8 @@ order; do not reorder it.
   that does not exist (T-413 — invisible until the dependency was installed), a `dict` variance
   issue in the drawio MCP client, and an `EncyclopediaReportRenderer.render` parameter typed
   `list[Finding | dict]` where callers pass `list[Finding]`.
-  So gating the hook is now blocked on T-413 and T-414, not on more of this item. Measure in an
+  T-414 is now done, which took the count to **8**. Gating the hook is blocked on T-413 (four
+  findings) plus two deliberate T-412 leftovers and two minor variance issues. Measure in an
   environment with dependencies installed; a bare container overstates the count fourfold.
   **T-412 owned 11 of the earlier findings** and is now resolved as scaffold guards.
   The rest are a scattered tail: a `dict[str, str | int]` variance issue in the drawio MCP client,
@@ -1042,11 +1043,15 @@ order; do not reorder it.
   `azure-mgmt-costmanagement`, `cairosvg`, and `mcp`. Confirmed by resolving every import against
   the declared set, and again after `pip install -e .` — the nine *declared* packages resolved, all
   ten of these did not.
-  Nothing crashes, which is the problem. Every one is imported lazily inside `try: ... except
-  ImportError:`, so on a clean install the features simply never activate: Log Analytics diagnostic
-  checks, alert-count collection, cost-management queries, private DNS and Compute enrichment,
-  security-centre checks, SVG→PNG conversion, and both MCP clients. A deployment looks healthy while
-  quietly producing a thinner assessment than the code can generate.
+  Every one is imported lazily inside `try: ... except ImportError:`, so nothing crashes — on a
+  clean install the features simply never activate: Log Analytics diagnostic checks, alert-count
+  collection, cost-management queries, private DNS and Compute enrichment, security-centre checks,
+  SVG→PNG conversion, and both MCP clients. A deployment looks healthy while producing a thinner
+  assessment than the code can generate.
+  *(Correcting an earlier draft of this item: the handlers are **not** silent. All 24 `except
+  ImportError` blocks in `cna/` either log — 18 at warning level, three at debug — record the reason
+  into the model, or are legitimate capability probes. The gap was in the packaging, not the
+  handlers.)*
 - **Dependencies:** None. Related to T-413, which is the same class of problem from the other
   direction — a *declared* dependency at a version the code cannot use.
 - **Recommended action:** Decide per package whether the feature is core or genuinely optional.
@@ -1055,11 +1060,28 @@ order; do not reorder it.
   message naming the extra to install, rather than passing silently. Pin versions, per the CBTS
   standard for security-sensitive dependencies, and re-run `ty check cna/` afterwards — these ten
   account for all 15 remaining `unresolved-import` findings under T-410.
-- **Status:** Not started
+- **Status:** Done — declared as a `[project.optional-dependencies] enrichment` extra, installable
+  with `pip install -e .[enrichment]`. An extra rather than core dependencies, because that matches
+  what the code already does: every import is lazy and every handler degrades, so a default install
+  behaves exactly as before and nothing new is forced on anyone.
+  **The version bounds are the important part, and the obvious ones would have been wrong.** All ten
+  install cleanly at their latest release, but installing them revealed that three have shipped a
+  major that breaks this code — `managementgroups` 2.x renamed `ManagementGroupsAPI` to
+  `ManagementGroupsMgmtClient`, `monitor` 7.x dropped `MonitorManagementClient.diagnostic_settings`,
+  and `costmanagement` 5.x changed `QueryComparisonExpression`'s signature. A naive `>=latest` would
+  have declared a dependency set the code cannot run against. Each bound was verified by installing
+  the version and re-running `ty`; upper bounds are set on all ten, since this failure mode is now
+  demonstrated three times over (four with T-413).
+  Declaring them dropped `ty check cna/` from 24 diagnostics to **8**, and surfaced four more real
+  defects that were invisible while the imports were unresolved — three fixed by the version bounds
+  above, one fixed in code (`QueryDefinition` was passed a `dict` where `QueryTimePeriod` is
+  declared; it now builds the model with datetimes, which is what its `iso-8601` attribute map
+  expects).
 - **Notes for future engineers:** The `except ImportError` blocks are doing real work — they keep a
-  partial install running — so do not simply delete them. The gap is that they are silent. A
-  one-line `logger.warning` naming the missing extra would have surfaced this years earlier than a
-  type checker did.
+  partial install running — so do not delete them when the extra is installed by default somewhere.
+  If you bump any of these past its upper bound, re-run `ty check cna/` **with the package
+  installed**: an unresolved import means the entire module goes unchecked, which is exactly how
+  four defects hid here.
 
 ---
 
