@@ -208,6 +208,32 @@ class AzureDiscovery:
         self._credential = None
         self._sub_client = None
 
+    @property
+    def _cred(self):
+        """The ARM credential, established by ``_init_credentials()``.
+
+        Both fields start as ``None`` and are only populated once credentials
+        are initialised, so every consumer below was dereferencing a possibly
+        ``None`` value. Narrow it in one place and fail with a named error
+        rather than ``AttributeError`` on ``NoneType`` (TODO.md T-410).
+        """
+        if self._credential is None:
+            raise RuntimeError(
+                "Azure credential not initialised — call validate_access() or "
+                "_init_credentials() first."
+            )
+        return self._credential
+
+    @property
+    def _subs(self):
+        """The subscription client, established by ``_init_credentials()``."""
+        if self._sub_client is None:
+            raise RuntimeError(
+                "Azure subscription client not initialised — call "
+                "validate_access() or _init_credentials() first."
+            )
+        return self._sub_client
+
     # ------------------------------------------------------------------ auth
 
     def _init_credentials(self) -> None:
@@ -246,7 +272,7 @@ class AzureDiscovery:
         # 1. Verify the SP can obtain an ARM token.
         self._progress("Pre-check: verifying SP token…")
         try:
-            token = self._credential.get_token("https://management.azure.com/.default")
+            token = self._cred.get_token("https://management.azure.com/.default")
             self._progress(f"Pre-check: token OK (expires ~{token.expires_on})")
         except Exception as e:
             raise CNAAuthError(f"SP authentication failed — cannot obtain ARM token: {e}") from e
@@ -259,7 +285,7 @@ class AzureDiscovery:
 
         for sub_id in self.opts.subscription_ids:
             try:
-                sub = self._sub_client.subscriptions.get(sub_id)
+                sub = self._subs.subscriptions.get(sub_id)
                 self._progress(
                     f"Pre-check: subscription {sub_id} ({sub.display_name}) — state: {sub.state}"
                 )
@@ -289,7 +315,7 @@ class AzureDiscovery:
         """
         subs = []
         skipped = []
-        for sub in with_retry()(self._sub_client.subscriptions.list)():
+        for sub in with_retry()(self._subs.subscriptions.list)():
             if sub.state not in self._ACTIVE_SUB_STATES:
                 logger.info(
                     "Skipping %s subscription %s (%s)",
@@ -315,7 +341,7 @@ class AzureDiscovery:
     def _get_subscription_direct(self, subscription_id: str) -> dict | None:
         """Fetch a single subscription by ID — fallback when list() misses it."""
         try:
-            sub = with_retry()(self._sub_client.subscriptions.get)(subscription_id)
+            sub = with_retry()(self._subs.subscriptions.get)(subscription_id)
             if sub and sub.subscription_id:
                 return {
                     "id": sub.subscription_id,
@@ -338,7 +364,7 @@ class AzureDiscovery:
             )
             return []
 
-        mg_client = ManagementGroupsAPI(self._credential)
+        mg_client = ManagementGroupsAPI(self._cred)
         mg_list = []
         try:
             for mg in mg_client.management_groups.list():
@@ -404,8 +430,8 @@ class AzureDiscovery:
                 errors.append(msg)
 
         try:
-            net = NetworkManagementClient(self._credential, sub_id)
-            rmc = ResourceManagementClient(self._credential, sub_id)
+            net = NetworkManagementClient(self._cred, sub_id)
+            rmc = ResourceManagementClient(self._cred, sub_id)
             rg_names = [rg.name for rg in _safe_list(rmc.resource_groups.list()) if rg.name]
         except Exception as e:
             topo.discovery_blocked = True
@@ -1428,7 +1454,7 @@ class AzureDiscovery:
         try:
             from azure.mgmt.privatedns import PrivateDnsManagementClient
 
-            dns_client = PrivateDnsManagementClient(self._credential, sub_id)
+            dns_client = PrivateDnsManagementClient(self._cred, sub_id)
             for zone in _safe_list(dns_client.private_zones.list()):
                 rg = _rg_from_id(zone.id)
                 linked_vnets = []
@@ -1538,7 +1564,7 @@ class AzureDiscovery:
             logger.warning("azure-mgmt-compute not installed — NVA discovery skipped")
             return []
 
-        cmc = ComputeManagementClient(self._credential, sub_id)
+        cmc = ComputeManagementClient(self._cred, sub_id)
         nvas: list[AzureNVA] = []
 
         for vm in _safe_list(cmc.virtual_machines.list_all()):
@@ -1794,7 +1820,7 @@ class AzureDiscovery:
         try:
             from azure.mgmt.loganalytics import LogAnalyticsManagementClient
 
-            la = LogAnalyticsManagementClient(self._credential, sub_id)
+            la = LogAnalyticsManagementClient(self._cred, sub_id)
             for ws in _safe_list(la.workspaces.list()):
                 obs.log_analytics_workspaces.append(
                     LogAnalyticsWorkspace(
@@ -1818,7 +1844,7 @@ class AzureDiscovery:
         try:
             from azure.mgmt.monitor import MonitorManagementClient
 
-            mon = MonitorManagementClient(self._credential, sub_id)
+            mon = MonitorManagementClient(self._cred, sub_id)
             for ds in _safe_list(mon.diagnostic_settings.list(resource_id)):
                 if getattr(ds, "workspace_id", None):
                     return True
@@ -1847,7 +1873,7 @@ class AzureDiscovery:
         try:
             from azure.mgmt.monitor import MonitorManagementClient
 
-            mon = MonitorManagementClient(self._credential, sub_id)
+            mon = MonitorManagementClient(self._cred, sub_id)
             obs.metric_alert_count = len(_safe_list(mon.metric_alerts.list_by_subscription()))
             obs.activity_log_alert_count = len(
                 _safe_list(mon.activity_log_alerts.list_by_subscription_id())
@@ -1905,7 +1931,7 @@ class AzureDiscovery:
             return metrics
 
         try:
-            monitor = MonitorManagementClient(self._credential, ctx.sub_id)
+            monitor = MonitorManagementClient(self._cred, ctx.sub_id)
             end = _dt.datetime.now(_dt.UTC)
             start = end - timedelta(hours=24)
             timespan = (
@@ -2134,7 +2160,7 @@ class AzureDiscovery:
         try:
             from azure.monitor.query import LogsQueryClient
 
-            logs_client = LogsQueryClient(self._credential)
+            logs_client = LogsQueryClient(self._cred)
             nta_query = (
                 "AzureNetworkAnalytics_CL"
                 "| where TimeGenerated > ago(24h)"
@@ -2206,7 +2232,7 @@ class AzureDiscovery:
                 TimeframeType,
             )
 
-            cost_client = CostManagementClient(self._credential)
+            cost_client = CostManagementClient(self._cred)
             scope = f"/subscriptions/{sub_id}"
             today = _dt3.date.today()
             mtd_start = today.replace(day=1)
@@ -2292,7 +2318,7 @@ class AzureDiscovery:
         """Enumerate Front Door (classic + Standard/Premium) WAF policies."""
         from azure.mgmt.network import NetworkManagementClient
 
-        net = NetworkManagementClient(self._credential, sub_id)
+        net = NetworkManagementClient(self._cred, sub_id)
         policies: list[FrontDoorWAFPolicy] = []
         try:
             for p in net.web_application_firewall_policies.list_all():
@@ -2395,7 +2421,7 @@ class AzureDiscovery:
 
         assessments: list[DefenderAssessment] = []
         try:
-            sc = SecurityCenter(self._credential, sub_id)
+            sc = SecurityCenter(self._cred, sub_id)
             scope = f"/subscriptions/{sub_id}"
             for item in sc.assessments.list(scope):
                 status_code = self._defender_status(item)

@@ -793,8 +793,8 @@ order; do not reorder it.
   has no such attribute, and `core/throttle.py:78` can `raise last_exc` while it is still `None`
   (currently unreachable, but only by accident of the loop's structure). When the count reaches
   zero, delete the `stages: [manual]` line from the `ty` hook so it gates.
-- **Status:** In progress — 98 → **71** diagnostics (52 → **27** non-import). Nineteen fixed, each
-  a real defect rather than a style nit:
+- **Status:** In progress — 98 → **60** diagnostics (52 → **16** non-import). Thirty fixed, each a
+  real defect rather than a style nit:
   `analysis_engine.py` used the builtin `callable` in a type expression (not a type at all) and
   `options: AnalysisOptions = None`; `render_pipeline.py` had the same `= None` on a non-Optional
   parameter, plus `Path("engagements") / self.store.engagement_id` where `engagement_id` is
@@ -865,7 +865,26 @@ order; do not reorder it.
   `cloud` to the deployer's type. Narrowing it properly needs the two lazily-imported classes in
   scope at the call site; do that as a small refactor if the noise becomes annoying, not by
   suppressing the rule.
-  **The remaining 27 are dominated by one systemic problem — see T-412.** 11 of the 22
+  A sixth pass applied the same narrowing pattern to Azure and cleared the tail.
+  `AzureDiscovery._credential` and `._sub_client` start as `None` until `_init_credentials()` runs;
+  `_cred` and `_subs` properties now narrow them across **17** read sites. `DiagramExporter`'s
+  `_drawio_bin` is `str | None` and would have reached `subprocess.run` as `argv[0]`; it now raises
+  `ExportPipelineError` naming the condition. `AnalysisEngine.run()` got the same `engagement_id`
+  guard as the two discovery paths. `RenderPipeline` now requires a bound store **at construction**:
+  `DeliverableManifest` is a plain dataclass with no validation, so a `None` id was being written
+  into the manifest as `null` rather than rejected — the guard moved up from `_output_dir()`, which
+  had been enforcing the same invariant one step too late. `render_tgw_topology` claimed
+  `-> dict[str, Path]` while actually nesting TGW id → format → Path, unlike its siblings which
+  render one diagram each; the annotation now matches (it has no callers today, so nothing broke).
+  `_dedup_key` was widened to `str | None`, which is what it always accepted.
+  **Noticed, not fixed:** `_dedup_key(None, None)` returns the literal `"None:None"`, so any two
+  findings that both lack `rule_id` *and* `resource_id` collide and the second is silently
+  deduplicated away. Both fields are Optional on `Finding`. Whether such a finding should exist at
+  all is a schema decision rather than a typing one, so it is left here rather than papered over.
+  **The remaining 16 are dominated by one systemic problem — see T-412**, which owns 11 of them.
+  The rest are a scattered tail: a `dict[str, str | int]` variance issue in the drawio MCP client,
+  an `EncyclopediaReportRenderer.render` parameter typed `list[Finding | dict]` where callers pass
+  `list[Finding]`, and the two known-false-positive deployer-union findings described above. 11 of the 22
   `unresolved-attribute` findings are calls to `EngagementStore` methods that do not exist, which is
   not a typing nit but three broken CLI commands. Fixing those is that item's job, not this one's;
   what is left here afterwards is largely `invalid-argument-type` (17) and the Optional-narrowing

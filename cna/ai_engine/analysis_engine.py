@@ -159,7 +159,7 @@ class AnalysisEngine:
 
     # ---------------------------------------------------------------- dedup
 
-    def _dedup_key(self, rule_id: str, resource_id: str) -> str:
+    def _dedup_key(self, rule_id: str | None, resource_id: str | None) -> str:
         return f"{rule_id}:{resource_id}"
 
     def _emit(self, finding: Finding) -> None:
@@ -1681,6 +1681,11 @@ class AnalysisEngine:
           5. Return report
         """
         engagement_id = self.store.engagement_id
+        if engagement_id is None:
+            raise ValueError(
+                "AnalysisEngine requires an EngagementStore bound to an engagement_id; "
+                "construct it with EngagementStore(engagement_id=...)."
+            )
         self._findings = []
         self._seen = set()
 

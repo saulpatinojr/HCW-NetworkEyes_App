@@ -60,22 +60,22 @@ class RenderPipeline:
     """Renders all engagement deliverables from a reviewed FindingsReport."""
 
     def __init__(self, store: EngagementStore, options: RenderOptions | None = None):
+        # DeliverableManifest is a dataclass, so it does not validate: a None
+        # engagement_id would be written into the manifest as null rather than
+        # rejected. A pipeline that cannot identify its engagement cannot
+        # produce a valid manifest, so require it here (TODO.md T-410).
+        if store.engagement_id is None:
+            raise ValueError(
+                "RenderPipeline requires an EngagementStore bound to an "
+                "engagement_id; construct it with EngagementStore(engagement_id=...)."
+            )
         self.store = store
+        self.engagement_id: str = store.engagement_id
         self.opts = options or RenderOptions()
-        self._manifest = DeliverableManifest(engagement_id=store.engagement_id)
+        self._manifest = DeliverableManifest(engagement_id=self.engagement_id)
 
     def _output_dir(self) -> Path:
-        # store.engagement_id is Optional; without an explicit output_dir it is
-        # required to build the path. `Path(...) / None` raises an opaque
-        # TypeError, so fail with something a caller can act on.
-        if self.opts.output_dir is None and self.store.engagement_id is None:
-            raise ValueError(
-                "RenderPipeline needs either options.output_dir or an "
-                "EngagementStore bound to an engagement_id."
-            )
-        base = self.opts.output_dir or (
-            Path("engagements") / str(self.store.engagement_id) / "deliverables"
-        )
+        base = self.opts.output_dir or (Path("engagements") / self.engagement_id / "deliverables")
         base.mkdir(parents=True, exist_ok=True)
         return base
 

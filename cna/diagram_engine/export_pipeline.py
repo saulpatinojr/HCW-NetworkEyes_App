@@ -133,6 +133,12 @@ class DiagramExporter:
 
     def _run_drawio_export(self, drawio_path: Path, out_path: Path, fmt: str) -> None:
         """Invoke draw.io CLI headless export."""
+        if self._drawio_bin is None:
+            # Callers gate on `not self._drawio_bin`; reaching here without one
+            # is a programming error, not a missing-CLI condition.
+            raise ExportPipelineError(
+                "draw.io CLI unavailable — _run_drawio_export called without a binary."
+            )
         cmd = [
             self._drawio_bin,
             "--export",
