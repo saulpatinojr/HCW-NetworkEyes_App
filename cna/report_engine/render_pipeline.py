@@ -59,14 +59,22 @@ class RenderOptions:
 class RenderPipeline:
     """Renders all engagement deliverables from a reviewed FindingsReport."""
 
-    def __init__(self, store: EngagementStore, options: RenderOptions = None):
+    def __init__(self, store: EngagementStore, options: RenderOptions | None = None):
         self.store = store
         self.opts = options or RenderOptions()
         self._manifest = DeliverableManifest(engagement_id=store.engagement_id)
 
     def _output_dir(self) -> Path:
+        # store.engagement_id is Optional; without an explicit output_dir it is
+        # required to build the path. `Path(...) / None` raises an opaque
+        # TypeError, so fail with something a caller can act on.
+        if self.opts.output_dir is None and self.store.engagement_id is None:
+            raise ValueError(
+                "RenderPipeline needs either options.output_dir or an "
+                "EngagementStore bound to an engagement_id."
+            )
         base = self.opts.output_dir or (
-            Path("engagements") / self.store.engagement_id / "deliverables"
+            Path("engagements") / str(self.store.engagement_id) / "deliverables"
         )
         base.mkdir(parents=True, exist_ok=True)
         return base

@@ -68,10 +68,14 @@ class TechnicalReportRenderer:
         }
         # Group by account/region for coverage tables
         aws_accounts = sorted(
-            {f.account_id for f in report.findings if f.resource_type.startswith("AWS")}
+            {f.account_id for f in report.findings if (f.resource_type or "").startswith("AWS")}
         )
         azure_subscriptions = sorted(
-            {f.account_id for f in report.findings if f.resource_type.startswith("Microsoft")}
+            {
+                f.account_id
+                for f in report.findings
+                if (f.resource_type or "").startswith("Microsoft")
+            }
         )
         return {
             "engagement_id": report.engagement_id,

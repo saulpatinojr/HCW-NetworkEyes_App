@@ -20,6 +20,7 @@ Any finding with the same key is deduplicated — the first occurrence wins.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -138,7 +139,7 @@ class AnalysisOptions:
     load_aws: bool = True
     load_azure: bool = True
     dry_run: bool = False  # produce findings but do not write to store
-    progress_callback: callable | None = None
+    progress_callback: Callable[[str], None] | None = None
 
 
 class AnalysisEngine:
@@ -147,7 +148,7 @@ class AnalysisEngine:
     Strictly does NOT inject recommendations — that is RecommendationEngine's job.
     """
 
-    def __init__(self, store: EngagementStore, options: AnalysisOptions = None):
+    def __init__(self, store: EngagementStore, options: AnalysisOptions | None = None):
         self.store = store
         self.opts = options or AnalysisOptions()
         self._enforcer = ObservedStateEnforcer()

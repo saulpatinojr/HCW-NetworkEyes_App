@@ -14,7 +14,7 @@ in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG
 | [Phase 1](#phase-1--critical-fixes) | Critical fixes — repository states something untrue | T-101 – T-104 |
 | [Phase 2](#phase-2--security-improvements) | Security improvements | T-201 – T-204 |
 | [Phase 3](#phase-3--deployment-readiness) | Deployment readiness | T-301 – T-305 |
-| [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-411 |
+| [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-412 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements | T-501 – T-502 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
 
@@ -793,10 +793,27 @@ order; do not reorder it.
   has no such attribute, and `core/throttle.py:78` can `raise last_exc` while it is still `None`
   (currently unreachable, but only by accident of the loop's structure). When the count reaches
   zero, delete the `stages: [manual]` line from the `ty` hook so it gates.
-- **Status:** Not started
+- **Status:** In progress — 98 → **92** diagnostics (52 → **48** non-import). Six fixed, each a
+  real defect rather than a style nit:
+  `analysis_engine.py` used the builtin `callable` in a type expression (not a type at all) and
+  `options: AnalysisOptions = None`; `render_pipeline.py` had the same `= None` on a non-Optional
+  parameter, plus `Path("engagements") / self.store.engagement_id` where `engagement_id` is
+  `str | None` — that path now raises a `ValueError` naming the missing input instead of an opaque
+  `TypeError`; `technical_report.py` called `.startswith()` on `Finding.resource_type`, which is
+  `str | None` with default `None`, in two places; and `core/throttle.py` could `raise last_exc`
+  while it was still `None` (unreachable today, but only by accident of the loop's shape — it now
+  falls through to an explicit `RuntimeError`). Verified behaviourally, not just by re-running the
+  checker: `with_retry` still retries then succeeds, both `__init__`s still default correctly, and
+  `_output_dir()` raises `ValueError` rather than `TypeError`.
+  **The remaining 48 are dominated by one systemic problem — see T-412.** 11 of the 22
+  `unresolved-attribute` findings are calls to `EngagementStore` methods that do not exist, which is
+  not a typing nit but three broken CLI commands. Fixing those is that item's job, not this one's;
+  what is left here afterwards is largely `invalid-argument-type` (17) and the Optional-narrowing
+  group in the discovery modules (`self._mgmt_session.client(...)` where `_mgmt_session` is
+  `Session | None`), which is safe but needs care.
 - **Notes for future engineers:** Do not close this by widening ignore lists or adding
-  `# type: ignore` — T-402 is explicit on that point, and the one bug already found is the argument
-  for taking the findings seriously.
+  `# type: ignore` — T-402 is explicit on that point, and the two bugs already found are the
+  argument for taking the findings seriously.
 
 ### T-411 — Triage the 446 `detect-secrets` findings and close the secret-scanning gap
 
@@ -834,6 +851,51 @@ order; do not reorder it.
 - **Notes for future engineers:** Do **not** close this by regenerating the baseline in one step —
   that marks all 446 as reviewed without anyone having reviewed them, which is worse than the
   current state because it looks clean. The baseline is an audit record, not a suppression file.
+
+### T-412 — `cna analyze`, `cna report`, and `cna publish` call EngagementStore methods that do not exist
+
+- **Priority:** High
+- **Category:** Correctness / broken feature
+- **Description:** Three CLI commands call **ten methods that are absent from `EngagementStore`**.
+  Confirmed by `hasattr` against the real class, not inferred: the class defines twelve methods
+  (`init`, `load`, `save`, `acquire_lock`, `release_lock`, `write_discovery_checkpoint`,
+  `list_completed_checkpoints`, `write_audit_event`, `engagement_dir`, `_atomic_write`,
+  `output_paths`, `__init__`) and none of the following exist —
+
+  | Missing method | Called from |
+  |---|---|
+  | `load_aws_topology` | `cli/analyze.py:83` |
+  | `load_azure_topology` | `cli/analyze.py:97` |
+  | `load_findings_report` | `cli/report.py:87`, `cli/report.py:149` |
+  | `get_delivery_date` | `cli/publish.py:67` |
+  | `load_deliverable_manifest` | `cli/publish.py:76` |
+  | `load_findings_report_json` | `cli/publish.py:87` |
+  | `write_access_record` | `cli/publish.py:179` |
+  | `load_access_record` | `cli/publish.py:214` |
+  | `write_findings_report` | `ai_engine/analysis_engine.py:1726` |
+  | `write_deliverable_manifest` | `report_engine/render_pipeline.py:237` |
+
+  These are not latent: `EngagementStore().load_aws_topology("eng-1")` raises
+  `AttributeError: 'EngagementStore' object has no attribute 'load_aws_topology'`. Worse, the call
+  in `analyze.py` sits inside `try: ... except FileNotFoundError:`, which does **not** catch
+  `AttributeError`, so the command aborts with an unhandled traceback rather than the intended
+  "run `cna discover` first" message. No `SCAFFOLD` marker or `NotImplementedError` guard exists on
+  any of these paths, so nothing signals that they are unfinished. Found by `ty` on its first run
+  (T-402).
+- **Dependencies:** None. Blocks any real use of `cna analyze`, `cna report`, or `cna publish`.
+- **Recommended action:** Decide first whether these commands are meant to work today or are Phase D
+  scaffold — `cli/analyze.py`'s docstring says "Phase D entry point", which suggests the latter, but
+  nothing in the code says so. If scaffold, guard each command with an explicit
+  `NotImplementedError` naming the blocking item, so the failure is honest. If they are meant to
+  work, implement the ten methods on `EngagementStore`; the call sites already pin down the
+  contract (arguments and expected return types), and `write_discovery_checkpoint` plus
+  `output_paths` show the intended on-disk layout to read back. Cover each with a unit test using a
+  real `EngagementStore` on `tmp_path` — a `MagicMock` store accepts any method name and is exactly
+  why this survived.
+- **Status:** Not started
+- **Notes for future engineers:** The existing tests never caught this because they mock the store.
+  That is also how the `write_audit_event` `TypeError` fixed under T-402 survived. When testing
+  anything that touches persistence, prefer a real `EngagementStore` pointed at `tmp_path`.
 
 ---
 

@@ -75,7 +75,13 @@ def with_retry(max_retries: int = MAX_RETRIES):
                         raise
                     time.sleep(wait)
                     last_exc = e
-            raise last_exc  # pragma: no cover
+            # Unreachable: the final attempt re-raises above. Kept so the
+            # function can never fall through and implicitly return None.
+            if last_exc is not None:  # pragma: no cover
+                raise last_exc
+            raise RuntimeError(  # pragma: no cover
+                "with_retry: retry loop exited without returning or raising"
+            )
 
         return wrapper
 
