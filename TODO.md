@@ -185,11 +185,27 @@ Each one actively misleads an engineer or a workflow run.
   and `docker`, so no ecosystem is unwatched. Verified with `npm ci --legacy-peer-deps`,
   `tsc --noEmit`, and a full `next build` (all routes compile). Recorded in
   [`CHANGELOG.md`](CHANGELOG.md) → Unreleased.
-- **Notes for future engineers:** The alert *count* was not reconciled — the Dependabot REST API
-  returns 403 for the automation token, so the 8 alerts could not be enumerated and mapped one-to-one
-  onto the 7 npm advisories fixed here. Confirm the alerts page is clear before closing this out;
-  if any remain, they are ones `npm audit` and `pip-audit` do not see (a GitHub Actions or Docker
-  base-image advisory, both of which Dependabot also watches).
+- **Follow-up (same day):** Dependabot alert #30 — *"DeepmergeTS has stack exhaustion when merging
+  recursive object graphs"*, GHSA-ggr8-5vv4-36mx / CVE-2026-40345, high, CVSS 4.0 8.2 — was raised
+  after the work above and is now also fixed. It is the concrete instance of the caveat below:
+  `npm audit` reported **0** while this advisory was live, because it was published the same day and
+  the npm registry's advisory database had not yet picked it up. GitHub's advisory database is ahead
+  of `npm audit`; treat a clean `npm audit` as necessary but not sufficient.
+  `deepmerge-ts` reaches the tree only through `prisma` → `@prisma/config@6.19.3`, which pins it at
+  **exactly** `7.1.5`, and the Prisma 6.20 prerelease still pins 7.1.5 — so no Prisma release
+  resolves this and an `overrides` entry is the only route. Fixed to `^8.0.1` (patched in 8.0.0).
+  Forcing a new major onto a dependency Prisma pins exactly is the risk here, so it was verified
+  rather than assumed: both versions are ESM with identical `engines` (node >=16); `prisma generate`,
+  `prisma version`, `prisma migrate deploy --help`, and `prisma validate` (with `DATABASE_URL` set)
+  all succeed; `next build` is clean; and the advisory's own case — two objects self-referencing
+  through identical property paths — merges without stack exhaustion on 8.0.1 while ordinary merges
+  are unchanged.
+- **Notes for future engineers:** The alert *count* was never fully reconciled — the Dependabot REST
+  API returns 403 for the automation token, so the alerts could not be enumerated and mapped
+  one-to-one onto the advisories fixed here; alert #30 surfaced only because a human read the alerts
+  page. Confirm that page is clear before closing this out; anything remaining is something
+  `npm audit` and `pip-audit` do not see (a GitHub Actions or Docker base-image advisory, both of
+  which Dependabot also watches).
   Two traps when regenerating this lockfile: (1) it is stored with **LF** endings while
   `package.json` is **CRLF**, and npm rewrites the lockfile as CRLF on this platform — convert back
   or the diff becomes the whole file; (2) regenerate with **npm 11+**, matching the `node:24-alpine`
