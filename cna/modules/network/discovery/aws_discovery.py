@@ -777,12 +777,16 @@ class AWSDiscovery:
             region_topo = self._discover_region(acct_session, account_id, region)
             topology.regions.append(region_topo)
 
+            # Positional, matching the signature
+            # (engagement_id, platform, account_or_sub_id, data). Passing this
+            # as `account_id=` raised TypeError on the first region of the first
+            # account, so no AWS checkpoint was ever written (TODO.md T-410).
             checkpoint_key = f"aws_{account_id}_{region}"
             self.store.write_discovery_checkpoint(
                 engagement_id,
                 "aws",
-                account_id=checkpoint_key,
-                data=json.loads(region_topo.model_dump_json()),
+                checkpoint_key,
+                json.loads(region_topo.model_dump_json()),
             )
 
             vpc_count = len(region_topo.vpcs)

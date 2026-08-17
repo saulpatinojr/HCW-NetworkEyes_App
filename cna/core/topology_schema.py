@@ -316,6 +316,11 @@ class AzureSubnet(BaseModel):
     id: str
     name: str
     address_prefix: str
+    # Populated by _classify_subnet() in the Azure discovery path. The field was
+    # missing while the discovery code already passed it, so Pydantic silently
+    # discarded every classification it computed (TODO.md T-410). Defaulted, so
+    # checkpoints written before this field existed still deserialise.
+    subnet_type: SubnetType = SubnetType.UNKNOWN
     nsg_id: str | None = None
     nsg_name: str | None = None
     route_table_id: str | None = None

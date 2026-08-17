@@ -793,7 +793,7 @@ order; do not reorder it.
   has no such attribute, and `core/throttle.py:78` can `raise last_exc` while it is still `None`
   (currently unreachable, but only by accident of the loop's structure). When the count reaches
   zero, delete the `stages: [manual]` line from the `ty` hook so it gates.
-- **Status:** In progress — 98 → **92** diagnostics (52 → **48** non-import). Six fixed, each a
+- **Status:** In progress — 98 → **89** diagnostics (52 → **45** non-import). Nine fixed, each a
   real defect rather than a style nit:
   `analysis_engine.py` used the builtin `callable` in a type expression (not a type at all) and
   `options: AnalysisOptions = None`; `render_pipeline.py` had the same `= None` on a non-Optional
@@ -805,7 +805,23 @@ order; do not reorder it.
   falls through to an explicit `RuntimeError`). Verified behaviourally, not just by re-running the
   checker: `with_retry` still retries then succeeds, both `__init__`s still default correctly, and
   `_output_dir()` raises `ValueError` rather than `TypeError`.
-  **The remaining 48 are dominated by one systemic problem — see T-412.** 11 of the 22
+  Three further defects fixed in a second pass, both of the same shape as the T-402 bug — a store
+  method called with arguments that do not match its signature, hidden because the tests mock the
+  store:
+  `aws_discovery.py` called `write_discovery_checkpoint(engagement_id, "aws", account_id=...,
+  data=...)`, but that method takes `(engagement_id, platform, account_or_sub_id, data)`. Passing
+  `account_id=` raised `TypeError: got an unexpected keyword argument 'account_id'` **inside the
+  per-region loop**, so the first region of the first account aborted AWS discovery and no
+  checkpoint was ever written. Azure's equivalent call was always correct. Now positional, with
+  `TestRegionCheckpointWrite` covering it against a real `EngagementStore` — verified by reverting
+  the fix and watching the test fail.
+  `AzureSubnet` had no `subnet_type` field while the discovery path already passed one, so Pydantic
+  (which defaults to discarding extras) **silently threw away every classification
+  `_classify_subnet()` computed** — a function that exists for no other purpose. The field is now
+  declared with a `SubnetType.UNKNOWN` default, so checkpoints written before it existed still
+  deserialise, and the value survives the JSON round-trip the checkpoint path uses. Note the AWS
+  `Subnet` model always had this field; only the Azure model was missing it.
+  **The remaining 45 are dominated by one systemic problem — see T-412.** 11 of the 22
   `unresolved-attribute` findings are calls to `EngagementStore` methods that do not exist, which is
   not a typing nit but three broken CLI commands. Fixing those is that item's job, not this one's;
   what is left here afterwards is largely `invalid-argument-type` (17) and the Optional-narrowing

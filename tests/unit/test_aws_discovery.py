@@ -22,7 +22,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from cna.core.exceptions import CNAAuthError, CNARateLimitError
-from cna.core.topology_schema import AWSAccount, AWSRegionTopology
+from cna.core.topology_schema import AWSAccount, AWSRegionTopology, AWSTopology
 from cna.modules.network.discovery.aws_discovery import AWSDiscovery, DiscoveryOptions
 
 MODULE = "cna.modules.network.discovery.aws_discovery"
@@ -492,3 +492,51 @@ class TestAccessDeniedAuditEvent:
         assert events[0]["account"] == "222222222222"
         assert "AssumeRole failed" in events[0]["error"]
         assert "timestamp" in events[0]
+
+
+class TestRegionCheckpointWrite:
+    """`_discover_region` checkpoint write (TODO.md T-410).
+
+    `write_discovery_checkpoint` takes
+    `(engagement_id, platform, account_or_sub_id, data)`, but this call passed
+    `account_id=` — not a parameter — while omitting the required one, raising
+    `TypeError: got an unexpected keyword argument 'account_id'`. It sits inside
+    the per-region loop, so the first region of the first account killed AWS
+    discovery and no checkpoint was ever written. Azure's equivalent call was
+    always correct.
+
+    Uses a real `EngagementStore`: a `MagicMock` accepts any keyword and is the
+    reason this survived, exactly as with the `write_audit_event` bug (T-402).
+    """
+
+    def test_writes_a_checkpoint_per_region(self, discovery, tmp_path):
+        from cna.core.persistence import EngagementStore
+
+        store = EngagementStore(data_dir=tmp_path)
+        engagement_id = "test-20260305-0004"
+        store.engagement_dir(engagement_id).mkdir(parents=True, exist_ok=True)
+        discovery.store = store
+
+        account = AWSAccount(account_id="123456789012", account_name="prod")
+        topology = AWSTopology(engagement_id=engagement_id)
+        region_topo = AWSRegionTopology(account_id="123456789012", region="us-east-1")
+
+        with (
+            patch.object(discovery, "_assume_role", return_value=MagicMock()),
+            patch.object(discovery, "_get_enabled_regions", return_value=["us-east-1"]),
+            patch.object(discovery, "_discover_region", return_value=region_topo),
+        ):
+            discovery._discover_account(account, "CNA-ReadOnly", topology, engagement_id)
+
+        checkpoints = sorted(
+            (store.engagement_dir(engagement_id) / store.DISCOVERY_DIR).glob("*.json")
+        )
+        assert checkpoints, "no checkpoint written for the discovered region"
+        assert len(checkpoints) == 1
+        # account_or_sub_id "aws_123456789012_us-east-1" is sanitised by the store:
+        # "/" and "-" become "_", and the platform prefixes the filename.
+        assert checkpoints[0].name == "aws_aws_123456789012_us_east_1.json"
+        payload = json.loads(checkpoints[0].read_text())
+        assert payload["region"] == "us-east-1"
+        assert payload["account_id"] == "123456789012"
+        assert topology.regions == [region_topo]
