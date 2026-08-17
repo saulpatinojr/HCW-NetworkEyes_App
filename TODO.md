@@ -169,10 +169,23 @@ Each one actively misleads an engineer or a workflow run.
 - **Recommended action:** Verify no thumbprint appears in `infra/terraform/providers/aws/identity/`
   and add a short comment recording why it is absent, so a future reviewer does not "fix" the
   omission.
-- **Status:** Not started
+- **Status:** Done — verified and documented in code. `grep -rn thumbprint infra/` returns **only
+  comment lines**: there is no `thumbprint_list` value anywhere under `infra/`, so nothing was
+  copied forward. The legacy placeholder does still exist in the superseded root, at
+  `migrate/iam.tf:139` and `migrate/scripts/Initialize-Migration.ps1:97` — forty `f`s, never a real
+  thumbprint — and goes away with T-401.
+  A short comment already existed above `aws_iam_openid_connect_provider.github`; it was expanded
+  rather than duplicated, and now records three things a future reviewer needs: *why* the omission
+  is correct (provider 5.x validates GitHub's endpoint against its own trusted CA store), that the
+  `migrate/` placeholder must not be copied in, and — the part previously recorded only here in
+  `TODO.md` — the one-provider-per-account constraint, with the concrete `terraform import` command
+  to use when the target account already has one. That last point is the difference between a clean
+  first apply and a failed one, so it belongs next to the resource rather than in the backlog.
+  `terraform fmt -check -recursive` still passes and the file's LF endings are unchanged.
 - **Notes for future engineers:** AWS permits exactly one GitHub OIDC provider per account. If the
   target account already has one, the module must import it rather than create it — a duplicate
-  create fails the whole apply.
+  create fails the whole apply. This is now also stated in the module itself, which is where it will
+  actually be read; keep the two in step if either changes.
 
 ### T-204 — Triage the 8 open Dependabot advisories on the default branch
 

@@ -159,8 +159,23 @@ resource "aws_iam_role_policy" "ecs_task_xray" {
 }
 
 # ─── GitHub Actions OIDC deploy role ──────────────────────────────────────────
-# thumbprint_list is intentionally omitted: the AWS provider 5.x manages the
-# GitHub OIDC thumbprint automatically. Do not ship a hardcoded thumbprint.
+# thumbprint_list is intentionally omitted (TODO.md T-203). AWS provider 5.x
+# validates GitHub's OIDC endpoint against its own trusted CA store, so the
+# legacy thumbprint is no longer required. This absence is deliberate — do not
+# "fix" it by adding one back.
+#
+# In particular, do not copy the value from the superseded migrate/ root:
+# migrate/iam.tf sets thumbprint_list to a placeholder of forty `f`s, which is
+# not a real thumbprint and never was. migrate/ is queued for retirement in
+# TODO.md T-401.
+#
+# Deploy note: AWS permits exactly ONE GitHub OIDC provider per account. If the
+# target account already has one — likely if anything else in the org deploys
+# from GitHub Actions — this resource must be imported rather than created, or
+# the duplicate create fails the entire apply:
+#
+#   terraform import module.identity.aws_iam_openid_connect_provider.github \
+#     arn:aws:iam::<account-id>:oidc-provider/token.actions.githubusercontent.com
 resource "aws_iam_openid_connect_provider" "github" {
   url            = "https://token.actions.githubusercontent.com"
   client_id_list = ["sts.amazonaws.com"]
