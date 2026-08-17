@@ -136,3 +136,64 @@ class TestDiscoveryCheckpoints:
 
         assert len(store.list_completed_checkpoints(config.engagement_id, "aws")) == 1
         assert len(store.list_completed_checkpoints(config.engagement_id, "azure")) == 1
+
+
+class TestReportWrites:
+    """`write_findings_report` / `write_deliverable_manifest` (TODO.md T-412).
+
+    Both were called by `AnalysisEngine.run()` and `RenderPipeline.run()` but did
+    not exist on the class, so each engine raised `AttributeError` at the point
+    it tried to persist its result.
+    """
+
+    def test_findings_report_lands_under_reports(self, store, config):
+        store.init(config)
+        path = store.write_findings_report(
+            config.engagement_id, {"total_count": 2, "findings": [{"rule_id": "AZ-COST-001"}]}
+        )
+
+        assert path == (
+            store.engagement_dir(config.engagement_id)
+            / store.REPORTS_DIR
+            / store.FINDINGS_REPORT_FILE
+        )
+        assert json.loads(path.read_text())["total_count"] == 2
+
+    def test_findings_report_serialises_non_primitives(self, store, config):
+        """`FindingsReport.model_dump()` keeps enums and datetimes as objects."""
+        from datetime import UTC, datetime
+
+        from cna.core.findings_schema import FindingSeverity
+
+        store.init(config)
+        path = store.write_findings_report(
+            config.engagement_id,
+            {"severity": FindingSeverity.CRITICAL, "generated_at": datetime.now(UTC)},
+        )
+        json.loads(path.read_text())  # `_atomic_write(default=str)` is the backstop
+
+    def test_deliverable_manifest_round_trips(self, store, config):
+        store.init(config)
+        manifest = {
+            "engagement_id": config.engagement_id,
+            "records": [{"label": "Executive Report", "format": "pdf"}],
+        }
+        path = store.write_deliverable_manifest(
+            engagement_id=config.engagement_id, manifest=manifest
+        )
+
+        assert path.name == store.DELIVERABLE_MANIFEST_FILE
+        assert json.loads(path.read_text()) == manifest
+
+    def test_both_writes_are_idempotent(self, store, config):
+        store.init(config)
+        store.write_findings_report(config.engagement_id, {"total_count": 1})
+        second = store.write_findings_report(config.engagement_id, {"total_count": 9})
+        assert json.loads(second.read_text())["total_count"] == 9
+
+    def test_writes_create_the_reports_dir_when_init_was_skipped(self, store, config):
+        """RenderPipeline may run against a directory built by another process."""
+        path = store.write_deliverable_manifest(
+            engagement_id=config.engagement_id, manifest={"records": []}
+        )
+        assert path.is_file()

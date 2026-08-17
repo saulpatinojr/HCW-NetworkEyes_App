@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -409,7 +410,7 @@ def generate_diagram_svgs(
 
 
 def build_encyclopedia_context(  # noqa: PLR0913 — one optional input per data source
-    findings: list[Finding | dict],
+    findings: Sequence[Finding | dict],
     *,
     edition: str = EDITION_EXPANDED,
     topology: Any | None = None,
@@ -533,7 +534,7 @@ class EncyclopediaReportRenderer:
 
     def render_html(  # noqa: PLR0913 — one optional input per data source
         self,
-        findings: list[Finding | dict],
+        findings: Sequence[Finding | dict],
         *,
         topology: Any | None = None,
         classification: TopologyClassification | None = None,
@@ -565,7 +566,7 @@ class EncyclopediaReportRenderer:
 
     def render(  # noqa: PLR0913 — one optional input per data source
         self,
-        findings: list[Finding | dict],
+        findings: Sequence[Finding | dict],
         output_path: Path,
         *,
         topology: Any | None = None,

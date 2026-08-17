@@ -79,7 +79,7 @@ class DrawioMCPClient:
         """Return ranked, allow-list-filtered shape hits. Empty list on any error."""
         if not query or not query.strip():
             return []
-        payload = {"query": query.strip(), "limit": int(limit)}
+        payload: dict[str, object] = {"query": query.strip(), "limit": int(limit)}
         body = self._post("search_shapes", payload)
         if body is None:
             return []

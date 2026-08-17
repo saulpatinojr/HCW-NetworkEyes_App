@@ -61,6 +61,8 @@ class EngagementStore:
     DIAGRAMS_DIR = "diagrams"
     REPORTS_DIR = "reports"
     AUDIT_LOG_FILE = "audit.jsonl"
+    FINDINGS_REPORT_FILE = "findings_report.json"
+    DELIVERABLE_MANIFEST_FILE = "deliverable_manifest.json"
 
     def __init__(self, data_dir: Path | None = None, engagement_id: str | None = None):
         env_dir = os.environ.get("CNA_DATA_DIR", "./engagements")
@@ -177,6 +179,37 @@ class EngagementStore:
         event["timestamp"] = datetime.now(UTC).isoformat()
         with open(audit_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(event) + "\n")
+
+    def write_findings_report(self, engagement_id: str, report: dict) -> Path:
+        """Write the FindingsReport produced by AnalysisEngine.run() (TODO.md T-412).
+
+        Report file: reports/findings_report.json
+
+        `AnalysisEngine` hands over `FindingsReport.model_dump()`, so the payload
+        may still hold enums and datetimes; `_atomic_write` serialises those via
+        `default=str`.
+        """
+        reports_dir = self.engagement_dir(engagement_id) / self.REPORTS_DIR
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        report_path = reports_dir / self.FINDINGS_REPORT_FILE
+        self._atomic_write(report_path, report)
+        logger.debug("FindingsReport written: %s", report_path)
+        return report_path
+
+    def write_deliverable_manifest(self, engagement_id: str, manifest: dict) -> Path:
+        """Write the deliverable manifest produced by RenderPipeline.run() (TODO.md T-412).
+
+        Manifest file: reports/deliverable_manifest.json
+
+        Phase F's portal reads this to learn which deliverables exist, their
+        formats, and where they live on disk.
+        """
+        reports_dir = self.engagement_dir(engagement_id) / self.REPORTS_DIR
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        manifest_path = reports_dir / self.DELIVERABLE_MANIFEST_FILE
+        self._atomic_write(manifest_path, manifest)
+        logger.debug("Deliverable manifest written: %s", manifest_path)
+        return manifest_path
 
     @staticmethod
     def _atomic_write(path: Path, data: dict) -> None:

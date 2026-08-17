@@ -889,18 +889,33 @@ order; do not reorder it.
   that does not exist (T-413 — invisible until the dependency was installed), a `dict` variance
   issue in the drawio MCP client, and an `EncyclopediaReportRenderer.render` parameter typed
   `list[Finding | dict]` where callers pass `list[Finding]`.
-  T-414 is now done, which took the count to **8**. Gating the hook is blocked on T-413 (four
-  findings) plus two deliberate T-412 leftovers and two minor variance issues. Measure in an
-  environment with dependencies installed; a bare container overstates the count fourfold.
-  **T-412 owned 11 of the earlier findings** and is now resolved as scaffold guards.
-  The rest are a scattered tail: a `dict[str, str | int]` variance issue in the drawio MCP client,
-  an `EncyclopediaReportRenderer.render` parameter typed `list[Finding | dict]` where callers pass
-  `list[Finding]`, and the two known-false-positive deployer-union findings described above. 11 of the 22
-  `unresolved-attribute` findings are calls to `EngagementStore` methods that do not exist, which is
-  not a typing nit but three broken CLI commands. Fixing those is that item's job, not this one's;
-  what is left here afterwards is largely `invalid-argument-type` (17) and the Optional-narrowing
-  group in the discovery modules (`self._mgmt_session.client(...)` where `_mgmt_session` is
-  `Session | None`), which is safe but needs care.
+  T-414 is now done, which took the count to **8**, then T-413 to **6**. Measure in an environment
+  with dependencies installed; a bare container overstates the count fourfold.
+  **The tail is now cleared — 6 → 2.** Four fixes, none of them suppressions:
+  1. `DrawioMCPClient.search_shapes` built its payload as an unannotated literal, which infers
+     `dict[str, str | int]`; `dict` is invariant, so it did not satisfy `_post`'s
+     `dict[str, object]`. Annotated `dict[str, object]`, matching its sibling `create_diagram`,
+     which already did this.
+  2. `EncyclopediaReportRenderer.render` / `.render_html` / `build_encyclopedia_context` declared
+     `findings: list[Finding | dict]` and every caller passes a homogeneous `list[Finding]` —
+     rejected for the same invariance reason. All three now take `Sequence[Finding | dict]`, which
+     is covariant and is all the code needs: the parameter is only iterated
+     (`[normalize_finding(f) for f in findings]`), never mutated.
+  3. `RenderPipeline.run()` re-read `self.store.engagement_id` (`str | None`) instead of the
+     `self.engagement_id: str` the constructor guard already narrowed, throwing the narrowing away
+     at five sites. All five now read the narrowed attribute.
+  4. The **two T-412 engine writes are implemented**, not guarded — see that item. Implementing
+     `write_deliverable_manifest` is what surfaced (3): the argument type could not be checked
+     while the method did not exist.
+  **Remaining: 2, both the T-413 stub artifact** — `project.agents` at
+  `foundry_agent_client.py:133,159`. `AIProjectClient.agents` is annotated
+  `-> AgentsClient  # type: ignore[name-defined]` in the SDK because its companion class is
+  imported lazily, so the checker cannot resolve the return type. Verified at runtime that the
+  attribute and its `threads`/`messages`/`runs` children all exist. There is no structural fix that
+  is not a contortion around working code, so the hook stays non-gating until the SDK ships a
+  resolvable annotation. **Unblock condition:** when `ty check` reports 0, delete the
+  `stages: [manual]` line from the `ty` hook in `.pre-commit-config.yaml` and update the comment
+  above it — that is the entire remaining change.
 - **Notes for future engineers:** Do not close this by widening ignore lists or adding
   `# type: ignore` — T-402 is explicit on that point, and the two bugs already found are the
   argument for taking the findings seriously.
@@ -993,13 +1008,22 @@ order; do not reorder it.
   A useful side effect: `ty` treats code after an unconditional `raise` as unreachable, so guarding
   the commands also removed nine of the eleven findings this item owns — confirmed with a minimal
   probe before relying on it. The count fell 60 → 49.
-  **Two call sites deliberately remain**, and they are the real remaining work:
-  `analysis_engine.py:1736` (`write_findings_report`) and `render_pipeline.py:245`
-  (`write_deliverable_manifest`). Both sit at the end of engines that genuinely work and are
-  covered by tests — `AnalysisEngine.run()` alone is exercised by a dozen cases — so guarding them
-  would delete working functionality to silence a checker. They are unreachable in production now
-  that the CLI is guarded, and they are exactly the two writes that must be implemented first when
-  these commands become real.
+  **Two call sites were left unguarded** — `analysis_engine.py:1736` (`write_findings_report`) and
+  `render_pipeline.py:245` (`write_deliverable_manifest`). Both sit at the end of engines that
+  genuinely work and are covered by tests, so guarding them would have deleted working
+  functionality to silence a checker.
+  **Both are now implemented on `EngagementStore`** rather than guarded, which is what the two
+  engines needed to finish their own work: each was building a complete result and then dying with
+  `AttributeError` on the last statement. They write to `reports/findings_report.json` and
+  `reports/deliverable_manifest.json`, reusing `_atomic_write` (whose `default=str` covers the
+  enums and datetimes `FindingsReport.model_dump()` leaves in place) and creating `reports/` if a
+  caller skipped `init()`. Filenames are class constants (`FINDINGS_REPORT_FILE`,
+  `DELIVERABLE_MANIFEST_FILE`) alongside the existing ones, not inline literals. Parameter names
+  match the existing call sites exactly — `write_deliverable_manifest` is called with keywords.
+  Covered by five tests in `tests/unit/test_persistence.py` against a real store on `tmp_path`.
+  **The eight read-side methods are still missing**, so the five CLI guards stay as they are. When
+  those commands become real, these two writers pin down the on-disk layout the readers must
+  match.
 - **Notes for future engineers:** The existing tests never caught this because they mock the store.
   That is also how the `write_audit_event` `TypeError` fixed under T-402 survived. When testing
   anything that touches persistence, prefer a real `EngagementStore` pointed at `tmp_path`.

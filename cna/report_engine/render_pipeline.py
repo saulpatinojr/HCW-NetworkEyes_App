@@ -83,7 +83,7 @@ class RenderPipeline:
         return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
     def _filename(self, label: str, ext: str) -> str:
-        return f"{self.store.engagement_id}_{label}_{self._timestamp()}.{ext}"
+        return f"{self.engagement_id}_{label}_{self._timestamp()}.{ext}"
 
     # ---------------------------------------------------------------- gate check
 
@@ -91,16 +91,16 @@ class RenderPipeline:
         """DD-009: Block all rendering if findings have not been reviewed."""
         if not report.review_complete:
             raise ReviewGateError(
-                f"Engagement {self.store.engagement_id}: FindingsReport has "
+                f"Engagement {self.engagement_id}: FindingsReport has "
                 f"review_complete=False. Run `cna review complete "
-                f"--engagement-id {self.store.engagement_id}` before generating reports."
+                f"--engagement-id {self.engagement_id}` before generating reports."
             )
 
     def _enforce_ja_gate(self) -> None:
         """DD-015: Block JA report if native speaker review not complete."""
         if not self.opts.ja_review_complete:
             raise JaReviewGateError(
-                f"Engagement {self.store.engagement_id}: JA regional report requested "
+                f"Engagement {self.engagement_id}: JA regional report requested "
                 f"but ja_review_complete=False. Complete native speaker review and set "
                 f"--ja-review-complete flag."
             )
@@ -117,7 +117,7 @@ class RenderPipeline:
         self._enforce_review_gate(report)
 
         out = self._output_dir()
-        engagement_id = self.store.engagement_id
+        engagement_id = self.engagement_id
 
         if self.opts.render_html_preview:
             from cna.report_engine.html_preview import HtmlPreviewRenderer
