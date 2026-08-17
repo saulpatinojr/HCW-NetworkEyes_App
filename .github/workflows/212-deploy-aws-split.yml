@@ -2,15 +2,22 @@ name: "212 · Deploy AWS Platform (Split)"
 
 # SCAFFOLD — not yet functional. Mirrors 211-deploy-azure-split.yml's input
 # contract and three-job shape (policy-gates / plan / apply) so the trigger
-# surface is stable while infra/terraform/providers/aws/* and
-# infra/terraform/environments/aws/* are built out module by module.
+# surface is stable until the AWS deploy path is implemented (TODO.md T-501).
 #
-# Each job below is a guard that fails fast with a pointer to the tracking
-# issue, rather than actually running `terraform plan/apply` against modules
-# that declare no resources yet — a vacuous "successful" plan against an
-# empty config would look like a working pipeline and isn't.
+# The blocker is human account setup, NOT missing Terraform. The eight
+# provider modules under infra/terraform/providers/aws/ declare 90 resources
+# between them (ai 3, compute 25, database 2, identity 16, observability 22,
+# runtime 10, security 4, storage 8). What does not exist yet is the AWS
+# account, the S3/DynamoDB state backend, and the OIDC deploy role — see
+# REVIEW.md R-001, R-002, and R-003, each of which needs a human with account
+# access, not a code change.
 #
-# Tracked in https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/issues/110
+# Each job below therefore fails fast rather than running `terraform
+# plan/apply` with no backend and no credentials, which would either error
+# confusingly mid-run or, worse, appear to succeed.
+#
+# Tracked in TODO.md T-101 (this message), T-501 (the real implementation),
+# and https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/issues/110
 
 on:
   workflow_dispatch:
@@ -92,9 +99,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Not yet implemented
+      - name: Blocked on AWS account setup
         run: |
-          echo "::error::212-deploy-aws-split.yml is a scaffold. infra/terraform/providers/aws/* has no resources yet — see issue #110 (https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/issues/110) and its per-module follow-ups."
+          echo "::error::212-deploy-aws-split.yml cannot run yet: the AWS account, Terraform state backend, and OIDC deploy role do not exist. This is NOT a missing-code problem — infra/terraform/providers/aws/* declares 90 resources across eight modules."
+          echo "::error::Unblock in order: REVIEW.md R-001 (AWS account + administrative access), R-002 (S3 state backend + DynamoDB lock table, created out of band), R-003 (GitHub OIDC deploy role wired into CI secrets). Each needs a human with account access."
+          echo "::error::Implementation of the real plan/apply steps is tracked in TODO.md T-501. Background: https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/issues/110"
           exit 1
 
   plan:
@@ -107,9 +116,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Not yet implemented
+      - name: Blocked on AWS account setup
         run: |
-          echo "::error::212-deploy-aws-split.yml is a scaffold. See issue #110 for AWS provider module status."
+          echo "::error::Cannot run 'terraform plan': there is no S3 state backend to initialise against and no OIDC role to assume. The AWS Terraform itself is present — eight modules, 90 resources."
+          echo "::error::Unblock via REVIEW.md R-001 (AWS account), R-002 (S3 state backend + DynamoDB lock table), R-003 (OIDC deploy role in CI secrets). Real plan steps are tracked in TODO.md T-501."
           exit 1
 
   apply:
@@ -123,7 +133,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Not yet implemented
+      - name: Blocked on AWS account setup
         run: |
-          echo "::error::212-deploy-aws-split.yml is a scaffold. See issue #110 for AWS provider module status."
+          echo "::error::Cannot run 'terraform apply': no AWS account, state backend, or OIDC deploy role exists. Applying is also gated on a reviewed plan, which cannot be produced yet."
+          echo "::error::Unblock via REVIEW.md R-001 (AWS account), R-002 (S3 state backend + DynamoDB lock table), R-003 (OIDC deploy role in CI secrets), then implement the apply path per TODO.md T-501 and T-301/T-302 for module apply order."
           exit 1

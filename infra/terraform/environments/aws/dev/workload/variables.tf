@@ -26,13 +26,11 @@ variable "region_short" {
 variable "github_owner" {
   description = "GitHub organization/owner for the github provider and the OIDC deploy role."
   type        = string
-  default     = "<GITHUB_OWNER_PLACEHOLDER>"
 }
 
 variable "github_repository" {
   description = "GitHub repository name (without owner) for the OIDC deploy role trust policy."
   type        = string
-  default     = "<GITHUB_REPO_PLACEHOLDER>"
 }
 
 variable "github_token" {

@@ -34,13 +34,11 @@ variable "kms_deletion_window_days" {
 variable "github_owner" {
   description = "GitHub organization or user that owns the repository allowed to assume the deploy role via OIDC."
   type        = string
-  default     = "<GITHUB_OWNER_PLACEHOLDER>"
 }
 
 variable "github_repository" {
   description = "GitHub repository name (without owner) allowed to assume the deploy role via OIDC."
   type        = string
-  default     = "<GITHUB_REPO_PLACEHOLDER>"
 }
 
 variable "task_bedrock_policy_json" {

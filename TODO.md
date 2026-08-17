@@ -14,7 +14,7 @@ in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG
 | [Phase 1](#phase-1--critical-fixes) | Critical fixes — repository states something untrue | T-101 – T-104 |
 | [Phase 2](#phase-2--security-improvements) | Security improvements | T-201 – T-204 |
 | [Phase 3](#phase-3--deployment-readiness) | Deployment readiness | T-301 – T-305 |
-| [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-406 |
+| [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-407 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements | T-501 – T-502 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
 
@@ -40,7 +40,16 @@ Each one actively misleads an engineer or a workflow run.
   (AWS account, state backend, and OIDC deploy role — `REVIEW.md` R-001/R-002/R-003) and to point
   at `REVIEW.md` rather than only at issue #110. Keep the fail-fast behaviour until those
   blockers clear.
-- **Status:** Not started
+- **Status:** Done — the header comment and all three `::error::` messages in
+  `212-deploy-aws-split.yml` were rewritten to name the real blocker. They now state that the eight
+  provider modules declare 90 resources (so this is not a missing-code problem), point at
+  `REVIEW.md` R-001 (AWS account), R-002 (S3 state backend + DynamoDB lock table), and R-003 (OIDC
+  deploy role in CI secrets) as the human-owned prerequisites, and cross-reference `TODO.md` T-501
+  for the real implementation, keeping the issue #110 link as background rather than the sole
+  pointer. Fail-fast behaviour and the three-job `policy-gates → plan → apply` shape are unchanged;
+  each job still `exit 1`s. The `plan` and `apply` messages are now job-specific — naming the
+  missing backend and the missing reviewed plan respectively — rather than three copies of one
+  string. Recorded in [`CHANGELOG.md`](CHANGELOG.md) → Unreleased.
 - **Notes for future engineers:** The guard jobs mirror `211-deploy-azure-split.yml`'s input
   contract and job shape on purpose — preserve that shape when the guard is replaced with real
   steps (see T-501), so the two clouds keep a single deploy interface.
@@ -130,7 +139,19 @@ Each one actively misleads an engineer or a workflow run.
 - **Dependencies:** None.
 - **Recommended action:** Drop the defaults so Terraform requires the values, or add a
   `validation` block rejecting any value containing `PLACEHOLDER`.
-- **Status:** Not started
+- **Status:** Done — all six placeholder defaults removed, making the variables required:
+  `github_owner` and `github_repository` in
+  `infra/terraform/providers/aws/identity/variables.tf` and in both
+  `infra/terraform/environments/aws/{dev,prod}/workload/variables.tf`. No literal `PLACEHOLDER`
+  string remains anywhere under `infra/`. The "make it required" option was chosen over a
+  `validation` block because it is the stricter of the two — a validation rejecting `PLACEHOLDER`
+  still permits an empty or wrong value, whereas an absent default makes Terraform refuse to plan.
+  Verified safe: nothing supplied these from a default. The drift workflows (350/360) target the
+  *Azure* roots, and the only workflow touching the AWS roots is 212, whose three jobs all fail
+  fast before Terraform runs. `211-deploy-azure-split.yml` and both drift workflows already pass
+  `-var="github_owner=..."` and `-var="github_repository=..."` explicitly — that is the pattern the
+  AWS deploy path should follow when T-501 implements it. Recorded in
+  [`CHANGELOG.md`](CHANGELOG.md) → Unreleased.
 - **Notes for future engineers:** Everything else a human must supply is *not* a token in the
   source — account ID, partition, and region resolve from `data.aws_caller_identity.current`,
   `data.aws_partition.current`, and `var.aws_region`; backend settings arrive at
@@ -566,6 +587,30 @@ order; do not reorder it.
   tooling, not part of closing the test gap. `validate_shape_catalog.py` is covered only by a
   "still passes against this repository" assertion; it reads a hardcoded catalog path and has no
   fixture seam, so a violating-fixture test for it needs a small refactor first.
+
+### T-407 — The AWS Terraform has no `fmt` or `validate` coverage in CI
+
+- **Priority:** Medium
+- **Category:** CI coverage / infrastructure
+- **Description:** No workflow runs `terraform fmt -check` or `terraform validate` against
+  `infra/terraform/providers/aws/**` or `infra/terraform/environments/aws/**`. Grepping the
+  workflows for `terraform init|validate|fmt` returns only Azure roots (`350-drift-dev.yml`,
+  `360-drift-prod.yml`, `211-deploy-azure-split.yml`, `000-bootstrap-backend.yml`); the sole
+  AWS-targeting workflow, `212-deploy-aws-split.yml`, fails fast before Terraform runs. The
+  practical consequence was hit directly while closing T-202: a change to three AWS `variables.tf`
+  files could not be checked by any tooling, in CI or locally, and had to be verified by a
+  hand-rolled brace-balance script. 90 resources across eight modules are currently unlinted.
+- **Dependencies:** None. Deliberately independent of `REVIEW.md` R-001 – R-003 — `fmt` and
+  `validate` need neither an AWS account nor credentials, unlike `plan`.
+- **Recommended action:** Add a job to `300-test-codebase.yml` that runs `terraform fmt -check
+  -recursive` over `infra/terraform/` and `terraform init -backend=false && terraform validate`
+  for each AWS root. `-backend=false` is the important flag: it makes validation possible with no
+  state backend, which is exactly the situation until R-002 is resolved.
+- **Status:** Not started
+- **Notes for future engineers:** Do not fold this into 212 — that workflow is `workflow_dispatch`
+  only and fails fast by design, so validation placed there would never run. It belongs in the
+  push/PR test pipeline. Note also that the Azure roots would benefit from the same `fmt -check`
+  sweep; scope it to `infra/terraform/` as a whole rather than AWS alone.
 
 ---
 
