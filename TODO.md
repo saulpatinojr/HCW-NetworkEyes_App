@@ -1028,10 +1028,27 @@ order; do not reorder it.
   backwards deserves a check that nothing else needs 2.x. Whichever way, add one test that exercises
   `run()` against a mocked client shaped like the *declared* SDK version, so the next divergence
   fails a test rather than a deployment.
-- **Status:** Not started
-- **Notes for future engineers:** Note the interaction with the broad `except Exception` here. It is
-  what turned a clear `AttributeError` into an opaque runtime error, and it is the same
-  narrow-vs-broad question raised under T-404 — worth revisiting together.
+- **Status:** Done — pinned back to 1.x, per the repository owner's decision, rather than porting
+  `run()` to the 2.x surface. `pyproject.toml` now declares `azure-ai-projects>=1.0.0,<2`.
+  **Pinning alone was not sufficient**, which is the part worth remembering. In 1.x,
+  `AIProjectClient.agents` returns an `AgentsClient` from the **separate `azure-ai-agents`
+  package** — that companion package provides `threads`, `messages`, and `runs`, not
+  `azure-ai-projects` itself. It was undeclared, so a pin to 1.x on its own would have swapped one
+  broken state for another. `azure-ai-agents>=1.1.0,<2` is now declared alongside it. That is the
+  same undeclared-dependency class as T-414, found the same way.
+  Verified at runtime rather than by the type checker alone: on the pinned pair,
+  `AIProjectClient.agents` resolves to `AgentsClient`, and `.threads`, `.messages`, and
+  `.runs.create_and_process` all exist. Note only `1.0.0` exists in the 1.x line — there is no
+  newer 1.x to move to, so this pin is a ceiling as well as a floor.
+- **Notes for future engineers:** Two `ty` findings remain on `project.agents` and are a **type-stub
+  artifact, not a bug**: the `agents` property in `azure-ai-projects` 1.0.0 is annotated
+  `-> AgentsClient` with a `# type: ignore[name-defined]`, because its companion package is imported
+  lazily. The runtime chain is proven to work. Do not "fix" these by restructuring the call.
+  Note also the interaction with the broad `except Exception` here. It is what turned a clear
+  `AttributeError` into an opaque `FoundryAgentError`, hiding a total failure of this path behind a
+  generic message — the same narrow-vs-broad question raised under T-404, and the concrete argument
+  for it. If this is revisited, add a test that drives `run()` against a mock shaped like the
+  *declared* SDK, so the next divergence fails a test rather than a deployment.
 
 ### T-414 — Ten imported packages are not declared as dependencies
 
