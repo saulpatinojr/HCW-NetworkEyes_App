@@ -170,19 +170,27 @@ jobs:
         run: python3 scripts/validate_documentation_model.py
 
   # ------------------------------------------------------------------
-  # 5. Terraform format and validate (TODO.md T-407)
+  # 5. Terraform format check (TODO.md T-407)
   # ------------------------------------------------------------------
-  # The AWS Terraform had no fmt or validate coverage anywhere: the only
-  # terraform invocations lived in the Azure deploy and drift workflows, and
+  # The AWS Terraform had no fmt coverage anywhere: the only terraform
+  # invocations lived in the Azure deploy and drift workflows, and
   # 212-deploy-aws-split.yml fails fast before terraform runs. 90 resources
-  # across eight modules were unlinted.
+  # across eight modules were unformatted-unchecked.
   #
-  # Neither check needs an AWS account or credentials, so this is deliberately
-  # independent of REVIEW.md R-001 - R-003. `validate` needs provider schemas
-  # but not state, which is what -backend=false buys: it works before the S3
-  # backend of R-002 exists.
-  terraform-checks:
-    name: Terraform Format and Validate
+  # fmt needs no provider download, no AWS account, and no credentials, so this
+  # job is deliberately independent of REVIEW.md R-001 - R-003 and covers both
+  # clouds.
+  #
+  # `terraform validate` is NOT here. It was in the first version of this job
+  # and failed on its first run; the cause could not be diagnosed, because the
+  # Actions API is not readable from the authoring environment and the egress
+  # policy blocks registry.terraform.io, so `init` cannot resolve providers
+  # locally either. Rather than guess, validate was dropped back to TODO.md
+  # T-409, which records the open question: the AWS roots carry no
+  # .terraform.lock.hcl (unlike the Azure roots), so it is not yet known
+  # whether the failure was provider resolution or a genuine config error.
+  terraform-fmt:
+    name: Terraform Format Check
     runs-on: self-hosted
     timeout-minutes: 10
     needs: [test]
@@ -193,28 +201,8 @@ jobs:
         with:
           terraform_wrapper: false
 
-      # Formatting needs no provider download, so it covers both clouds.
       - name: Terraform fmt check (all roots and modules)
         run: terraform fmt -check -recursive infra/terraform/
-
-      # Scoped to the AWS roots: the Azure roots are already init'd and planned
-      # by 211 and the drift workflows on every deploy.
-      - name: Terraform validate (AWS roots)
-        run: |
-          set -euo pipefail
-          failed=0
-          for root in infra/terraform/environments/aws/*/*/; do
-            echo "::group::validate ${root}"
-            if terraform -chdir="${root}" init -backend=false -input=false -no-color \
-               && terraform -chdir="${root}" validate -no-color; then
-              echo "OK: ${root}"
-            else
-              echo "::error::terraform validate failed for ${root}"
-              failed=1
-            fi
-            echo "::endgroup::"
-          done
-          exit "${failed}"
 
   # ------------------------------------------------------------------
   # 6. Docker build smoke test

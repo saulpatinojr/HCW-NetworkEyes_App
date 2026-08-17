@@ -14,7 +14,7 @@ in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG
 | [Phase 1](#phase-1--critical-fixes) | Critical fixes — repository states something untrue | T-101 – T-104 |
 | [Phase 2](#phase-2--security-improvements) | Security improvements | T-201 – T-204 |
 | [Phase 3](#phase-3--deployment-readiness) | Deployment readiness | T-301 – T-305 |
-| [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-408 |
+| [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-409 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements | T-501 – T-502 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
 
@@ -655,11 +655,13 @@ order; do not reorder it.
   `providers/aws/observability/variables.tf` (the `alarm_thresholds` object), and
   `providers/aws/security/locals.tf`. Verified with a real `terraform` 1.9.8 binary: `fmt -check
   -recursive` is now clean across `infra/terraform/`, and LF endings are unchanged.
-  **`validate` has never actually executed.** It could not be verified locally because the agent
-  proxy blocks `registry.terraform.io` (403 on the provider discovery document), so providers
-  cannot be downloaded in the review environment. Its first real run is in CI, and it may fail —
-  these roots have never been validated by anything. That is the point of the job rather than an
-  argument against it; treat a first-run failure as the check doing its job.
+  **`validate` was attempted, failed, and was removed** — see T-409. The first version of this job
+  ran `terraform validate` per AWS root after `init -backend=false`. It failed on its first CI run
+  (check run 95481918579 on commit `cc3c9db`) and the cause could not be determined: the Actions
+  API returns 403 for this automation, and the egress policy blocks `registry.terraform.io`, so the
+  failure could be reproduced neither by reading the log nor by running it locally. `fmt` was
+  re-verified clean at that exact commit with a real terraform 1.9.8 binary, which is how the
+  failure was isolated to the validate step. Only `fmt` shipped; the job is `terraform-fmt`.
 - **Notes for future engineers:** Do not fold this into 212 — that workflow is `workflow_dispatch`
   only and fails fast by design, so validation placed there would never run. It belongs in the
   push/PR test pipeline. Note also that the Azure roots would benefit from the same `fmt -check`
@@ -692,6 +694,40 @@ order; do not reorder it.
   how the figures above were obtained. Also correct the misleading comment when the entries go —
   and note the same block omits `cna/diagram_engine/diagrams_generator.py` and the diagram modules
   for a *genuine* reason (they need the graphviz binary), so do not delete the block wholesale.
+
+### T-409 — `terraform validate` for the AWS roots: failed on first run, cause unknown
+
+- **Priority:** Medium
+- **Category:** CI coverage / infrastructure
+- **Description:** T-407 originally added `terraform validate` for each AWS root, run after
+  `terraform init -backend=false`. It **failed on its first CI execution** (check run 95481918579,
+  commit `cc3c9db`, PR #155) and was removed so the rest of that work could land; only
+  `terraform fmt -check` shipped. The failure is genuinely undiagnosed, not merely unfixed. Two
+  independent walls prevented diagnosis from the authoring environment: every GitHub Actions and
+  Checks endpoint returns `403 Resource not accessible by integration` (job logs, check-run detail,
+  annotations), and the session egress policy rejects `registry.terraform.io:443` and
+  `checkpoint-api.hashicorp.com:443` at CONNECT, so `init` cannot resolve providers locally either.
+  `terraform fmt -check -recursive` was re-run against that exact commit with a real terraform
+  1.9.8 binary and was clean, which isolates the failure to the validate step rather than the
+  formatting one.
+- **Dependencies:** None, but the first step needs someone who can read the Actions log.
+- **Recommended action:** Read the failing step's output and split on what it says.
+  1. **If `init` could not reach the registry** — the runner has the same egress restriction. The
+     fix is a provider mirror or committed lock files, not a Terraform change. Note the AWS roots
+     carry **no `.terraform.lock.hcl`** at all, while every Azure root does; that asymmetry is the
+     first thing to check, since it means the AWS roots must resolve `hashicorp/aws ~> 5.0` fresh
+     on every init.
+  2. **If `validate` reported config errors** — they are real defects in roots that have never been
+     validated by anything, and should be fixed root by root before the step is restored.
+  Restore the step in `300-test-codebase.yml` once it passes; the removed version is in this
+  repository's history on commit `cc3c9db`.
+- **Status:** Not started
+- **Notes for future engineers:** Do not restore the step without first reproducing a green run —
+  it blocks every PR when red, which is why it was pulled rather than left failing. Generating the
+  lock files (`terraform providers lock` for the four AWS roots) is worth doing regardless of the
+  outcome: it pins provider versions for supply-chain reasons, matching what the Azure roots
+  already do, and it is the CBTS standard of preferring pinned versions in security-sensitive
+  dependencies.
 
 ---
 
