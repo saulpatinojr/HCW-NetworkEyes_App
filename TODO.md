@@ -171,8 +171,33 @@ Each one actively misleads an engineer or a workflow run.
   note with a reason. Prioritise anything reachable from the web platform's request path. Check
   whether `.github/dependabot.yml` covers both ecosystems (`pip` and `npm`) and both lockfiles; if
   an ecosystem is unwatched, alerts for it will never be raised in the first place.
-- **Status:** Not started
-- **Notes for future engineers:** CI already runs a `pip-audit` job in `300-test-codebase.yml`,
+- **Status:** Done — remediated in the `apps/cna-web` npm tree; `npm audit` goes from 4 vulnerable
+  packages (3 high, 1 moderate) to **0**, and `pip-audit` over `pyproject.toml` reports no known
+  vulnerabilities, confirming the advisories were entirely Node-side as the notes below predicted.
+  Fixes: `next` 16.2.11 → 16.3.1 and `eslint-config-next` to match (postcss path traversal,
+  GHSA-6g55-p6wh-862q and its incomplete-fix follow-up); `postcss` floor raised to `^8.5.23`
+  (resolves 8.5.26); `nanoid` 3.3.12 → 3.3.18 (infinite loop on zero/negative size);
+  `brace-expansion` 1.1.16 → 1.1.18 and 5.0.7 → 5.0.9 (unbounded-expansion DoS, CVE-2026-14257 and
+  its mitigation bypass). The two transitive packages are pinned through targeted `overrides`
+  entries in `package.json` rather than a blanket tree refresh, per the CBTS standard of preferring
+  pinned versions in security-sensitive dependencies. `.github/dependabot.yml` was checked as the
+  recommended action asked: it already covers `pip`, `npm` (at `/apps/cna-web`), `github-actions`,
+  and `docker`, so no ecosystem is unwatched. Verified with `npm ci --legacy-peer-deps`,
+  `tsc --noEmit`, and a full `next build` (all routes compile). Recorded in
+  [`CHANGELOG.md`](CHANGELOG.md) → Unreleased.
+- **Notes for future engineers:** The alert *count* was not reconciled — the Dependabot REST API
+  returns 403 for the automation token, so the 8 alerts could not be enumerated and mapped one-to-one
+  onto the 7 npm advisories fixed here. Confirm the alerts page is clear before closing this out;
+  if any remain, they are ones `npm audit` and `pip-audit` do not see (a GitHub Actions or Docker
+  base-image advisory, both of which Dependabot also watches).
+  Two traps when regenerating this lockfile: (1) it is stored with **LF** endings while
+  `package.json` is **CRLF**, and npm rewrites the lockfile as CRLF on this platform — convert back
+  or the diff becomes the whole file; (2) regenerate with **npm 11+**, matching the `node:24-alpine`
+  image, because npm 10 silently strips the `libc` fields that select the musl vs glibc native
+  binaries for `@next/swc` and `@tailwindcss/oxide`. Also note `npm update` floats the entire tree —
+  it pulled in 119 package changes including major transitive jumps (`immer` 10 → 11) — so prefer
+  targeted `overrides` plus `npm install --package-lock-only` for security-only work.
+  CI already runs a `pip-audit` job in `300-test-codebase.yml`,
   which covers the Python side — check whether that job is passing before assuming the Python
   dependencies are implicated. A green `pip-audit` alongside 7 high advisories would point at the
   Node dependency tree. Per CBTS engineering standards, prefer pinned versions over ranges when
