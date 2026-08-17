@@ -1426,10 +1426,13 @@ class AnalysisEngine:
         self, sub_topo: AzureSubscriptionTopology, sub_id: str
     ) -> None:
         for vnet in sub_topo.vnets:
-            has_local_gw = (
-                any(gw.vnet_id == vnet.id for gw in sub_topo.virtual_network_gateways)
-                if sub_topo.virtual_network_gateways
-                else False
+            # A gateway has no vnet_id — it lives in a GatewaySubnet, and an ARM
+            # subnet id nests under its VNet id as "<vnet_id>/subnets/<name>".
+            # Reading gw.vnet_id raised AttributeError for any subscription that
+            # actually had a gateway (TODO.md T-410).
+            has_local_gw = any(
+                gw.subnet_id and gw.subnet_id.startswith(f"{vnet.id}/")
+                for gw in sub_topo.virtual_network_gateways or []
             )
             for peering in vnet.peerings:
                 if peering.allow_gateway_transit and not has_local_gw:

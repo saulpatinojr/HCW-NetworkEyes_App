@@ -67,14 +67,20 @@ class TechnicalReportRenderer:
             "LOW": [f for f in report.findings if f.severity == FindingSeverity.LOW],
         }
         # Group by account/region for coverage tables
+        # account_id is Optional; a single finding without one makes sorted()
+        # raise "'<' not supported between 'str' and 'NoneType'".
         aws_accounts = sorted(
-            {f.account_id for f in report.findings if (f.resource_type or "").startswith("AWS")}
+            {
+                f.account_id
+                for f in report.findings
+                if (f.resource_type or "").startswith("AWS") and f.account_id
+            }
         )
         azure_subscriptions = sorted(
             {
                 f.account_id
                 for f in report.findings
-                if (f.resource_type or "").startswith("Microsoft")
+                if (f.resource_type or "").startswith("Microsoft") and f.account_id
             }
         )
         return {

@@ -793,8 +793,8 @@ order; do not reorder it.
   has no such attribute, and `core/throttle.py:78` can `raise last_exc` while it is still `None`
   (currently unreachable, but only by accident of the loop's structure). When the count reaches
   zero, delete the `stages: [manual]` line from the `ty` hook so it gates.
-- **Status:** In progress — 98 → **84** diagnostics (52 → **40** non-import). Eleven fixed, each a
-  real defect rather than a style nit:
+- **Status:** In progress — 98 → **81** diagnostics (52 → **37** non-import). Thirteen fixed, each
+  a real defect rather than a style nit:
   `analysis_engine.py` used the builtin `callable` in a type expression (not a type at all) and
   `options: AnalysisOptions = None`; `render_pipeline.py` had the same `= None` on a non-Optional
   parameter, plus `Path("engagements") / self.store.engagement_id` where `engagement_id` is
@@ -837,7 +837,19 @@ order; do not reorder it.
   `progress(cloud, current, total, label)`. The annotation is now
   `Callable[[str, int, int, str], None]`, which removes the two
   `too-many-positional-arguments` findings that annotation had itself created.
-  **The remaining 40 are dominated by one systemic problem — see T-412.** 11 of the 22
+  A fourth pass fixed two more genuine crashes:
+  `analysis_engine._check_azure_peering_gateway_transit()` read `gw.vnet_id`, which
+  `AzureVirtualNetworkGateway` does not have — the model carries `subnet_id`. The rule raised
+  `AttributeError` for any subscription that actually had a gateway, so it only ever "worked" when
+  the gateway list was empty and the short-circuit skipped it. An ARM subnet id nests under its VNet
+  id (`<vnet_id>/subnets/<name>`), which is the real link; `TestAzurePeeringGatewayTransit` covers
+  the no-raise case, suppression by a local gateway, and that a gateway in a *different* VNet does
+  not count.
+  `technical_report._build_context()` called `sorted()` over a set of `Finding.account_id`, which is
+  `str | None`. One finding without an account id raises
+  `TypeError: '<' not supported between instances of 'str' and 'NoneType'` — reproduced directly.
+  Both comprehensions now filter falsy ids.
+  **The remaining 37 are dominated by one systemic problem — see T-412.** 11 of the 22
   `unresolved-attribute` findings are calls to `EngagementStore` methods that do not exist, which is
   not a typing nit but three broken CLI commands. Fixing those is that item's job, not this one's;
   what is left here afterwards is largely `invalid-argument-type` (17) and the Optional-narrowing

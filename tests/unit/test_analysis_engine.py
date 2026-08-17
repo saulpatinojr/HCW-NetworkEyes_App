@@ -39,12 +39,15 @@ from cna.core.topology_schema import (
     AzureSubnet,
     AzureSubscriptionTopology,
     AzureTopology,
+    AzureVirtualNetworkGateway,
     DirectConnectConnection,
     FrontDoorWAFPolicy,
+    PeeringState,
     SecurityGroup,
     SecurityGroupRule,
     TransitGateway,
     VNet,
+    VNetPeering,
 )
 
 
@@ -491,3 +494,81 @@ class TestReportCounts:
         assert report.critical_count == sum(
             1 for f in report.findings if f.severity == FindingSeverity.CRITICAL
         )
+
+
+class TestAzurePeeringGatewayTransit:
+    """`_check_azure_peering_gateway_transit` (TODO.md T-410).
+
+    This read `gw.vnet_id`, which `AzureVirtualNetworkGateway` does not have —
+    the model carries `subnet_id`. Any subscription that actually had a gateway
+    raised `AttributeError`, so the rule only ever "worked" when the gateway list
+    was empty and the short-circuit skipped it.
+
+    An ARM subnet id nests under its VNet id (`<vnet_id>/subnets/<name>`), which
+    is the real link between a gateway and its VNet.
+    """
+
+    def _vnet(self, vnet_id, allow_gateway_transit=True):
+        return VNet(
+            id=vnet_id,
+            name="vnet-prod",
+            location="eastus",
+            resource_group="rg-net",
+            subscription_id="sub-001",
+            address_space=["10.0.0.0/16"],
+            subnets=[],
+            peerings=[
+                VNetPeering(
+                    id=f"{vnet_id}/peer",
+                    name="to-hub",
+                    remote_vnet_id="/subs/sub-001/vnet-hub",
+                    remote_subscription_id="sub-001",
+                    peering_state=PeeringState.ACTIVE,
+                    allow_forwarded_traffic=False,
+                    allow_gateway_transit=allow_gateway_transit,
+                    use_remote_gateways=False,
+                )
+            ],
+        )
+
+    def _gateway(self, subnet_id):
+        return AzureVirtualNetworkGateway(
+            id="/subs/sub-001/gw1",
+            name="gw1",
+            location="eastus",
+            resource_group="rg-net",
+            gateway_type="Vpn",
+            subnet_id=subnet_id,
+        )
+
+    def test_does_not_raise_when_a_gateway_is_present(self, engine):
+        """The regression itself: this used to be an AttributeError."""
+        vnet_id = "/subs/sub-001/vnet-prod"
+        sub = AzureSubscriptionTopology(subscription_id="sub-001", tenant_id="tenant-001")
+        sub.vnets = [self._vnet(vnet_id)]
+        sub.virtual_network_gateways = [self._gateway(f"{vnet_id}/subnets/GatewaySubnet")]
+
+        engine._check_azure_peering_gateway_transit(sub, "sub-001")  # must not raise
+
+    def test_a_gateway_in_this_vnet_suppresses_the_finding(self, engine):
+        vnet_id = "/subs/sub-001/vnet-prod"
+        sub = AzureSubscriptionTopology(subscription_id="sub-001", tenant_id="tenant-001")
+        sub.vnets = [self._vnet(vnet_id)]
+        sub.virtual_network_gateways = [self._gateway(f"{vnet_id}/subnets/GatewaySubnet")]
+
+        before = len(engine._findings)
+        engine._check_azure_peering_gateway_transit(sub, "sub-001")
+        assert len(engine._findings) == before, "a local gateway should suppress the finding"
+
+    def test_a_gateway_in_a_different_vnet_does_not_count(self, engine):
+        """Prefix matching must not treat another VNet's gateway as local."""
+        vnet_id = "/subs/sub-001/vnet-prod"
+        sub = AzureSubscriptionTopology(subscription_id="sub-001", tenant_id="tenant-001")
+        sub.vnets = [self._vnet(vnet_id)]
+        sub.virtual_network_gateways = [
+            self._gateway("/subs/sub-001/vnet-other/subnets/GatewaySubnet")
+        ]
+
+        before = len(engine._findings)
+        engine._check_azure_peering_gateway_transit(sub, "sub-001")
+        assert len(engine._findings) > before, "no local gateway — the finding should be emitted"
