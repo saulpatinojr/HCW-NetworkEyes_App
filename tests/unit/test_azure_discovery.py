@@ -14,12 +14,24 @@ Tests cover:
 
 from __future__ import annotations
 
+import contextlib
 from unittest.mock import MagicMock, patch
 
 import pytest
+from azure.core.exceptions import HttpResponseError
 
-from cna.core.topology_schema import AzureSubscriptionTopology
-from cna.modules.network.discovery.azure_discovery import AzureDiscovery, AzureDiscoveryOptions
+from cna.core.exceptions import CNAAuthError
+from cna.core.topology_schema import AzureSubscriptionTopology, SubnetType
+from cna.modules.network.discovery.azure_discovery import (
+    AzureDiscovery,
+    AzureDiscoveryOptions,
+    _classify_subnet,
+    _rg_from_id,
+    _safe_list,
+    _sub_from_id,
+)
+
+MODULE = "cna.modules.network.discovery.azure_discovery"
 
 
 @pytest.fixture
@@ -355,3 +367,1035 @@ class TestRun:
 
         assert messages, "expected run() to emit progress messages"
         assert any("sub-0001" in m for m in messages)
+
+
+# ---------------------------------------------------------------------------
+# TODO.md T-408 — coverage for the orchestrator and the collectors that had
+# none. Everything is mocked; no Azure call is made.
+# ---------------------------------------------------------------------------
+
+
+class TestResourceIdHelpers:
+    @pytest.mark.parametrize(
+        "resource_id,expected",
+        [
+            ("/subscriptions/s1/resourceGroups/rg-net/providers/x/y/z", "rg-net"),
+            # ARM is case-inconsistent about this segment; both spellings occur.
+            ("/subscriptions/s1/resourcegroups/rg-low/providers/x/y/z", "rg-low"),
+            ("/subscriptions/s1/RESOURCEGROUPS/rg-up/providers/x/y/z", "rg-up"),
+        ],
+    )
+    def test_rg_from_id(self, resource_id, expected):
+        assert _rg_from_id(resource_id) == expected
+
+    def test_rg_from_id_falls_back_on_a_malformed_id(self):
+        assert _rg_from_id("not-an-arm-id") == ""
+
+    @pytest.mark.parametrize(
+        "resource_id,expected",
+        [
+            ("/subscriptions/sub-0001/resourceGroups/rg/providers/x", "sub-0001"),
+            ("/SUBSCRIPTIONS/sub-0002/resourceGroups/rg", "sub-0002"),
+            ("no-subscription-segment", ""),
+        ],
+    )
+    def test_sub_from_id(self, resource_id, expected):
+        assert _sub_from_id(resource_id) == expected
+
+
+class TestSafeList:
+    def test_materialises_an_iterable(self):
+        assert _safe_list(iter([1, 2, 3])) == [1, 2, 3]
+
+    def test_returns_empty_on_any_exception(self):
+        """Azure pagers raise mid-iteration on a permission boundary."""
+
+        def _explode():
+            yield 1
+            raise RuntimeError("403 on page 2")
+
+        assert _safe_list(_explode()) == []
+
+
+class TestClassifySubnet:
+    @pytest.mark.parametrize("name", ["GatewaySubnet", "AzureFirewallSubnet", "AzureBastionSubnet"])
+    def test_wellknown_infra_names_are_private_regardless_of_config(self, name):
+        assert _classify_subnet(name, None, None, None, True) == SubnetType.PRIVATE
+
+    def test_delegation_forces_private(self):
+        assert (
+            _classify_subnet("app", None, None, "Microsoft.Web/serverFarms", True)
+            == SubnetType.PRIVATE
+        )
+
+    def test_nsg_and_udr_is_isolated(self):
+        assert _classify_subnet("app", "nsg-1", "rt-1", None, True) == SubnetType.ISOLATED
+
+    @pytest.mark.parametrize("nsg,udr", [("nsg-1", None), (None, "rt-1")])
+    def test_one_control_layer_is_private(self, nsg, udr):
+        assert _classify_subnet("app", nsg, udr, None, True) == SubnetType.PRIVATE
+
+    def test_no_controls_with_default_outbound_is_public(self):
+        assert _classify_subnet("app", None, None, None, True) == SubnetType.PUBLIC
+
+    def test_no_controls_without_default_outbound_is_unknown(self):
+        assert _classify_subnet("app", None, None, None, False) == SubnetType.UNKNOWN
+
+
+class TestCredentialGuards:
+    """`_cred` / `_subs` narrow Optional once instead of at 17 sites (T-410)."""
+
+    def test_cred_raises_before_initialisation(self, discovery):
+        with pytest.raises(RuntimeError, match="credential not initialised"):
+            _ = discovery._cred
+
+    def test_subs_raises_before_initialisation(self, discovery):
+        with pytest.raises(RuntimeError, match="subscription client not initialised"):
+            _ = discovery._subs
+
+
+class TestInitCredentials:
+    def test_uses_service_principal_when_both_id_and_secret_are_set(self, store):
+        opts = AzureDiscoveryOptions(
+            tenant_id="tenant-1", client_id="app-1", client_secret="placeholder-not-real"
+        )
+        d = AzureDiscovery(store=store, options=opts)
+        csc, dac, subclient = MagicMock(), MagicMock(), MagicMock()
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "azure.identity": MagicMock(ClientSecretCredential=csc, DefaultAzureCredential=dac),
+                "azure.mgmt.subscription": MagicMock(SubscriptionClient=subclient),
+            },
+        ):
+            d._init_credentials()
+
+        csc.assert_called_once()
+        dac.assert_not_called()
+        assert csc.call_args.kwargs["tenant_id"] == "tenant-1"
+
+    def test_falls_back_to_the_default_credential_chain(self, discovery):
+        csc, dac, subclient = MagicMock(), MagicMock(), MagicMock()
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "azure.identity": MagicMock(ClientSecretCredential=csc, DefaultAzureCredential=dac),
+                "azure.mgmt.subscription": MagicMock(SubscriptionClient=subclient),
+            },
+        ):
+            discovery._init_credentials()
+
+        dac.assert_called_once()
+        csc.assert_not_called()
+        assert discovery._sub_client is subclient.return_value
+
+    def test_missing_sdk_raises_a_named_auth_error_naming_the_install(self, discovery):
+        with (
+            patch.dict("sys.modules", {"azure.identity": None}),
+            pytest.raises(CNAAuthError, match="pip install azure-identity"),
+        ):
+            discovery._init_credentials()
+
+
+class TestValidateAccess:
+    def _wire(self, discovery, token_ok=True):
+        discovery._credential = MagicMock()
+        discovery._sub_client = MagicMock()
+        if token_ok:
+            discovery._credential.get_token.return_value = MagicMock(expires_on=123)
+        else:
+            discovery._credential.get_token.side_effect = RuntimeError("no token")
+
+    def test_token_failure_is_fatal(self, discovery):
+        with patch.object(discovery, "_init_credentials"):
+            self._wire(discovery, token_ok=False)
+            with pytest.raises(CNAAuthError, match="cannot obtain ARM token"):
+                discovery.validate_access()
+
+    def test_returns_early_when_no_subscription_filter_is_set(self, store):
+        d = AzureDiscovery(store=store, options=AzureDiscoveryOptions(tenant_id="t"))
+        with patch.object(d, "_init_credentials"):
+            self._wire(d)
+            d.validate_access()
+        d._sub_client.subscriptions.get.assert_not_called()
+
+    def test_reports_each_requested_subscription(self, discovery):
+        messages = []
+        discovery._progress = messages.append
+        with patch.object(discovery, "_init_credentials"):
+            self._wire(discovery)
+            discovery._sub_client.subscriptions.get.return_value = MagicMock(
+                display_name="Prod", state="Enabled"
+            )
+            discovery.validate_access()
+
+        assert any("sub-0001" in m and "Prod" in m for m in messages)
+
+    def test_warns_on_a_state_that_may_limit_discovery(self, discovery):
+        messages = []
+        discovery._progress = messages.append
+        with patch.object(discovery, "_init_credentials"):
+            self._wire(discovery)
+            discovery._sub_client.subscriptions.get.return_value = MagicMock(
+                display_name="Old", state="Disabled"
+            )
+            discovery.validate_access()
+
+        assert any("WARNING" in m for m in messages)
+
+    def test_an_inaccessible_subscription_is_reported_not_raised(self, discovery):
+        """One unreadable subscription must not abort the pre-flight for the rest."""
+        messages = []
+        discovery._progress = messages.append
+        with patch.object(discovery, "_init_credentials"):
+            self._wire(discovery)
+            discovery._sub_client.subscriptions.get.side_effect = RuntimeError("403")
+            discovery.validate_access()
+
+        assert any("NOT accessible" in m for m in messages)
+
+
+class TestListSubscriptions:
+    def _sub(self, sub_id, name, state):
+        s = MagicMock()
+        s.subscription_id, s.display_name, s.state = sub_id, name, state
+        return s
+
+    @pytest.mark.parametrize("state", ["Enabled", "Warned", "PastDue"])
+    def test_readable_states_are_included(self, discovery, state):
+        discovery._sub_client = MagicMock()
+        discovery._sub_client.subscriptions.list.return_value = [self._sub("sub-1", "One", state)]
+
+        assert [s["id"] for s in discovery._list_subscriptions()] == ["sub-1"]
+
+    @pytest.mark.parametrize("state", ["Disabled", "Deleted"])
+    def test_inaccessible_states_are_skipped(self, discovery, state):
+        discovery._sub_client = MagicMock()
+        discovery._sub_client.subscriptions.list.return_value = [self._sub("sub-1", "One", state)]
+
+        assert discovery._list_subscriptions() == []
+
+    def test_skipped_subscriptions_are_named_in_the_progress_log(self, discovery):
+        messages = []
+        discovery._progress = messages.append
+        discovery._sub_client = MagicMock()
+        discovery._sub_client.subscriptions.list.return_value = [
+            self._sub("sub-1", "Live", "Enabled"),
+            self._sub("sub-2", "Dead", "Disabled"),
+        ]
+
+        discovery._list_subscriptions()
+
+        assert any("Dead" in m and "Disabled" in m for m in messages)
+
+
+class TestGetSubscriptionDirect:
+    def test_returns_the_subscription_when_readable(self, discovery):
+        discovery._sub_client = MagicMock()
+        discovery._sub_client.subscriptions.get.return_value = MagicMock(
+            subscription_id="sub-1", display_name="One"
+        )
+
+        assert discovery._get_subscription_direct("sub-1")["name"] == "One"
+
+    def test_falls_back_to_the_id_when_the_name_is_absent(self, discovery):
+        discovery._sub_client = MagicMock()
+        discovery._sub_client.subscriptions.get.return_value = MagicMock(
+            subscription_id="sub-1", display_name=None
+        )
+
+        assert discovery._get_subscription_direct("sub-1")["name"] == "sub-1"
+
+    def test_returns_none_on_failure(self, discovery):
+        discovery._sub_client = MagicMock()
+        discovery._sub_client.subscriptions.get.side_effect = RuntimeError("403")
+
+        assert discovery._get_subscription_direct("sub-1") is None
+
+
+class TestCollectManagementGroups:
+    def test_splits_children_into_management_groups_and_subscriptions(self, discovery):
+        discovery._credential = MagicMock()
+        mg = MagicMock()
+        mg.name, mg.display_name = "mg-root", "Root"
+        detail = MagicMock()
+        child_mg, child_sub = MagicMock(), MagicMock()
+        child_mg.id, child_mg.name = "/providers/.../managementGroups/mg-a", "mg-a"
+        child_sub.id, child_sub.name = "/subscriptions/sub-1", "sub-1"
+        detail.children = [child_mg, child_sub]
+        api = MagicMock()
+        api.return_value.management_groups.list.return_value = [mg]
+        api.return_value.management_groups.get.return_value = detail
+
+        with patch.dict(
+            "sys.modules", {"azure.mgmt.managementgroups": MagicMock(ManagementGroupsAPI=api)}
+        ):
+            groups = discovery._collect_management_groups()
+
+        assert len(groups) == 1
+        assert groups[0].child_mg_ids == ["mg-a"]
+        assert groups[0].subscription_ids == ["sub-1"]
+
+    def test_missing_sdk_returns_empty_rather_than_raising(self, discovery):
+        with patch.dict("sys.modules", {"azure.mgmt.managementgroups": None}):
+            assert discovery._collect_management_groups() == []
+
+    def test_enumeration_failure_returns_empty(self, discovery):
+        """Tenant-root MG read is frequently denied; it must not fail discovery."""
+        discovery._credential = MagicMock()
+        api = MagicMock()
+        api.return_value.management_groups.list.side_effect = RuntimeError("403")
+
+        with patch.dict(
+            "sys.modules", {"azure.mgmt.managementgroups": MagicMock(ManagementGroupsAPI=api)}
+        ):
+            assert discovery._collect_management_groups() == []
+
+
+# Collectors driven by `_discover_subscription`, in call order. Kept as one list
+# so the ordering assertion below cannot drift from the patch set.
+_PHASE1_COLLECTORS = [
+    ("public_ips", "_collect_public_ips"),
+    ("nsgs", "_collect_nsgs"),
+    ("route_tables", "_collect_route_tables"),
+    ("nat_gateways", "_collect_nat_gateways"),
+    ("vnets", "_collect_vnets"),
+    ("virtual_wans", "_collect_vwans"),
+    ("route_servers", "_collect_route_servers"),
+    ("firewalls", "_collect_firewalls"),
+    ("application_gateways", "_collect_appgws"),
+    ("load_balancers", "_collect_load_balancers"),
+    ("virtual_network_gateways", "_collect_vnet_gateways"),
+    ("private_endpoints", "_collect_private_endpoints"),
+    ("bastion_hosts", "_collect_bastion_hosts"),
+    ("private_dns_zones", "_collect_private_dns"),
+    ("express_route_circuits", "_collect_er_circuits"),
+]
+
+
+@contextlib.contextmanager
+def _all_collectors_stubbed(discovery, returns=None, raises=None):
+    """Patch every phase-1 collector plus the phase-2 scan, and the ARM clients."""
+    returns = returns or {}
+    raises = raises or {}
+    discovery._credential = MagicMock()  # _cred narrows this and raises when unset
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(patch(f"{MODULE}.NetworkManagementClient", create=True))
+        stack.enter_context(patch("azure.mgmt.network.NetworkManagementClient"))
+        rmc = stack.enter_context(patch("azure.mgmt.resource.resources.ResourceManagementClient"))
+        rg = MagicMock()
+        rg.name = "rg-net"  # `name=` is reserved by MagicMock itself
+        rmc.return_value.resource_groups.list.return_value = [rg]
+        patched = {}
+        for _attr, method in _PHASE1_COLLECTORS:
+            kwargs = {}
+            if method in raises:
+                kwargs["side_effect"] = raises[method]
+            else:
+                kwargs["return_value"] = returns.get(method, [])
+            patched[method] = stack.enter_context(patch.object(discovery, method, **kwargs))
+        patched["_run_phase2_collectors"] = stack.enter_context(
+            patch.object(discovery, "_run_phase2_collectors")
+        )
+        yield patched
+
+
+class TestDiscoverSubscription:
+    def test_runs_every_collector_and_returns_an_unblocked_topology(self, discovery):
+        with _all_collectors_stubbed(discovery) as patched:
+            topo = discovery._discover_subscription("sub-0001", "Prod")
+
+        assert topo.subscription_id == "sub-0001"
+        assert topo.subscription_name == "Prod"
+        assert topo.discovery_blocked is False
+        for _attr, method in _PHASE1_COLLECTORS:
+            assert patched[method].called, f"{method} was never called"
+        patched["_run_phase2_collectors"].assert_called_once()
+
+    def test_client_construction_failure_blocks_the_whole_subscription(self, discovery):
+        """No ARM client means nothing can be read — that is a blocked subscription."""
+        discovery._credential = MagicMock()
+        with patch(
+            "azure.mgmt.network.NetworkManagementClient", side_effect=RuntimeError("403 on ARM")
+        ):
+            topo = discovery._discover_subscription("sub-0001", "Prod")
+
+        assert topo.discovery_blocked is True
+        assert "403 on ARM" in topo.block_reason
+
+    def test_one_failing_collector_does_not_block_the_others(self, discovery):
+        """A missing permission on one resource type must not lose the subscription."""
+        with _all_collectors_stubbed(
+            discovery,
+            returns={"_collect_nsgs": [MagicMock()]},
+            raises={"_collect_firewalls": RuntimeError("no Microsoft.Network/azureFirewalls read")},
+        ) as patched:
+            topo = discovery._discover_subscription("sub-0001", "Prod")
+
+        assert topo.discovery_blocked is False, "something was discovered, so not blocked"
+        assert "_collect_firewalls" not in topo.block_reason
+        assert "firewalls:" in topo.block_reason
+        assert patched["_collect_er_circuits"].called, "later collectors still ran"
+
+    def test_http_response_errors_are_reported_with_their_status(self, discovery):
+        err = HttpResponseError(message="Forbidden")
+        err.status_code = 403
+        with _all_collectors_stubbed(
+            discovery,
+            returns={"_collect_nsgs": [MagicMock()]},
+            raises={"_collect_vnets": err},
+        ):
+            topo = discovery._discover_subscription("sub-0001", "Prod")
+
+        assert "HTTP 403" in topo.block_reason
+
+    def test_every_collector_failing_marks_the_subscription_blocked(self, discovery):
+        raises = {method: RuntimeError("403") for _a, method in _PHASE1_COLLECTORS}
+        with _all_collectors_stubbed(discovery, raises=raises):
+            topo = discovery._discover_subscription("sub-0001", "Prod")
+
+        assert topo.discovery_blocked is True
+
+    def test_progress_log_summarises_phase_one(self, discovery):
+        messages = []
+        discovery._progress = messages.append
+        with _all_collectors_stubbed(discovery):
+            discovery._discover_subscription("sub-0001", "Prod")
+
+        assert any("Phase 1 complete" in m for m in messages)
+
+
+class TestPhase2Scans:
+    """Each phase-2 scan is independently fault-isolated — one failure must not
+    stop the next, because they are appended to an already-valid topology."""
+
+    def _topo(self):
+        return AzureSubscriptionTopology(
+            subscription_id="sub-0001", subscription_name="Prod", tenant_id="t"
+        )
+
+    def test_phase2_runs_all_five_scans(self, discovery):
+        topo = self._topo()
+        with (
+            patch.object(discovery, "_run_nva_scan") as nva,
+            patch.object(discovery, "_run_bgp_scan") as bgp,
+            patch.object(discovery, "_run_observability_scan") as obs,
+            patch.object(discovery, "_run_metrics_scan") as met,
+            patch.object(discovery, "_run_waf_scan") as waf,
+        ):
+            discovery._run_phase2_collectors(topo, MagicMock(), "sub-0001", "Prod")
+
+        for scan in (nva, bgp, obs, met, waf):
+            scan.assert_called_once()
+
+    def test_nva_scan_records_and_reports_findings(self, discovery):
+        messages = []
+        discovery._progress = messages.append
+        topo = self._topo()
+        nva = MagicMock()
+        nva.name = "fortigate-01"
+        with patch.object(discovery, "_collect_nvas", return_value=[nva]):
+            discovery._run_nva_scan(topo, MagicMock(), "sub-0001", "Prod")
+
+        assert topo.nvas == [nva]
+        assert any("fortigate-01" in m for m in messages)
+
+    def test_nva_scan_reports_when_none_are_found(self, discovery):
+        messages = []
+        discovery._progress = messages.append
+        with patch.object(discovery, "_collect_nvas", return_value=[]):
+            discovery._run_nva_scan(self._topo(), MagicMock(), "sub-0001", "Prod")
+
+        assert any("No NVAs" in m for m in messages)
+
+    def test_nva_scan_failure_is_reported_not_raised(self, discovery):
+        messages = []
+        discovery._progress = messages.append
+        with patch.object(discovery, "_collect_nvas", side_effect=RuntimeError("no compute read")):
+            discovery._run_nva_scan(self._topo(), MagicMock(), "sub-0001", "Prod")
+
+        assert any("NVA scan skipped" in m for m in messages)
+
+    def test_bgp_scan_failure_is_reported_not_raised(self, discovery):
+        messages = []
+        discovery._progress = messages.append
+        with patch.object(discovery, "_collect_bgp_data", side_effect=RuntimeError("timeout")):
+            discovery._run_bgp_scan(self._topo(), MagicMock(), "sub-0001", "Prod")
+
+        assert any("BGP data skipped" in m for m in messages)
+
+    def test_observability_scan_summarises_what_it_found(self, discovery):
+        messages = []
+        discovery._progress = messages.append
+        topo = self._topo()
+        obs = MagicMock()
+        obs.network_watchers = ["eastus"]
+        obs.log_analytics_workspaces = ["law-1"]
+        obs.nsg_flow_logs_enabled, obs.nsg_flow_logs_total = 1, 2
+        with patch.object(discovery, "_collect_observability", return_value=obs):
+            discovery._run_observability_scan(topo, MagicMock(), "sub-0001", "Prod")
+
+        assert topo.observability is obs
+        assert any("Observability:" in m for m in messages)
+
+    def test_observability_scan_failure_is_reported_not_raised(self, discovery):
+        messages = []
+        discovery._progress = messages.append
+        with patch.object(discovery, "_collect_observability", side_effect=RuntimeError("no read")):
+            discovery._run_observability_scan(self._topo(), MagicMock(), "sub-0001", "Prod")
+
+        assert any("Observability data skipped" in m for m in messages)
+
+    def test_metrics_scan_reports_a_collection_error_from_the_metrics_object(self, discovery):
+        """The metrics collector reports failure in-band rather than by raising."""
+        messages = []
+        discovery._progress = messages.append
+        topo = self._topo()
+        metrics = MagicMock()
+        metrics.collection_error = "azure-monitor-query not installed"
+        with patch.object(discovery, "_collect_network_metrics", return_value=metrics):
+            discovery._run_metrics_scan(topo, "sub-0001", "Prod")
+
+        assert any("azure-monitor-query not installed" in m for m in messages)
+
+    def test_metrics_scan_summarises_a_successful_collection(self, discovery):
+        messages = []
+        discovery._progress = messages.append
+        topo = self._topo()
+        metrics = MagicMock()
+        metrics.collection_error = None
+        metrics.gateway_metrics, metrics.firewall_metrics = ["g"], []
+        metrics.lb_metrics, metrics.vnet_utilization = ["l"], ["v"]
+        with patch.object(discovery, "_collect_network_metrics", return_value=metrics):
+            discovery._run_metrics_scan(topo, "sub-0001", "Prod")
+
+        assert any("Metrics collected" in m for m in messages)
+
+    def test_metrics_scan_failure_is_reported_not_raised(self, discovery):
+        messages = []
+        discovery._progress = messages.append
+        with patch.object(
+            discovery, "_collect_network_metrics", side_effect=RuntimeError("throttled")
+        ):
+            discovery._run_metrics_scan(self._topo(), "sub-0001", "Prod")
+
+        assert any("Metrics skipped" in m for m in messages)
+
+    def test_waf_scan_collects_front_door_policies_and_defender_findings(self, discovery):
+        topo = self._topo()
+        with (
+            patch.object(discovery, "_collect_front_door_waf_policies", return_value=["p"]),
+            patch.object(discovery, "_collect_defender_assessments", return_value=["a"]),
+        ):
+            discovery._run_waf_scan(topo, "sub-0001", "Prod")
+
+        assert topo.front_door_waf_policies == ["p"]
+        assert topo.defender_assessments == ["a"]
+
+    def test_waf_and_defender_failures_are_independent(self, discovery):
+        """Front Door and Defender are separate SDKs; one missing must not lose the other."""
+        messages = []
+        discovery._progress = messages.append
+        topo = self._topo()
+        with (
+            patch.object(
+                discovery,
+                "_collect_front_door_waf_policies",
+                side_effect=RuntimeError("no cdn sdk"),
+            ),
+            patch.object(discovery, "_collect_defender_assessments", return_value=["a"]),
+        ):
+            discovery._run_waf_scan(topo, "sub-0001", "Prod")
+
+        assert any("Front Door WAF scan skipped" in m for m in messages)
+        assert topo.defender_assessments == ["a"]
+
+    def test_defender_failure_is_reported_not_raised(self, discovery):
+        messages = []
+        discovery._progress = messages.append
+        with (
+            patch.object(discovery, "_collect_front_door_waf_policies", return_value=[]),
+            patch.object(
+                discovery,
+                "_collect_defender_assessments",
+                side_effect=RuntimeError("no security sdk"),
+            ),
+        ):
+            discovery._run_waf_scan(self._topo(), "sub-0001", "Prod")
+
+        assert any("Defender for Cloud skipped" in m for m in messages)
+
+
+class _Arm:
+    """Stand-in for an ARM SDK model object.
+
+    The collectors read many optional attributes directly (`pip.dns_settings`,
+    `lb.sku`, …) and coerce them (`int(x or 4)`), so a bare `MagicMock` is the
+    wrong shape — `int(MagicMock())` raises. This returns `None` for anything
+    not explicitly set, which is what the SDK does for an unpopulated field.
+    """
+
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+
+    def __getattr__(self, name):  # only reached when the attribute was not set
+        return None
+
+
+class TestInferPipAssocType:
+    @pytest.mark.parametrize(
+        "assoc_id,expected",
+        [
+            ("/subscriptions/s/.../loadBalancers/lb-1/frontendIPConfigurations/f", "LB"),
+            ("/subscriptions/s/.../applicationGateways/agw-1/x", "AppGW"),
+            ("/subscriptions/s/.../azureFirewalls/afw-1/x", "Firewall"),
+            ("/subscriptions/s/.../virtualNetworkGateways/vgw-1/x", "VpnGateway"),
+            ("/subscriptions/s/.../bastionHosts/bas-1/x", "Bastion"),
+            ("/subscriptions/s/.../networkInterfaces/nic-1/x", "NIC"),
+            # natGateways is deliberately absent from _PIP_ASSOC_TYPES
+            ("/subscriptions/s/.../natGateways/nat-1/x", None),
+            ("/subscriptions/s/.../somethingElse/x", None),
+        ],
+    )
+    def test_maps_known_owners(self, assoc_id, expected):
+        assert AzureDiscovery._infer_pip_assoc_type(assoc_id) == expected
+
+
+class TestCollectPublicIps:
+    def test_maps_a_fully_populated_public_ip(self, discovery):
+        net = MagicMock()
+        net.public_ip_addresses.list_all.return_value = [
+            _Arm(
+                id="/subscriptions/sub-0001/resourceGroups/rg-net/providers/"
+                "Microsoft.Network/publicIPAddresses/pip-1",
+                name="pip-1",
+                location="eastus",
+                sku=_Arm(name="Standard"),
+                public_ip_allocation_method="Static",
+                ip_address="20.1.2.3",
+                public_ip_address_version="IPv4",
+                dns_settings=_Arm(domain_name_label="cna", fqdn="cna.eastus.cloudapp.azure.com"),
+                ddos_settings=_Arm(protection_mode="Enabled"),
+                zones=["1", "2"],
+                idle_timeout_in_minutes=15,
+                tags={"env": "prod"},
+                ip_configuration=_Arm(
+                    id="/subscriptions/s/providers/Microsoft.Network/loadBalancers/lb-1/x"
+                ),
+            )
+        ]
+
+        pips = discovery._collect_public_ips(net, "sub-0001")
+
+        assert len(pips) == 1
+        pip = pips[0]
+        assert pip.resource_group == "rg-net"
+        assert pip.sku_name == "Standard"
+        assert pip.dns_label == "cna"
+        assert pip.zones == ["1", "2"]
+        assert pip.idle_timeout_minutes == 15
+        assert pip.ddos_protection_mode == "Enabled"
+        assert pip.associated_resource_type == "LB"
+
+    def test_applies_defaults_for_an_unpopulated_public_ip(self, discovery):
+        """Basic-SKU and freshly-created IPs leave most of these fields unset."""
+        net = MagicMock()
+        net.public_ip_addresses.list_all.return_value = [
+            _Arm(id="/subscriptions/s/resourceGroups/rg/x", name="pip-1", location="eastus")
+        ]
+
+        pip = discovery._collect_public_ips(net, "sub-0001")[0]
+
+        assert pip.sku_name == "Standard"
+        assert pip.allocation_method == "Static"
+        assert pip.ip_version == "IPv4"
+        assert pip.idle_timeout_minutes == 4
+        assert pip.ddos_protection_mode == "VirtualNetworkInherited"
+        assert pip.associated_resource_id is None
+        assert pip.zones == []
+
+
+class TestCollectLoadBalancers:
+    def _lb(self, frontends, rules=None, probes=None):
+        return _Arm(
+            id="/subscriptions/sub-0001/resourceGroups/rg-net/providers/"
+            "Microsoft.Network/loadBalancers/lb-1",
+            name="lb-1",
+            location="eastus",
+            sku=_Arm(name="Standard"),
+            frontend_ip_configurations=frontends,
+            load_balancing_rules=rules or [],
+            probes=probes or [],
+            backend_address_pools=[_Arm(id="pool-1"), _Arm(id=None)],
+            inbound_nat_rules=[_Arm(), _Arm()],
+            tags={},
+        )
+
+    def test_a_frontend_with_a_subnet_makes_the_lb_internal(self, discovery):
+        net = MagicMock()
+        net.load_balancers.list_all.return_value = [
+            self._lb(
+                [
+                    _Arm(
+                        name="fe",
+                        subnet=_Arm(id="subnet-1"),
+                        private_ip_address="10.0.0.4",
+                        private_ip_allocation_method="Static",
+                        zones=["1"],
+                    )
+                ]
+            )
+        ]
+
+        lb = discovery._collect_load_balancers(net, "sub-0001")[0]
+
+        assert lb.lb_type == "Internal"
+        assert lb.frontend_ip_configs[0].subnet_id == "subnet-1"
+        assert lb.frontend_ip_configs[0].private_ip_allocation_method == "Static"
+        assert lb.zones == ["1"]
+        assert lb.backend_pool_ids == ["pool-1"], "pools without an id are dropped"
+        assert lb.inbound_nat_rule_count == 2
+
+    def test_a_public_frontend_leaves_the_lb_public(self, discovery):
+        net = MagicMock()
+        net.load_balancers.list_all.return_value = [
+            self._lb([_Arm(name="fe", public_ip_address=_Arm(id="pip-1"))])
+        ]
+
+        lb = discovery._collect_load_balancers(net, "sub-0001")[0]
+
+        assert lb.lb_type == "Public"
+        assert lb.frontend_ip_configs[0].public_ip_id == "pip-1"
+        assert lb.frontend_ip_configs[0].private_ip_allocation_method is None
+
+    def test_maps_rules_and_probes_with_defaults(self, discovery):
+        net = MagicMock()
+        net.load_balancers.list_all.return_value = [
+            self._lb(
+                [_Arm(name="fe", public_ip_address=_Arm(id="pip-1"))],
+                rules=[
+                    _Arm(name="http", frontend_port=80, backend_port=8080, enable_floating_ip=True)
+                ],
+                probes=[_Arm(name="hp", port=8080, request_path="/healthz")],
+            )
+        ]
+
+        lb = discovery._collect_load_balancers(net, "sub-0001")[0]
+
+        rule = lb.lb_rules[0]
+        assert (rule.frontend_port, rule.backend_port) == (80, 8080)
+        assert rule.protocol == "Tcp", "unset protocol defaults"
+        assert rule.idle_timeout_minutes == 4
+        assert rule.load_distribution == "Default"
+        assert rule.enable_floating_ip is True
+        probe = lb.probes[0]
+        assert probe.interval_seconds == 15
+        assert probe.number_of_probes == 2
+        assert probe.request_path == "/healthz"
+
+
+class TestCollectVnetGateways:
+    def _gw(self, **over):
+        base = dict(
+            id="/subscriptions/sub-0001/resourceGroups/rg-net/providers/"
+            "Microsoft.Network/virtualNetworkGateways/vgw-1",
+            name="vgw-1",
+            location="eastus",
+            gateway_type="Vpn",
+            vpn_type="RouteBased",
+            sku=_Arm(name="VpnGw2", tier="VpnGw2"),
+            bgp_settings=_Arm(asn=65515, bgp_peering_address="10.0.255.4"),
+            ip_configurations=[_Arm(public_ip_address=_Arm(id="pip-1"), subnet=_Arm(id="gwsub"))],
+            active_active=True,
+            enable_bgp=True,
+            vpn_gateway_generation="Generation2",
+            zones=["1"],
+            tags={},
+        )
+        base.update(over)
+        return _Arm(**base)
+
+    def test_iterates_per_resource_group_and_maps_the_gateway(self, discovery):
+        net = MagicMock()
+        net.virtual_network_gateways.list.return_value = [self._gw()]
+        net.virtual_network_gateway_connections.list.return_value = []
+
+        gws = discovery._collect_vnet_gateways(net, "sub-0001", ["rg-net"])
+
+        assert len(gws) == 1
+        gw = gws[0]
+        assert gw.sku_name == "VpnGw2"
+        assert gw.bgp_asn == 65515
+        assert gw.public_ip_ids == ["pip-1"]
+        assert gw.subnet_id == "gwsub"
+        assert gw.active_active is True
+        assert gw.generation == "Generation2"
+        net.virtual_network_gateways.list.assert_called_once_with("rg-net")
+
+    def test_expressroute_gateways_have_no_vpn_type(self, discovery):
+        net = MagicMock()
+        net.virtual_network_gateways.list.return_value = [self._gw(gateway_type="ExpressRoute")]
+        net.virtual_network_gateway_connections.list.return_value = []
+
+        assert discovery._collect_vnet_gateways(net, "sub-0001", ["rg-net"])[0].vpn_type is None
+
+    def test_collects_vpn_client_address_pools(self, discovery):
+        net = MagicMock()
+        net.virtual_network_gateways.list.return_value = [
+            self._gw(
+                vpn_client_configuration=_Arm(
+                    vpn_client_address_pool=[_Arm(address_prefixes=["172.16.0.0/24"])]
+                )
+            )
+        ]
+        net.virtual_network_gateway_connections.list.return_value = []
+
+        gw = discovery._collect_vnet_gateways(net, "sub-0001", ["rg-net"])[0]
+
+        assert gw.vpn_client_address_pool == ["172.16.0.0/24"]
+
+    def test_applies_sku_defaults_when_unset(self, discovery):
+        net = MagicMock()
+        net.virtual_network_gateways.list.return_value = [self._gw(sku=None, bgp_settings=None)]
+        net.virtual_network_gateway_connections.list.return_value = []
+
+        gw = discovery._collect_vnet_gateways(net, "sub-0001", ["rg-net"])[0]
+
+        assert (gw.sku_name, gw.sku_tier) == ("VpnGw1", "VpnGw1")
+        assert gw.bgp_asn is None
+
+
+class TestCollectGatewayConnections:
+    def _conn(self, gw_id, **over):
+        base = dict(
+            id="/subscriptions/s/resourceGroups/rg/providers/x/conn-1",
+            name="conn-1",
+            connection_type="IPsec",
+            connection_status="Connected",
+            virtual_network_gateway1=_Arm(id=gw_id),
+            routing_weight=10,
+            enable_bgp=True,
+            use_policy_based_traffic_selectors=False,
+            egress_bytes_transferred=100,
+            ingress_bytes_transferred=200,
+        )
+        base.update(over)
+        return _Arm(**base)
+
+    def test_keeps_only_connections_referencing_this_gateway(self, discovery):
+        net = MagicMock()
+        net.virtual_network_gateway_connections.list.return_value = [
+            self._conn("/subscriptions/s/.../virtualNetworkGateways/vgw-1"),
+            self._conn("/subscriptions/s/.../virtualNetworkGateways/other-gw", name="conn-2"),
+        ]
+
+        conns = discovery._collect_gateway_connections(net, "rg-net", "vgw-1")
+
+        assert [c.name for c in conns] == ["conn-1"]
+        assert conns[0].egress_bytes_transferred == 100
+        assert conns[0].shared_key_set is True
+
+    def test_records_the_remote_side_of_each_connection_shape(self, discovery):
+        net = MagicMock()
+        net.virtual_network_gateway_connections.list.return_value = [
+            self._conn(
+                "/x/virtualNetworkGateways/vgw-1",
+                virtual_network_gateway2=_Arm(id="remote-vgw"),
+                local_network_gateway2=_Arm(id="lng-1"),
+                peer=_Arm(id="er-circuit-1"),
+            )
+        ]
+
+        conn = discovery._collect_gateway_connections(net, "rg-net", "vgw-1")[0]
+
+        assert conn.remote_vnet_id == "remote-vgw"
+        assert conn.local_network_gateway_id == "lng-1"
+        assert conn.express_route_circuit_id == "er-circuit-1"
+
+    def test_a_listing_failure_returns_empty_rather_than_losing_the_gateway(self, discovery):
+        net = MagicMock()
+        net.virtual_network_gateway_connections.list.side_effect = RuntimeError("403")
+
+        assert discovery._collect_gateway_connections(net, "rg-net", "vgw-1") == []
+
+
+class TestCollectNatGateways:
+    def test_maps_associations_and_defaults(self, discovery):
+        net = MagicMock()
+        net.nat_gateways.list_all.return_value = [
+            _Arm(
+                id="/subscriptions/sub-0001/resourceGroups/rg-net/providers/x/nat-1",
+                name="nat-1",
+                location="eastus",
+                public_ip_addresses=[_Arm(id="pip-1"), _Arm(id=None)],
+                public_ip_prefixes=[_Arm(id="pfx-1")],
+                subnets=[_Arm(id="subnet-1")],
+                zones=["1"],
+                tags={},
+            )
+        ]
+
+        ng = discovery._collect_nat_gateways(net, "sub-0001")[0]
+
+        assert ng.public_ip_ids == ["pip-1"], "entries without an id are dropped"
+        assert ng.public_ip_prefix_ids == ["pfx-1"]
+        assert ng.associated_subnet_ids == ["subnet-1"]
+        assert ng.idle_timeout_minutes == 4
+        assert ng.sku_name == "Standard"
+        assert ng.provisioning_state == "Succeeded"
+
+
+class TestCollectBastionHosts:
+    def test_maps_feature_flags_and_ip_configuration(self, discovery):
+        net = MagicMock()
+        net.bastion_hosts.list.return_value = [
+            _Arm(
+                id="/subscriptions/sub-0001/resourceGroups/rg-net/providers/x/bas-1",
+                name="bas-1",
+                location="eastus",
+                sku=_Arm(name="Premium"),
+                scale_units=4,
+                enable_tunneling=True,
+                enable_ip_connect=True,
+                enable_file_copy=False,
+                ip_configurations=[
+                    _Arm(
+                        subnet=_Arm(id="AzureBastionSubnet-id"), public_ip_address=_Arm(id="pip-1")
+                    )
+                ],
+                tags={},
+            )
+        ]
+
+        bh = discovery._collect_bastion_hosts(net, "sub-0001")[0]
+
+        assert bh.sku_name == "Premium"
+        assert bh.scale_units == 4
+        assert bh.tunneling_enabled is True
+        assert bh.ip_connect_enabled is True
+        assert bh.file_copy_enabled is False
+        assert bh.subnet_id == "AzureBastionSubnet-id"
+        assert bh.public_ip_id == "pip-1"
+
+    def test_defaults_when_the_optional_fields_are_absent(self, discovery):
+        net = MagicMock()
+        net.bastion_hosts.list.return_value = [
+            _Arm(id="/subscriptions/s/resourceGroups/rg/x", name="bas-1", location="eastus")
+        ]
+
+        bh = discovery._collect_bastion_hosts(net, "sub-0001")[0]
+
+        assert bh.sku_name == "Standard"
+        assert bh.scale_units == 2
+        assert bh.kerberos_enabled is False
+
+
+class TestValidatePeDns:
+    def test_no_custom_dns_but_private_ips_is_treated_as_valid(self):
+        assert AzureDiscovery._validate_pe_dns([], ["10.0.0.4"]) is True
+
+    def test_no_custom_dns_and_no_private_ips_is_inconclusive(self):
+        assert AzureDiscovery._validate_pe_dns([], []) is None
+
+    def test_resolution_to_an_rfc1918_address_passes(self):
+        with patch("socket.gethostbyname", return_value="10.1.2.3"):
+            assert AzureDiscovery._validate_pe_dns(["db.privatelink.example"], []) is True
+
+    def test_resolution_to_a_public_address_fails(self):
+        """A private endpoint FQDN resolving publicly means DNS is misconfigured."""
+        with patch("socket.gethostbyname", return_value="93.184.216.34"):
+            assert AzureDiscovery._validate_pe_dns(["db.privatelink.example"], []) is False
+
+    def test_unresolvable_names_are_inconclusive_rather_than_a_failure(self):
+        with patch("socket.gethostbyname", side_effect=OSError("NXDOMAIN")):
+            assert AzureDiscovery._validate_pe_dns(["nope.example"], []) is None
+
+    def test_checks_at_most_three_names(self):
+        with patch("socket.gethostbyname", return_value="93.184.216.34") as resolve:
+            AzureDiscovery._validate_pe_dns([f"h{i}.example" for i in range(10)], [])
+        assert resolve.call_count == 3
+
+
+class TestPrivateEndpointHelpers:
+    def test_pe_private_ips_reads_each_attached_nic(self, discovery):
+        net = MagicMock()
+        net.network_interfaces.get.return_value = _Arm(
+            ip_configurations=[_Arm(private_ip_address="10.0.0.4"), _Arm()]
+        )
+        pe = _Arm(network_interfaces=[_Arm(id="/subscriptions/s/resourceGroups/rg/x/nic-1")])
+
+        assert AzureDiscovery._pe_private_ips(net, pe) == ["10.0.0.4"]
+
+    def test_pe_private_ips_skips_a_nic_it_cannot_read(self, discovery):
+        net = MagicMock()
+        net.network_interfaces.get.side_effect = RuntimeError("403")
+        pe = _Arm(network_interfaces=[_Arm(id="/subscriptions/s/resourceGroups/rg/x/nic-1")])
+
+        assert AzureDiscovery._pe_private_ips(net, pe) == []
+
+    def test_pe_service_conns_merges_auto_and_manual_connections(self):
+        pe = _Arm(
+            private_link_service_connections=[
+                _Arm(
+                    name="auto",
+                    private_link_service_id="pls-1",
+                    group_ids=["blob"],
+                    private_link_service_connection_state=_Arm(status="Approved"),
+                )
+            ],
+            manual_private_link_service_connections=[
+                _Arm(name="manual", private_link_service_id="pls-2", group_ids=[])
+            ],
+        )
+
+        conns = AzureDiscovery._pe_service_conns(pe)
+
+        assert [c.connection_name for c in conns] == ["auto", "manual"]
+        assert conns[0].connection_state == "Approved"
+        assert conns[1].connection_state == "Pending", "unset state defaults to Pending"
+
+
+class TestCollectPrivateEndpoints:
+    def test_maps_an_endpoint_with_dns_groups_and_custom_configs(self, discovery):
+        net = MagicMock()
+        net.network_interfaces.get.return_value = _Arm(
+            ip_configurations=[_Arm(private_ip_address="10.0.0.4")]
+        )
+        net.private_endpoints.list_by_subscription.return_value = [
+            _Arm(
+                id="/subscriptions/sub-0001/resourceGroups/rg-net/providers/x/pe-1",
+                name="pe-1",
+                location="eastus",
+                subnet=_Arm(id="subnet-1"),
+                network_interfaces=[_Arm(id="/subscriptions/s/resourceGroups/rg/x/nic-1")],
+                custom_dns_configs=[_Arm(fqdn="db.privatelink.example"), _Arm()],
+                private_dns_zone_groups=[_Arm(name="default"), _Arm()],
+                private_link_service_connections=[],
+                manual_private_link_service_connections=[],
+                tags={},
+            )
+        ]
+
+        pe = discovery._collect_private_endpoints(net, "sub-0001")[0]
+
+        assert pe.subnet_id == "subnet-1"
+        assert pe.private_ip_addresses == ["10.0.0.4"]
+        assert pe.custom_dns_configs == ["db.privatelink.example"]
+        assert pe.dns_zone_group_names == ["default"]
+
+    def test_an_endpoint_without_a_subnet_records_an_empty_subnet_id(self, discovery):
+        net = MagicMock()
+        net.private_endpoints.list_by_subscription.return_value = [
+            _Arm(
+                id="/subscriptions/s/resourceGroups/rg/x/pe-1",
+                name="pe-1",
+                location="eastus",
+                network_interfaces=[],
+                private_link_service_connections=[],
+                manual_private_link_service_connections=[],
+            )
+        ]
+
+        assert discovery._collect_private_endpoints(net, "sub-0001")[0].subnet_id == ""
