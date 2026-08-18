@@ -19,10 +19,17 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
+import botocore.exceptions
 import pytest
 
 from cna.core.exceptions import CNAAuthError, CNARateLimitError
-from cna.core.topology_schema import AWSAccount, AWSRegionTopology, AWSTopology
+from cna.core.topology_schema import (
+    AttachmentType,
+    AWSAccount,
+    AWSRegionTopology,
+    AWSTopology,
+    PeeringState,
+)
 from cna.modules.network.discovery.aws_discovery import AWSDiscovery, DiscoveryOptions
 
 MODULE = "cna.modules.network.discovery.aws_discovery"
@@ -540,3 +547,825 @@ class TestRegionCheckpointWrite:
         assert payload["region"] == "us-east-1"
         assert payload["account_id"] == "123456789012"
         assert topology.regions == [region_topo]
+
+
+def _client_error(code: str, msg: str = "denied", op: str = "Op"):
+    """Build a botocore ClientError the way the SDK raises one."""
+    return botocore.exceptions.ClientError({"Error": {"Code": code, "Message": msg}}, op)
+
+
+def _pages(client, operation: str, pages: list[dict]):
+    """Wire `client.get_paginator(operation).paginate(...)` to yield `pages`."""
+    paginator = MagicMock()
+    paginator.paginate.return_value = pages
+    client.get_paginator.side_effect = lambda name: (
+        paginator if name == operation else MagicMock(paginate=MagicMock(return_value=[]))
+    )
+    return paginator
+
+
+class TestMgmtSessionGuard:
+    """`_mgmt` narrows Optional once instead of 17 deref sites (T-410)."""
+
+    def test_raises_named_error_before_run(self, store, opts):
+        d = AWSDiscovery(store=store, options=opts)
+        with pytest.raises(RuntimeError, match="call run\\(\\) before"):
+            _ = d._mgmt
+
+    def test_returns_the_session_once_set(self, discovery):
+        assert discovery._mgmt is discovery._mgmt_session
+
+
+class TestAssumeRole:
+    def test_builds_session_from_returned_credentials(self, discovery):
+        sts = MagicMock()
+        sts.assume_role.return_value = {
+            "Credentials": {
+                "AccessKeyId": "ASIAEXAMPLE",
+                "SecretAccessKey": "example-secret-not-real",
+                "SessionToken": "example-token-not-real",
+            }
+        }
+        discovery._mgmt_session.client.return_value = sts
+
+        with patch(f"{MODULE}.boto3.Session") as session_cls:
+            discovery._assume_role("222222222222", "CNA-ReadOnly")
+
+        kwargs = sts.assume_role.call_args.kwargs
+        assert kwargs["RoleArn"] == "arn:aws:iam::222222222222:role/CNA-ReadOnly"
+        assert kwargs["DurationSeconds"] == 3600
+        assert "ExternalId" not in kwargs, "no external id was configured"
+        assert session_cls.call_args.kwargs["aws_access_key_id"] == "ASIAEXAMPLE"
+
+    def test_passes_external_id_when_configured(self, store):
+        opts = DiscoveryOptions(
+            org_role_arn="arn:aws:iam::123456789012:role/CNA-ReadOnly",
+            external_id="shared-secret-placeholder",
+        )
+        d = AWSDiscovery(store=store, options=opts)
+        d._mgmt_session = MagicMock()
+        sts = MagicMock()
+        sts.assume_role.return_value = {
+            "Credentials": {
+                "AccessKeyId": "a",
+                "SecretAccessKey": "b",
+                "SessionToken": "c",
+            }
+        }
+        d._mgmt_session.client.return_value = sts
+
+        with patch(f"{MODULE}.boto3.Session"):
+            d._assume_role("222222222222", "CNA-ReadOnly")
+
+        assert sts.assume_role.call_args.kwargs["ExternalId"] == "shared-secret-placeholder"
+
+    @pytest.mark.parametrize("code", ["AccessDenied", "AccessDeniedException"])
+    def test_access_denied_becomes_cna_auth_error(self, discovery, code):
+        sts = MagicMock()
+        sts.assume_role.side_effect = _client_error(code, "not authorized", "AssumeRole")
+        discovery._mgmt_session.client.return_value = sts
+
+        with pytest.raises(CNAAuthError, match="AssumeRole failed"):
+            discovery._assume_role("222222222222", "CNA-ReadOnly")
+
+    def test_other_client_errors_propagate_unchanged(self, discovery):
+        """Only the access-denied codes are translated; the rest must not be swallowed."""
+        sts = MagicMock()
+        sts.assume_role.side_effect = _client_error("ThrottlingException", "slow down")
+        discovery._mgmt_session.client.return_value = sts
+
+        with pytest.raises(botocore.exceptions.ClientError):
+            discovery._assume_role("222222222222", "CNA-ReadOnly")
+
+
+class TestListOrgAccounts:
+    def test_paginates_and_skips_non_active_accounts(self, discovery):
+        orgs = MagicMock()
+        orgs.list_accounts.side_effect = [
+            {
+                "Accounts": [
+                    {"Id": "111111111111", "Name": "prod", "Status": "ACTIVE"},
+                    {"Id": "222222222222", "Name": "closed", "Status": "SUSPENDED"},
+                ],
+                "NextToken": "page-2",
+            },
+            {"Accounts": [{"Id": "333333333333", "Name": "dev", "Status": "ACTIVE"}]},
+        ]
+        discovery._mgmt_session.client.return_value = orgs
+
+        accounts = discovery._list_org_accounts()
+
+        assert [a.account_id for a in accounts] == ["111111111111", "333333333333"]
+        assert orgs.list_accounts.call_count == 2
+        assert orgs.list_accounts.call_args_list[1].kwargs["NextToken"] == "page-2"
+
+    def test_standalone_account_returns_empty_rather_than_raising(self, discovery):
+        """A non-Organization account is a supported configuration, not an error."""
+        orgs = MagicMock()
+        orgs.list_accounts.side_effect = _client_error(
+            "AWSOrganizationsNotInUseException", "not in use"
+        )
+        discovery._mgmt_session.client.return_value = orgs
+
+        assert discovery._list_org_accounts() == []
+
+    def test_other_org_errors_propagate(self, discovery):
+        orgs = MagicMock()
+        orgs.list_accounts.side_effect = _client_error("AccessDeniedException", "no orgs:List")
+        discovery._mgmt_session.client.return_value = orgs
+
+        with pytest.raises(botocore.exceptions.ClientError):
+            discovery._list_org_accounts()
+
+
+class TestGetEnabledRegions:
+    def _session_returning(self, region_names):
+        session = MagicMock()
+        session.region_name = "us-east-1"
+        ec2 = MagicMock()
+        ec2.describe_regions.return_value = {"Regions": [{"RegionName": r} for r in region_names]}
+        session.client.return_value = ec2
+        return session
+
+    def test_returns_sorted_and_filtered_by_requested_regions(self, discovery):
+        session = self._session_returning(["us-west-2", "us-east-1", "eu-west-1"])
+        # the `opts` fixture requests us-east-1 only
+        assert discovery._get_enabled_regions(session) == ["us-east-1"]
+
+    def test_returns_all_enabled_regions_when_none_requested(self, store):
+        d = AWSDiscovery(
+            store=store,
+            options=DiscoveryOptions(org_role_arn="arn:aws:iam::1:role/r", regions=[]),
+        )
+        d._mgmt_session = MagicMock()
+        session = self._session_returning(["us-west-2", "us-east-1"])
+
+        assert d._get_enabled_regions(session) == ["us-east-1", "us-west-2"]
+
+    def test_requests_only_enabled_opt_in_statuses(self, discovery):
+        session = self._session_returning(["us-east-1"])
+        discovery._get_enabled_regions(session)
+        filters = session.client.return_value.describe_regions.call_args.kwargs["Filters"]
+        assert filters[0]["Values"] == ["opt-in-not-required", "opted-in"]
+
+
+class TestDiscoverRegion:
+    def _session(self):
+        session = MagicMock()
+        client = MagicMock()
+        client.get_paginator.return_value = MagicMock(paginate=MagicMock(return_value=[]))
+        client.describe_internet_gateways.return_value = {}
+        client.describe_connections.return_value = {}
+        client.describe_vpn_gateways.return_value = {}
+        session.client.return_value = client
+        return session, client
+
+    def test_happy_path_returns_unblocked_topology(self, discovery):
+        session, _ = self._session()
+        topo = discovery._discover_region(session, "123456789012", "us-east-1")
+
+        assert topo.account_id == "123456789012"
+        assert topo.region == "us-east-1"
+        assert topo.discovery_blocked is False
+
+    def test_auth_failure_raises_rather_than_recording_a_blocked_region(self, discovery):
+        """An expired or invalid credential is fatal — it is not a per-region condition."""
+        session, client = self._session()
+        client.get_paginator.side_effect = _client_error("AuthFailure", "token expired")
+
+        with pytest.raises(CNAAuthError, match="Auth failure"):
+            discovery._discover_region(session, "123456789012", "us-east-1")
+
+    def test_unexpected_api_error_blocks_the_region_without_raising(self, discovery):
+        """One broken region must not abort discovery of every other region."""
+        session, client = self._session()
+        client.get_paginator.side_effect = _client_error("InternalError", "boom")
+
+        topo = discovery._discover_region(session, "123456789012", "us-east-1")
+
+        assert topo.discovery_blocked is True
+        assert "InternalError" in topo.block_reason
+
+
+class TestCollectVpcs:
+    def test_maps_fields_and_recurses_into_children(self, discovery):
+        ec2 = MagicMock()
+        _pages(
+            ec2,
+            "describe_vpcs",
+            [
+                {
+                    "Vpcs": [
+                        {
+                            "VpcId": "vpc-001",
+                            "CidrBlock": "10.0.0.0/16",
+                            "IsDefault": False,
+                            "Tags": [
+                                {"Key": "Name", "Value": "core"},
+                                {"Key": "env", "Value": "p"},
+                            ],
+                            "CidrBlockAssociationSet": [
+                                {
+                                    "CidrBlock": "10.0.0.0/16",
+                                    "CidrBlockState": {"State": "associated"},
+                                },
+                                {
+                                    "CidrBlock": "10.1.0.0/16",
+                                    "CidrBlockState": {"State": "associated"},
+                                },
+                                {
+                                    "CidrBlock": "10.2.0.0/16",
+                                    "CidrBlockState": {"State": "disassociated"},
+                                },
+                            ],
+                        }
+                    ]
+                }
+            ],
+        )
+        ec2.describe_internet_gateways.return_value = {}
+
+        vpcs = discovery._collect_vpcs(ec2, "123456789012", "us-east-1")
+
+        assert len(vpcs) == 1
+        vpc = vpcs[0]
+        assert vpc.id == "vpc-001"
+        assert vpc.name == "core"
+        assert vpc.cidr == "10.0.0.0/16"
+        assert vpc.tags == {"Name": "core", "env": "p"}
+        # primary excluded, disassociated excluded
+        assert vpc.secondary_cidrs == ["10.1.0.0/16"]
+
+
+class TestCollectIgws:
+    def test_maps_attached_gateways(self, discovery):
+        ec2 = MagicMock()
+        ec2.describe_internet_gateways.return_value = {
+            "InternetGateways": [
+                {"InternetGatewayId": "igw-001", "Tags": [{"Key": "Name", "Value": "edge"}]}
+            ]
+        }
+
+        igws = discovery._collect_igws(ec2, "vpc-001")
+
+        assert [i.id for i in igws] == ["igw-001"]
+        assert igws[0].name == "edge"
+        assert igws[0].state == "attached"
+
+    def test_returns_empty_when_none_attached(self, discovery):
+        ec2 = MagicMock()
+        ec2.describe_internet_gateways.return_value = {}
+        assert discovery._collect_igws(ec2, "vpc-001") == []
+
+
+class TestCollectPeering:
+    def _peering(self, pcx_id, state="active"):
+        return {
+            "VpcPeeringConnectionId": pcx_id,
+            "Status": {"Code": state},
+            "RequesterVpcInfo": {
+                "VpcId": "vpc-001",
+                "OwnerId": "111111111111",
+                "Region": "us-east-1",
+            },
+            "AccepterVpcInfo": {
+                "VpcId": "vpc-002",
+                "OwnerId": "222222222222",
+                "Region": "us-west-2",
+            },
+            "Tags": [],
+        }
+
+    def test_queries_both_requester_and_accepter_roles(self, discovery):
+        ec2 = MagicMock()
+        paginator = MagicMock()
+        paginator.paginate.side_effect = [
+            [{"VpcPeeringConnections": [self._peering("pcx-req")]}],
+            [{"VpcPeeringConnections": [self._peering("pcx-acc")]}],
+        ]
+        ec2.get_paginator.return_value = paginator
+
+        peerings = discovery._collect_peering(ec2, "vpc-001")
+
+        assert [p.id for p in peerings] == ["pcx-req", "pcx-acc"]
+        used_filters = [c.kwargs["Filters"][0]["Name"] for c in paginator.paginate.call_args_list]
+        assert used_filters == [
+            "requester-vpc-info.vpc-id",
+            "accepter-vpc-info.vpc-id",
+        ]
+
+    def test_unknown_state_code_falls_back_to_active(self, discovery):
+        """AWS adds status codes over time; an unmapped one must not raise."""
+        ec2 = MagicMock()
+        paginator = MagicMock()
+        paginator.paginate.side_effect = [
+            [{"VpcPeeringConnections": [self._peering("pcx-1", state="provisioning")]}],
+            [],
+        ]
+        ec2.get_paginator.return_value = paginator
+
+        peerings = discovery._collect_peering(ec2, "vpc-001")
+
+        assert peerings[0].state == PeeringState.ACTIVE
+
+
+class TestCollectNacls:
+    def test_maps_entries_and_associations(self, discovery):
+        ec2 = MagicMock()
+        _pages(
+            ec2,
+            "describe_network_acls",
+            [
+                {
+                    "NetworkAcls": [
+                        {
+                            "NetworkAclId": "acl-001",
+                            "IsDefault": True,
+                            "Tags": [],
+                            "Associations": [{"SubnetId": "subnet-001"}],
+                            "Entries": [
+                                {
+                                    "RuleNumber": 100,
+                                    "Protocol": "6",
+                                    "RuleAction": "allow",
+                                    "CidrBlock": "0.0.0.0/0",
+                                    "PortRange": {"From": 443, "To": 443},
+                                    "Egress": False,
+                                },
+                                {
+                                    "RuleNumber": 101,
+                                    "Protocol": "-1",
+                                    "RuleAction": "deny",
+                                    "Ipv6CidrBlock": "::/0",
+                                    "Egress": True,
+                                },
+                            ],
+                        }
+                    ]
+                }
+            ],
+        )
+
+        nacls = discovery._collect_nacls(ec2, "vpc-001")
+
+        assert len(nacls) == 1
+        nacl = nacls[0]
+        assert nacl.id == "acl-001"
+        assert nacl.is_default is True
+        assert nacl.associated_subnet_ids == ["subnet-001"]
+        assert nacl.entries[0].from_port == 443
+        # falls back to the v6 block when there is no v4 one
+        assert nacl.entries[1].cidr == "::/0"
+        assert nacl.entries[1].from_port is None
+
+
+class TestCollectTgws:
+    def test_maps_options_and_nested_attachments(self, discovery):
+        ec2 = MagicMock()
+        tgw_pag = MagicMock()
+        tgw_pag.paginate.return_value = [
+            {
+                "TransitGateways": [
+                    {
+                        "TransitGatewayId": "tgw-001",
+                        "OwnerId": "111111111111",
+                        "Tags": [{"Key": "Name", "Value": "hub"}],
+                        "Options": {
+                            "AmazonSideAsn": 64512,
+                            "DnsSupport": "enable",
+                            "VpnEcmpSupport": "disable",
+                            "DefaultRouteTableAssociation": "enable",
+                            "DefaultRouteTablePropagation": "disable",
+                        },
+                    }
+                ]
+            }
+        ]
+        att_pag = MagicMock()
+        att_pag.paginate.return_value = [
+            {
+                "TransitGatewayAttachments": [
+                    {
+                        "TransitGatewayAttachmentId": "tgw-attach-001",
+                        "ResourceId": "vpc-001",
+                        "ResourceType": "vpc",
+                        "ResourceOwnerId": "111111111111",
+                        "State": "available",
+                    },
+                    {
+                        "TransitGatewayAttachmentId": "tgw-attach-002",
+                        "ResourceId": "dxgw-001",
+                        "ResourceType": "direct-connect-gateway",
+                        "ResourceOwnerId": "111111111111",
+                        "State": "available",
+                    },
+                ]
+            }
+        ]
+        ec2.get_paginator.side_effect = lambda name: (
+            tgw_pag if name == "describe_transit_gateways" else att_pag
+        )
+
+        tgws = discovery._collect_tgws(ec2, "111111111111", "us-east-1")
+
+        assert len(tgws) == 1
+        tgw = tgws[0]
+        assert tgw.name == "hub"
+        assert tgw.amazon_side_asn == 64512
+        assert tgw.dns_support is True
+        assert tgw.vpn_ecmp_support is False
+        assert tgw.default_route_table_association is True
+        assert tgw.default_route_table_propagation is False
+        # "direct-connect-gateway" normalises to the underscored enum value
+        assert [a.resource_type for a in tgw.attachments] == [
+            AttachmentType.VPC,
+            AttachmentType.DIRECT_CONNECT,
+        ]
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("vpc", AttachmentType.VPC),
+            ("vpn", AttachmentType.VPN),
+            # AWS returns the hyphenated service name, not the enum spelling.
+            # `raw.replace("-", "_")` produced "direct_connect_gateway", which is
+            # not a member, so this silently recorded a DX gateway as a VPC
+            # attachment until T-408 added this case.
+            ("direct-connect-gateway", AttachmentType.DIRECT_CONNECT),
+            ("connect", AttachmentType.CONNECT),
+            ("peering", AttachmentType.PEERING),
+            ("tgw-peering", AttachmentType.PEERING),
+        ],
+    )
+    def test_every_aws_resource_type_maps_correctly(self, discovery, raw, expected):
+        ec2 = MagicMock()
+        att_pag = MagicMock()
+        att_pag.paginate.return_value = [
+            {
+                "TransitGatewayAttachments": [
+                    {
+                        "TransitGatewayAttachmentId": "tgw-attach-001",
+                        "ResourceId": "x-001",
+                        "ResourceType": raw,
+                        "ResourceOwnerId": "111111111111",
+                        "State": "available",
+                    }
+                ]
+            }
+        ]
+        ec2.get_paginator.return_value = att_pag
+
+        assert discovery._collect_tgw_attachments(ec2, "tgw-001")[0].resource_type == expected
+
+    def test_unknown_attachment_type_falls_back_to_vpc(self, discovery):
+        ec2 = MagicMock()
+        att_pag = MagicMock()
+        att_pag.paginate.return_value = [
+            {
+                "TransitGatewayAttachments": [
+                    {
+                        "TransitGatewayAttachmentId": "tgw-attach-001",
+                        "ResourceId": "x-001",
+                        "ResourceType": "something-new",
+                        "ResourceOwnerId": "111111111111",
+                        "State": "available",
+                    }
+                ]
+            }
+        ]
+        ec2.get_paginator.return_value = att_pag
+
+        attachments = discovery._collect_tgw_attachments(ec2, "tgw-001")
+
+        assert attachments[0].resource_type == AttachmentType.VPC
+
+
+class TestCollectDirectConnect:
+    def test_maps_connections(self, discovery):
+        dc = MagicMock()
+        dc.describe_connections.return_value = {
+            "connections": [
+                {
+                    "connectionId": "dxcon-001",
+                    "connectionName": "primary",
+                    "location": "EqDC2",
+                    "bandwidth": "1Gbps",
+                    "connectionState": "available",
+                    "ownerAccount": "111111111111",
+                }
+            ]
+        }
+
+        conns = discovery._collect_dx(dc, "123456789012", "us-east-1")
+
+        assert conns[0].id == "dxcon-001"
+        assert conns[0].bandwidth == "1Gbps"
+        assert conns[0].owner_account_id == "111111111111"
+
+    def test_defaults_owner_to_the_calling_account(self, discovery):
+        dc = MagicMock()
+        dc.describe_connections.return_value = {"connections": [{"connectionId": "dxcon-001"}]}
+
+        conns = discovery._collect_dx(dc, "123456789012", "us-east-1")
+
+        assert conns[0].owner_account_id == "123456789012"
+
+    def test_client_error_is_logged_not_raised(self, discovery):
+        """Direct Connect is not enabled everywhere; a denial must not stop the region."""
+        dc = MagicMock()
+        dc.describe_connections.side_effect = _client_error("AccessDeniedException", "no dx")
+
+        assert discovery._collect_dx(dc, "123456789012", "us-east-1") == []
+
+
+class TestCollectVpnGateways:
+    def test_maps_first_vpc_attachment(self, discovery):
+        ec2 = MagicMock()
+        ec2.describe_vpn_gateways.return_value = {
+            "VpnGateways": [
+                {
+                    "VpnGatewayId": "vgw-001",
+                    "State": "available",
+                    "Type": "ipsec.1",
+                    "AmazonSideAsn": 64512,
+                    "Tags": [{"Key": "Name", "Value": "onprem"}],
+                    "VpcAttachments": [{"VpcId": "vpc-001", "State": "attached"}],
+                }
+            ]
+        }
+
+        vgws = discovery._collect_vpn_gateways(ec2, "123456789012", "us-east-1")
+
+        assert vgws[0].id == "vgw-001"
+        assert vgws[0].vpc_id == "vpc-001"
+        assert vgws[0].name == "onprem"
+
+    def test_detached_gateway_has_no_vpc(self, discovery):
+        ec2 = MagicMock()
+        ec2.describe_vpn_gateways.return_value = {
+            "VpnGateways": [{"VpnGatewayId": "vgw-001", "State": "available"}]
+        }
+
+        assert discovery._collect_vpn_gateways(ec2, "1", "us-east-1")[0].vpc_id is None
+
+    def test_client_error_is_logged_not_raised(self, discovery):
+        ec2 = MagicMock()
+        ec2.describe_vpn_gateways.side_effect = _client_error("UnauthorizedOperation", "no")
+
+        assert discovery._collect_vpn_gateways(ec2, "1", "us-east-1") == []
+
+
+class TestCollectNetworkFirewalls:
+    def _session_with(self, client):
+        session = MagicMock()
+        session.client.return_value = client
+        return session
+
+    def test_maps_firewall_and_all_three_logging_destinations(self, discovery):
+        client = MagicMock()
+        _pages(client, "list_firewalls", [{"Firewalls": [{"FirewallArn": "arn:fw:1"}]}])
+        client.describe_firewall.return_value = {
+            "Firewall": {
+                "FirewallArn": "arn:fw:1",
+                "FirewallName": "edge-fw",
+                "VpcId": "vpc-001",
+                "FirewallPolicyArn": "arn:pol:1",
+                "SubnetMappings": [{"SubnetId": "subnet-001"}, {"SubnetId": "subnet-002"}],
+                "DeleteProtection": True,
+                "SubnetChangeProtection": True,
+                "FirewallPolicyChangeProtection": False,
+                "Tags": [{"Key": "env", "Value": "prod"}],
+            },
+            "FirewallStatus": {"Status": "READY"},
+        }
+        client.describe_logging_configuration.return_value = {
+            "LoggingConfiguration": {
+                "LogDestinationConfigs": [
+                    {"LogDestinationType": "S3"},
+                    {"LogDestinationType": "CloudWatchLogs"},
+                    {"LogDestinationType": "KinesisDataFirehose"},
+                ]
+            }
+        }
+
+        fws = discovery._collect_network_firewalls(
+            self._session_with(client), "123456789012", "us-east-1"
+        )
+
+        assert len(fws) == 1
+        fw = fws[0]
+        assert fw.firewall_name == "edge-fw"
+        assert fw.subnet_mappings == ["subnet-001", "subnet-002"]
+        assert fw.delete_protection is True
+        assert fw.firewall_policy_change_protection is False
+        assert (fw.logging_s3_enabled, fw.logging_cloudwatch_enabled) == (True, True)
+        assert fw.logging_kinesis_enabled is True
+        assert fw.tags == {"env": "prod"}
+
+    def test_missing_logging_config_leaves_flags_false(self, discovery):
+        """Logging config is a separate call and often denied; it must not lose the firewall."""
+        client = MagicMock()
+        _pages(client, "list_firewalls", [{"Firewalls": [{"FirewallArn": "arn:fw:1"}]}])
+        client.describe_firewall.return_value = {
+            "Firewall": {
+                "FirewallArn": "arn:fw:1",
+                "FirewallName": "edge-fw",
+                "VpcId": "vpc-001",
+            },
+            "FirewallStatus": {},
+        }
+        client.describe_logging_configuration.side_effect = RuntimeError("denied")
+
+        fws = discovery._collect_network_firewalls(
+            self._session_with(client), "123456789012", "us-east-1"
+        )
+
+        assert len(fws) == 1
+        assert fws[0].logging_s3_enabled is False
+        assert fws[0].firewall_status == "READY", "defaults when the status block is absent"
+
+    def test_detail_failure_drops_only_that_firewall(self, discovery):
+        client = MagicMock()
+        _pages(
+            client,
+            "list_firewalls",
+            [{"Firewalls": [{"FirewallArn": "arn:fw:1"}, {"FirewallArn": "arn:fw:2"}]}],
+        )
+        client.describe_firewall.side_effect = [
+            RuntimeError("boom"),
+            {
+                "Firewall": {
+                    "FirewallArn": "arn:fw:2",
+                    "FirewallName": "second",
+                    "VpcId": "vpc-002",
+                },
+                "FirewallStatus": {},
+            },
+        ]
+        client.describe_logging_configuration.return_value = {}
+
+        fws = discovery._collect_network_firewalls(
+            self._session_with(client), "123456789012", "us-east-1"
+        )
+
+        assert [f.firewall_name for f in fws] == ["second"]
+
+    def test_unavailable_service_returns_empty(self, discovery):
+        """network-firewall does not exist in every region or partition."""
+        session = MagicMock()
+        session.client.side_effect = RuntimeError("no such service")
+
+        assert discovery._collect_network_firewalls(session, "1", "us-gov-west-1") == []
+
+
+class TestCollectWafWebAcls:
+    def _session_with(self, client):
+        session = MagicMock()
+        session.client.return_value = client
+        return session
+
+    def test_counts_managed_versus_custom_rules(self, discovery):
+        client = MagicMock()
+        _pages(client, "list_web_acls", [{"WebACLs": [{"Name": "app", "Id": "acl-1"}]}])
+        client.get_web_acl.return_value = {
+            "WebACL": {
+                "Id": "acl-1",
+                "ARN": "arn:acl:1",
+                "Name": "app",
+                "DefaultAction": {"Allow": {}},
+                "Rules": [
+                    {"Statement": {"ManagedRuleGroupStatement": {}}},
+                    {"Statement": {"ManagedRuleGroupStatement": {}}},
+                    {"Statement": {"RateBasedStatement": {}}},
+                ],
+                "VisibilityConfig": {
+                    "SampledRequestsEnabled": True,
+                    "CloudWatchMetricsEnabled": True,
+                },
+            }
+        }
+        client.list_resources_for_web_acl.return_value = {"ResourceArns": ["arn:alb:1"]}
+
+        acls = discovery._collect_waf_web_acls(
+            self._session_with(client), "123456789012", "us-east-1"
+        )
+
+        assert len(acls) == 1
+        acl = acls[0]
+        assert acl.managed_rule_groups_count == 2
+        assert acl.custom_rules_count == 1
+        assert acl.default_action == "Allow"
+        assert acl.associated_resource_arns == ["arn:alb:1"]
+        assert acl.sampled_requests_enabled is True
+
+    def test_block_default_action_is_recorded(self, discovery):
+        client = MagicMock()
+        _pages(client, "list_web_acls", [{"WebACLs": [{"Name": "app", "Id": "acl-1"}]}])
+        client.get_web_acl.return_value = {
+            "WebACL": {
+                "Id": "acl-1",
+                "ARN": "arn:acl:1",
+                "Name": "app",
+                "DefaultAction": {"Block": {}},
+                "Rules": [],
+            }
+        }
+        client.list_resources_for_web_acl.return_value = {}
+
+        acls = discovery._collect_waf_web_acls(self._session_with(client), "1", "us-east-1")
+
+        assert acls[0].default_action == "Block"
+        assert acls[0].custom_rules_count == 0
+
+    def test_scoped_to_regional(self, discovery):
+        """CLOUDFRONT-scoped ACLs live in us-east-1 only and are collected elsewhere."""
+        client = MagicMock()
+        paginator = _pages(client, "list_web_acls", [{"WebACLs": []}])
+
+        discovery._collect_waf_web_acls(self._session_with(client), "1", "us-east-1")
+
+        assert paginator.paginate.call_args.kwargs["Scope"] == "REGIONAL"
+
+    def test_detail_failure_drops_only_that_acl(self, discovery):
+        client = MagicMock()
+        _pages(client, "list_web_acls", [{"WebACLs": [{"Name": "app", "Id": "acl-1"}]}])
+        client.get_web_acl.side_effect = RuntimeError("boom")
+
+        assert discovery._collect_waf_web_acls(self._session_with(client), "1", "us-east-1") == []
+
+    def test_unavailable_service_returns_empty(self, discovery):
+        session = MagicMock()
+        session.client.side_effect = RuntimeError("no wafv2 here")
+
+        assert discovery._collect_waf_web_acls(session, "1", "cn-north-1") == []
+
+
+class TestDiscoverAccount:
+    def _topology(self):
+        return AWSTopology(engagement_id="test-20260305-0001")
+
+    def test_resume_skips_an_account_with_an_existing_checkpoint(self, discovery, store):
+        discovery.opts.resume = True
+        store.list_completed_checkpoints.return_value = ["aws_111111111111_us-east-1"]
+        topology = self._topology()
+
+        discovery._discover_account(
+            AWSAccount(account_id="111111111111"), "CNA-ReadOnly", topology, "eng-1"
+        )
+
+        assert topology.regions == []
+        store.write_discovery_checkpoint.assert_not_called()
+
+    def test_management_account_reuses_the_management_session(self, discovery):
+        account = AWSAccount(account_id="111111111111", is_management_account=True)
+        with (
+            patch.object(discovery, "_assume_role") as assume,
+            patch.object(discovery, "_get_enabled_regions", return_value=[]),
+        ):
+            discovery._discover_account(account, "CNA-ReadOnly", self._topology(), "eng-1")
+
+        assume.assert_not_called()
+
+    def test_member_account_assumes_the_role(self, discovery):
+        account = AWSAccount(account_id="222222222222")
+        with (
+            patch.object(discovery, "_assume_role") as assume,
+            patch.object(discovery, "_get_enabled_regions", return_value=[]),
+        ):
+            discovery._discover_account(account, "CNA-ReadOnly", self._topology(), "eng-1")
+
+        assume.assert_called_once_with("222222222222", "CNA-ReadOnly")
+
+    def test_inaccessible_account_writes_one_audit_event_and_returns(self, discovery, store):
+        """The T-402 regression: `cloud` travels inside the event dict, not positionally."""
+        account = AWSAccount(account_id="222222222222")
+        topology = self._topology()
+        with patch.object(discovery, "_assume_role", side_effect=CNAAuthError("denied")):
+            discovery._discover_account(account, "CNA-ReadOnly", topology, "eng-1")
+
+        assert topology.regions == []
+        args = store.write_audit_event.call_args.args
+        assert len(args) == 2, "write_audit_event takes (engagement_id, event)"
+        assert args[0] == "eng-1"
+        assert args[1]["type"] == "access_denied"
+        assert args[1]["cloud"] == "aws"
+        assert args[1]["account"] == "222222222222"
+
+    def test_writes_one_checkpoint_per_region_positionally(self, discovery, store):
+        account = AWSAccount(account_id="111111111111", is_management_account=True)
+        topology = self._topology()
+        region_topo = AWSRegionTopology(account_id="111111111111", region="us-east-1")
+
+        with (
+            patch.object(
+                discovery, "_get_enabled_regions", return_value=["us-east-1", "us-west-2"]
+            ),
+            patch.object(discovery, "_discover_region", return_value=region_topo),
+        ):
+            discovery._discover_account(account, "CNA-ReadOnly", topology, "eng-1")
+
+        assert len(topology.regions) == 2
+        assert store.write_discovery_checkpoint.call_count == 2
+        args = store.write_discovery_checkpoint.call_args_list[0].args
+        assert args[:3] == ("eng-1", "aws", "aws_111111111111_us-east-1")
+        assert isinstance(args[3], dict), "the checkpoint payload must be JSON, not a model"

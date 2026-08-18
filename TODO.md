@@ -757,9 +757,31 @@ order; do not reorder it.
   mocked tests in the style T-403 established, and remove each `omit` line once its file clears
   ~80% on its own. Do not remove them in one step and lower `fail_under` to compensate — that
   weakens the gate for the whole package to accommodate two files.
-- **Status:** Not started
-- **Notes for future engineers:** To measure honestly while the entries are still in place, run
-  pytest with `--cov-config` pointing at a copy of the config with the two lines deleted; that is
+- **Status:** In progress — **`aws_discovery.py` is done and its `omit` line is gone.**
+  46% → **98%** (380 statements, 6 missed), via 46 new tests in `tests/unit/test_aws_discovery.py`
+  covering the collectors that had none: `_assume_role`, `_list_org_accounts`,
+  `_get_enabled_regions`, `_discover_region`, `_collect_vpcs`, `_collect_igws`, `_collect_peering`,
+  `_collect_nacls`, `_collect_tgws`/`_collect_tgw_attachments`, `_collect_dx`,
+  `_collect_vpn_gateways`, `_collect_network_firewalls`, `_collect_waf_web_acls`, and
+  `_discover_account`. All mocked; no network call. With it measured, the package gate **rises**
+  84% → **87.5%**, because the file now sits above the package average.
+  **It found a real bug, which is the argument for the whole item.** `_collect_tgw_attachments`
+  derived the attachment type as `AttachmentType(raw.replace("-", "_"))`. AWS returns six values
+  for `ResourceType`, and that transform mislabelled two of them: `direct-connect-gateway` became
+  `direct_connect_gateway` and `tgw-peering` became `tgw_peering`, neither an enum member, so both
+  fell through the `except ValueError` to `AttachmentType.VPC`. Every Direct Connect gateway
+  attachment on a Transit Gateway was silently recorded as a VPC attachment — wrong in the
+  topology, in the diagrams, and in any rule counting VPC attachments. Replaced with a declared
+  `_TGW_ATTACHMENT_TYPES` mapping covering all six wire values, and an unmapped value now logs a
+  warning naming itself instead of failing silently. Parametrized over every value AWS returns.
+  **`azure_discovery.py` remains omitted at 22%** (1,189 statements, 930 missed). Reaching 80%
+  needs ~693 more covered statements spread over roughly 70 methods — the largest by uncovered
+  count are `_discover_subscription` (48), `_collect_bgp_data` (36), `_collect_appgws` (35),
+  `_collect_vm_nics` (29), `_collect_vnet_gateways` (28), and `_collect_load_balancers` (27), then
+  a long tail. Its `omit` comment has been corrected: it now says the file is omitted *because it
+  is at 22%*, not because it needs a live tenant, which was never true.
+- **Notes for future engineers:** To measure honestly while the entry is still in place, run
+  pytest with `--cov-config` pointing at a copy of the config with the line deleted; that is
   how the figures above were obtained. Also correct the misleading comment when the entries go —
   and note the same block omits `cna/diagram_engine/diagrams_generator.py` and the diagram modules
   for a *genuine* reason (they need the graphviz binary), so do not delete the block wholesale.

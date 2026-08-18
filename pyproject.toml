@@ -144,9 +144,13 @@ omit = [
     "*/__init__.py",
     "*/migrations/*",
 
-    # Discovery modules — require live AWS/Azure API calls against real tenants.
-    # Covered by integration tests run against sandboxed tenants.
-    "cna/modules/network/discovery/aws_discovery.py",
+    # Azure discovery — omitted only because it is still at 22% (TODO.md T-408).
+    # NOT because it needs a live tenant: the premise this block used to state was
+    # false. `tests/unit/test_azure_discovery.py` drives the whole module with
+    # MagicMock and makes no network call, exactly as the AWS equivalent does.
+    # aws_discovery.py was removed from this list at 98%; remove this line too
+    # once azure_discovery.py clears ~80% on its own. Do not lower fail_under to
+    # compensate — that weakens the gate for the whole package to suit one file.
     "cna/modules/network/discovery/azure_discovery.py",
 
     # Diagram generation — require graphviz binary + drawio runtime

@@ -72,6 +72,24 @@ _OPT_IN_REGIONS = {
 }
 
 
+# AWS's wire values for TransitGatewayAttachment.ResourceType, mapped to the
+# schema enum. Declared rather than derived: the previous code did
+# `AttachmentType(raw.replace("-", "_"))`, which silently mislabelled two of the
+# six values AWS actually returns — "direct-connect-gateway" became
+# "direct_connect_gateway" and "tgw-peering" became "tgw_peering", neither of
+# which is an enum member, so both fell through to VPC. A Direct Connect gateway
+# attachment being recorded as a VPC attachment is wrong in the topology, in the
+# diagrams, and in any rule that counts VPC attachments (TODO.md T-408).
+_TGW_ATTACHMENT_TYPES: dict[str, AttachmentType] = {
+    "vpc": AttachmentType.VPC,
+    "vpn": AttachmentType.VPN,
+    "direct-connect-gateway": AttachmentType.DIRECT_CONNECT,
+    "connect": AttachmentType.CONNECT,
+    "peering": AttachmentType.PEERING,
+    "tgw-peering": AttachmentType.PEERING,
+}
+
+
 @dataclass
 class DiscoveryOptions:
     org_role_arn: str  # arn:aws:iam::MGMT:role/CNA-ReadOnly
@@ -528,9 +546,15 @@ class AWSDiscovery:
         ):
             for a in page["TransitGatewayAttachments"]:
                 resource_type_raw = a.get("ResourceType", "vpc")
-                try:
-                    resource_type = AttachmentType(resource_type_raw.replace("-", "_"))
-                except ValueError:
+                resource_type = _TGW_ATTACHMENT_TYPES.get(resource_type_raw)
+                if resource_type is None:
+                    logger.warning(
+                        "Unmapped transit gateway attachment type %r on %s — recorded as %s. "
+                        "Add it to _TGW_ATTACHMENT_TYPES.",
+                        resource_type_raw,
+                        a.get("TransitGatewayAttachmentId", "?"),
+                        AttachmentType.VPC,
+                    )
                     resource_type = AttachmentType.VPC
                 attachments.append(
                     TGWAttachment(
