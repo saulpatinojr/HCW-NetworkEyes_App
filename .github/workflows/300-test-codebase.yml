@@ -72,6 +72,35 @@ jobs:
           PY
 
   # ------------------------------------------------------------------
+  # 1b. Secret scanning — detect-secrets, gating (TODO.md T-411)
+  # ------------------------------------------------------------------
+  # The gitleaks job above is `continue-on-error: true` because gitleaks needs a
+  # paid licence on private repos. That left the repository with no secret scan
+  # that could fail a build — a control that reads as present in the config and
+  # is not. detect-secrets needs no licence, so this job gates.
+  #
+  # It runs the hook through pre-commit rather than invoking detect-secrets
+  # directly, so the file exclusions live in exactly one place
+  # (.pre-commit-config.yaml) instead of being restated here and drifting.
+  detect-secrets:
+    name: Secret Scanning (detect-secrets, gating)
+    runs-on: self-hosted
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Cache pip
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ~/.cache/pip
+          key: detect-secrets-${{ hashFiles('.pre-commit-config.yaml') }}
+      - run: pip install pre-commit
+      - name: Run detect-secrets against the audited baseline
+        run: pre-commit run detect-secrets --all-files --show-diff-on-failure
+
+  # ------------------------------------------------------------------
   # 2. Lint & format
   # ------------------------------------------------------------------
   lint:

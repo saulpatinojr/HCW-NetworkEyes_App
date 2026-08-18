@@ -18,7 +18,22 @@ repos:
       - id: detect-secrets
         name: detect-secrets
         args: ['--baseline', '.secrets.baseline']
-        exclude: ^\.env\.example$
+        # Vendored agent configuration only. `.claude/` and `.agents/` are
+        # third-party security documentation packs full of example tokens, and
+        # they contributed 413 of the 446 findings on the first readable scan —
+        # noise that made the baseline untriageable and the hook unusable.
+        # `.deployment-catalog/` holds build manifests whose image digests trip
+        # the hex-entropy detector. These are the same directories
+        # `pyproject.toml` excludes from ruff and
+        # `scripts/validate_documentation_model.py` excludes from the
+        # documentation model, on the same grounds: vendored configuration, not
+        # project source (TODO.md T-411).
+        #
+        # `.env.example` used to be excluded here and deliberately is not any
+        # more. Excluding it meant a real credential pasted into the template
+        # would never be caught; its three placeholder findings are recorded in
+        # the baseline instead, which still catches anything new.
+        exclude: ^(\.claude|\.agents|\.codex|\.deployment-catalog)/
 
   # --- Python linting ---
   - repo: https://github.com/astral-sh/ruff-pre-commit
