@@ -314,16 +314,65 @@ jobs:
             fi
           fi
 
-          # Required resource providers for the split infra:
-          #   Microsoft.App      — Container Apps (compute)
-          #   Microsoft.Insights — diagnostic settings / Application Insights
-          # (Microsoft.AlertsManagement is no longer needed — the refactor dropped
-          #  metric alerts; only diagnostic settings remain.)
+          # Required resource providers, derived from the resource types the Azure
+          # roots actually declare (TODO.md T-104). An unregistered provider does
+          # not fail the plan — it fails partway through apply, ~20 minutes in,
+          # leaving a half-provisioned environment. Checking here turns that into
+          # a 30-second failure with the exact `az provider register` to run.
+          #
+          # Declared as one list rather than inline per check, so adding a service
+          # to the Terraform means adding one line here. Keep it in sync with:
+          #   grep -rhoE 'resource "azurerm_[a-z0-9_]+"' infra/terraform/*/azure/
+          #
+          #   Microsoft.App                — container_app, container_app_environment
+          #   Microsoft.Network            — vnet, subnet, NSG, public_ip, route_table,
+          #                                  private_dns_zone, private_endpoint, firewall,
+          #                                  and the azapi networkWatchers/flowLogs
+          #   Microsoft.Storage            — storage_account, container, mgmt policy,
+          #                                  static website
+          #   Microsoft.KeyVault           — key_vault, secret, certificate
+          #   Microsoft.DBforPostgreSQL    — postgresql_flexible_server + database + config
+          #   Microsoft.CognitiveServices  — cognitive_account, cognitive_deployment,
+          #                                  and the azapi accounts/projects (Foundry)
+          #   Microsoft.OperationalInsights— log_analytics_workspace
+          #   Microsoft.Insights           — monitor_diagnostic_setting
+          #   Microsoft.Cdn                — the nine cdn_frontdoor_* resources
+          #   Microsoft.ManagedIdentity    — user_assigned_identity
+          #
+          # Deliberately NOT checked: Microsoft.Resources (resource_group) and
+          # Microsoft.Authorization (role_assignment) are registered on every
+          # subscription and cannot be unregistered, so asserting them is noise.
+          #
+          # Microsoft.AlertsManagement is deliberately absent. REVIEW.md R-007 asked
+          # the subscription owner to register it for Application Insights
+          # smart-detection alerts, but the split refactor removed alerting entirely:
+          # there is no application_insights, no monitor_smart_detector_alert_rule,
+          # no monitor_metric_alert, and no monitor_action_group anywhere in infra/.
+          # The only monitor resource left is monitor_diagnostic_setting, which is
+          # Microsoft.Insights. Verified 2026-08-18; R-007 closed on that basis.
+          REQUIRED_PROVIDERS=(
+            Microsoft.App
+            Microsoft.Network
+            Microsoft.Storage
+            Microsoft.KeyVault
+            Microsoft.DBforPostgreSQL
+            Microsoft.CognitiveServices
+            Microsoft.OperationalInsights
+            Microsoft.Insights
+            Microsoft.Cdn
+            Microsoft.ManagedIdentity
+          )
           PROVIDER_FAILED=0
-          for ns in Microsoft.App Microsoft.Insights; do
+          for ns in "${REQUIRED_PROVIDERS[@]}"; do
             STATE=$(az provider show --namespace "$ns" --query registrationState -o tsv 2>/dev/null || echo "NotRegistered")
             if [[ "$STATE" == "Registered" ]]; then
               echo "| $ns | Registered | ✅ |" >> "$GITHUB_STEP_SUMMARY"
+            elif [[ "$STATE" == "Registering" ]]; then
+              # Transient: registration was started but has not finished. Telling
+              # someone to run `az provider register` again would be wrong advice.
+              echo "| $ns | Registering | ⏳ Wait and re-run |" >> "$GITHUB_STEP_SUMMARY"
+              echo "::error::$ns registration is still in progress. Wait for it to reach Registered, then re-run this workflow."
+              PROVIDER_FAILED=1
             else
               echo "| $ns | $STATE | ❌ Register before deploy |" >> "$GITHUB_STEP_SUMMARY"
               echo "::error::$ns is not registered in this subscription. Run: az provider register --namespace $ns"

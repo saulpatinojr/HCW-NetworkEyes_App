@@ -97,13 +97,40 @@ Each one actively misleads an engineer or a workflow run.
   `Microsoft.AlertsManagement` provider, and the failure surfaces roughly 20 minutes into a
   `211-deploy-azure-split.yml` run. Workflow `100-validate-prereqs.yml` validates secrets,
   variables, and OIDC but not resource-provider registration.
-- **Dependencies:** `REVIEW.md` → R-007 (the subscription owner must register it first; this task
-  makes the failure detectable, it does not resolve it).
+- **Dependencies:** `REVIEW.md` → R-007 (now closed — see Status).
 - **Recommended action:** Add a registration-state assertion to `100-validate-prereqs.yml`,
   failing with a message that names the provider and points at `REVIEW.md` → R-007.
-- **Status:** Not started
+- **Status:** Done, but not as written — **the premise was stale, and the note below turned out to
+  be the whole item.**
+  1. **`Microsoft.AlertsManagement` is not needed and has not been for some time.** The split
+     refactor removed alerting from the Azure roots: `infra/` contains no
+     `azurerm_application_insights`, no `azurerm_monitor_smart_detector_alert_rule`, no
+     `azurerm_monitor_metric_alert`, and no `azurerm_monitor_action_group`. The only monitor
+     resource left is `azurerm_monitor_diagnostic_setting` (`Microsoft.Insights`). Both
+     `azapi_resource` declarations resolve to namespaces already covered
+     (`Microsoft.CognitiveServices/accounts/projects`,
+     `Microsoft.Network/networkWatchers/flowLogs`). `REVIEW.md` → R-007 is closed on this basis —
+     it was asking the subscription owner for something no longer required.
+  2. **A provider check already existed** in `100-validate-prereqs.yml`, and already carried a
+     comment saying AlertsManagement had been dropped. So the item as written was asking for a
+     check that was there.
+  3. **The real gap was coverage.** That check asserted `Microsoft.App` and `Microsoft.Insights`
+     only — 2 of the 10 namespaces these roots actually need. `Microsoft.Cdn`,
+     `Microsoft.CognitiveServices`, and `Microsoft.DBforPostgreSQL` in particular are commonly
+     *not* registered by default on a fresh subscription, and each fails partway through apply
+     exactly as R-007 described. The list is now derived from the declared resource types and
+     covers all ten, declared once as `REQUIRED_PROVIDERS` with each namespace commented with the
+     resources that require it.
+  `Microsoft.Resources` and `Microsoft.Authorization` are deliberately excluded — they are
+  registered on every subscription and cannot be unregistered, so asserting them is noise. The
+  loop also distinguishes `Registering` (transient; wait and re-run) from `NotRegistered` (run
+  `az provider register`), because telling someone to re-register a provider that is mid-flight is
+  wrong advice. It reports every failing provider before exiting rather than stopping at the
+  first. Verified with a stubbed `az` covering all three states.
 - **Notes for future engineers:** Check whether any other provider registration is assumed by the
   Azure roots while adding this — the same class of late failure applies to every one of them.
+  This note was the actual work. Keep `REQUIRED_PROVIDERS` in sync when adding a service; the
+  workflow comment carries the `grep` that regenerates the resource-type list.
 
 ---
 

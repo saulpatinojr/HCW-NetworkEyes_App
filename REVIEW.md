@@ -16,7 +16,7 @@ Anything an engineer can solve without external input belongs in [`TODO.md`](TOD
 | [R-004](#r-004--acm-certificates-and-custom-domain-decision) | ACM certificates + custom-domain decision | DNS / domain owner | Open |
 | [R-005](#r-005--amazon-bedrock-model-access-opt-in) | Amazon Bedrock foundation-model access opt-in | AWS account owner | Open |
 | [R-006](#r-006--runtime-secrets-have-no-defaults-and-must-be-supplied) | Runtime secrets supplied at apply time | Security / secret owner | Open |
-| [R-007](#r-007--azure-subscription-resource-provider-registration) | `Microsoft.AlertsManagement` provider registration | Azure subscription owner | Open |
+| [R-007](#r-007--azure-subscription-resource-provider-registration) | `Microsoft.AlertsManagement` provider registration | Azure subscription owner | Resolved — no longer required |
 | [R-008](#r-008--live-azure-beta-acceptance-sign-off) | 0.8 beta exit — live Azure acceptance sign-off | Product owner | Open |
 | [R-009](#r-009--github-wiki-write-access-for-documentation-migration) | GitHub Wiki write access to publish prepared pages | Repository owner | Open — not blocking |
 
@@ -259,34 +259,42 @@ provisions Secrets Manager entries, so seeding is the closer mirror.
 
 ## R-007 — Azure subscription resource-provider registration
 
-**Problem**
-The Azure subscription must have `Microsoft.AlertsManagement` registered before workflow
-`211-deploy-azure-split.yml` runs. Resource-provider registration is a subscription-level
-operation.
+**Status: Resolved — nothing is required of the subscription owner.**
 
-**Why it blocks progress**
-Application Insights smart-detection alert deployment fails during apply if the provider is not
-registered, and the failure surfaces late in a ~20-minute apply.
+**Original problem**
+The Azure subscription was said to need `Microsoft.AlertsManagement` registered before workflow
+`211-deploy-azure-split.yml` runs, because Application Insights smart-detection alert deployment
+fails during apply if it is not, ~20 minutes into a run.
 
-**Required owner**
-Azure subscription owner / contributor with subscription-scope rights (the deploy identity is
-scoped to the resource group and cannot self-register).
+**Why it is no longer required**
+The split refactor removed alerting from the Azure roots entirely. Verified against the current
+Terraform on 2026-08-18 (`TODO.md` → T-104): `infra/` contains no `azurerm_application_insights`,
+no `azurerm_monitor_smart_detector_alert_rule`, no `azurerm_monitor_metric_alert`, and no
+`azurerm_monitor_action_group`. The only monitor resource left is
+`azurerm_monitor_diagnostic_setting`, which belongs to `Microsoft.Insights`, not
+`Microsoft.AlertsManagement`. Both `azapi_resource` declarations resolve to
+`Microsoft.CognitiveServices` and `Microsoft.Network`. Workflow `100-validate-prereqs.yml` had
+already reached the same conclusion in a code comment; this is the check against the Terraform
+that confirms it.
 
-**Required action**
-Register `Microsoft.AlertsManagement` on the target subscription, then confirm registration state
-before the next 211 run.
+**What replaced it**
+Provider registration is now *asserted*, not assumed. Workflow `100-validate-prereqs.yml` checks
+all ten namespaces the roots genuinely need — `Microsoft.App`, `.Network`, `.Storage`, `.KeyVault`,
+`.DBforPostgreSQL`, `.CognitiveServices`, `.OperationalInsights`, `.Insights`, `.Cdn`, and
+`.ManagedIdentity` — and fails in seconds with the exact `az provider register` command rather
+than partway through apply. It previously checked only two of the ten, so the *class* of blocker
+R-007 describes was real and largely unguarded; it is now closed for every provider at once, not
+just this one.
 
-**Impact if unresolved**
-Every Azure deploy attempt fails partway through apply, leaving the environment in a partially
-provisioned state and consuming a full apply cycle per attempt.
+**If a future change reintroduces alerting**
+Add `Microsoft.AlertsManagement` to `REQUIRED_PROVIDERS` in `100-validate-prereqs.yml` in the same
+commit as the alert resource, and reopen this item — the registration is still a subscription-level
+operation the deploy identity cannot perform itself.
 
 **References**
-- `.github/workflows/211-deploy-azure-split.yml`
-- `infra/terraform/environments/azure/{dev,prod}/workload/`
-
-**Recommended next step**
-Add the registration check to workflow `100-validate-prereqs.yml` once the subscription owner has
-registered it, so the failure cannot recur silently (engineering follow-up: `TODO.md` → T-104).
+- `.github/workflows/100-validate-prereqs.yml` (the `REQUIRED_PROVIDERS` list)
+- `infra/terraform/providers/azure/observability/`
+- `TODO.md` → T-104
 
 ---
 
@@ -320,7 +328,8 @@ of code readiness.
 - [`CHANGELOG.md`](CHANGELOG.md) → `[0.8.0-beta]`
 
 **Recommended next step**
-Book the deploy window. R-007 must be cleared first or the run will fail during apply.
+Book the deploy window. R-007 no longer blocks it — see that item; provider registration is now
+asserted by workflow `100-validate-prereqs.yml`, which should be run first regardless.
 
 ---
 
