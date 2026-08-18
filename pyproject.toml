@@ -144,14 +144,11 @@ omit = [
     "*/__init__.py",
     "*/migrations/*",
 
-    # Azure discovery — omitted only because it is still at 22% (TODO.md T-408).
-    # NOT because it needs a live tenant: the premise this block used to state was
-    # false. `tests/unit/test_azure_discovery.py` drives the whole module with
-    # MagicMock and makes no network call, exactly as the AWS equivalent does.
-    # aws_discovery.py was removed from this list at 98%; remove this line too
-    # once azure_discovery.py clears ~80% on its own. Do not lower fail_under to
-    # compensate — that weakens the gate for the whole package to suit one file.
-    "cna/modules/network/discovery/azure_discovery.py",
+    # Both discovery orchestrators used to be omitted here, on the stated premise
+    # that they "require live AWS/Azure API calls against real tenants". That was
+    # never true — their tests are fully mocked — and it kept 1,542 statements out
+    # of the fail_under gate. Both are measured now (TODO.md T-408). Do not add
+    # them back.
 
     # Diagram generation — require graphviz binary + drawio runtime
     # (Round 3: add `apt-get install graphviz` to CI and remove these)

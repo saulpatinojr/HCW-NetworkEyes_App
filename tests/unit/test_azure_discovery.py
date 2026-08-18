@@ -21,11 +21,17 @@ import pytest
 from azure.core.exceptions import HttpResponseError
 
 from cna.core.exceptions import CNAAuthError
-from cna.core.topology_schema import AzureSubscriptionTopology, SubnetType
+from cna.core.topology_schema import (
+    AppGatewayMetric,
+    AzureSubscriptionTopology,
+    NetworkMetrics,
+    SubnetType,
+)
 from cna.modules.network.discovery.azure_discovery import (
     AzureDiscovery,
     AzureDiscoveryOptions,
     _classify_subnet,
+    _MetricsContext,
     _rg_from_id,
     _safe_list,
     _sub_from_id,
@@ -1098,22 +1104,24 @@ class TestCollectLoadBalancers:
 
 class TestCollectVnetGateways:
     def _gw(self, **over):
-        base = dict(
-            id="/subscriptions/sub-0001/resourceGroups/rg-net/providers/"
+        base = {
+            "id": "/subscriptions/sub-0001/resourceGroups/rg-net/providers/"
             "Microsoft.Network/virtualNetworkGateways/vgw-1",
-            name="vgw-1",
-            location="eastus",
-            gateway_type="Vpn",
-            vpn_type="RouteBased",
-            sku=_Arm(name="VpnGw2", tier="VpnGw2"),
-            bgp_settings=_Arm(asn=65515, bgp_peering_address="10.0.255.4"),
-            ip_configurations=[_Arm(public_ip_address=_Arm(id="pip-1"), subnet=_Arm(id="gwsub"))],
-            active_active=True,
-            enable_bgp=True,
-            vpn_gateway_generation="Generation2",
-            zones=["1"],
-            tags={},
-        )
+            "name": "vgw-1",
+            "location": "eastus",
+            "gateway_type": "Vpn",
+            "vpn_type": "RouteBased",
+            "sku": _Arm(name="VpnGw2", tier="VpnGw2"),
+            "bgp_settings": _Arm(asn=65515, bgp_peering_address="10.0.255.4"),
+            "ip_configurations": [
+                _Arm(public_ip_address=_Arm(id="pip-1"), subnet=_Arm(id="gwsub"))
+            ],
+            "active_active": True,
+            "enable_bgp": True,
+            "vpn_gateway_generation": "Generation2",
+            "zones": ["1"],
+            "tags": {},
+        }
         base.update(over)
         return _Arm(**base)
 
@@ -1169,18 +1177,18 @@ class TestCollectVnetGateways:
 
 class TestCollectGatewayConnections:
     def _conn(self, gw_id, **over):
-        base = dict(
-            id="/subscriptions/s/resourceGroups/rg/providers/x/conn-1",
-            name="conn-1",
-            connection_type="IPsec",
-            connection_status="Connected",
-            virtual_network_gateway1=_Arm(id=gw_id),
-            routing_weight=10,
-            enable_bgp=True,
-            use_policy_based_traffic_selectors=False,
-            egress_bytes_transferred=100,
-            ingress_bytes_transferred=200,
-        )
+        base = {
+            "id": "/subscriptions/s/resourceGroups/rg/providers/x/conn-1",
+            "name": "conn-1",
+            "connection_type": "IPsec",
+            "connection_status": "Connected",
+            "virtual_network_gateway1": _Arm(id=gw_id),
+            "routing_weight": 10,
+            "enable_bgp": True,
+            "use_policy_based_traffic_selectors": False,
+            "egress_bytes_transferred": 100,
+            "ingress_bytes_transferred": 200,
+        }
         base.update(over)
         return _Arm(**base)
 
@@ -1399,3 +1407,927 @@ class TestCollectPrivateEndpoints:
         ]
 
         assert discovery._collect_private_endpoints(net, "sub-0001")[0].subnet_id == ""
+
+
+class TestCollectFirewallsIpConfigurations:
+    """Complements TestCollectFirewalls above, which leaves ip_configurations empty."""
+
+    def test_maps_sku_subnet_and_public_ips(self, discovery):
+        net = MagicMock()
+        net.azure_firewalls.list_all.return_value = [
+            _Arm(
+                id="/subscriptions/sub-0001/resourceGroups/rg-net/providers/x/afw-1",
+                name="afw-1",
+                location="eastus",
+                sku=_Arm(tier="Premium"),
+                ip_configurations=[
+                    _Arm(
+                        subnet=_Arm(id="AzureFirewallSubnet-id"), public_ip_address=_Arm(id="pip-1")
+                    ),
+                    _Arm(public_ip_address=_Arm(id="pip-2")),
+                ],
+                firewall_policy=_Arm(id="pol-1"),
+                threat_intel_mode="Deny",
+                zones=["1", "2", "3"],
+                tags={},
+            )
+        ]
+
+        fw = discovery._collect_firewalls(net, "sub-0001")[0]
+
+        assert fw.sku_tier == "Premium"
+        assert fw.subnet_id == "AzureFirewallSubnet-id"
+        assert fw.public_ip_ids == ["pip-1", "pip-2"]
+        assert fw.policy_id == "pol-1"
+        assert fw.threat_intel_mode == "Deny"
+
+    def test_falls_back_to_the_id_when_the_name_is_missing(self, discovery):
+        net = MagicMock()
+        net.azure_firewalls.list_all.return_value = [
+            _Arm(id="/subscriptions/s/resourceGroups/rg/providers/x/afw-fallback")
+        ]
+
+        fw = discovery._collect_firewalls(net, "sub-0001")[0]
+
+        assert fw.name == "afw-fallback"
+        assert fw.sku_tier == "Standard"
+        assert fw.threat_intel_mode == "Alert"
+
+
+class TestCollectAppGateways:
+    def _agw(self, **over):
+        base = {
+            "id": "/subscriptions/sub-0001/resourceGroups/rg-net/providers/x/agw-1",
+            "name": "agw-1",
+            "location": "eastus",
+            "sku": _Arm(name="WAF_v2", capacity=2),
+            "gateway_ip_configurations": [_Arm(subnet=_Arm(id="agw-subnet"))],
+            "frontend_ip_configurations": [_Arm(name="fe-public"), _Arm(name="fe-private")],
+            "ssl_policy": _Arm(policy_name="AppGwSslPolicy20220101S"),
+            "zones": ["1"],
+            "tags": {},
+        }
+        base.update(over)
+        return _Arm(**base)
+
+    def test_maps_inline_waf_configuration(self, discovery):
+        net = MagicMock()
+        net.application_gateways.list_all.return_value = [
+            self._agw(
+                web_application_firewall_configuration=_Arm(
+                    enabled=True,
+                    firewall_mode="Prevention",
+                    rule_set_type="OWASP",
+                    rule_set_version="3.2",
+                )
+            )
+        ]
+
+        agw = discovery._collect_appgws(net, "sub-0001")[0]
+
+        assert agw.sku_name == "WAF_v2"
+        assert agw.sku_capacity == 2
+        assert agw.waf_enabled is True
+        assert agw.waf_mode == "Prevention"
+        assert agw.waf_rule_set_version == "3.2"
+        assert agw.subnet_id == "agw-subnet"
+        assert agw.frontend_ip_configs == ["fe-public", "fe-private"]
+        assert agw.ssl_policy_name == "AppGwSslPolicy20220101S"
+
+    def test_an_attached_waf_policy_enables_waf_even_without_inline_config(self, discovery):
+        """A WAF policy supersedes the deprecated inline block; both mean WAF is on."""
+        net = MagicMock()
+        net.application_gateways.list_all.return_value = [
+            self._agw(firewall_policy=_Arm(id="wafpol-1"))
+        ]
+
+        assert discovery._collect_appgws(net, "sub-0001")[0].waf_enabled is True
+
+    def test_no_waf_config_and_no_policy_means_waf_off(self, discovery):
+        net = MagicMock()
+        net.application_gateways.list_all.return_value = [self._agw()]
+
+        agw = discovery._collect_appgws(net, "sub-0001")[0]
+
+        assert agw.waf_enabled is False
+        assert agw.waf_mode is None
+
+    def test_reads_autoscale_bounds(self, discovery):
+        net = MagicMock()
+        net.application_gateways.list_all.return_value = [
+            self._agw(autoscale_configuration=_Arm(min_capacity=2, max_capacity=10))
+        ]
+
+        agw = discovery._collect_appgws(net, "sub-0001")[0]
+
+        assert (agw.autoscale_min, agw.autoscale_max) == (2, 10)
+
+    def test_defaults_when_the_sku_block_is_absent(self, discovery):
+        net = MagicMock()
+        net.application_gateways.list_all.return_value = [
+            self._agw(sku=None, gateway_ip_configurations=[], ssl_policy=None)
+        ]
+
+        agw = discovery._collect_appgws(net, "sub-0001")[0]
+
+        assert agw.sku_name == "Standard_v2"
+        assert agw.subnet_id == ""
+        assert agw.ssl_policy_name is None
+
+
+class TestCollectRouteServers:
+    def _hub(self, kind="RouteServer"):
+        return _Arm(
+            id="/subscriptions/sub-0001/resourceGroups/rg-net/providers/x/rs-1",
+            name="rs-1",
+            location="eastus",
+            kind=kind,
+            virtual_router_asn=65515,
+            virtual_router_ips=["10.0.1.4", "10.0.1.5"],
+            allow_branch_to_branch_traffic=True,
+            tags={},
+        )
+
+    def test_skips_hubs_that_are_not_route_servers(self, discovery):
+        """Route Servers and vWAN hubs share the virtual_hubs collection."""
+        net = MagicMock()
+        net.virtual_hubs.list.return_value = [self._hub(kind="VirtualWAN")]
+
+        assert discovery._collect_route_servers(net, "sub-0001") == []
+
+    def test_maps_the_hosted_subnet_and_derives_the_vnet(self, discovery):
+        net = MagicMock()
+        net.virtual_hubs.list.return_value = [self._hub()]
+        net.virtual_hub_ip_configuration.list.return_value = [
+            _Arm(
+                subnet=_Arm(
+                    id="/subscriptions/s/.../virtualNetworks/vnet-1/subnets/RouteServerSubnet"
+                )
+            )
+        ]
+        net.virtual_hub_bgp_connections.list.return_value = []
+
+        rs = discovery._collect_route_servers(net, "sub-0001")[0]
+
+        assert rs.hosted_subnet_id.endswith("/subnets/RouteServerSubnet")
+        assert rs.vnet_id == "/subscriptions/s/.../virtualNetworks/vnet-1"
+        assert rs.virtual_router_asn == 65515
+        assert rs.allow_branch_to_branch_traffic is True
+
+    def test_maps_bgp_peer_connections(self, discovery):
+        net = MagicMock()
+        net.virtual_hubs.list.return_value = [self._hub()]
+        net.virtual_hub_ip_configuration.list.return_value = []
+        net.virtual_hub_bgp_connections.list.return_value = [
+            _Arm(
+                id="conn-1",
+                name="peer-nva",
+                peer_ip="10.0.2.4",
+                peer_asn=65001,
+                connection_state="Connected",
+            )
+        ]
+
+        rs = discovery._collect_route_servers(net, "sub-0001")[0]
+
+        assert rs.vnet_id is None, "no hosted subnet means no derivable VNet"
+        assert rs.bgp_connections[0].peer_asn == 65001
+        assert rs.bgp_connections[0].provisioning_state == "Succeeded"
+
+
+class TestCollectPrivateDns:
+    def _client(self, zones, links):
+        client = MagicMock()
+        client.return_value.private_zones.list.return_value = zones
+        client.return_value.virtual_network_links.list.return_value = links
+        return client
+
+    def test_maps_zones_and_their_vnet_links(self, discovery):
+        discovery._credential = MagicMock()
+        client = self._client(
+            zones=[
+                _Arm(
+                    id="/subscriptions/sub-0001/resourceGroups/rg-dns/providers/x/"
+                    "privatelink.blob.core.windows.net",
+                    name="privatelink.blob.core.windows.net",
+                    number_of_record_sets=7,
+                )
+            ],
+            links=[
+                _Arm(
+                    name="link-hub", virtual_network=_Arm(id="vnet-hub"), registration_enabled=True
+                ),
+                _Arm(name="link-spoke", virtual_network=_Arm(id="vnet-spoke")),
+            ],
+        )
+
+        with patch.dict(
+            "sys.modules",
+            {"azure.mgmt.privatedns": MagicMock(PrivateDnsManagementClient=client)},
+        ):
+            zones = discovery._collect_private_dns("sub-0001")
+
+        assert len(zones) == 1
+        zone = zones[0]
+        assert zone.resource_group == "rg-dns"
+        assert zone.linked_vnet_ids == ["vnet-hub", "vnet-spoke"]
+        assert zone.linked_vnet_names == ["link-hub", "link-spoke"]
+        assert zone.auto_registration_enabled is True
+        assert zone.record_count == 7
+
+    def test_missing_sdk_returns_empty(self, discovery):
+        discovery._credential = MagicMock()
+        with patch.dict("sys.modules", {"azure.mgmt.privatedns": None}):
+            assert discovery._collect_private_dns("sub-0001") == []
+
+    def test_a_query_failure_returns_empty_rather_than_raising(self, discovery):
+        discovery._credential = MagicMock()
+        client = MagicMock()
+        client.return_value.private_zones.list.side_effect = RuntimeError("403")
+        with patch.dict(
+            "sys.modules",
+            {"azure.mgmt.privatedns": MagicMock(PrivateDnsManagementClient=client)},
+        ):
+            assert discovery._collect_private_dns("sub-0001") == []
+
+
+class TestIdentifyNvaPublisher:
+    def test_marketplace_plan_from_a_known_vendor(self, discovery):
+        vm = _Arm(plan=_Arm(publisher="PaloAltoNetworks", product="vmseries-flex", name="byol"))
+
+        pub, offer, plan, method = discovery._identify_nva_publisher(vm)
+
+        assert (pub, offer, plan, method) == (
+            "PaloAltoNetworks",
+            "vmseries-flex",
+            "byol",
+            "marketplace",
+        )
+
+    def test_falls_back_to_the_image_reference_for_byol_images(self, discovery):
+        vm = _Arm(
+            storage_profile=_Arm(
+                image_reference=_Arm(
+                    publisher="fortinet", offer="fortinet_fortigate-vm_v5", sku="fortinet_fg-vm"
+                )
+            )
+        )
+
+        pub, offer, plan, method = discovery._identify_nva_publisher(vm)
+
+        assert method == "image_reference"
+        assert (pub, offer, plan) == ("fortinet", "fortinet_fortigate-vm_v5", "fortinet_fg-vm")
+
+    def test_an_unknown_publisher_matches_nothing(self, discovery):
+        vm = _Arm(
+            plan=_Arm(publisher="Canonical"),
+            storage_profile=_Arm(image_reference=_Arm(publisher="Canonical")),
+        )
+
+        assert discovery._identify_nva_publisher(vm) == (None, None, None, None)
+
+    def test_a_vm_with_no_plan_or_image_matches_nothing(self, discovery):
+        assert discovery._identify_nva_publisher(_Arm()) == (None, None, None, None)
+
+
+class TestCollectVmNics:
+    def _vm(self, nic_ids):
+        return _Arm(
+            id="/subscriptions/s/resourceGroups/rg/providers/x/vm-1",
+            tags={},
+            network_profile=_Arm(network_interfaces=[_Arm(id=i) for i in nic_ids]),
+        )
+
+    def test_reports_ip_forwarding_and_maps_the_nic(self, discovery):
+        net = MagicMock()
+        net.network_interfaces.get.return_value = _Arm(
+            id="nic-1",
+            name="nic-1",
+            location="eastus",
+            enable_ip_forwarding=True,
+            network_security_group=_Arm(id="nsg-1"),
+            ip_configurations=[
+                _Arm(
+                    subnet=_Arm(id="subnet-1"),
+                    private_ip_address="10.0.0.4",
+                    public_ip_address=_Arm(id="pip-1"),
+                )
+            ],
+        )
+
+        nics, has_fwd = discovery._collect_vm_nics(
+            net, self._vm(["/subscriptions/s/resourceGroups/rg-net/x/nic-1"])
+        )
+
+        assert has_fwd is True
+        assert nics[0].subnet_ids == ["subnet-1"]
+        assert nics[0].private_ips == ["10.0.0.4"]
+        assert nics[0].public_ip_id == "pip-1"
+        assert nics[0].nsg_id == "nsg-1"
+        assert nics[0].resource_group == "rg-net"
+
+    def test_a_vm_without_a_network_profile_yields_nothing(self, discovery):
+        assert discovery._collect_vm_nics(MagicMock(), _Arm()) == ([], False)
+
+    def test_an_unreadable_nic_is_skipped_without_losing_the_vm(self, discovery):
+        net = MagicMock()
+        net.network_interfaces.get.side_effect = RuntimeError("403")
+
+        nics, has_fwd = discovery._collect_vm_nics(
+            net, self._vm(["/subscriptions/s/resourceGroups/rg/x/nic-1"])
+        )
+
+        assert (nics, has_fwd) == ([], False)
+
+
+class TestCollectNvas:
+    def _cmc(self, vms):
+        cmc = MagicMock()
+        cmc.return_value.virtual_machines.list_all.return_value = vms
+        return cmc
+
+    def _vm(self, **over):
+        base = {
+            "id": "/subscriptions/sub-0001/resourceGroups/rg-nva/providers/x/vm-1",
+            "name": "vm-1",
+            "location": "eastus",
+            "hardware_profile": _Arm(vm_size="Standard_D4s_v5"),
+            "storage_profile": _Arm(os_disk=_Arm(os_type="Linux")),
+            "network_profile": _Arm(network_interfaces=[]),
+            "tags": {},
+        }
+        base.update(over)
+        return _Arm(**base)
+
+    def test_identifies_a_marketplace_ngfw(self, discovery):
+        discovery._credential = MagicMock()
+        vm = self._vm(plan=_Arm(publisher="fortinet", product="fortigate", name="byol"))
+        with patch.dict(
+            "sys.modules",
+            {"azure.mgmt.compute": MagicMock(ComputeManagementClient=self._cmc([vm]))},
+        ):
+            nvas = discovery._collect_nvas(MagicMock(), "sub-0001")
+
+        assert len(nvas) == 1
+        assert nvas[0].identification_method == "marketplace"
+        assert nvas[0].vm_size == "Standard_D4s_v5"
+        assert nvas[0].os_type == "Linux"
+        assert nvas[0].resource_group == "rg-nva"
+
+    def test_a_plain_vm_with_ip_forwarding_still_counts_as_an_nva(self, discovery):
+        """Custom-built appliances have no recognisable publisher; forwarding is the tell."""
+        discovery._credential = MagicMock()
+        net = MagicMock()
+        net.network_interfaces.get.return_value = _Arm(
+            id="nic-1",
+            name="nic-1",
+            location="eastus",
+            enable_ip_forwarding=True,
+            ip_configurations=[],
+        )
+        vm = self._vm(
+            network_profile=_Arm(
+                network_interfaces=[_Arm(id="/subscriptions/s/resourceGroups/rg/x/nic-1")]
+            )
+        )
+        with patch.dict(
+            "sys.modules",
+            {"azure.mgmt.compute": MagicMock(ComputeManagementClient=self._cmc([vm]))},
+        ):
+            nvas = discovery._collect_nvas(net, "sub-0001")
+
+        assert nvas[0].identification_method == "ip_forwarding"
+
+    def test_an_ordinary_vm_is_not_reported(self, discovery):
+        discovery._credential = MagicMock()
+        with patch.dict(
+            "sys.modules",
+            {"azure.mgmt.compute": MagicMock(ComputeManagementClient=self._cmc([self._vm()]))},
+        ):
+            assert discovery._collect_nvas(MagicMock(), "sub-0001") == []
+
+    def test_missing_sdk_returns_empty(self, discovery):
+        with patch.dict("sys.modules", {"azure.mgmt.compute": None}):
+            assert discovery._collect_nvas(MagicMock(), "sub-0001") == []
+
+
+class TestCollectBgpData:
+    def _gw(self, **over):
+        base = {
+            "id": "gw-1",
+            "name": "vgw-1",
+            "gateway_type": "Vpn",
+            "enable_bgp": True,
+            "bgp_asn": 65515,
+            "resource_group": "rg-net",
+        }
+        base.update(over)
+        return _Arm(**base)
+
+    def test_skips_expressroute_gateways(self, discovery):
+        assert (
+            discovery._collect_bgp_data(
+                MagicMock(), "sub-0001", [self._gw(gateway_type="ExpressRoute")]
+            )
+            == []
+        )
+
+    def test_a_gateway_without_bgp_is_recorded_but_not_queried(self, discovery):
+        net = MagicMock()
+
+        data = discovery._collect_bgp_data(net, "sub-0001", [self._gw(enable_bgp=False)])
+
+        assert len(data) == 1
+        assert data[0].bgp_enabled is False
+        assert data[0].peers == []
+        net.virtual_network_gateways.begin_get_bgp_peer_status.assert_not_called()
+
+    def test_collects_peers_learned_and_advertised_routes(self, discovery):
+        net = MagicMock()
+        net.virtual_network_gateways.begin_get_bgp_peer_status.return_value.result.return_value = (
+            _Arm(
+                value=[
+                    _Arm(
+                        neighbor="10.0.0.1",
+                        asn=65001,
+                        bgp_peer_state="Connected",
+                        messages_sent=10,
+                        messages_received=12,
+                        routes_received=5,
+                        connected_duration="1:00:00",
+                    )
+                ]
+            )
+        )
+        net.virtual_network_gateways.begin_get_learned_routes.return_value.result.return_value = (
+            _Arm(value=[_Arm(network="10.1.0.0/16"), _Arm()])
+        )
+        net.virtual_network_gateways.begin_get_advertised_routes.return_value.result.return_value = _Arm(
+            value=[_Arm(network="10.0.0.0/16")]
+        )
+
+        item = discovery._collect_bgp_data(net, "sub-0001", [self._gw()])[0]
+
+        assert item.peers[0].peer_asn == 65001
+        assert item.peers[0].state == "Connected"
+        assert item.learned_routes_count == 2
+        assert item.learned_routes == ["10.1.0.0/16"], "routes without a network are dropped"
+        assert item.advertised_routes == ["10.0.0.0/16"]
+        assert item.collection_error is None
+
+    def test_peer_and_route_failures_are_both_recorded_in_one_error(self, discovery):
+        """These are long-running ARM operations that time out independently."""
+        net = MagicMock()
+        net.virtual_network_gateways.begin_get_bgp_peer_status.side_effect = RuntimeError("timeout")
+        net.virtual_network_gateways.begin_get_learned_routes.side_effect = RuntimeError("denied")
+
+        item = discovery._collect_bgp_data(net, "sub-0001", [self._gw()])[0]
+
+        assert "BGP peers" in item.collection_error
+        assert "Learned routes" in item.collection_error
+
+    def test_advertised_routes_are_skipped_when_there_are_no_peers(self, discovery):
+        net = MagicMock()
+        net.virtual_network_gateways.begin_get_bgp_peer_status.return_value.result.return_value = (
+            _Arm(value=[])
+        )
+        net.virtual_network_gateways.begin_get_learned_routes.return_value.result.return_value = (
+            _Arm(value=[])
+        )
+
+        discovery._collect_bgp_data(net, "sub-0001", [self._gw()])
+
+        net.virtual_network_gateways.begin_get_advertised_routes.assert_not_called()
+
+
+def _metric(name, *, totals=None, averages=None, maximums=None):
+    """Build one Azure Monitor metric result with a single timeseries."""
+    points = []
+    for seq, attr in ((totals, "total"), (averages, "average"), (maximums, "maximum")):
+        for i, v in enumerate(seq or []):
+            while len(points) <= i:
+                points.append(_Arm())
+            setattr(points[i], attr, v)
+    return _Arm(name=_Arm(value=name), timeseries=[_Arm(data=points)])
+
+
+def _monitor_returning(*metrics):
+    monitor = MagicMock()
+    monitor.metrics.list.return_value = _Arm(value=list(metrics))
+    return monitor
+
+
+class TestMetricAggregationHelpers:
+    def test_sum_metric_total_ignores_none_points(self):
+        assert AzureDiscovery._sum_metric_total(_metric("m", totals=[1.0, None, 2.5])) == 3.5
+
+    def test_avg_metric_values_collects_only_populated_points(self):
+        assert AzureDiscovery._avg_metric_values(_metric("m", averages=[1.0, None, 3.0])) == [
+            1.0,
+            3.0,
+        ]
+
+    def test_max_metric_maximum_defaults_to_zero_when_empty(self):
+        assert AzureDiscovery._max_metric_maximum(_metric("m")) == 0
+
+    def test_max_metric_maximum_picks_the_largest(self):
+        assert AzureDiscovery._max_metric_maximum(_metric("m", maximums=[1, 9, 4])) == 9
+
+
+class TestGatewayMetrics:
+    def _gw(self, sku="VpnGw2"):
+        return _Arm(id="gw-1", name="vgw-1", gateway_type="Vpn", sku_name=sku)
+
+    def test_computes_utilization_against_the_provisioned_sku_bandwidth(self, discovery):
+        metrics = NetworkMetrics()
+        # VpnGw2 is 1000 Mbps; 500 Mbps average is 50%.
+        monitor = _monitor_returning(
+            _metric("TunnelIngressBytes", totals=[1000.0]),
+            _metric("TunnelEgressBytes", totals=[2000.0]),
+            _metric("AverageBandwidth", averages=[500_000_000.0]),
+        )
+
+        discovery._collect_gateway_metrics("sub-1", [self._gw()], monitor, "ts", metrics)
+
+        gm = metrics.gateway_metrics[0]
+        assert gm.ingress_bytes_24h == 1000.0
+        assert gm.egress_bytes_24h == 2000.0
+        assert gm.bandwidth_mbps_provisioned == 1000
+        assert gm.utilization_pct == 50.0
+
+    def test_an_unknown_sku_has_no_provisioned_bandwidth_and_no_utilization(self, discovery):
+        metrics = NetworkMetrics()
+        monitor = _monitor_returning(_metric("AverageBandwidth", averages=[500_000_000.0]))
+
+        discovery._collect_gateway_metrics("sub-1", [self._gw(sku="Basic")], monitor, "ts", metrics)
+
+        assert metrics.gateway_metrics[0].bandwidth_mbps_provisioned is None
+        assert metrics.gateway_metrics[0].utilization_pct is None
+
+    def test_a_query_failure_still_records_the_gateway(self, discovery):
+        metrics = NetworkMetrics()
+        monitor = MagicMock()
+        monitor.metrics.list.side_effect = RuntimeError("throttled")
+
+        discovery._collect_gateway_metrics("sub-1", [self._gw()], monitor, "ts", metrics)
+
+        assert len(metrics.gateway_metrics) == 1
+
+    def test_caps_at_five_gateways(self, discovery):
+        metrics = NetworkMetrics()
+        monitor = _monitor_returning()
+
+        discovery._collect_gateway_metrics("sub-1", [self._gw()] * 9, monitor, "ts", metrics)
+
+        assert len(metrics.gateway_metrics) == 5
+
+
+class TestFirewallMetrics:
+    def test_converts_bytes_to_gigabytes_and_maps_rule_hits(self, discovery):
+        metrics = NetworkMetrics()
+        monitor = _monitor_returning(
+            _metric("DataProcessed", totals=[1_073_741_824.0 * 2]),
+            _metric("ApplicationRuleHit", totals=[10.0]),
+            _metric("NetworkRuleHit", totals=[20.0]),
+            _metric("NatRuleHit", totals=[5.0]),
+        )
+
+        discovery._collect_firewall_metrics(
+            "sub-1", [_Arm(id="fw-1", name="afw-1")], monitor, "ts", metrics
+        )
+
+        fm = metrics.firewall_metrics[0]
+        assert fm.data_processed_gb_24h == 2.0
+        assert (fm.app_rule_hits_24h, fm.network_rule_hits_24h, fm.nat_rule_hits_24h) == (10, 20, 5)
+
+    def test_records_the_error_on_the_firewall_metric_itself(self, discovery):
+        metrics = NetworkMetrics()
+        monitor = MagicMock()
+        monitor.metrics.list.side_effect = RuntimeError("no Microsoft.Insights read")
+
+        discovery._collect_firewall_metrics(
+            "sub-1", [_Arm(id="fw-1", name="afw-1")], monitor, "ts", metrics
+        )
+
+        assert "no Microsoft.Insights read" in metrics.firewall_metrics[0].collection_error
+
+
+class TestLoadBalancerMetrics:
+    def test_computes_snat_port_utilization(self, discovery):
+        metrics = NetworkMetrics()
+        monitor = _monitor_returning(
+            _metric("SnatConnectionCount", totals=[100.0]),
+            _metric("UsedSnatPorts", averages=[512.0]),
+            _metric("AllocatedSnatPorts", averages=[1024.0]),
+        )
+
+        discovery._collect_lb_metrics(
+            "sub-1", [_Arm(id="lb-1", name="lb-1")], monitor, "ts", metrics
+        )
+
+        lm = metrics.lb_metrics[0]
+        assert lm.snat_connections_24h == 100.0
+        assert (lm.used_snat_ports, lm.allocated_snat_ports) == (512.0, 1024.0)
+        assert lm.snat_port_utilization_pct == 50.0
+
+    def test_no_allocated_ports_means_no_utilization_rather_than_a_divide_by_zero(self, discovery):
+        metrics = NetworkMetrics()
+        monitor = _monitor_returning(_metric("UsedSnatPorts", averages=[512.0]))
+
+        discovery._collect_lb_metrics(
+            "sub-1", [_Arm(id="lb-1", name="lb-1")], monitor, "ts", metrics
+        )
+
+        assert metrics.lb_metrics[0].snat_port_utilization_pct is None
+
+    def test_caps_at_ten_load_balancers(self, discovery):
+        metrics = NetworkMetrics()
+        discovery._collect_lb_metrics(
+            "sub-1", [_Arm(id="lb", name="lb")] * 14, _monitor_returning(), "ts", metrics
+        )
+        assert len(metrics.lb_metrics) == 10
+
+
+class TestExpressRouteMetrics:
+    def test_computes_utilization_against_the_provisioned_circuit_bandwidth(self, discovery):
+        metrics = NetworkMetrics()
+        # 1000 Mbps circuit; 500 Mbps in is 50%.
+        monitor = _monitor_returning(
+            _metric("BitsInPerSecond", averages=[500_000_000.0]),
+            _metric("BitsOutPerSecond", averages=[250_000_000.0]),
+        )
+
+        discovery._collect_er_metrics(
+            "sub-1", [_Arm(id="erc-1", name="erc-1", bandwidth_mbps=1000)], monitor, "ts", metrics
+        )
+
+        em = metrics.er_circuit_metrics[0]
+        assert em.primary_utilization_pct == 50.0
+        assert em.secondary_utilization_pct == 25.0
+
+    def test_a_circuit_without_a_declared_bandwidth_reports_rates_but_no_percentage(
+        self, discovery
+    ):
+        metrics = NetworkMetrics()
+        monitor = _monitor_returning(_metric("BitsInPerSecond", averages=[500_000_000.0]))
+
+        discovery._collect_er_metrics(
+            "sub-1", [_Arm(id="erc-1", name="erc-1", bandwidth_mbps=0)], monitor, "ts", metrics
+        )
+
+        em = metrics.er_circuit_metrics[0]
+        assert em.primary_bits_in_per_second == 500_000_000.0
+        assert em.primary_utilization_pct is None
+
+
+class TestDdosMetrics:
+    def test_records_an_ip_under_attack(self, discovery):
+        metrics = NetworkMetrics()
+        monitor = _monitor_returning(_metric("IfUnderDDoSAttack", maximums=[1]))
+
+        discovery._collect_ddos_metrics(
+            "sub-1", [_Arm(id="pip-1", ip_address="20.1.2.3")], monitor, "ts", metrics
+        )
+
+        assert metrics.ddos_attack_events_24h == 1
+        assert metrics.public_ips_under_ddos_attack == ["20.1.2.3"]
+
+    def test_a_quiet_ip_is_not_recorded(self, discovery):
+        metrics = NetworkMetrics()
+        monitor = _monitor_returning(_metric("IfUnderDDoSAttack", maximums=[0]))
+
+        discovery._collect_ddos_metrics(
+            "sub-1", [_Arm(id="pip-1", ip_address="20.1.2.3")], monitor, "ts", metrics
+        )
+
+        assert metrics.ddos_attack_events_24h == 0
+        assert metrics.public_ips_under_ddos_attack == []
+
+
+class TestComputeVnetUtilization:
+    def test_computes_allocated_over_total_address_space(self, discovery):
+        metrics = NetworkMetrics()
+        # /16 = 65536 addresses; two /24s = 512 → 0.8%
+        vnet = _Arm(
+            id="vnet-1",
+            address_space=["10.0.0.0/16"],
+            subnets=[_Arm(address_prefix="10.0.1.0/24"), _Arm(address_prefix="10.0.2.0/24")],
+        )
+
+        discovery._compute_vnet_utilization([vnet], metrics)
+
+        assert metrics.vnet_utilization["vnet-1"] == 0.8
+
+    def test_a_vnet_with_no_address_space_is_skipped(self, discovery):
+        metrics = NetworkMetrics()
+        discovery._compute_vnet_utilization([_Arm(id="vnet-1", address_space=[])], metrics)
+        assert metrics.vnet_utilization == {}
+
+    def test_a_malformed_prefix_is_skipped_rather_than_raising(self, discovery):
+        metrics = NetworkMetrics()
+        discovery._compute_vnet_utilization(
+            [_Arm(id="vnet-1", address_space=["not-a-cidr"])], metrics
+        )
+        assert metrics.vnet_utilization == {}
+
+
+class TestNtaMetrics:
+    def _logs_client(self, rows, status_success=True):
+        from azure.monitor.query import LogsQueryStatus
+
+        client = MagicMock()
+        client.return_value.query_workspace.return_value = _Arm(
+            status=LogsQueryStatus.SUCCESS if status_success else "PartialFailure",
+            tables=[_Arm(rows=rows)],
+        )
+        return client
+
+    def test_no_workspaces_means_no_query(self, discovery):
+        metrics = NetworkMetrics()
+        discovery._collect_nta_metrics("sub-1", [], metrics)
+        assert metrics.nta_query_workspace_id is None
+
+    def test_splits_east_west_from_north_south_traffic(self, discovery):
+        discovery._credential = MagicMock()
+        metrics = NetworkMetrics()
+        client = self._logs_client([["E", 100.0], ["I", 20.0], ["O", 30.0]])
+
+        with patch("azure.monitor.query.LogsQueryClient", client):
+            discovery._collect_nta_metrics("sub-1", [{"workspace_id": "ws-1"}], metrics)
+
+        assert metrics.nta_east_west_bytes_24h == 100.0
+        assert metrics.nta_north_south_bytes_24h == 50.0
+        assert metrics.nta_query_workspace_id == "ws-1"
+
+    def test_skips_workspaces_with_no_id_and_stops_at_the_first_success(self, discovery):
+        discovery._credential = MagicMock()
+        metrics = NetworkMetrics()
+        client = self._logs_client([["IntraVNet", 7.0]])
+
+        with patch("azure.monitor.query.LogsQueryClient", client):
+            discovery._collect_nta_metrics(
+                "sub-1", [{"workspace_id": ""}, {"id": "ws-2"}, {"workspace_id": "ws-3"}], metrics
+            )
+
+        assert metrics.nta_query_workspace_id == "ws-2"
+        assert client.return_value.query_workspace.call_count == 1
+
+    def test_a_query_failure_leaves_the_metrics_untouched(self, discovery):
+        discovery._credential = MagicMock()
+        metrics = NetworkMetrics()
+        client = MagicMock()
+        client.return_value.query_workspace.side_effect = RuntimeError("no Log Analytics Reader")
+
+        with patch("azure.monitor.query.LogsQueryClient", client):
+            discovery._collect_nta_metrics("sub-1", [{"workspace_id": "ws-1"}], metrics)
+
+        assert metrics.nta_query_workspace_id is None
+
+
+class TestApplyAppgwMetric:
+    def test_capacity_units_records_both_average_and_maximum(self):
+        agm = AppGatewayMetric(appgw_name="agw-1")
+        AzureDiscovery._apply_appgw_metric(
+            _metric("CapacityUnits", averages=[2.0, 4.0], maximums=[3.0, 8.0]), agm
+        )
+        assert agm.capacity_units_avg == 3.0
+        assert agm.capacity_units_max == 8.0
+
+    def test_backend_latency_is_averaged(self):
+        agm = AppGatewayMetric(appgw_name="agw-1")
+        AzureDiscovery._apply_appgw_metric(
+            _metric("BackendLastByteResponseTime", averages=[10.0, 20.0]), agm
+        )
+        assert agm.backend_latency_ms_avg == 15.0
+
+    @pytest.mark.parametrize(
+        "name,attr",
+        [
+            ("FailedRequests", "failed_requests_24h"),
+            ("TotalRequests", "total_requests_24h"),
+            ("ApplicationGatewayWAFRuleMatches", "waf_rule_hits_24h"),
+        ],
+    )
+    def test_counter_metrics_are_summed_as_integers(self, name, attr):
+        agm = AppGatewayMetric(appgw_name="agw-1")
+        AzureDiscovery._apply_appgw_metric(_metric(name, totals=[1.0, 2.0]), agm)
+        assert getattr(agm, attr) == 3
+
+    def test_an_unrecognised_metric_is_ignored(self):
+        agm = AppGatewayMetric(appgw_name="agw-1")
+        AzureDiscovery._apply_appgw_metric(_metric("SomethingNew", totals=[5.0]), agm)
+        assert agm.total_requests_24h is None, "the field is left unset, not zeroed"
+
+
+class TestAppgwMetrics:
+    def test_skips_entirely_when_the_monitor_client_is_unavailable(self, discovery):
+        """`_collect_network_metrics` passes None when its own setup failed."""
+        metrics = NetworkMetrics()
+        discovery._collect_appgw_metrics("sub-1", [_Arm(id="a", name="agw-1")], None, "", metrics)
+        assert metrics.appgw_metrics == []
+
+    def test_records_the_error_on_the_metric_object(self, discovery):
+        metrics = NetworkMetrics()
+        monitor = MagicMock()
+        monitor.metrics.list.side_effect = RuntimeError("throttled")
+
+        discovery._collect_appgw_metrics(
+            "sub-1", [_Arm(id="a", name="agw-1")], monitor, "ts", metrics
+        )
+
+        assert "throttled" in metrics.appgw_metrics[0].collection_error
+
+
+class TestCollectNetworkMetrics:
+    def test_missing_monitor_sdk_reports_in_band_rather_than_raising(self, discovery):
+        ctx = _MetricsContext(sub_id="sub-1", gateways=[])
+        with patch.dict("sys.modules", {"azure.mgmt.monitor": None}):
+            metrics = discovery._collect_network_metrics(ctx)
+
+        assert metrics.collection_error == "azure-mgmt-monitor not installed"
+
+    def test_monitor_construction_failure_is_recorded_and_the_rest_still_runs(self, discovery):
+        """VNet utilization needs no API call, so it must survive a Monitor failure."""
+        discovery._credential = MagicMock()
+        ctx = _MetricsContext(
+            sub_id="sub-1",
+            gateways=[],
+            vnets=[
+                _Arm(
+                    id="vnet-1",
+                    address_space=["10.0.0.0/16"],
+                    subnets=[_Arm(address_prefix="10.0.1.0/24")],
+                )
+            ],
+        )
+        with patch("azure.mgmt.monitor.MonitorManagementClient", side_effect=RuntimeError("403")):
+            metrics = discovery._collect_network_metrics(ctx)
+
+        assert metrics.collection_error == "403"
+        assert metrics.vnet_utilization["vnet-1"] == 0.4
+
+
+class TestCollectFrontDoorWafPolicies:
+    def _policy(self, **over):
+        base = {
+            "id": "/subscriptions/sub-0001/resourceGroups/rg-waf/providers/x/wafpol-1",
+            "name": "wafpol-1",
+            "location": "global",
+            "sku": _Arm(name="Premium_AzureFrontDoor"),
+            "policy_settings": _Arm(mode="Prevention", enabled_state="Enabled"),
+            "custom_rules": _Arm(rules=[_Arm(), _Arm()]),
+            "managed_rules": _Arm(managed_rule_sets=[_Arm(rule_sets=[_Arm(), _Arm(), _Arm()])]),
+            "tags": {},
+        }
+        base.update(over)
+        return _Arm(**base)
+
+    def test_maps_a_front_door_policy(self, discovery):
+        discovery._credential = MagicMock()
+        net = MagicMock()
+        net.return_value.web_application_firewall_policies.list_all.return_value = [self._policy()]
+
+        with patch("azure.mgmt.network.NetworkManagementClient", net):
+            policies = discovery._collect_front_door_waf_policies("sub-0001")
+
+        assert len(policies) == 1
+        p = policies[0]
+        assert p.resource_group == "rg-waf"
+        assert p.policy_mode == "Prevention"
+        assert p.custom_rules_count == 2
+        assert p.managed_rules_count == 3
+
+    def test_application_gateway_policies_are_excluded(self, discovery):
+        """App Gateway WAF policies share the same ARM collection."""
+        discovery._credential = MagicMock()
+        net = MagicMock()
+        net.return_value.web_application_firewall_policies.list_all.return_value = [
+            self._policy(sku=_Arm(name="ApplicationGatewayWebApplicationFirewallPolicy"))
+        ]
+
+        with patch("azure.mgmt.network.NetworkManagementClient", net):
+            assert discovery._collect_front_door_waf_policies("sub-0001") == []
+
+    def test_defaults_when_policy_settings_are_absent(self, discovery):
+        discovery._credential = MagicMock()
+        net = MagicMock()
+        net.return_value.web_application_firewall_policies.list_all.return_value = [
+            self._policy(policy_settings=None, custom_rules=None, managed_rules=None, sku=None)
+        ]
+
+        with patch("azure.mgmt.network.NetworkManagementClient", net):
+            p = discovery._collect_front_door_waf_policies("sub-0001")[0]
+
+        assert p.policy_mode == "Detection"
+        assert p.policy_enabled_state == "Enabled"
+        assert (p.custom_rules_count, p.managed_rules_count) == (0, 0)
+
+    def test_an_enumeration_failure_returns_empty(self, discovery):
+        discovery._credential = MagicMock()
+        net = MagicMock()
+        net.return_value.web_application_firewall_policies.list_all.side_effect = RuntimeError(
+            "403"
+        )
+
+        with patch("azure.mgmt.network.NetworkManagementClient", net):
+            assert discovery._collect_front_door_waf_policies("sub-0001") == []

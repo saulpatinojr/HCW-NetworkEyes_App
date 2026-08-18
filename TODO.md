@@ -757,7 +757,7 @@ order; do not reorder it.
   mocked tests in the style T-403 established, and remove each `omit` line once its file clears
   ~80% on its own. Do not remove them in one step and lower `fail_under` to compensate — that
   weakens the gate for the whole package to accommodate two files.
-- **Status:** In progress — **`aws_discovery.py` is done and its `omit` line is gone.**
+- **Status:** Done — **both files are covered and both `omit` lines are gone.**
   46% → **98%** (380 statements, 6 missed), via 46 new tests in `tests/unit/test_aws_discovery.py`
   covering the collectors that had none: `_assume_role`, `_list_org_accounts`,
   `_get_enabled_regions`, `_discover_region`, `_collect_vpcs`, `_collect_igws`, `_collect_peering`,
@@ -774,12 +774,20 @@ order; do not reorder it.
   topology, in the diagrams, and in any rule counting VPC attachments. Replaced with a declared
   `_TGW_ATTACHMENT_TYPES` mapping covering all six wire values, and an unmapped value now logs a
   warning naming itself instead of failing silently. Parametrized over every value AWS returns.
-  **`azure_discovery.py` remains omitted at 22%** (1,189 statements, 930 missed). Reaching 80%
-  needs ~693 more covered statements spread over roughly 70 methods — the largest by uncovered
-  count are `_discover_subscription` (48), `_collect_bgp_data` (36), `_collect_appgws` (35),
-  `_collect_vm_nics` (29), `_collect_vnet_gateways` (28), and `_collect_load_balancers` (27), then
-  a long tail. Its `omit` comment has been corrected: it now says the file is omitted *because it
-  is at 22%*, not because it needs a live tenant, which was never true.
+  **`azure_discovery.py` is done too: 22% → 85%** (1,189 statements, 178 missed), across five
+  batches — the module helpers and subnet classifier; `_init_credentials`, `validate_access`, and
+  the subscription listing; `_collect_management_groups`; `_discover_subscription` itself (the
+  largest single block, including the fault-isolation contract that one failing collector must not
+  lose the subscription); the five phase-2 scans; the resource collectors; and the Azure Monitor
+  metrics group with its aggregation helpers.
+  **Both `omit` entries are gone and the gate now measures all 1,569 statements.** Package
+  coverage went *up*, 84% → **87%**, because both files landed above the package average — the
+  13-point shortfall the original estimate predicted never materialised, since it assumed the
+  files stayed at their then-current coverage.
+  A reusable `_Arm` test double carries the Azure work: the collectors read optional attributes
+  directly and coerce them (`int(x or 4)`), so a bare `MagicMock` is the wrong shape —
+  `int(MagicMock())` raises. `_Arm` returns `None` for anything not set, which is what the SDK
+  does for an unpopulated field.
 - **Notes for future engineers:** To measure honestly while the entry is still in place, run
   pytest with `--cov-config` pointing at a copy of the config with the line deleted; that is
   how the figures above were obtained. Also correct the misleading comment when the entries go —
