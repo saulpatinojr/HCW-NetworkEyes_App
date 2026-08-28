@@ -22,6 +22,7 @@ This repository keeps exactly four documents. Everything else lives in the
 | [`CHANGELOG.md`](CHANGELOG.md) | Completed work, by release |
 | [`REVIEW.md`](REVIEW.md) | Blockers that require a human decision, approval, or access grant |
 | [`TODO.md`](TODO.md) | The engineering work queue — every actionable item, phased |
+| [`CNA-0.90-updates.md`](CNA-0.90-updates.md) | *Temporary* — the 0.9.0 pre-demo review, cleanup record, and polish plan; retired when 0.9.0 ships |
 | [GitHub Wiki](https://github.com/saulpatinojr/Work-Cloud_Network_Assessment/wiki) | Architecture, ADRs, runbooks, workflow reference, security posture, deployment guides |
 
 If you are picking up work on this repository, start with `TODO.md`. If you are waiting on

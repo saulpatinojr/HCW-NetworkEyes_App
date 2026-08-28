@@ -37,7 +37,13 @@ ALLOWED_ROOT_DOCUMENTS = {
     "TODO.md",
 }
 
-_ALLOWED_ROOT_LOWER = {name.lower() for name in ALLOWED_ROOT_DOCUMENTS}
+# Allowed at the root but not required to exist — temporary working documents
+# with a planned retirement (removed again once their release ships).
+OPTIONAL_ROOT_DOCUMENTS = {
+    "CNA-0.90-updates.md",
+}
+
+_ALLOWED_ROOT_LOWER = {name.lower() for name in ALLOWED_ROOT_DOCUMENTS | OPTIONAL_ROOT_DOCUMENTS}
 
 # Extensions GitHub renders as a document. Compared case-folded, so ROADMAP.MD
 # and NOTES.Md are caught alongside notes.md (T-606).

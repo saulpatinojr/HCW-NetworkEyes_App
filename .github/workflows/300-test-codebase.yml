@@ -146,7 +146,9 @@ jobs:
           path: ~/.cache/pip
           key: test-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
       - name: Install dependencies
-        run: pip install -e .[dev]
+        # enrichment is required since tests/unit/test_azure_discovery.py exercises
+        # the Log Analytics paths by importing azure.monitor.query directly (T-408).
+        run: pip install -e .[dev,enrichment]
       - name: Run tests with coverage
         run: |
           pytest tests/unit/ -v --tb=short \
