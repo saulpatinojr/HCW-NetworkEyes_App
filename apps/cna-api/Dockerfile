@@ -68,19 +68,20 @@ COPY --from=drawio-fetch /tmp/drawio.deb /tmp/drawio.deb
 COPY --chmod=755 scripts/drawio-headless.sh /usr/local/bin/drawio
 RUN apt-get update \
  && apt-get -y upgrade \
- && apt-get install -y --no-install-recommends /tmp/drawio.deb xvfb xauth \
+ && apt-get install -y --no-install-recommends /tmp/drawio.deb xvfb xauth libasound2t64 \
  && rm -rf /var/lib/apt/lists/* /tmp/drawio.deb \
  && drawio --version
-
-# The base image ships its own pip toolchain (setuptools pinned upstream) that
-# periodically carries fixable CVEs Docker Scout gates on — keep it at or
-# above the fixed versions.
-RUN pip install --no-cache-dir "setuptools>=78.1.1" "msgpack>=1.2.1"
 
 WORKDIR /app
 COPY --from=builder --chown=cna:cna /install /usr/local
 COPY --chown=cna:cna cna/ /app/cna/
 COPY --chown=cna:cna apps/cna-api/ /app/apps/cna-api/
+
+# pip is unused at runtime and vendors CVE-carrying copies of msgpack and
+# setuptools (declared in its own pip/_vendor/bom.cdx.json) that no
+# `pip install` can replace — strip it from the shipped image, the same
+# reasoning the web image uses to strip npm.
+RUN python -m pip uninstall -y pip
 
 USER cna
 
