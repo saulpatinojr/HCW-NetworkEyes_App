@@ -105,6 +105,13 @@ class DiscoveryOptions:
     # aws-cn partitions can override it — us-east-1 does not exist in either.
     # It is a last resort: see AWSDiscovery._region_for_region_lookup().
     region_lookup_endpoint: str = "us-east-1"
+    # Explicit management-account credentials. The CLI leaves these unset and
+    # relies on the ambient credential chain (env vars, shared config, IMDS);
+    # the web/API path must pass them, because the API container runs outside
+    # AWS and has no ambient chain to fall back on.
+    access_key_id: str | None = None
+    secret_access_key: str | None = None
+    session_token: str | None = None
 
 
 class AWSDiscovery:
@@ -850,8 +857,16 @@ class AWSDiscovery:
             )
         logger.info("[%s] AWS discovery starting", engagement_id)
 
-        # 1. Establish management account session
-        self._mgmt_session = boto3.Session()
+        # 1. Establish management account session — explicit credentials when
+        # the caller supplied them, otherwise the ambient chain.
+        if self.opts.access_key_id:
+            self._mgmt_session = boto3.Session(
+                aws_access_key_id=self.opts.access_key_id,
+                aws_secret_access_key=self.opts.secret_access_key,
+                aws_session_token=self.opts.session_token,
+            )
+        else:
+            self._mgmt_session = boto3.Session()
         identity = with_retry()(self._mgmt_session.client("sts").get_caller_identity)()
         mgmt_account_id = identity["Account"]
         logger.info("Management account: %s", mgmt_account_id)

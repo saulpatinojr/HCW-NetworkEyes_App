@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useTransition, useRef } from "react";
-import { addBulkCredentials, testAzureConnection } from "./actions";
+import {
+  addAwsCredential,
+  addBulkCredentials,
+  testAwsConnection,
+  testAzureConnection,
+} from "./actions";
 import { SpHelpModal } from "@/components/ui/sp-help-modal";
 
 type Platform = "AZURE" | "AWS";
@@ -102,6 +107,23 @@ export function CredentialForm({ engagementId }: { engagementId: string }) {
     count?: number;
   } | null>(null);
 
+  const [awsLabel, setAwsLabel] = useState("");
+  const [awsRoleArn, setAwsRoleArn] = useState("");
+  const [awsExternalId, setAwsExternalId] = useState("");
+  const [awsRegions, setAwsRegions] = useState("");
+  const [awsAccessKeyId, setAwsAccessKeyId] = useState("");
+  const [awsSecretAccessKey, setAwsSecretAccessKey] = useState("");
+  const [awsTestResult, setAwsTestResult] = useState<{
+    ok: boolean;
+    callerAccount?: string;
+    assumedRoleArn?: string;
+    error?: string;
+  } | null>(null);
+  const [awsSaveResult, setAwsSaveResult] = useState<{
+    error?: string;
+    success?: boolean;
+  } | null>(null);
+
   const [isTesting, startTest] = useTransition();
   const [isSaving, startSave] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -185,6 +207,39 @@ export function CredentialForm({ engagementId }: { engagementId: string }) {
   const canTest = !!tenantId && !!spClientId && !!spClientSecret;
   const canSave = canTest && subscriptions.length > 0 && !isSaving;
 
+  function handleAwsTest() {
+    setAwsTestResult(null);
+    startTest(async () => {
+      const result = await testAwsConnection({
+        roleArn: awsRoleArn,
+        externalId: awsExternalId || undefined,
+        accessKeyId: awsAccessKeyId,
+        secretAccessKey: awsSecretAccessKey,
+      });
+      setAwsTestResult(result);
+    });
+  }
+
+  function handleAwsSave() {
+    setAwsSaveResult(null);
+    startSave(async () => {
+      const fd = new FormData();
+      fd.set("engagementId", engagementId);
+      fd.set("label", awsLabel);
+      fd.set("awsRoleArn", awsRoleArn);
+      fd.set("awsExternalId", awsExternalId);
+      fd.set("awsRegions", awsRegions);
+      fd.set("awsAccessKeyId", awsAccessKeyId);
+      fd.set("awsSecretAccessKey", awsSecretAccessKey);
+      const result = await addAwsCredential(null, fd);
+      setAwsSaveResult(result);
+      if (result.success) setAwsTestResult(null);
+    });
+  }
+
+  const canTestAws = !!awsRoleArn && !!awsAccessKeyId && !!awsSecretAccessKey;
+  const canSaveAws = canTestAws && !!awsLabel && !isSaving;
+
   return (
     <div className="space-y-5">
       {/* Platform tabs */}
@@ -202,14 +257,14 @@ export function CredentialForm({ engagementId }: { engagementId: string }) {
         </button>
         <button
           type="button"
-          disabled
-          title="AWS support coming soon"
-          className="flex items-center gap-1.5 rounded-lg bg-navy-50 dark:bg-navy-700/30 px-4 py-1.5 text-sm font-medium text-navy-500 cursor-not-allowed"
+          onClick={() => setPlatform("AWS")}
+          className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${
+            platform === "AWS"
+              ? "bg-teal-700 text-white"
+              : "bg-navy-100/60 dark:bg-navy-700/60 text-navy-400 dark:text-navy-300 hover:bg-navy-200 dark:hover:bg-navy-700"
+          }`}
         >
           AWS
-          <span className="rounded-full bg-navy-100/60 dark:bg-navy-700/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-navy-400">
-            soon
-          </span>
         </button>
       </div>
 
@@ -409,9 +464,135 @@ export function CredentialForm({ engagementId }: { engagementId: string }) {
       )}
 
       {platform === "AWS" && (
-        <div className="rounded-xl border border-dashed border-navy-600/40 p-8 text-center">
-          <p className="text-sm text-navy-400">AWS connections aren&apos;t available in this release.</p>
-          <p className="mt-1 text-xs text-navy-500">Azure is fully supported — switch to Azure to add a connection.</p>
+        <div className="space-y-6">
+          {/* ── Authentication ── */}
+          <div>
+            <p className="label-caps mb-3 text-navy-400">Authentication</p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="block text-sm font-medium text-navy-400 dark:text-navy-300">Access Key ID</label>
+                <input
+                  type="text"
+                  value={awsAccessKeyId}
+                  onChange={(e) => setAwsAccessKeyId(e.target.value)}
+                  placeholder="AKIA…"
+                  autoComplete="off"
+                  className={INPUT_CLS}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-navy-400 dark:text-navy-300">Secret Access Key</label>
+                <input
+                  type="password"
+                  value={awsSecretAccessKey}
+                  onChange={(e) => setAwsSecretAccessKey(e.target.value)}
+                  placeholder="••••••••••••••••"
+                  autoComplete="new-password"
+                  className={INPUT_CLS}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-navy-400 dark:text-navy-300">Read-only Role ARN</label>
+                <input
+                  type="text"
+                  value={awsRoleArn}
+                  onChange={(e) => setAwsRoleArn(e.target.value)}
+                  placeholder="arn:aws:iam::123456789012:role/CNA-ReadOnly"
+                  autoComplete="off"
+                  className={INPUT_CLS}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-navy-400 dark:text-navy-300">
+                  External ID <span className="font-normal text-navy-500">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={awsExternalId}
+                  onChange={(e) => setAwsExternalId(e.target.value)}
+                  placeholder="cna-engagement"
+                  autoComplete="off"
+                  className={INPUT_CLS}
+                />
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-navy-500">
+              The access key authenticates against the management account; discovery then assumes the
+              read-only role (with the external ID, when set) in each member account. The secret is
+              stored encrypted.
+            </p>
+          </div>
+
+          {/* ── Scope ── */}
+          <div>
+            <p className="label-caps mb-3 text-navy-400">Scope</p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="block text-sm font-medium text-navy-400 dark:text-navy-300">Connection label</label>
+                <input
+                  type="text"
+                  value={awsLabel}
+                  onChange={(e) => setAwsLabel(e.target.value)}
+                  placeholder="ACME Corp AWS Org"
+                  autoComplete="off"
+                  className={INPUT_CLS}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-navy-400 dark:text-navy-300">
+                  Regions <span className="font-normal text-navy-500">(comma-separated; empty = all enabled)</span>
+                </label>
+                <input
+                  type="text"
+                  value={awsRegions}
+                  onChange={(e) => setAwsRegions(e.target.value)}
+                  placeholder="us-east-1, eu-west-1"
+                  autoComplete="off"
+                  className={INPUT_CLS}
+                />
+              </div>
+            </div>
+          </div>
+
+          {awsTestResult && (
+            <div className={`rounded-lg px-3 py-2 text-sm ${awsTestResult.ok ? "border border-teal-800/40 bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-300" : "border border-red-800/40 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400"}`}>
+              {awsTestResult.ok ? (
+                <>
+                  <p className="font-medium">Connection successful</p>
+                  <p className="mt-1 text-xs">
+                    Caller account {awsTestResult.callerAccount} can assume {awsTestResult.assumedRoleArn}
+                  </p>
+                </>
+              ) : (
+                <p>{awsTestResult.error}</p>
+              )}
+            </div>
+          )}
+
+          {awsSaveResult && (
+            <div className={`rounded-lg px-3 py-2 text-sm ${awsSaveResult.success ? "border border-teal-800/40 bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-300" : "border border-red-800/40 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400"}`}>
+              {awsSaveResult.success ? "AWS connection saved." : awsSaveResult.error}
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-3 pt-1">
+            <button
+              type="button"
+              onClick={handleAwsTest}
+              disabled={isTesting || !canTestAws}
+              className="inline-flex items-center rounded-lg border border-navy-600/50 bg-navy-100/60 dark:bg-navy-700/40 px-4 py-2 text-sm font-medium text-navy-500 dark:text-navy-200 hover:bg-navy-100/60 dark:hover:bg-navy-700/60 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isTesting ? "Testing…" : "Test connection"}
+            </button>
+            <button
+              type="button"
+              onClick={handleAwsSave}
+              disabled={!canSaveAws}
+              className="inline-flex items-center rounded-lg bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isSaving ? "Saving…" : "Save connection"}
+            </button>
+          </div>
         </div>
       )}
     </div>

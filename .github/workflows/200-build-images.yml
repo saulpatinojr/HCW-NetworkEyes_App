@@ -5,10 +5,12 @@ on:
     branches:
       - main
     paths:
+      - Dockerfile
       - apps/cna-api/**
       - apps/cna-worker/**
       - apps/cna-web/**
       - cna/**
+      - scripts/drawio-headless.sh
       - pyproject.toml
       - .github/workflows/200-build-images.yml
   workflow_dispatch:

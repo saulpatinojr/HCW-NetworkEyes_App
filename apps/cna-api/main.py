@@ -1190,12 +1190,232 @@ def intake(body: dict) -> dict:
     )
 
 
-@app.post("/publish", status_code=501)
-def publish(body: dict) -> dict:
-    raise HTTPException(
-        status_code=501,
-        detail="The publish phase is not yet implemented in the API.",
+# ─── Client portal publishing (CNA-0.90 §3: the publish story) ───────────────
+
+
+class PublishRequest(BaseModel):
+    engagement_id: str
+    ttl_hours: int = 168  # AccessManager hard-caps at 7 days
+
+
+def _slugify_filename(title: str, extension: str) -> str:
+    safe = "".join(c if c.isalnum() or c in " -_" else "" for c in title)
+    safe = "-".join(safe.lower().split())[:80] or "deliverable"
+    return f"{safe}{extension}"
+
+
+def _load_published_deliverables(engagement_id: str) -> list[dict]:
+    with _get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT id, title, type, content, "blobPath", "updatedAt"
+                   FROM "Deliverable"
+                   WHERE "engagementId" = %s
+                     AND "publishedAt" IS NOT NULL
+                     AND status = 'COMPLETED'
+                   ORDER BY "createdAt" ASC""",
+                (engagement_id,),
+            )
+            rows = cur.fetchall()
+    return [dict(row) for row in rows]
+
+
+def _load_latest_publication(engagement_id: str) -> dict | None:
+    with _get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT id, "issuedAt", "expiresAt", "ttlHours",
+                          "storageLocation", "deliverableCount"
+                   FROM "PortalPublication"
+                   WHERE "engagementId" = %s
+                   ORDER BY "issuedAt" ASC LIMIT 1""",
+                (engagement_id,),
+            )
+            row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def _record_publication(engagement_id: str, record: dict) -> None:
+    with _get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO "PortalPublication"
+                     (id, "engagementId", cloud, "storageLocation",
+                      "deliverableCount", "ttlHours", "issuedAt", "expiresAt", "createdAt")
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())""",
+                (
+                    str(uuid.uuid4()),
+                    engagement_id,
+                    record["cloud"],
+                    record["storage_location"],
+                    record["deliverable_count"],
+                    record["ttl_hours"],
+                    record["issued_at"],
+                    record["expires_at"],
+                ),
+            )
+        conn.commit()
+
+
+@app.post("/publish")
+def publish(request: PublishRequest) -> dict:
+    """Publish the engagement's published deliverables to a client portal.
+
+    Uploads them to a private per-engagement blob container, generates the
+    portal index via cna.delivery_portal, and returns a TTL-capped SAS portal
+    URL. The signed URL itself is never persisted (AccessManager's contract) —
+    only the publication metadata is recorded, so the caller must surface the
+    URL immediately. The cna-worker placeholder that once sketched this job is
+    superseded by this endpoint.
+    """
+    if not DATABASE_URL:
+        raise HTTPException(status_code=503, detail="DATABASE_URL not configured")
+    account_name = os.environ.get("AZURE_STORAGE_ACCOUNT_NAME", "")
+    if not account_name:
+        raise HTTPException(
+            status_code=503,
+            detail="AZURE_STORAGE_ACCOUNT_NAME is not configured on the API.",
+        )
+
+    engagement_id = request.engagement_id
+    deliverables = _load_published_deliverables(engagement_id)
+    if not deliverables:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "No published deliverables for this engagement — publish at least one "
+                "deliverable in the app before creating the client portal."
+            ),
+        )
+
+    # Lazy: the delivery_portal stack needs azure-storage-blob, which older
+    # API images may not carry.
+    from cna.delivery_portal.access_manager import AccessManager
+    from cna.delivery_portal.azure_blob_deployer import AzureBlobDeployer
+    from cna.delivery_portal.portal_generator import PortalGenerator
+    from cna.delivery_portal.retention_engine import RetentionEngine, RetentionExpiredError
+    from cna.report_engine.deliverable_manifest import DeliverableManifest, DeliverableRecord
+
+    # DD-019: the retention clock starts at the FIRST publication.
+    first_publication = _load_latest_publication(engagement_id)
+    delivery_date = (
+        first_publication["issuedAt"].isoformat()
+        if first_publication and first_publication.get("issuedAt")
+        else None
     )
+    try:
+        RetentionEngine.check(engagement_id, delivery_date)
+    except RetentionExpiredError as exc:
+        raise HTTPException(status_code=410, detail=str(exc)) from None
+
+    try:
+        import tempfile
+
+        with tempfile.TemporaryDirectory(prefix="cna-portal-") as tmp:
+            tmpdir = Path(tmp)
+            manifest = DeliverableManifest(engagement_id=engagement_id)
+            file_paths: list[Path] = []
+            for row in deliverables:
+                content = row.get("content")
+                if not content:
+                    # Blob-only deliverables would need a download leg; every
+                    # current generator stores inline content, so skip and log
+                    # rather than fail the whole publication.
+                    logger.warning(
+                        "publish: deliverable %s has no inline content — skipped", row["id"]
+                    )
+                    continue
+                extension = ".html" if content.lstrip().startswith("<") else ".md"
+                path = tmpdir / _slugify_filename(row["title"], extension)
+                path.write_text(content, encoding="utf-8")
+                file_paths.append(path)
+                manifest.add(
+                    DeliverableRecord(
+                        label=row["title"],
+                        path=str(path),
+                        format=extension.lstrip("."),
+                        lang="en",
+                        rendered_at=(
+                            row["updatedAt"].isoformat()
+                            if row.get("updatedAt")
+                            else datetime.now(UTC).isoformat()
+                        ),
+                    )
+                )
+
+            if not file_paths:
+                raise HTTPException(
+                    status_code=409,
+                    detail="No publishable deliverable content found for this engagement.",
+                )
+
+            # Container per engagement: private, SAS-only, and deletable as a
+            # unit when DD-019 retention expires. Engagement ids are cuids
+            # (lowercase alphanumeric), which are valid container name parts.
+            container = f"portal-{engagement_id.lower()}"[:63]
+            deployer = AzureBlobDeployer(
+                account_name=account_name,
+                container_name=container,
+                sas_ttl_hours=request.ttl_hours,
+            )
+            signed_urls = deployer.upload_all(file_paths)
+            storage_location = f"https://{account_name}.blob.core.windows.net/{container}"
+
+            access_record = AccessManager.build_record(
+                engagement_id=engagement_id,
+                cloud="azure",
+                storage_location=storage_location,
+                deliverable_count=len(file_paths),
+                ttl_hours=request.ttl_hours,
+            )
+
+            entries = PortalGenerator.build_entries(
+                manifest=manifest,
+                signed_urls=signed_urls,
+                current_findings_checksum="",
+            )
+            portal_path = tmpdir / "index.html"
+            PortalGenerator().generate(
+                manifest=manifest,
+                entries=entries,
+                published_at=access_record.issued_at,
+                expires_at=access_record.expires_at,
+                output_path=portal_path,
+            )
+            portal_blob = deployer.upload(portal_path)
+            portal_url = deployer.generate_sas_token(portal_blob)
+
+        _record_publication(
+            engagement_id,
+            {
+                "cloud": "azure",
+                "storage_location": storage_location,
+                "deliverable_count": len(file_paths),
+                "ttl_hours": access_record.ttl_hours,
+                "issued_at": access_record.issued_at,
+                "expires_at": access_record.expires_at,
+            },
+        )
+
+        return {
+            "ok": True,
+            "portal_url": portal_url,
+            "deliverable_count": len(file_paths),
+            "issued_at": access_record.issued_at,
+            "expires_at": access_record.expires_at,
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        # Full details stay server-side; callers get a sanitized message.
+        logger.exception("publish failed for engagement %s", engagement_id)
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "Publishing the client portal failed. Check that the API's identity has "
+                "Storage Blob Data Contributor on the storage account, then try again."
+            ),
+        ) from None
 
 
 class TestConnectionRequest(BaseModel):
@@ -1232,20 +1452,86 @@ async def test_connection(request: TestConnectionRequest) -> dict:
         ) from None
 
 
+class AwsTestConnectionRequest(BaseModel):
+    role_arn: str
+    external_id: str | None = None
+    access_key_id: str
+    secret_access_key: str  # plaintext — decrypted by web layer
+
+
+@app.post("/discovery/test-connection-aws")
+async def test_connection_aws(request: AwsTestConnectionRequest) -> dict:
+    """Validate AWS keys and prove the CNA read-only role can be assumed."""
+    try:
+        import boto3  # lazy: keeps Azure-only deployments importable without boto3
+
+        session = boto3.Session(
+            aws_access_key_id=request.access_key_id,
+            aws_secret_access_key=request.secret_access_key,
+        )
+        sts = session.client("sts")
+        identity = sts.get_caller_identity()
+        kwargs: dict[str, Any] = {
+            "RoleArn": request.role_arn,
+            "RoleSessionName": "CNA-TestConnection",
+            "DurationSeconds": 900,
+        }
+        if request.external_id:
+            kwargs["ExternalId"] = request.external_id
+        assumed = sts.assume_role(**kwargs)
+        return {
+            "ok": True,
+            "caller_account": identity["Account"],
+            "assumed_role_arn": assumed["AssumedRoleUser"]["Arn"],
+        }
+    except Exception:
+        # Full details stay server-side; callers get a sanitized message.
+        logger.exception("test-connection-aws failed for role %s", request.role_arn)
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "Could not validate the AWS credentials or assume the read-only role. "
+                "Check the access key, secret, role ARN, and external ID, then try again."
+            ),
+        ) from None
+
+
 class DiscoveryStartRequest(BaseModel):
     job_id: str
     engagement_id: str
     credential_id: str | None = None
+    platform: str = "AZURE"  # "AZURE" | "AWS"
+    # Azure
     tenant_id: str | None = None
     subscription_ids: list[str] = []
     sp_client_id: str | None = None
     sp_client_secret: str | None = None  # plaintext — decrypted by web layer
+    # AWS
+    aws_role_arn: str | None = None
+    aws_external_id: str | None = None
+    aws_regions: list[str] = []
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: str | None = None  # plaintext — decrypted by web layer
 
 
 @app.post("/discovery/start")
 async def start_discovery(
     request: DiscoveryStartRequest, background_tasks: BackgroundTasks
 ) -> dict:
+    if request.platform.upper() == "AWS":
+        if not request.aws_role_arn:
+            raise HTTPException(
+                status_code=422, detail="aws_role_arn is required for AWS discovery"
+            )
+        if not request.aws_access_key_id or not request.aws_secret_access_key:
+            raise HTTPException(
+                status_code=422,
+                detail="aws_access_key_id and aws_secret_access_key are required for AWS discovery",
+            )
+        _update_job(request.job_id, status="RUNNING", startedAt=datetime.now(UTC))
+        background_tasks.add_task(_run_aws_discovery, request)
+        return {"job_id": request.job_id, "status": "RUNNING"}
+
     if not request.tenant_id:
         raise HTTPException(status_code=422, detail="tenant_id is required")
     _update_job(request.job_id, status="RUNNING", startedAt=datetime.now(UTC))
@@ -1372,6 +1658,114 @@ def _run_azure_discovery(request: DiscoveryStartRequest) -> None:
 
     except Exception as exc:
         logger.exception("[job:%s] discovery failed", job_id)
+        _update_job(
+            job_id,
+            status="FAILED",
+            errorMessage=str(exc),
+            completedAt=datetime.now(UTC),
+            progressLog=json.dumps(progress),
+        )
+
+
+def _run_aws_discovery(request: DiscoveryStartRequest) -> None:
+    """AWS counterpart of _run_azure_discovery (CNA-0.90 §3: AWS end-to-end).
+
+    Findings come from the cna package's AnalysisEngine AWS rules rather than
+    a second bespoke rule set here — the ~1,000 lines of _check_* helpers
+    above are Azure-shaped, and the engine's AWS rules are already tested.
+    The FinOps/BC-DR generators are typed AzureTopology-only and are skipped.
+    """
+    job_id = request.job_id
+    engagement_id = request.engagement_id
+    progress: list[str] = []
+
+    def _log(msg: str) -> None:
+        ts = datetime.now(UTC).strftime("%H:%M:%S")
+        entry = f"[{ts} UTC] {msg}"
+        progress.append(entry)
+        logger.info("[job:%s] %s", job_id, msg)
+        _update_job(job_id, progressLog=json.dumps(progress))
+
+    try:
+        # Lazy: keeps Azure-only deployments importable without boto3.
+        from cna.ai_engine.analysis_engine import AnalysisEngine, AnalysisOptions
+        from cna.modules.network.discovery.aws_discovery import (
+            AWSDiscovery,
+        )
+        from cna.modules.network.discovery.aws_discovery import (
+            DiscoveryOptions as AwsDiscoveryOptions,
+        )
+
+        _log("Initialising AWS discovery engine…")
+        tmpdir = Path(mkdtemp(prefix="cna-discovery-"))
+        store = EngagementStore(data_dir=tmpdir, engagement_id=engagement_id)
+
+        options = AwsDiscoveryOptions(
+            org_role_arn=request.aws_role_arn,  # type: ignore[arg-type]  # validated at the endpoint
+            external_id=request.aws_external_id,
+            regions=request.aws_regions,
+            access_key_id=request.aws_access_key_id,
+            secret_access_key=request.aws_secret_access_key,
+        )
+
+        _log(f"Role: {request.aws_role_arn}")
+        if request.aws_regions:
+            _log(
+                f"Targeting {len(request.aws_regions)} region(s): {', '.join(request.aws_regions)}"
+            )
+        else:
+            _log("No region filter — will discover all enabled regions.")
+
+        discovery = AWSDiscovery(store, options)
+
+        _log("Running discovery — this may take a few minutes…")
+        topology = discovery.run()
+
+        blocked = sum(1 for r in topology.regions if r.discovery_blocked)
+        _log(
+            f"Scanned {len(topology.regions)} region(s) across "
+            f"{len(topology.accounts)} account(s)" + (f" — {blocked} blocked." if blocked else ".")
+        )
+
+        _log("Running analysis rules…")
+        engine = AnalysisEngine(
+            store=store,
+            options=AnalysisOptions(load_aws=True, load_azure=False, dry_run=True),
+        )
+        report = engine.run(aws_topology=topology)
+        all_findings = [_finding_model_to_dict(f) for f in report.findings]
+        _log(f"Analysis → {len(all_findings)} finding(s).")
+
+        # Tag findings with a traffic-direction plane (same as the Azure path)
+        for f in all_findings:
+            if not f.get("traffic_direction"):
+                f["traffic_direction"] = classify_traffic_direction(
+                    f.get("rule_id", ""),
+                    f.get("category", ""),
+                    f.get("resource_type", ""),
+                )
+
+        if not DATABASE_URL:
+            logger.warning(
+                "[job:%s] DATABASE_URL is not set — %d finding(s) will NOT be persisted.",
+                job_id,
+                len(all_findings),
+            )
+        _log(f"Writing {len(all_findings)} finding(s) to database…")
+        _replace_discovery_findings(engagement_id, request.credential_id, all_findings)
+        _advance_engagement_status(engagement_id)
+
+        _update_job(
+            job_id,
+            status="COMPLETED",
+            completedAt=datetime.now(UTC),
+            findingsCount=len(all_findings),
+            topologyJson=topology.model_dump_json(),
+            progressLog=json.dumps(progress + ["Done."]),
+        )
+
+    except Exception as exc:
+        logger.exception("[job:%s] AWS discovery failed", job_id)
         _update_job(
             job_id,
             status="FAILED",

@@ -63,22 +63,6 @@ def analyze(engagement_id, load_aws, load_azure, dry_run, no_recommendations, da
         --engagement-id acme-20260305-a3f2 \\
         --aws --azure --no-recommendations
     """
-    # SCAFFOLD — not implemented (TODO.md T-412).
-    #
-    # This command calls EngagementStore.load_aws_topology() and
-    # load_azure_topology(), and AnalysisEngine.run() finishes by calling
-    # write_findings_report(). None of those three methods exist on
-    # EngagementStore, so the command previously died with an unhandled
-    # AttributeError — the load call sits inside `except FileNotFoundError`,
-    # which does not catch it. Nothing marked it unfinished.
-    #
-    # Fail honestly instead. The analysis rules themselves work and are tested;
-    # what is missing is the persistence layer they read from and write to.
-    raise NotImplementedError(
-        "`cna analyze` is not implemented yet. It needs EngagementStore methods "
-        "load_aws_topology(), load_azure_topology(), and write_findings_report(), "
-        "none of which exist — see TODO.md T-412."
-    )
     from cna.ai_engine.analysis_engine import AnalysisEngine, AnalysisOptions
     from cna.ai_engine.recommendation_engine import RecommendationEngine
     from cna.core.persistence import EngagementStore

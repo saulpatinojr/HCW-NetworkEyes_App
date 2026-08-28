@@ -150,10 +150,23 @@ dead Future-state toggle; soften the AWS coming-soon copy.
 `/publish` return 501 instead of fake success; error responses use real HTTP status
 codes and sanitized messages; loud startup log when `DATABASE_URL` is unset.
 
-**Out of scope for 0.9.0 demo (tracked honestly, not hidden):** CLI command wiring +
-the eight `EngagementStore` readers (T-412), AWS end-to-end, draw.io rendering inside
-the API image, the worker/publish story, Aeonik weight licensing, the self-hosted
-runner single point of failure, R-007/R-008.
+**Out of scope for 0.9.0 demo (tracked honestly, not hidden):** ~~CLI command wiring +
+the eight `EngagementStore` readers (T-412)~~ *(landed post-demo-scope: the readers are
+implemented, the five guards removed, and the CLI registry is real — see `TODO.md`
+T-412 and `CHANGELOG.md`)*, ~~AWS end-to-end~~ *(v1 landed post-demo-scope:
+AWS credentials → connection test → discovery → findings work through the web
+platform via the cna engine's AWS rules — see `CHANGELOG.md`; inventory/diagram/
+FinOps views remain Azure-shaped)*, ~~draw.io rendering inside
+the API image~~ *(landed post-demo-scope: both container images now install the
+pinned draw.io CLI with a headless wrapper, verified end-to-end — see
+`CHANGELOG.md`; the running dev environment gets it on the next
+`200-build-images` → `220-fast-redeploy`)*, ~~the worker/publish story~~
+*(landed post-demo-scope: `POST /publish` publishes a no-login, TTL-capped
+client portal via the cna delivery_portal stack, with a "Client portal" panel
+on the Client Deliverables page — see `CHANGELOG.md`. The cna-worker
+placeholder is superseded by it and is a retirement candidate, pending the
+owner's call)*, Aeonik
+weight licensing, the self-hosted runner single point of failure, R-007/R-008.
 
 ---
 

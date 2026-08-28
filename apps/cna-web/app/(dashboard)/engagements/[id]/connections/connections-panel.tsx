@@ -400,7 +400,10 @@ function DeleteCredentialButton({
 
 interface ConnectionsPanelProps {
   engagementId: string;
-  credentials: Pick<CloudCredential, "id" | "label" | "platform" | "tenantId" | "subscriptionIds">[];
+  credentials: Pick<
+    CloudCredential,
+    "id" | "label" | "platform" | "tenantId" | "subscriptionIds" | "awsRoleArn" | "awsRegions"
+  >[];
   jobs: JobSummary[];
 }
 
@@ -470,10 +473,21 @@ function CredentialCard({
             )}
           </div>
           <p className="text-xs text-navy-400">
-            {cred.platform} · Tenant: {cred.tenantId?.slice(0, 8)}…
-            {cred.subscriptionIds.length > 0
-              ? ` · ${cred.subscriptionIds.length} subscription(s)`
-              : " · All subscriptions"}
+            {cred.platform === "AWS" ? (
+              <>
+                AWS · Role: {cred.awsRoleArn?.split("/").pop() ?? "—"}
+                {cred.awsRegions.length > 0
+                  ? ` · ${cred.awsRegions.length} region(s)`
+                  : " · All enabled regions"}
+              </>
+            ) : (
+              <>
+                {cred.platform} · Tenant: {cred.tenantId?.slice(0, 8)}…
+                {cred.subscriptionIds.length > 0
+                  ? ` · ${cred.subscriptionIds.length} subscription(s)`
+                  : " · All subscriptions"}
+              </>
+            )}
           </p>
 
           {/* Active job progress bar */}

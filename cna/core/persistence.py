@@ -23,6 +23,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from cna.core.engagement import EngagementConfig
+from cna.core.findings_schema import FindingsReport
+from cna.core.topology_schema import (
+    AWSRegionTopology,
+    AWSTopology,
+    AzureSubscriptionTopology,
+    AzureTopology,
+)
 
 logger = logging.getLogger("cna.core.persistence")
 
@@ -63,6 +70,7 @@ class EngagementStore:
     AUDIT_LOG_FILE = "audit.jsonl"
     FINDINGS_REPORT_FILE = "findings_report.json"
     DELIVERABLE_MANIFEST_FILE = "deliverable_manifest.json"
+    ACCESS_RECORD_FILE = "access_record.json"
 
     def __init__(self, data_dir: Path | None = None, engagement_id: str | None = None):
         env_dir = os.environ.get("CNA_DATA_DIR", "./engagements")
@@ -210,6 +218,143 @@ class EngagementStore:
         self._atomic_write(manifest_path, manifest)
         logger.debug("Deliverable manifest written: %s", manifest_path)
         return manifest_path
+
+    def load_aws_topology(self, engagement_id: str) -> AWSTopology:
+        """Reassemble an AWSTopology from per-region discovery checkpoints (TODO.md T-412).
+
+        `AWSDiscovery` writes one checkpoint per account/region
+        (`discovery/aws_*.json`, each an `AWSRegionTopology` dump); the full
+        `AWSTopology` is never persisted, so it is rebuilt here. Account and
+        organization metadata is not carried by the checkpoints and stays at
+        the model defaults.
+
+        Raises:
+            FileNotFoundError: If no AWS checkpoints exist for the engagement.
+        """
+        regions = [
+            AWSRegionTopology(**data) for data in self._load_checkpoints(engagement_id, "aws")
+        ]
+        return AWSTopology(engagement_id=engagement_id, regions=regions)
+
+    def load_azure_topology(self, engagement_id: str) -> AzureTopology:
+        """Reassemble an AzureTopology from per-subscription checkpoints (TODO.md T-412).
+
+        `AzureDiscovery` writes one checkpoint per subscription
+        (`discovery/azure_*.json`, each an `AzureSubscriptionTopology` dump).
+        The tenant ID is recovered from the first subscription checkpoint —
+        every subscription in one discovery run shares the tenant.
+
+        Raises:
+            FileNotFoundError: If no Azure checkpoints exist for the engagement.
+        """
+        subscriptions = [
+            AzureSubscriptionTopology(**data)
+            for data in self._load_checkpoints(engagement_id, "azure")
+        ]
+        return AzureTopology(
+            engagement_id=engagement_id,
+            tenant_id=subscriptions[0].tenant_id,
+            subscriptions=subscriptions,
+        )
+
+    def _load_checkpoints(self, engagement_id: str, platform: str) -> list[dict]:
+        """Read every discovery checkpoint for one platform, oldest filename first."""
+        disc_dir = self.engagement_dir(engagement_id) / self.DISCOVERY_DIR
+        paths = sorted(disc_dir.glob(f"{platform}_*.json")) if disc_dir.exists() else []
+        if not paths:
+            raise FileNotFoundError(
+                f"No {platform} discovery checkpoints found for engagement "
+                f"'{engagement_id}' in {disc_dir}. Run `cna discover {platform}` first."
+            )
+        return [json.loads(p.read_text(encoding="utf-8")) for p in paths]
+
+    def load_findings_report(self, engagement_id: str) -> FindingsReport:
+        """Load the FindingsReport written by `write_findings_report` (TODO.md T-412).
+
+        Raises:
+            FileNotFoundError: If no report has been written. Run `cna analyze` first.
+        """
+        return FindingsReport(**json.loads(self.load_findings_report_json(engagement_id)))
+
+    def load_findings_report_json(self, engagement_id: str) -> str:
+        """Return the raw FindingsReport JSON text (TODO.md T-412).
+
+        `cna publish` checksums this exact byte content for deliverable
+        staleness detection (DD-013), so it must be the file verbatim — not a
+        re-serialisation.
+
+        Raises:
+            FileNotFoundError: If no report has been written. Run `cna analyze` first.
+        """
+        report_path = (
+            self.engagement_dir(engagement_id) / self.REPORTS_DIR / self.FINDINGS_REPORT_FILE
+        )
+        if not report_path.exists():
+            raise FileNotFoundError(
+                f"No FindingsReport found for engagement '{engagement_id}' at "
+                f"{report_path}. Run `cna analyze` first."
+            )
+        return report_path.read_text(encoding="utf-8")
+
+    def load_deliverable_manifest(self, engagement_id: str) -> dict:
+        """Load the manifest written by `write_deliverable_manifest` (TODO.md T-412).
+
+        Returns the `DeliverableManifest.to_dict()` shape:
+        `{engagement_id, created_at, total_deliverables, records: [...]}`.
+
+        Raises:
+            FileNotFoundError: If no manifest exists. Run `cna report generate` first.
+        """
+        manifest_path = (
+            self.engagement_dir(engagement_id) / self.REPORTS_DIR / self.DELIVERABLE_MANIFEST_FILE
+        )
+        if not manifest_path.exists():
+            raise FileNotFoundError(
+                f"No deliverable manifest found for engagement '{engagement_id}' at "
+                f"{manifest_path}. Run `cna report generate` first."
+            )
+        return json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    def write_access_record(self, engagement_id: str, record: dict) -> Path:
+        """Persist the access-link metadata record from `cna publish` (TODO.md T-412).
+
+        Record file: access_record.json (engagement root — engagement-level
+        metadata, not a deliverable). Only metadata is stored; the signed URL
+        itself is never written (see AccessManager).
+        """
+        eng_dir = self.engagement_dir(engagement_id)
+        eng_dir.mkdir(parents=True, exist_ok=True)
+        record_path = eng_dir / self.ACCESS_RECORD_FILE
+        self._atomic_write(record_path, record)
+        logger.debug("Access record written: %s", record_path)
+        return record_path
+
+    def load_access_record(self, engagement_id: str) -> dict:
+        """Load the access record written by `write_access_record` (TODO.md T-412).
+
+        Raises:
+            FileNotFoundError: If nothing has been published. Run `cna publish run` first.
+        """
+        record_path = self.engagement_dir(engagement_id) / self.ACCESS_RECORD_FILE
+        if not record_path.exists():
+            raise FileNotFoundError(
+                f"No access record found for engagement '{engagement_id}' at "
+                f"{record_path}. Run `cna publish run` first."
+            )
+        return json.loads(record_path.read_text(encoding="utf-8"))
+
+    def get_delivery_date(self, engagement_id: str) -> str | None:
+        """Return the delivery date that starts the 90-day retention clock (DD-019).
+
+        Delivery is the first successful `cna publish run`, recorded as the
+        access record's `issued_at`. Returns None when nothing has been
+        published yet — RetentionEngine treats that as "clock not started".
+        """
+        try:
+            record = self.load_access_record(engagement_id)
+        except FileNotFoundError:
+            return None
+        return record.get("issued_at")
 
     @staticmethod
     def _atomic_write(path: Path, data: dict) -> None:

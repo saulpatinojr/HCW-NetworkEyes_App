@@ -2,16 +2,13 @@ import click
 from rich.console import Console
 
 from cna import __version__
-from cna.cli.commands import (
-    analyze_cmd,
-    diagram_cmd,
-    discover_cmd,
-    init_cmd,
-    module_cmd,
-    publish_cmd,
-    report_cmd,
-    review_cmd,
-)
+from cna.cli.analyze import analyze
+from cna.cli.commands import diagram_cmd, module_cmd
+from cna.cli.discover import discover
+from cna.cli.init import init
+from cna.cli.publish import publish_group
+from cna.cli.report import report_group
+from cna.cli.review import review_group
 
 console = Console()
 
@@ -27,13 +24,14 @@ def cli():
     pass
 
 
-cli.add_command(init_cmd.init)
-cli.add_command(discover_cmd.discover)
-cli.add_command(analyze_cmd.analyze)
+cli.add_command(init)
+cli.add_command(discover)
+cli.add_command(analyze)
+cli.add_command(review_group)
+cli.add_command(report_group)
+cli.add_command(publish_group)
+# Still stubs: the diagram and module engines have no CLI wiring yet.
 cli.add_command(diagram_cmd.diagram)
-cli.add_command(review_cmd.review)
-cli.add_command(report_cmd.report)
-cli.add_command(publish_cmd.publish)
 cli.add_command(module_cmd.module)
 
 if __name__ == "__main__":

@@ -1369,3 +1369,49 @@ class TestDiscoverAccount:
         args = store.write_discovery_checkpoint.call_args_list[0].args
         assert args[:3] == ("eng-1", "aws", "aws_111111111111_us-east-1")
         assert isinstance(args[3], dict), "the checkpoint payload must be JSON, not a model"
+
+
+class TestExplicitCredentials:
+    """DiscoveryOptions.access_key_id and friends (AWS end-to-end, 0.90 backlog).
+
+    The CLI relies on the ambient boto3 credential chain, but the web/API
+    path runs outside AWS and must pass explicit management-account keys.
+    """
+
+    def _session(self, account_id="111111111111"):
+        session = MagicMock()
+        session.client.return_value.get_caller_identity.return_value = {"Account": account_id}
+        return session
+
+    def test_explicit_keys_build_the_management_session(self, store):
+        opts = DiscoveryOptions(
+            org_role_arn="arn:aws:iam::123456789012:role/CNA-ReadOnly",
+            account_ids=["111111111111"],
+            access_key_id="AKIAEXAMPLE",
+            secret_access_key="placeholder-not-real",
+            session_token="placeholder-not-real",
+        )
+        discovery = AWSDiscovery(store=store, options=opts)
+        with (
+            patch(f"{MODULE}.boto3.Session", return_value=self._session()) as session_cls,
+            patch.object(discovery, "_list_org_accounts", return_value=[]),
+            patch.object(discovery, "_discover_account"),
+        ):
+            discovery.run()
+
+        session_cls.assert_called_once_with(
+            aws_access_key_id="AKIAEXAMPLE",
+            aws_secret_access_key="placeholder-not-real",
+            aws_session_token="placeholder-not-real",
+        )
+
+    def test_no_keys_fall_back_to_the_ambient_chain(self, store, opts):
+        discovery = AWSDiscovery(store=store, options=opts)
+        with (
+            patch(f"{MODULE}.boto3.Session", return_value=self._session()) as session_cls,
+            patch.object(discovery, "_list_org_accounts", return_value=[]),
+            patch.object(discovery, "_discover_account"),
+        ):
+            discovery.run()
+
+        session_cls.assert_called_once_with()

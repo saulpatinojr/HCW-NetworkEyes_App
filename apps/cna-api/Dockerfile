@@ -1,5 +1,5 @@
 # python:3.14-slim digest pinned — see root Dockerfile for the same pattern.
-FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4 AS builder
+FROM python:3.14-slim@sha256:cae66f2ef0ec51a9891263eeee7f987dacf0a9879e8aa9353d5606e0530619a5 AS builder
 
 WORKDIR /build
 
@@ -26,6 +26,8 @@ RUN pip install --no-cache-dir --prefix=/install \
     "azure-mgmt-monitor>=6.0" \
     "azure-mgmt-loganalytics>=13.0" \
     "azure-mgmt-compute>=30.0" \
+    "azure-storage-blob>=12.19" \
+    "boto3>=1.34" \
     "tenacity>=8.4" \
     "jinja2>=3.1" \
     "httpx>=0.27" \
@@ -35,12 +37,45 @@ RUN pip install --no-cache-dir --prefix=/install \
 # Install the cna package itself (no heavy extras — no weasyprint/matplotlib/diagrams)
 RUN pip install --no-cache-dir --no-deps --prefix=/install .
 
+# ---- drawio fetch stage ----
+# Pinned draw.io desktop release, verified by checksum before it can reach
+# the final image. Used headlessly (see scripts/drawio-headless.sh) so the
+# encyclopedia report's diagram SVGs render instead of silently degrading.
+FROM python:3.14-slim@sha256:cae66f2ef0ec51a9891263eeee7f987dacf0a9879e8aa9353d5606e0530619a5 AS drawio-fetch
+
+ARG DRAWIO_VERSION=31.3.2
+ARG DRAWIO_SHA256=725453f32ef7f2f63f8b50b374857a5c312e2aaabcf221cb0600332741ae1094
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+  && rm -rf /var/lib/apt/lists/* \
+  && curl -fsSL -o /tmp/drawio.deb \
+     "https://github.com/jgraph/drawio-desktop/releases/download/v${DRAWIO_VERSION}/drawio-amd64-${DRAWIO_VERSION}.deb" \
+  && echo "${DRAWIO_SHA256}  /tmp/drawio.deb" | sha256sum -c -
+
 # ---- final stage ----
-FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4
+FROM python:3.14-slim@sha256:cae66f2ef0ec51a9891263eeee7f987dacf0a9879e8aa9353d5606e0530619a5
 
 # Non-root user — uid/gid 1001 (matches root Dockerfile's cna user).
 RUN groupadd --gid 1001 cna \
  && useradd --uid 1001 --gid cna --no-create-home --shell /usr/sbin/nologin cna
+
+# draw.io desktop CLI + xvfb for headless diagram SVG export (Electron needs
+# an X display even for --export). The wrapper shadows /usr/bin/drawio on
+# PATH and supplies xvfb-run, --no-sandbox, and a writable HOME — see the
+# script for why each is required. `drawio --version` proves the whole
+# chain (deb deps, xvfb, wrapper) at build time rather than at first render.
+COPY --from=drawio-fetch /tmp/drawio.deb /tmp/drawio.deb
+COPY --chmod=755 scripts/drawio-headless.sh /usr/local/bin/drawio
+RUN apt-get update \
+ && apt-get -y upgrade \
+ && apt-get install -y --no-install-recommends /tmp/drawio.deb xvfb xauth \
+ && rm -rf /var/lib/apt/lists/* /tmp/drawio.deb \
+ && drawio --version
+
+# The base image ships its own pip toolchain (setuptools pinned upstream) that
+# periodically carries fixable CVEs Docker Scout gates on — keep it at or
+# above the fixed versions.
+RUN pip install --no-cache-dir "setuptools>=78.1.1" "msgpack>=1.2.1"
 
 WORKDIR /app
 COPY --from=builder --chown=cna:cna /install /usr/local
