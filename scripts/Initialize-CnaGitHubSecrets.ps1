@@ -1874,6 +1874,10 @@ if (-not $SkipAzureSetup) {
         "Network Contributor",
         "Storage Account Contributor",
         "Container Apps Contributor",
+        # Container Apps *Jobs* (Microsoft.App/jobs/*) are a separate resource
+        # type from container apps; 211's migration step creates/starts a
+        # Container Apps Job and fails with AuthorizationFailed without this.
+        "Container Apps Jobs Contributor",
         "Container Apps ManagedEnvironments Contributor",
         "Key Vault Contributor",
         "Cognitive Services Contributor",
