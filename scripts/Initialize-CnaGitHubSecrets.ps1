@@ -1463,6 +1463,71 @@ function Remove-CnaRoleAssignmentIfExists {
     Write-Ok "Removed legacy subscription-scope $RoleName from $AssigneeAppId"
 }
 
+function Confirm-NetworkWatcherAccess {
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    param(
+        [string]$SubscriptionId,
+        [string]$Location,
+        [string]$EnvClientId
+    )
+
+    Write-Step "Ensuring Network Watcher access for the environment deploy SP"
+    # Azure auto-provisions one Network Watcher per region (NetworkWatcher_<region>
+    # in NetworkWatcherRG) when the first VNet appears. The observability module
+    # reads that watcher and parents the VNet flow log under it, so 211's plan and
+    # apply need Microsoft.Network/networkWatchers read+write in NetworkWatcherRG —
+    # outside the workload RG every env-SP role is scoped to. Ensure the RG and the
+    # regional watcher exist (pre-creating matches Azure's own naming), then grant
+    # Network Contributor scoped to just that RG.
+    $exists = & az group exists --name "NetworkWatcherRG" --subscription $SubscriptionId --output tsv
+    if ($exists -ne "true") {
+        if ($PSCmdlet.ShouldProcess("NetworkWatcherRG", "create resource group")) {
+            & az group create --name "NetworkWatcherRG" --location $Location --subscription $SubscriptionId --output none
+            if ($LASTEXITCODE -ne 0) { throw "Failed to create NetworkWatcherRG." }
+        }
+        Write-Ok "Created NetworkWatcherRG"
+    } else {
+        Write-Ok "NetworkWatcherRG exists"
+    }
+
+    if ($PSCmdlet.ShouldProcess($Location, "enable Network Watcher")) {
+        & az network watcher configure --locations $Location --enabled true --resource-group "NetworkWatcherRG" --subscription $SubscriptionId --output none 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn "Could not pre-enable Network Watcher for $Location; Azure will auto-create it with the first VNet."
+        } else {
+            Write-Ok "Network Watcher enabled for $Location"
+        }
+    }
+
+    $envObjectId = & az ad sp show --id $EnvClientId --query id --output tsv 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($envObjectId)) {
+        Write-Warn "Could not resolve environment deploy SP object ID for $EnvClientId. Grant Network Contributor on NetworkWatcherRG manually or re-run."
+        return
+    }
+    $scope = "/subscriptions/$SubscriptionId/resourceGroups/NetworkWatcherRG"
+    $assignmentCount = & az role assignment list `
+        --assignee-object-id $envObjectId `
+        --scope $scope `
+        --subscription $SubscriptionId `
+        --query "[?roleDefinitionName=='Network Contributor'] | length(@)" `
+        --output tsv 2>$null
+    if ($LASTEXITCODE -eq 0 -and $assignmentCount -eq "0") {
+        if ($PSCmdlet.ShouldProcess("NetworkWatcherRG", "assign Network Contributor to environment deploy SP")) {
+            & az role assignment create `
+                --role "Network Contributor" `
+                --assignee-object-id $envObjectId `
+                --assignee-principal-type ServicePrincipal `
+                --scope $scope `
+                --subscription $SubscriptionId `
+                --output none
+            if ($LASTEXITCODE -ne 0) { throw "Failed to assign Network Contributor on NetworkWatcherRG to the environment deploy SP." }
+        }
+        Write-Ok "Assigned Network Contributor on NetworkWatcherRG to environment deploy SP"
+    } else {
+        Write-Ok "Environment deploy SP already has Network Contributor on NetworkWatcherRG"
+    }
+}
+
 function Confirm-TfstateBackendResources {
     [CmdletBinding(SupportsShouldProcess = $true)]
     param(
@@ -2081,6 +2146,11 @@ if (-not $SkipAzureSetup) {
         -StorageAccountName $bootstrapTfstateStorageAccount `
         -ContainerName $bootstrapTfstateContainer `
         -ClientId $mainAppId `
+        -EnvClientId $envAppId
+
+    Confirm-NetworkWatcherAccess `
+        -SubscriptionId $resolvedSubscriptionId `
+        -Location $BootstrapLocation `
         -EnvClientId $envAppId
 }
 
