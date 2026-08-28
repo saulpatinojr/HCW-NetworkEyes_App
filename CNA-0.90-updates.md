@@ -118,6 +118,13 @@ Honest limits found:
 
 ## 3. Approved polish plan (starts after this PR merges)
 
+> **Status (2026-08-28):** implemented — A, B, C, and D all landed in the polish PR,
+> along with the three Copilot review fixes from PR #156 (README doc-count wording,
+> stale CHANGELOG omit sentence, pyproject statement-count comment). The B-4 demo-day
+> cheat sheet was delivered as a session file rather than a hosted artifact (the
+> hosting step was blocked by policy because the page carries break-glass details).
+> Out-of-scope items below remain tracked in `TODO.md`/`REVIEW.md`.
+
 Scope agreed: fix **both** light and dark themes properly; fix behavioral hazards;
 ship all four experience upgrades. Colors and fonts unchanged.
 

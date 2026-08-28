@@ -410,8 +410,8 @@ export function CredentialForm({ engagementId }: { engagementId: string }) {
 
       {platform === "AWS" && (
         <div className="rounded-xl border border-dashed border-navy-600/40 p-8 text-center">
-          <p className="text-sm text-navy-400">AWS discovery is coming soon.</p>
-          <p className="mt-1 text-xs text-navy-500">Switch to Azure to add a connection now.</p>
+          <p className="text-sm text-navy-400">AWS connections aren&apos;t available in this release.</p>
+          <p className="mt-1 text-xs text-navy-500">Azure is fully supported — switch to Azure to add a connection.</p>
         </div>
       )}
     </div>

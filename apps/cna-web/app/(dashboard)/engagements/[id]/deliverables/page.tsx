@@ -1,9 +1,11 @@
 import { auth } from "@/lib/auth";
+import { EmptyState } from "@/components/ui/empty-state";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { deleteDeliverable } from "./actions";
 import { GenerateDeliverableForm } from "./generate-form";
 import { DeliverableProgress } from "./deliverable-progress";
+import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -146,13 +148,9 @@ export default async function AssessmentsPage({ params }: PageProps) {
         </div>
 
         {deliverables.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-navy-700 px-6 py-10 text-center">
-            <svg aria-hidden="true" focusable="false" className="mx-auto mb-3 h-8 w-8 text-navy-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-            </svg>
-            <p className="text-sm font-medium text-navy-400">No assessments yet.</p>
-            <p className="mt-1 text-xs text-navy-600">Generate one from the form above.</p>
-          </div>
+          <EmptyState variant="inline" title="No assessments yet">
+            Generate one from the form above.
+          </EmptyState>
         ) : (
           <div className="divide-y divide-navy-700/30">
             {deliverables.map((d) => {
@@ -221,15 +219,16 @@ export default async function AssessmentsPage({ params }: PageProps) {
                     <form action={deleteDeliverable} aria-label={`Delete ${d.title}`}>
                       <input type="hidden" name="deliverableId" value={d.id} />
                       <input type="hidden" name="engagementId" value={id} />
-                      <button
-                        type="submit"
-                        aria-label={`Delete ${d.title}`}
+                      <ConfirmSubmitButton
+                        ariaLabel={`Delete ${d.title}`}
+                        confirmTitle="Delete this deliverable?"
+                        confirmMessage={`"${d.title}" will be permanently deleted. This cannot be undone.`}
                         className="flex h-7 w-7 items-center justify-center rounded-lg border border-red-800/40 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 transition-colors hover:bg-red-50 dark:hover:bg-red-900/40 hover:text-red-700 dark:hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                       >
                         <svg aria-hidden="true" focusable="false" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                         </svg>
-                      </button>
+                      </ConfirmSubmitButton>
                     </form>
                   </div>
                 </div>

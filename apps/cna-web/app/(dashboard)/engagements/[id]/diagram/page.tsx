@@ -44,28 +44,14 @@ export default async function DiagramPage({ params }: PageProps) {
       <section className="glass p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-navy-800 dark:text-navy-100">Diagram Workspace</h2>
-          {/* Current / Future state toggle.
-              TODO(Phase E follow-up): the future-state .drawio XML is produced by
+          {/* TODO(Phase E follow-up): future-state .drawio XML is produced by
               cna/diagram_engine/drawio_generator.py:generate_future_state_topology
               during assessment-report generation (worker) but is not yet persisted
-              as an engagement document. The editor now loads/saves current-state
-              XML; once generated future-state diagrams are persisted too, enable
-              this toggle to swap between current- and future-state XML. */}
-          <div
-            className="inline-flex overflow-hidden rounded-lg border border-navy-700/40 text-xs font-semibold"
-            role="group"
-            aria-label="Diagram state"
-          >
-            <span className="bg-teal-50 dark:bg-teal-900/30 px-3 py-2 text-teal-700 dark:text-teal-300">Current state</span>
-            <button
-              type="button"
-              disabled
-              title="Generated with the assessment report"
-              className="cursor-not-allowed px-3 py-2 text-navy-500"
-            >
-              Future state
-            </button>
-          </div>
+              as an engagement document. Once it is, add a Current/Future state
+              toggle here to swap between the two XML sources. */}
+          <span className="rounded-lg bg-teal-50 dark:bg-teal-900/30 px-3 py-2 text-xs font-semibold text-teal-700 dark:text-teal-300">
+            Current state
+          </span>
           <a
             href="https://app.diagrams.net/"
             target="_blank"
@@ -98,7 +84,7 @@ export default async function DiagramPage({ params }: PageProps) {
           </div>
         </div>
         {engagement.documents.length === 0 ? (
-          <p className="text-sm text-navy-500">No diagram files uploaded yet.</p>
+          <p className="py-4 text-center text-sm text-navy-400">No diagram files uploaded yet.</p>
         ) : (
           <ul className="divide-y divide-navy-700/30">
             {engagement.documents.map((doc) => (

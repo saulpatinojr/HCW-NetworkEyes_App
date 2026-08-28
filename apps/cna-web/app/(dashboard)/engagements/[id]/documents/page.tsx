@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { EmptyState } from "@/components/ui/empty-state";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -104,13 +105,9 @@ export default async function DocumentsPage({ params }: PageProps) {
         </p>
 
         {engagement.documents.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-navy-700 px-6 py-8 text-center">
-            <svg aria-hidden="true" focusable="false" className="mx-auto mb-3 h-8 w-8 text-navy-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-            </svg>
-            <p className="text-sm font-medium text-navy-400">No documents uploaded yet.</p>
-            <p className="mt-1 text-xs text-navy-600">Use the upload form below to add your first document.</p>
-          </div>
+          <EmptyState variant="inline" title="No documents uploaded yet">
+            Use the upload form below to add your first document.
+          </EmptyState>
         ) : (
           <ul className="divide-y divide-navy-700/30">
             {engagement.documents.map((doc) => (

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { EmptyState } from "@/components/ui/empty-state";
+import { summarizeErrorText } from "@/lib/summarize-error";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -294,22 +295,6 @@ const PLATFORM_SUBNETS = new Set([
   "RouteServerSubnet",
 ]);
 
-// Condense a raw ARM/SDK block reason into one readable sentence for the UI.
-// The full raw text remains available in the discovery job record / API logs.
-function summarizeBlockReason(reason: string): string {
-  let text = reason;
-  try {
-    const parsed = JSON.parse(reason) as { error?: { message?: string }; message?: string };
-    const m = parsed?.error?.message ?? parsed?.message;
-    if (typeof m === "string" && m.trim()) text = m;
-  } catch { /* not JSON — use as-is */ }
-  if (/AuthorizationFailed|does not have authorization/i.test(text)) {
-    return "Access denied by Azure — grant the service principal Reader on this subscription, then re-run discovery.";
-  }
-  const firstLine = text.split("\n")[0].trim();
-  return firstLine.length > 220 ? `${firstLine.slice(0, 220)}…` : firstLine;
-}
-
 export default async function InventoryPage({ params }: PageProps) {
   const { id } = await params;
   const session = await auth();
@@ -445,7 +430,7 @@ export default async function InventoryPage({ params }: PageProps) {
           {subs.filter((s) => s.discovery_blocked && s.block_reason).map((s) => (
             <div key={s.subscription_id} className="mt-2 rounded border border-red-300/60 bg-red-50 p-2 text-xs text-red-700 dark:border-red-800/40 dark:bg-red-950/40 dark:text-red-400">
               <span className="font-semibold">{s.subscription_name ?? s.subscription_id}: </span>
-              {summarizeBlockReason(s.block_reason!)}
+              {summarizeErrorText(s.block_reason!)}
             </div>
           ))}
         </div>
@@ -476,7 +461,7 @@ export default async function InventoryPage({ params }: PageProps) {
                   <div className="flex flex-col items-center gap-0.5">
                     <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-900/30 dark:text-red-400">Blocked</span>
                     {s.block_reason && (
-                      <span className="max-w-[16rem] text-left text-[10px] text-red-600 dark:text-red-400">{summarizeBlockReason(s.block_reason)}</span>
+                      <span className="max-w-[16rem] text-left text-[10px] text-red-600 dark:text-red-400">{summarizeErrorText(s.block_reason)}</span>
                     )}
                   </div>
                 ) : (

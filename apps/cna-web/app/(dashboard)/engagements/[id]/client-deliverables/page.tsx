@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { deleteDeliverableFromPortal, deleteDocument } from "./actions";
+import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -145,15 +146,16 @@ export default async function ClientDeliverablesPage({ params }: PageProps) {
               <form action={deleteDeliverableFromPortal} aria-label={`Delete ${interactiveAssessment.title}`}>
                 <input type="hidden" name="deliverableId" value={interactiveAssessment.id} />
                 <input type="hidden" name="engagementId" value={id} />
-                <button
-                  type="submit"
-                  aria-label={`Delete ${interactiveAssessment.title}`}
+                <ConfirmSubmitButton
+                  ariaLabel={`Delete ${interactiveAssessment.title}`}
+                  confirmTitle="Delete this assessment?"
+                  confirmMessage={`"${interactiveAssessment.title}" will be permanently deleted. This cannot be undone.`}
                   className="flex h-7 w-7 items-center justify-center rounded-lg border border-red-800/40 text-red-600 dark:text-red-400 transition-colors hover:bg-red-50 dark:hover:bg-red-900/20"
                 >
                   <svg aria-hidden="true" focusable="false" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
-                </button>
+                </ConfirmSubmitButton>
               </form>
             </div>
           </div>
@@ -216,12 +218,14 @@ export default async function ClientDeliverablesPage({ params }: PageProps) {
                   <form action={deleteDeliverableFromPortal} aria-label={`Delete ${d.title}`}>
                     <input type="hidden" name="deliverableId" value={d.id} />
                     <input type="hidden" name="engagementId" value={id} />
-                    <button type="submit" aria-label={`Delete ${d.title}`}
+                    <ConfirmSubmitButton ariaLabel={`Delete ${d.title}`}
+                      confirmTitle="Delete this deliverable?"
+                      confirmMessage={`"${d.title}" will be permanently deleted. This cannot be undone.`}
                       className="flex h-7 w-7 items-center justify-center rounded-lg border border-red-800/40 text-red-600 dark:text-red-400 transition-colors hover:bg-red-50 dark:hover:bg-red-900/20">
                       <svg aria-hidden="true" focusable="false" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                       </svg>
-                    </button>
+                    </ConfirmSubmitButton>
                   </form>
                 </div>
               </div>
@@ -247,12 +251,14 @@ export default async function ClientDeliverablesPage({ params }: PageProps) {
                     <form action={deleteDeliverableFromPortal} aria-label={`Delete ${d.title}`}>
                       <input type="hidden" name="deliverableId" value={d.id} />
                       <input type="hidden" name="engagementId" value={id} />
-                      <button type="submit" aria-label={`Delete ${d.title}`}
+                      <ConfirmSubmitButton ariaLabel={`Delete ${d.title}`}
+                        confirmTitle="Delete this draft?"
+                        confirmMessage={`"${d.title}" will be permanently deleted. This cannot be undone.`}
                         className="flex h-6 w-6 items-center justify-center rounded border border-red-800/40 text-red-600 dark:text-red-400 transition-colors hover:bg-red-50 dark:hover:bg-red-900/20">
                         <svg aria-hidden="true" focusable="false" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                         </svg>
-                      </button>
+                      </ConfirmSubmitButton>
                     </form>
                   </div>
                 </li>
@@ -284,12 +290,14 @@ export default async function ClientDeliverablesPage({ params }: PageProps) {
                 <form action={deleteDocument} className="shrink-0" aria-label={`Delete document ${doc.fileName}`}>
                   <input type="hidden" name="documentId" value={doc.id} />
                   <input type="hidden" name="engagementId" value={id} />
-                  <button type="submit" aria-label={`Delete document ${doc.fileName}`}
+                  <ConfirmSubmitButton ariaLabel={`Delete document ${doc.fileName}`}
+                    confirmTitle="Delete this document?"
+                    confirmMessage={`"${doc.fileName}" will be permanently deleted. This cannot be undone.`}
                     className="flex h-7 w-7 items-center justify-center rounded-lg border border-red-800/40 text-red-600 dark:text-red-400 transition-colors hover:bg-red-50 dark:hover:bg-red-900/20">
                     <svg aria-hidden="true" focusable="false" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                     </svg>
-                  </button>
+                  </ConfirmSubmitButton>
                 </form>
               </div>
             ))}
