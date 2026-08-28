@@ -57,11 +57,6 @@ RUN apt-get update && apt-get -y upgrade && apt-get install -y --no-install-reco
     libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# The base image ships its own pip toolchain (setuptools pinned upstream) that
-# periodically carries fixable CVEs Docker Scout gates on — keep it at or
-# above the fixed versions.
-RUN pip install --no-cache-dir "setuptools>=78.1.1" "msgpack>=1.2.1"
-
 # draw.io desktop CLI + xvfb for headless diagram export (.drawio -> .svg).
 # The wrapper shadows /usr/bin/drawio on PATH and supplies xvfb-run,
 # --no-sandbox, and a writable HOME — see the script for why each is
@@ -69,7 +64,7 @@ RUN pip install --no-cache-dir "setuptools>=78.1.1" "msgpack>=1.2.1"
 COPY --from=drawio-fetch /tmp/drawio.deb /tmp/drawio.deb
 COPY --chmod=755 scripts/drawio-headless.sh /usr/local/bin/drawio
 RUN apt-get update \
- && apt-get install -y --no-install-recommends /tmp/drawio.deb xvfb xauth \
+ && apt-get install -y --no-install-recommends /tmp/drawio.deb xvfb xauth libasound2t64 \
  && rm -rf /var/lib/apt/lists/* /tmp/drawio.deb \
  && drawio --version
 
@@ -83,6 +78,12 @@ COPY --chown=cna:cna . .
 
 # Engagement data written here — must be writable by non-root user
 RUN mkdir -p /app/engagements /app/output && chown -R cna:cna /app/engagements /app/output
+
+# pip is unused at runtime and vendors CVE-carrying copies of msgpack and
+# setuptools (declared in its own pip/_vendor/bom.cdx.json) that no
+# `pip install` can replace — strip it from the shipped image, the same
+# reasoning the web image uses to strip npm.
+RUN python -m pip uninstall -y pip
 
 USER cna
 
