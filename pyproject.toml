@@ -146,9 +146,9 @@ omit = [
 
     # Both discovery orchestrators used to be omitted here, on the stated premise
     # that they "require live AWS/Azure API calls against real tenants". That was
-    # never true — their tests are fully mocked — and it kept 1,542 statements out
-    # of the fail_under gate. Both are measured now (TODO.md T-408). Do not add
-    # them back.
+    # never true — their tests are fully mocked — and it kept the highest-risk
+    # code in the package out of the fail_under gate. Both are measured now
+    # (TODO.md T-408). Do not add them back.
 
     # Diagram generation — require graphviz binary + drawio runtime
     # (Round 3: add `apt-get install graphviz` to CI and remove these)
