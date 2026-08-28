@@ -23,6 +23,22 @@ COPY pyproject.toml .
 COPY cna/ cna/
 RUN pip install --no-cache-dir --prefix=/install .
 
+# ---- drawio fetch stage ----
+# Pinned draw.io desktop release, verified by checksum before it can reach
+# the final image. The export pipeline (cna/diagram_engine/export_pipeline.py)
+# degrades to XML-only output without it — its own warning promises the CLI
+# is available "inside the Docker container", which is made true here.
+FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4 AS drawio-fetch
+
+ARG DRAWIO_VERSION=31.3.2
+ARG DRAWIO_SHA256=725453f32ef7f2f63f8b50b374857a5c312e2aaabcf221cb0600332741ae1094
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+  && rm -rf /var/lib/apt/lists/* \
+  && curl -fsSL -o /tmp/drawio.deb \
+     "https://github.com/jgraph/drawio-desktop/releases/download/v${DRAWIO_VERSION}/drawio-amd64-${DRAWIO_VERSION}.deb" \
+  && echo "${DRAWIO_SHA256}  /tmp/drawio.deb" | sha256sum -c -
+
 # ---- final stage ----
 FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4
 
@@ -38,6 +54,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     graphviz libcairo2 libpango-1.0-0 \
     libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 \
     && rm -rf /var/lib/apt/lists/*
+
+# draw.io desktop CLI + xvfb for headless diagram export (.drawio -> .svg).
+# The wrapper shadows /usr/bin/drawio on PATH and supplies xvfb-run,
+# --no-sandbox, and a writable HOME — see the script for why each is
+# required. `drawio --version` proves the whole chain at build time.
+COPY --from=drawio-fetch /tmp/drawio.deb /tmp/drawio.deb
+COPY --chmod=755 scripts/drawio-headless.sh /usr/local/bin/drawio
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends /tmp/drawio.deb xvfb \
+ && rm -rf /var/lib/apt/lists/* /tmp/drawio.deb \
+ && drawio --version
 
 # Non-root user — uid/gid 1001
 RUN groupadd --gid 1001 cna \

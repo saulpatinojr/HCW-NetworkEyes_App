@@ -1,6 +1,6 @@
 """Unit tests for export_pipeline.py — closes Phase B Gap 13.
 
-12 tests covering all paths that CI actually exercises:
+11 tests covering all paths that CI actually exercises:
   - no draw.io CLI fallback (CI default)
   - skip_raster mode
   - empty XML guard
@@ -13,8 +13,12 @@
   - corrupt SVG detection
   - output directory creation
   - multiple format paths
+
+Plus TestRealDrawioExport: 2 tests that run the real headless export chain
+wherever the draw.io CLI is installed (the container images; skipped in CI).
 """
 
+import shutil
 from unittest.mock import patch
 
 import pytest
@@ -130,3 +134,83 @@ class TestDiagramFilename:
         for ext in [".drawio", ".svg", ".png", ".pdf", ".mmd"]:
             name = diagram_filename("eng-001", "aws", "vpc", ext=ext)
             assert name.endswith(ext)
+
+
+@pytest.mark.skipif(
+    shutil.which("drawio") is None,
+    reason="draw.io CLI not installed (it is present inside the container images)",
+)
+class TestRealDrawioExport:
+    """Exercises the real headless export chain when the CLI is available.
+
+    The container images install draw.io desktop plus the
+    scripts/drawio-headless.sh wrapper (xvfb-run, --no-sandbox, HOME
+    fallback); these tests prove that chain produces real SVG rather than
+    silently degrading — the CNA-0.90 gap where encyclopedia diagrams
+    never rendered because no image carried the CLI.
+    """
+
+    def test_export_produces_real_svg(self, tmp_output):
+        from cna.core.topology_schema import AzureSubnet, AzureSubscriptionTopology, VNet
+        from cna.diagram_engine.drawio_generator import generate_vnet_topology
+
+        sub = AzureSubscriptionTopology(
+            subscription_id="sub-1",
+            subscription_name="acme-prod",
+            tenant_id="t1",
+            vnets=[
+                VNet(
+                    id="/v1",
+                    name="vnet-hub",
+                    location="eastus",
+                    resource_group="rg1",
+                    subscription_id="sub-1",
+                    address_space=["10.0.0.0/16"],
+                    subnets=[
+                        AzureSubnet(id="/v1/s1", name="GatewaySubnet", address_prefix="10.0.0.0/24")
+                    ],
+                )
+            ],
+        )
+
+        exporter = DiagramExporter(output_dir=tmp_output)
+        paths = exporter.export(generate_vnet_topology(sub), "real-export")
+
+        assert ".svg" in paths
+        svg = paths[".svg"].read_text(encoding="utf-8")
+        assert "<svg" in svg and len(svg) > 1000
+
+    def test_encyclopedia_diagram_svgs_render(self):
+        from cna.core.topology_schema import (
+            AzureSubnet,
+            AzureSubscriptionTopology,
+            AzureTopology,
+            VNet,
+        )
+        from cna.modules.network.analysis.topology_classifier import classify_topology
+        from cna.report_engine.encyclopedia_report import generate_diagram_svgs
+
+        sub = AzureSubscriptionTopology(
+            subscription_id="sub-1",
+            subscription_name="acme-prod",
+            tenant_id="t1",
+            vnets=[
+                VNet(
+                    id="/v1",
+                    name="vnet-hub",
+                    location="eastus",
+                    resource_group="rg1",
+                    subscription_id="sub-1",
+                    address_space=["10.0.0.0/16"],
+                    subnets=[
+                        AzureSubnet(id="/v1/s1", name="GatewaySubnet", address_prefix="10.0.0.0/24")
+                    ],
+                )
+            ],
+        )
+        topology = AzureTopology(engagement_id="e1", tenant_id="t1", subscriptions=[sub])
+
+        current_svg, future_svg = generate_diagram_svgs(topology, classify_topology(topology))
+
+        assert current_svg and "<svg" in current_svg
+        assert future_svg and "<svg" in future_svg

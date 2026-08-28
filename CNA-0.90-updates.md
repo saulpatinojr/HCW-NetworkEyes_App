@@ -153,9 +153,12 @@ codes and sanitized messages; loud startup log when `DATABASE_URL` is unset.
 **Out of scope for 0.9.0 demo (tracked honestly, not hidden):** ~~CLI command wiring +
 the eight `EngagementStore` readers (T-412)~~ *(landed post-demo-scope: the readers are
 implemented, the five guards removed, and the CLI registry is real — see `TODO.md`
-T-412 and `CHANGELOG.md`)*, AWS end-to-end, draw.io rendering inside
-the API image, the worker/publish story, Aeonik weight licensing, the self-hosted
-runner single point of failure, R-007/R-008.
+T-412 and `CHANGELOG.md`)*, AWS end-to-end, ~~draw.io rendering inside
+the API image~~ *(landed post-demo-scope: both container images now install the
+pinned draw.io CLI with a headless wrapper, verified end-to-end — see
+`CHANGELOG.md`; the running dev environment gets it on the next
+`200-build-images` → `220-fast-redeploy`)*, the worker/publish story, Aeonik
+weight licensing, the self-hosted runner single point of failure, R-007/R-008.
 
 ---
 

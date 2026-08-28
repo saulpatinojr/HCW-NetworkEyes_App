@@ -35,12 +35,39 @@ RUN pip install --no-cache-dir --prefix=/install \
 # Install the cna package itself (no heavy extras — no weasyprint/matplotlib/diagrams)
 RUN pip install --no-cache-dir --no-deps --prefix=/install .
 
+# ---- drawio fetch stage ----
+# Pinned draw.io desktop release, verified by checksum before it can reach
+# the final image. Used headlessly (see scripts/drawio-headless.sh) so the
+# encyclopedia report's diagram SVGs render instead of silently degrading.
+FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4 AS drawio-fetch
+
+ARG DRAWIO_VERSION=31.3.2
+ARG DRAWIO_SHA256=725453f32ef7f2f63f8b50b374857a5c312e2aaabcf221cb0600332741ae1094
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+  && rm -rf /var/lib/apt/lists/* \
+  && curl -fsSL -o /tmp/drawio.deb \
+     "https://github.com/jgraph/drawio-desktop/releases/download/v${DRAWIO_VERSION}/drawio-amd64-${DRAWIO_VERSION}.deb" \
+  && echo "${DRAWIO_SHA256}  /tmp/drawio.deb" | sha256sum -c -
+
 # ---- final stage ----
 FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4
 
 # Non-root user — uid/gid 1001 (matches root Dockerfile's cna user).
 RUN groupadd --gid 1001 cna \
  && useradd --uid 1001 --gid cna --no-create-home --shell /usr/sbin/nologin cna
+
+# draw.io desktop CLI + xvfb for headless diagram SVG export (Electron needs
+# an X display even for --export). The wrapper shadows /usr/bin/drawio on
+# PATH and supplies xvfb-run, --no-sandbox, and a writable HOME — see the
+# script for why each is required. `drawio --version` proves the whole
+# chain (deb deps, xvfb, wrapper) at build time rather than at first render.
+COPY --from=drawio-fetch /tmp/drawio.deb /tmp/drawio.deb
+COPY --chmod=755 scripts/drawio-headless.sh /usr/local/bin/drawio
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends /tmp/drawio.deb xvfb \
+ && rm -rf /var/lib/apt/lists/* /tmp/drawio.deb \
+ && drawio --version
 
 WORKDIR /app
 COPY --from=builder --chown=cna:cna /install /usr/local
