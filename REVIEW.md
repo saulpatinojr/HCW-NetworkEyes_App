@@ -286,6 +286,16 @@ than partway through apply. It previously checked only two of the ten, so the *c
 R-007 describes was real and largely unguarded; it is now closed for every provider at once, not
 just this one.
 
+**2026-08-28 addendum — the leftover register call in 211**
+The first full `211` run under the RG-scoped deploy identities (rebuilt dev environment) failed
+in seconds on a leftover from the pre-split era: both the `plan` and `apply` jobs still ran an
+unconditional `az provider register --namespace Microsoft.App --wait`, which requires the
+subscription-scope `register/action` this item says the deploy identity must never hold. That
+step is now a read-only verification (fails with the one-time Owner command only on
+`NotRegistered`), and all four environment roots set `resource_provider_registrations = "none"`
+so the azurerm provider's default auto-registration cannot hit the same wall during plan.
+Workflow 100 remains the gating assertion.
+
 **If a future change reintroduces alerting**
 Add `Microsoft.AlertsManagement` to `REQUIRED_PROVIDERS` in `100-validate-prereqs.yml` in the same
 commit as the alert resource, and reopen this item — the registration is still a subscription-level

@@ -310,9 +310,27 @@ jobs:
             exit 1
           fi
 
-      - name: Register Azure Resource Providers
+      - name: Verify Azure Resource Provider registration
         run: |
-          az provider register --namespace Microsoft.App --wait
+          # Provider registration is a subscription-level operation the RG-scoped
+          # deploy identity cannot perform (REVIEW.md R-007) — registration is
+          # asserted by workflow 100, not attempted here. It is durable
+          # subscription state that survives environment teardowns, so verify it
+          # read-only instead of calling `az provider register` and failing on
+          # Microsoft.App/register/action.
+          STATE=$(az provider show --namespace Microsoft.App --query registrationState -o tsv 2>/dev/null || echo "Unknown")
+          echo "Microsoft.App registration state: $STATE"
+          case "$STATE" in
+            Registered|Registering)
+              ;;
+            Unknown)
+              echo "::warning::Could not read Microsoft.App registration state with this identity; workflow 100 asserts registration — continuing."
+              ;;
+            *)
+              echo "::error::Microsoft.App is not registered (state: $STATE) and the deploy identity cannot register it (R-007). Run once as subscription Owner: az provider register --namespace Microsoft.App"
+              exit 1
+              ;;
+          esac
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
@@ -649,9 +667,27 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Register Azure Resource Providers
+      - name: Verify Azure Resource Provider registration
         run: |
-          az provider register --namespace Microsoft.App --wait
+          # Provider registration is a subscription-level operation the RG-scoped
+          # deploy identity cannot perform (REVIEW.md R-007) — registration is
+          # asserted by workflow 100, not attempted here. It is durable
+          # subscription state that survives environment teardowns, so verify it
+          # read-only instead of calling `az provider register` and failing on
+          # Microsoft.App/register/action.
+          STATE=$(az provider show --namespace Microsoft.App --query registrationState -o tsv 2>/dev/null || echo "Unknown")
+          echo "Microsoft.App registration state: $STATE"
+          case "$STATE" in
+            Registered|Registering)
+              ;;
+            Unknown)
+              echo "::warning::Could not read Microsoft.App registration state with this identity; workflow 100 asserts registration — continuing."
+              ;;
+            *)
+              echo "::error::Microsoft.App is not registered (state: $STATE) and the deploy identity cannot register it (R-007). Run once as subscription Owner: az provider register --namespace Microsoft.App"
+              exit 1
+              ;;
+          esac
 
       # The DB-migration and revision-restart steps below use `az containerapp job`,
       # which lives in the containerapp CLI extension (NOT in core az). The runner

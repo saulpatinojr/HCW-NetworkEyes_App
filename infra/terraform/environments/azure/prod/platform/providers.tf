@@ -20,6 +20,11 @@ terraform {
 }
 
 provider "azurerm" {
+  # The deploy identity is RG-scoped least-privilege and cannot perform
+  # subscription-level provider registration (REVIEW.md R-007). Registration is
+  # asserted read-only by workflow 100; azurerm must not attempt it itself.
+  resource_provider_registrations = "none"
+
   features {
     resource_group {
       # Confirmed environment teardown must remove Azure-created child resources
