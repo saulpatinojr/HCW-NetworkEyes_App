@@ -54,7 +54,7 @@ export default async function ConnectionsPage({ params }: PageProps) {
     <div className="space-y-6">
       {/* ── Add cloud connection ── */}
       <section className="glass p-6">
-        <h2 className="mb-1 text-lg font-semibold text-navy-100">
+        <h2 className="mb-1 text-lg font-semibold text-navy-800 dark:text-navy-100">
           Add Cloud Connection
         </h2>
         <p className="mb-4 text-sm text-navy-400">
@@ -67,7 +67,7 @@ export default async function ConnectionsPage({ params }: PageProps) {
 
       {/* ── Cloud connections ── */}
       <section className="glass p-6">
-        <h2 className="mb-1 text-lg font-semibold text-navy-100">
+        <h2 className="mb-1 text-lg font-semibold text-navy-800 dark:text-navy-100">
           Cloud Connections
         </h2>
         <p className="mb-5 text-sm text-navy-400">

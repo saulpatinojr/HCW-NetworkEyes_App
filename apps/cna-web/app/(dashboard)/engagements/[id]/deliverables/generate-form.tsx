@@ -57,8 +57,8 @@ const ASSESSMENT_TYPES = [
 ];
 
 const CARD_BASE =
-  "flex cursor-pointer items-start gap-3 rounded-xl border border-navy-700 bg-navy-800/30 p-3.5 transition-colors hover:border-teal-600/60 hover:bg-teal-900/20";
-const CARD_CHECKED = "has-[:checked]:border-teal-500 has-[:checked]:bg-teal-900/30";
+  "flex cursor-pointer items-start gap-3 rounded-xl border border-navy-700 bg-navy-50 dark:bg-navy-800/30 p-3.5 transition-colors hover:border-teal-600/60 hover:bg-teal-50 dark:hover:bg-teal-900/20";
+const CARD_CHECKED = "has-[:checked]:border-teal-500 has-[:checked]:bg-teal-50 dark:bg-teal-900/30";
 
 export function GenerateDeliverableForm({ engagementId }: { engagementId: string }) {
   const [state, action] = useActionState(generateDeliverable, null);
@@ -85,12 +85,12 @@ export function GenerateDeliverableForm({ engagementId }: { engagementId: string
         <input type="hidden" name="engagementId" value={engagementId} />
 
         {state?.error && (
-          <p className="rounded-xl border border-red-800 bg-red-900/20 px-4 py-3 text-sm text-red-400">
+          <p className="rounded-xl border border-red-800 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-600 dark:text-red-400">
             {state.error}
           </p>
         )}
         {state?.success && (
-          <p className="rounded-xl border border-teal-800 bg-teal-900/20 px-4 py-3 text-sm text-teal-300">
+          <p className="rounded-xl border border-teal-800 bg-teal-50 dark:bg-teal-900/20 px-4 py-3 text-sm text-teal-700 dark:text-teal-300">
             Assessment generated — scroll up to view it.
           </p>
         )}
@@ -110,12 +110,12 @@ export function GenerateDeliverableForm({ engagementId }: { engagementId: string
                 />
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <svg aria-hidden="true" focusable="false" className="h-3.5 w-3.5 shrink-0 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg aria-hidden="true" focusable="false" className="h-3.5 w-3.5 shrink-0 text-teal-700 dark:text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d={opt.icon} />
                     </svg>
-                    <p className="text-xs font-semibold text-navy-100">{opt.label}</p>
+                    <p className="text-xs font-semibold text-navy-800 dark:text-navy-100">{opt.label}</p>
                   </div>
-                  <p className="mt-1 text-xs font-medium text-teal-500">{opt.audience}</p>
+                  <p className="mt-1 text-xs font-medium text-teal-700 dark:text-teal-500">{opt.audience}</p>
                   <p className="mt-0.5 text-xs text-navy-400">{opt.desc}</p>
                 </div>
               </label>
@@ -134,7 +134,7 @@ export function GenerateDeliverableForm({ engagementId }: { engagementId: string
             type="file"
             accept="image/png,image/svg+xml"
             aria-label="Customer logo (PNG or SVG)"
-            className="block w-full text-sm text-navy-500 file:mr-3 file:rounded-lg file:border-0 file:bg-teal-900/30 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-teal-300 hover:file:bg-teal-900/50"
+            className="block w-full text-sm text-navy-500 file:mr-3 file:rounded-lg file:border-0 file:bg-teal-50 dark:file:bg-teal-900/30 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-teal-700 dark:file:text-teal-300 hover:file:bg-teal-50 dark:hover:file:bg-teal-900/50"
           />
         </div>
 
@@ -159,20 +159,20 @@ export function GenerateDeliverableForm({ engagementId }: { engagementId: string
           <input type="hidden" name="engagementId" value={engagementId} />
 
           {allState?.error && (
-            <p className="mb-3 rounded-xl border border-red-800 bg-red-900/20 px-4 py-3 text-sm text-red-400">
+            <p className="mb-3 rounded-xl border border-red-800 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-600 dark:text-red-400">
               {allState.error}
             </p>
           )}
           {allState?.success && (
-            <p className="mb-3 rounded-xl border border-teal-800 bg-teal-900/20 px-4 py-3 text-sm text-teal-300">
+            <p className="mb-3 rounded-xl border border-teal-800 bg-teal-50 dark:bg-teal-900/20 px-4 py-3 text-sm text-teal-700 dark:text-teal-300">
               All assessments generated —{" "}
-              <strong className="text-teal-200">{allState.count}</strong> of 5 created successfully.
+              <strong className="text-teal-800 dark:text-teal-200">{allState.count}</strong> of 5 created successfully.
             </p>
           )}
 
-          <div className="flex items-center justify-between gap-4 rounded-xl border border-navy-700/40 bg-navy-800/20 px-4 py-3">
+          <div className="flex items-center justify-between gap-4 rounded-xl border border-navy-700/40 bg-navy-50 dark:bg-navy-800/20 px-4 py-3">
             <div>
-              <p className="text-xs font-semibold text-navy-200">Generate All Assessments</p>
+              <p className="text-xs font-semibold text-navy-500 dark:text-navy-200">Generate All Assessments</p>
               <p className="mt-0.5 text-xs text-navy-500">
                 Runs all 5 types in parallel. Each is auto-named and saved. May take several minutes.
               </p>

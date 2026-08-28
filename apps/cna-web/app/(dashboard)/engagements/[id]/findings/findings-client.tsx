@@ -88,7 +88,7 @@ function InstanceRow({
         onClick={() => setOpen((v) => !v)}
         {...{ "aria-expanded": open }}
         aria-controls={`finding-instance-${finding.id}`}
-        className="flex w-full items-center gap-2 py-2.5 text-left hover:text-navy-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-1"
+        className="flex w-full items-center gap-2 py-2.5 text-left hover:text-navy-800 dark:hover:text-navy-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-1"
       >
         <svg
           aria-hidden="true"
@@ -98,29 +98,29 @@ function InstanceRow({
         >
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
         </svg>
-        <span className="min-w-0 flex-1 truncate font-mono text-xs font-semibold text-navy-300">
+        <span className="min-w-0 flex-1 truncate font-mono text-xs font-semibold text-navy-400 dark:text-navy-300">
           {label}
         </span>
         {count > 1 && (
-          <span className="shrink-0 rounded border border-navy-600/40 bg-navy-700/40 px-1.5 py-0.5 text-[10px] font-semibold text-navy-400">
+          <span className="shrink-0 rounded border border-navy-600/40 bg-navy-100/60 dark:bg-navy-700/40 px-1.5 py-0.5 text-[10px] font-semibold text-navy-400">
             ×{count} syncs
           </span>
         )}
       </button>
       {open && (
         <div id={`finding-instance-${finding.id}`} className="pb-4 pl-5">
-          <p className="mb-2.5 text-sm leading-relaxed text-navy-300">{finding.description}</p>
+          <p className="mb-2.5 text-sm leading-relaxed text-navy-400 dark:text-navy-300">{finding.description}</p>
           {finding.recommendation && (
-            <div className="rounded-lg border border-teal-900/30 bg-teal-900/10 px-3 py-2.5">
-              <p className="text-xs leading-relaxed text-teal-300">
-                <span className="font-semibold text-teal-200">Recommendation: </span>
+            <div className="rounded-lg border border-teal-900/30 bg-teal-50 dark:bg-teal-900/10 px-3 py-2.5">
+              <p className="text-xs leading-relaxed text-teal-700 dark:text-teal-300">
+                <span className="font-semibold text-teal-800 dark:text-teal-200">Recommendation: </span>
                 {finding.recommendation}
               </p>
               <a
                 href={finding.msLearnUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-teal-400 hover:text-teal-300 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
+                className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-teal-700 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
               >
                 <svg aria-hidden="true" focusable="false" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -152,11 +152,11 @@ export interface FindingItem {
 const SEV_ORDER: Sev[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL"];
 
 const SEV_META: Record<Sev, { label: string; dot: string; border: string; badge: string; bar: string }> = {
-  CRITICAL:      { label: "Critical", dot: "bg-red-500",    border: "border-l-red-500",    badge: "bg-red-900/30 text-red-300 border border-red-800/40",         bar: "bg-red-500" },
-  HIGH:          { label: "High",     dot: "bg-orange-500", border: "border-l-orange-500", badge: "bg-orange-900/30 text-orange-300 border border-orange-800/40", bar: "bg-orange-500" },
-  MEDIUM:        { label: "Medium",   dot: "bg-yellow-400", border: "border-l-yellow-400", badge: "bg-yellow-900/30 text-yellow-300 border border-yellow-800/40", bar: "bg-yellow-400" },
-  LOW:           { label: "Low",      dot: "bg-blue-400",   border: "border-l-blue-400",   badge: "bg-blue-900/30 text-blue-300 border border-blue-800/40",       bar: "bg-blue-400" },
-  INFORMATIONAL: { label: "Info",     dot: "bg-navy-400",   border: "border-l-navy-500",   badge: "bg-navy-800/50 text-navy-300 border border-navy-700/40",       bar: "bg-navy-500" },
+  CRITICAL:      { label: "Critical", dot: "bg-red-500",    border: "border-l-red-500",    badge: "bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-800/40",         bar: "bg-red-500" },
+  HIGH:          { label: "High",     dot: "bg-orange-500", border: "border-l-orange-500", badge: "bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border border-orange-800/40", bar: "bg-orange-500" },
+  MEDIUM:        { label: "Medium",   dot: "bg-yellow-400", border: "border-l-yellow-400", badge: "bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 border border-yellow-800/40", bar: "bg-yellow-400" },
+  LOW:           { label: "Low",      dot: "bg-blue-400",   border: "border-l-blue-400",   badge: "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-800/40",       bar: "bg-blue-400" },
+  INFORMATIONAL: { label: "Info",     dot: "bg-navy-400",   border: "border-l-navy-500",   badge: "bg-navy-100/60 dark:bg-navy-800/50 text-navy-400 dark:text-navy-300 border border-navy-700/40",       bar: "bg-navy-500" },
 };
 
 // Risk matrix constants
@@ -254,7 +254,7 @@ export function FindingsClient({ findings }: Props) {
       <div className="glass p-5">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-navy-100">
+            <h2 className="text-lg font-semibold text-navy-800 dark:text-navy-100">
               Findings
               <span className="ml-2 text-base font-normal text-navy-400">
                 {totalGroups} unique issues
@@ -268,9 +268,9 @@ export function FindingsClient({ findings }: Props) {
           {/* Severity pills */}
           <div className="flex flex-wrap gap-2">
             {SEV_ORDER.filter((s) => sevCounts[s] > 0).map((sev) => (
-              <div key={sev} className="flex items-center gap-1.5 rounded-full border border-navy-700/40 bg-navy-800/40 px-3 py-1">
+              <div key={sev} className="flex items-center gap-1.5 rounded-full border border-navy-700/40 bg-navy-100/60 dark:bg-navy-800/40 px-3 py-1">
                 <span className={`h-2 w-2 rounded-full ${SEV_META[sev].dot}`} />
-                <span className="text-xs font-semibold text-navy-200">{SEV_META[sev].label}</span>
+                <span className="text-xs font-semibold text-navy-500 dark:text-navy-200">{SEV_META[sev].label}</span>
                 <span className="text-xs text-navy-400">{sevCounts[sev]}</span>
               </div>
             ))}
@@ -323,8 +323,8 @@ export function FindingsClient({ findings }: Props) {
                     (s, sev) => s + findings.filter((f) => f.category === cat && f.severity === sev).length, 0,
                   );
                   return (
-                    <tr key={cat} className="hover:bg-navy-800/20">
-                      <th scope="row" className="py-2 pr-4 text-left text-xs font-medium text-navy-200 font-normal">{cat}</th>
+                    <tr key={cat} className="hover:bg-navy-50 dark:hover:bg-navy-800/20">
+                      <th scope="row" className="py-2 pr-4 text-left text-xs font-medium text-navy-500 dark:text-navy-200 font-normal">{cat}</th>
                       {SEV_ORDER.map((sev) => {
                         const count = findings.filter((f) => f.category === cat && f.severity === sev).length;
                         return (
@@ -339,7 +339,7 @@ export function FindingsClient({ findings }: Props) {
                           </td>
                         );
                       })}
-                      <td className="py-2 text-center text-xs font-semibold text-navy-300">{rowTotal}</td>
+                      <td className="py-2 text-center text-xs font-semibold text-navy-400 dark:text-navy-300">{rowTotal}</td>
                     </tr>
                   );
                 })}
@@ -360,8 +360,8 @@ export function FindingsClient({ findings }: Props) {
               {...{ "aria-pressed": sevFilter === "ALL" }}
               className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 ${
                 sevFilter === "ALL"
-                  ? "bg-navy-600 text-navy-100 ring-2 ring-teal-500/50"
-                  : "bg-navy-800/40 text-navy-400 hover:text-navy-300 hover:bg-navy-700/40"
+                  ? "bg-navy-100 text-navy-800 ring-2 ring-teal-500/50 dark:bg-navy-600 dark:text-navy-100"
+                  : "bg-navy-100/60 dark:bg-navy-800/40 text-navy-400 hover:text-navy-400 dark:hover:text-navy-300 hover:bg-navy-100/60 dark:hover:bg-navy-700/40"
               }`}
             >
               All
@@ -375,7 +375,7 @@ export function FindingsClient({ findings }: Props) {
                 className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 ${
                   sevFilter === sev
                     ? `${SEV_META[sev].badge} ring-2 ring-teal-500/50`
-                    : "bg-navy-800/40 text-navy-400 hover:text-navy-300 hover:bg-navy-700/40"
+                    : "bg-navy-100/60 dark:bg-navy-800/40 text-navy-400 hover:text-navy-400 dark:hover:text-navy-300 hover:bg-navy-100/60 dark:hover:bg-navy-700/40"
                 }`}
               >
                 <span className={`h-1.5 w-1.5 rounded-full ${SEV_META[sev].dot}`} />
@@ -391,7 +391,7 @@ export function FindingsClient({ findings }: Props) {
               aria-label="Filter by category"
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              className="rounded-lg border border-navy-700/40 bg-navy-800/40 px-3 py-1 text-xs text-navy-300 focus:outline-none focus:ring-2 focus:ring-teal-500"
+              className="rounded-lg border border-navy-700/40 bg-navy-100/60 dark:bg-navy-800/40 px-3 py-1 text-xs text-navy-400 dark:text-navy-300 focus:outline-none focus:ring-2 focus:ring-teal-500"
             >
               <option value="ALL">All Categories</option>
               {categories.map((cat) => (
@@ -402,7 +402,7 @@ export function FindingsClient({ findings }: Props) {
               aria-label="Filter by source"
               value={sourceFilter}
               onChange={(e) => setSourceFilter(e.target.value as "ALL" | "LIVE" | "AI")}
-              className="rounded-lg border border-navy-700/40 bg-navy-800/40 px-3 py-1 text-xs text-navy-300 focus:outline-none focus:ring-2 focus:ring-teal-500"
+              className="rounded-lg border border-navy-700/40 bg-navy-100/60 dark:bg-navy-800/40 px-3 py-1 text-xs text-navy-400 dark:text-navy-300 focus:outline-none focus:ring-2 focus:ring-teal-500"
             >
               <option value="ALL">All Sources</option>
               <option value="LIVE">Live Discovery</option>
@@ -448,7 +448,7 @@ export function FindingsClient({ findings }: Props) {
                   {...{ "aria-expanded": isExpanded }}
                   aria-controls={`finding-group-${groupKey}`}
                   className={`w-full px-5 py-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-1 ${
-                    isExpanded ? "bg-navy-800/20" : "hover:bg-navy-800/10"
+                    isExpanded ? "bg-navy-50 dark:bg-navy-800/20" : "hover:bg-navy-50 dark:hover:bg-navy-800/10"
                   }`}
                 >
                   <div className="flex items-start gap-3">
@@ -456,22 +456,22 @@ export function FindingsClient({ findings }: Props) {
                       {meta.label}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold leading-snug text-navy-100">
+                      <p className="text-sm font-semibold leading-snug text-navy-800 dark:text-navy-100">
                         {displayTitle}
                       </p>
                       <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                        <span className="inline-flex items-center rounded border border-navy-700/40 bg-navy-800/40 px-2 py-0.5 text-xs text-navy-400">
+                        <span className="inline-flex items-center rounded border border-navy-700/40 bg-navy-100/60 dark:bg-navy-800/40 px-2 py-0.5 text-xs text-navy-400">
                           {rep.category}
                         </span>
                         <span className={`inline-flex items-center rounded border px-2 py-0.5 text-xs ${
                           rep.aiGenerated
-                            ? "border-teal-800/40 bg-teal-900/20 text-teal-400"
-                            : "border-violet-800/40 bg-violet-900/20 text-violet-400"
+                            ? "border-teal-800/40 bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-400"
+                            : "border-violet-800/40 bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400"
                         }`}>
                           {rep.aiGenerated ? "AI Analysis" : "Live Discovery"}
                         </span>
                         {isGroup && (
-                          <span className="inline-flex items-center rounded-full border border-navy-600/40 bg-navy-700/40 px-2 py-0.5 text-xs font-semibold text-navy-300">
+                          <span className="inline-flex items-center rounded-full border border-navy-600/40 bg-navy-100/60 dark:bg-navy-700/40 px-2 py-0.5 text-xs font-semibold text-navy-400 dark:text-navy-300">
                             {dedupedInstances.length} affected resources
                           </span>
                         )}
@@ -490,7 +490,7 @@ export function FindingsClient({ findings }: Props) {
 
                 {/* Expanded content */}
                 {isExpanded && (
-                  <div id={`finding-group-${groupKey}`} className="divide-y divide-navy-700/20 bg-navy-800/10">
+                  <div id={`finding-group-${groupKey}`} className="divide-y divide-navy-700/20 bg-navy-50 dark:bg-navy-800/10">
                     {isGroup ? (
                       /* Multiple affected resources — one row per resource */
                       dedupedInstances.map(({ label, finding, count }) => (
@@ -503,20 +503,20 @@ export function FindingsClient({ findings }: Props) {
                         <p className="mb-2 font-mono text-xs font-semibold text-navy-400">
                           {dedupedInstances[0].label}
                           {dedupedInstances[0].count > 1 && (
-                            <span className="ml-2 rounded border border-navy-600/40 bg-navy-700/40 px-1.5 py-0.5 text-[10px] font-semibold text-navy-400">
+                            <span className="ml-2 rounded border border-navy-600/40 bg-navy-100/60 dark:bg-navy-700/40 px-1.5 py-0.5 text-[10px] font-semibold text-navy-400">
                               ×{dedupedInstances[0].count} syncs
                             </span>
                           )}
                         </p>
-                        <p className="mb-3 text-sm leading-relaxed text-navy-300">{rep.description}</p>
+                        <p className="mb-3 text-sm leading-relaxed text-navy-400 dark:text-navy-300">{rep.description}</p>
                         {rep.recommendation && (
-                          <div className="rounded-lg border border-teal-900/30 bg-teal-900/10 px-3 py-2.5">
-                            <p className="text-xs leading-relaxed text-teal-300">
-                              <span className="font-semibold text-teal-200">Recommendation: </span>
+                          <div className="rounded-lg border border-teal-900/30 bg-teal-50 dark:bg-teal-900/10 px-3 py-2.5">
+                            <p className="text-xs leading-relaxed text-teal-700 dark:text-teal-300">
+                              <span className="font-semibold text-teal-800 dark:text-teal-200">Recommendation: </span>
                               {rep.recommendation}
                             </p>
                             <a href={rep.msLearnUrl} target="_blank" rel="noopener noreferrer"
-                              className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-teal-400 hover:text-teal-300 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500">
+                              className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-teal-700 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500">
                               <svg aria-hidden="true" focusable="false" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                               </svg>

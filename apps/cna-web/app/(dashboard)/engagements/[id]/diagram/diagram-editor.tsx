@@ -60,13 +60,13 @@ export function DiagramEditor({
         )}
         {saveState.kind === "saving" && <span className="text-navy-400">Saving…</span>}
         {saveState.kind === "saved" && (
-          <span className="text-teal-400">
+          <span className="text-teal-700 dark:text-teal-400">
             Saved to engagement at {saveState.at.toLocaleTimeString()} — listed under Documents and
             Deliverables.
           </span>
         )}
         {saveState.kind === "error" && (
-          <span className="font-semibold text-red-400">{saveState.message}</span>
+          <span className="font-semibold text-red-600 dark:text-red-400">{saveState.message}</span>
         )}
       </p>
     </div>

@@ -70,18 +70,18 @@ export function DeleteEngagementButton({
         <dialog
           ref={dialogRef}
           onClose={closeModal}
-          className="rounded-xl border border-navy-700 bg-navy-900 p-6 text-navy-100 shadow-2xl backdrop:bg-black/50 w-full max-w-md focus-visible:outline-none"
+          className="rounded-xl border border-navy-100 bg-white p-6 text-navy-800 shadow-2xl backdrop:bg-black/50 w-full max-w-md focus-visible:outline-none dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
         >
           <div className="space-y-4">
-            <h2 className="text-lg font-bold text-navy-50">Delete Engagement?</h2>
-            <p className="text-sm text-navy-300 font-normal">
-              Are you sure you want to delete <strong className="text-navy-100">"{engagementName}"</strong>? This will permanently remove all documents, findings, and deliverables. This cannot be undone.
+            <h2 className="text-lg font-bold text-navy-800 dark:text-navy-50">Delete Engagement?</h2>
+            <p className="text-sm text-navy-400 dark:text-navy-300 font-normal">
+              Are you sure you want to delete <strong className="text-navy-800 dark:text-navy-100">"{engagementName}"</strong>? This will permanently remove all documents, findings, and deliverables. This cannot be undone.
             </p>
             <div className="flex justify-end gap-3 pt-2">
               <button
                 type="button"
                 onClick={closeModal}
-                className="rounded-lg border border-navy-700 bg-navy-800/40 px-4 py-2 text-xs font-medium text-navy-300 hover:bg-navy-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
+                className="rounded-lg border border-navy-100 bg-navy-50 px-4 py-2 text-xs font-medium text-navy-500 hover:bg-navy-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-navy-700 dark:bg-navy-800/40 dark:text-navy-300 dark:hover:bg-navy-800"
               >
                 Cancel
               </button>

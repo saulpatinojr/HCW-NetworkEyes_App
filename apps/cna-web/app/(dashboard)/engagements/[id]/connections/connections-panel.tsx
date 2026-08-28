@@ -49,11 +49,11 @@ const makeStyle = (props: React.CSSProperties) => ({ [styleKey]: props }) as any
 
 const SEVERITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL"];
 const SEVERITY_STYLE: Record<string, string> = {
-  CRITICAL: "bg-red-900/30 text-red-400",
-  HIGH: "bg-orange-900/30 text-orange-400",
-  MEDIUM: "bg-yellow-900/30 text-yellow-400",
-  LOW: "bg-blue-900/30 text-blue-400",
-  INFORMATIONAL: "bg-navy-700/40 text-navy-300",
+  CRITICAL: "bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400",
+  HIGH: "bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400",
+  MEDIUM: "bg-yellow-50 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400",
+  LOW: "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400",
+  INFORMATIONAL: "bg-navy-100/60 dark:bg-navy-700/40 text-navy-400 dark:text-navy-300",
 };
 
 // ─── Inline job entry (inside collapsible) ────────────────────────────────────
@@ -116,12 +116,12 @@ function JobEntry({
   }).filter((s) => s.count > 0);
 
   return (
-    <div className="rounded-lg border border-navy-700/40 bg-navy-800/30 p-3">
+    <div className="rounded-lg border border-navy-700/40 bg-navy-50 dark:bg-navy-800/30 p-3">
       {/* Status + timestamp */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           {isCompleted ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-teal-900/40 px-2 py-0.5 text-xs font-semibold text-teal-400">
+            <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 dark:bg-teal-900/40 px-2 py-0.5 text-xs font-semibold text-teal-700 dark:text-teal-400">
               ● Completed
             </span>
           ) : (
@@ -130,7 +130,7 @@ function JobEntry({
           {isActive && (
             <>
               {/* WAI-19: Hide decorative spinner from screen readers, convey status with sr-only */}
-              <svg aria-hidden="true" focusable="false" className="h-3.5 w-3.5 animate-spin text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <svg aria-hidden="true" focusable="false" className="h-3.5 w-3.5 animate-spin text-blue-600 dark:text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
@@ -138,7 +138,7 @@ function JobEntry({
             </>
           )}
           {isCompleted && job.findingsCount != null && (
-            <span className="rounded-full bg-blue-900/30 px-2 py-0.5 text-xs font-semibold text-blue-400">
+            <span className="rounded-full bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 text-xs font-semibold text-blue-600 dark:text-blue-400">
               {job.findingsCount} finding{job.findingsCount !== 1 ? "s" : ""}
             </span>
           )}
@@ -153,7 +153,7 @@ function JobEntry({
 
       {/* Error */}
       {isFailed && job.errorMessage && (
-        <div className="mt-2 rounded border border-red-800/40 bg-red-900/20 px-3 py-2 text-xs font-mono text-red-400">
+        <div className="mt-2 rounded border border-red-800/40 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-xs font-mono text-red-600 dark:text-red-400">
           {job.errorMessage}
         </div>
       )}
@@ -164,7 +164,7 @@ function JobEntry({
           {severityCounts.map(({ severity, count }) => (
             <span
               key={severity}
-              className={`rounded-full px-2 py-0.5 text-xs font-semibold ${SEVERITY_STYLE[severity] ?? "bg-navy-700/40 text-navy-300"}`}
+              className={`rounded-full px-2 py-0.5 text-xs font-semibold ${SEVERITY_STYLE[severity] ?? "bg-navy-100/60 dark:bg-navy-700/40 text-navy-400 dark:text-navy-300"}`}
             >
               {severity}: {count}
             </span>
@@ -185,8 +185,8 @@ function JobEntry({
               { label: "DNS Zones", value: job.topologySummary.dnsZones },
               { label: "ExpressRoute", value: job.topologySummary.expressRoutes },
             ].filter(({ value }) => value > 0).map(({ label, value }) => (
-              <div key={label} className="flex items-center gap-1 rounded border border-navy-700/40 bg-navy-800/50 px-2 py-1">
-                <span className="text-sm font-bold text-navy-100">{value}</span>
+              <div key={label} className="flex items-center gap-1 rounded border border-navy-700/40 bg-navy-100/60 dark:bg-navy-800/50 px-2 py-1">
+                <span className="text-sm font-bold text-navy-800 dark:text-navy-100">{value}</span>
                 <span className="text-xs text-navy-400">{label}</span>
               </div>
             ))}
@@ -194,7 +194,7 @@ function JobEntry({
 
           {/* Workload inventory row */}
           {job.topologySummary.workload && (
-            <div className="rounded border border-navy-700/30 bg-navy-900/30 px-2.5 py-1.5">
+            <div className="rounded border border-navy-700/30 bg-navy-50 dark:bg-navy-900/30 px-2.5 py-1.5">
               <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-navy-500">Workload Inventory</p>
               <div className="flex flex-wrap gap-1.5">
                 {[
@@ -203,8 +203,8 @@ function JobEntry({
                   { label: "AKS", value: job.topologySummary.workload.aksCount },
                   { label: "Functions", value: job.topologySummary.workload.fnCount },
                 ].map(({ label, value }) => (
-                  <div key={label} className="flex items-center gap-1 rounded border border-navy-700/40 bg-navy-800/50 px-2 py-0.5">
-                    <span className="text-xs font-bold text-navy-100">{value}</span>
+                  <div key={label} className="flex items-center gap-1 rounded border border-navy-700/40 bg-navy-100/60 dark:bg-navy-800/50 px-2 py-0.5">
+                    <span className="text-xs font-bold text-navy-800 dark:text-navy-100">{value}</span>
                     <span className="text-[11px] text-navy-400">{label}</span>
                   </div>
                 ))}
@@ -214,27 +214,27 @@ function JobEntry({
 
           {/* BGP row */}
           {job.topologySummary.bgp && job.topologySummary.bgp.gatewaysWithBgp > 0 && (
-            <div className="rounded border border-navy-700/30 bg-navy-900/30 px-2.5 py-1.5">
+            <div className="rounded border border-navy-700/30 bg-navy-50 dark:bg-navy-900/30 px-2.5 py-1.5">
               <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-navy-500">BGP & Routing</p>
               <div className="flex flex-wrap gap-1.5">
-                <div className="flex items-center gap-1 rounded border border-navy-700/40 bg-navy-800/50 px-2 py-0.5">
-                  <span className="text-xs font-bold text-navy-100">{job.topologySummary.bgp.gatewaysWithBgp}</span>
+                <div className="flex items-center gap-1 rounded border border-navy-700/40 bg-navy-100/60 dark:bg-navy-800/50 px-2 py-0.5">
+                  <span className="text-xs font-bold text-navy-800 dark:text-navy-100">{job.topologySummary.bgp.gatewaysWithBgp}</span>
                   <span className="text-[11px] text-navy-400">BGP GW</span>
                 </div>
                 {job.topologySummary.bgp.peersConnected > 0 && (
-                  <div className="flex items-center gap-1 rounded border border-teal-700/40 bg-teal-900/20 px-2 py-0.5">
-                    <span className="text-xs font-bold text-teal-300">{job.topologySummary.bgp.peersConnected}</span>
-                    <span className="text-[11px] text-teal-400">peers up</span>
+                  <div className="flex items-center gap-1 rounded border border-teal-700/40 bg-teal-50 dark:bg-teal-900/20 px-2 py-0.5">
+                    <span className="text-xs font-bold text-teal-700 dark:text-teal-300">{job.topologySummary.bgp.peersConnected}</span>
+                    <span className="text-[11px] text-teal-700 dark:text-teal-400">peers up</span>
                   </div>
                 )}
                 {job.topologySummary.bgp.peersDisconnected > 0 && (
-                  <div className="flex items-center gap-1 rounded border border-red-700/40 bg-red-900/20 px-2 py-0.5">
-                    <span className="text-xs font-bold text-red-300">{job.topologySummary.bgp.peersDisconnected}</span>
-                    <span className="text-[11px] text-red-400">peers down</span>
+                  <div className="flex items-center gap-1 rounded border border-red-700/40 bg-red-50 dark:bg-red-900/20 px-2 py-0.5">
+                    <span className="text-xs font-bold text-red-700 dark:text-red-300">{job.topologySummary.bgp.peersDisconnected}</span>
+                    <span className="text-[11px] text-red-600 dark:text-red-400">peers down</span>
                   </div>
                 )}
-                <div className="flex items-center gap-1 rounded border border-navy-700/40 bg-navy-800/50 px-2 py-0.5">
-                  <span className="text-xs font-bold text-navy-100">{job.topologySummary.bgp.routesLearned}</span>
+                <div className="flex items-center gap-1 rounded border border-navy-700/40 bg-navy-100/60 dark:bg-navy-800/50 px-2 py-0.5">
+                  <span className="text-xs font-bold text-navy-800 dark:text-navy-100">{job.topologySummary.bgp.routesLearned}</span>
                   <span className="text-[11px] text-navy-400">routes learned</span>
                 </div>
               </div>
@@ -243,39 +243,39 @@ function JobEntry({
 
           {/* Observability row */}
           {job.topologySummary.observability && (
-            <div className="rounded border border-navy-700/30 bg-navy-900/30 px-2.5 py-1.5">
+            <div className="rounded border border-navy-700/30 bg-navy-50 dark:bg-navy-900/30 px-2.5 py-1.5">
               <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-navy-500">Observability</p>
               <div className="flex flex-wrap gap-1.5">
-                <div className="flex items-center gap-1 rounded border border-navy-700/40 bg-navy-800/50 px-2 py-0.5">
-                  <span className="text-xs font-bold text-navy-100">{job.topologySummary.observability.networkWatchers}</span>
+                <div className="flex items-center gap-1 rounded border border-navy-700/40 bg-navy-100/60 dark:bg-navy-800/50 px-2 py-0.5">
+                  <span className="text-xs font-bold text-navy-800 dark:text-navy-100">{job.topologySummary.observability.networkWatchers}</span>
                   <span className="text-[11px] text-navy-400">NW regions</span>
                 </div>
-                <div className="flex items-center gap-1 rounded border border-navy-700/40 bg-navy-800/50 px-2 py-0.5">
-                  <span className="text-xs font-bold text-navy-100">{job.topologySummary.observability.logWorkspaces}</span>
+                <div className="flex items-center gap-1 rounded border border-navy-700/40 bg-navy-100/60 dark:bg-navy-800/50 px-2 py-0.5">
+                  <span className="text-xs font-bold text-navy-800 dark:text-navy-100">{job.topologySummary.observability.logWorkspaces}</span>
                   <span className="text-[11px] text-navy-400">Log workspaces</span>
                 </div>
                 {job.topologySummary.observability.nsgTotal > 0 && (
                   <div className={[
                     "flex items-center gap-1 rounded border px-2 py-0.5",
                     job.topologySummary.observability.nsgFlowLogsEnabled >= job.topologySummary.observability.nsgTotal
-                      ? "border-teal-700/40 bg-teal-900/20"
-                      : "border-amber-700/40 bg-amber-900/20",
+                      ? "border-teal-700/40 bg-teal-50 dark:bg-teal-900/20"
+                      : "border-amber-700/40 bg-amber-50 dark:bg-amber-900/20",
                   ].join(" ")}>
                     <span className={`text-xs font-bold ${
                       job.topologySummary.observability.nsgFlowLogsEnabled >= job.topologySummary.observability.nsgTotal
-                        ? "text-teal-300" : "text-amber-300"
+                        ? "text-teal-700 dark:text-teal-300" : "text-amber-700 dark:text-amber-300"
                     }`}>
                       {job.topologySummary.observability.nsgFlowLogsEnabled}/{job.topologySummary.observability.nsgTotal}
                     </span>
                     <span className={`text-[11px] ${
                       job.topologySummary.observability.nsgFlowLogsEnabled >= job.topologySummary.observability.nsgTotal
-                        ? "text-teal-400" : "text-amber-400"
+                        ? "text-teal-700 dark:text-teal-400" : "text-amber-600 dark:text-amber-400"
                     }`}>NSG flow logs</span>
                   </div>
                 )}
                 {job.topologySummary.metricsCollected && (
-                  <div className="flex items-center gap-1 rounded border border-blue-700/40 bg-blue-900/20 px-2 py-0.5">
-                    <span className="text-[11px] text-blue-300">metrics collected</span>
+                  <div className="flex items-center gap-1 rounded border border-blue-700/40 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5">
+                    <span className="text-[11px] text-blue-700 dark:text-blue-300">metrics collected</span>
                   </div>
                 )}
               </div>
@@ -286,11 +286,11 @@ function JobEntry({
 
       {/* Progress log */}
       {progress.length > 0 && (
-        <div className="mt-2 max-h-36 overflow-y-auto rounded border border-navy-700/40 bg-navy-900/60 p-2 font-mono text-xs text-navy-300">
+        <div className="mt-2 max-h-36 overflow-y-auto rounded border border-navy-700/40 bg-navy-100/60 dark:bg-navy-900/60 p-2 font-mono text-xs text-navy-400 dark:text-navy-300">
           {progress.map((line, i) => (
             <div
               key={i}
-              className={i === progress.length - 1 && isActive ? "font-semibold text-teal-400" : ""}
+              className={i === progress.length - 1 && isActive ? "font-semibold text-teal-700 dark:text-teal-400" : ""}
             >
               {line}
             </div>
@@ -318,7 +318,7 @@ function StartDiscoveryForm({
       <input type="hidden" name="engagementId" value={engagementId} />
       <input type="hidden" name="credentialId" value={credentialId} />
       {state?.error && (
-        <span className="text-xs text-red-400">{state.error}</span>
+        <span className="text-xs text-red-600 dark:text-red-400">{state.error}</span>
       )}
       {hasCompleted ? (
         <SubmitButton
@@ -361,14 +361,14 @@ function DeleteCredentialButton({
         <input type="hidden" name="credentialId" value={credentialId} />
         <input type="hidden" name="engagementId" value={engagementId} />
         {state?.error && (
-          <span className="text-xs text-red-400">{state.error}</span>
+          <span className="text-xs text-red-600 dark:text-red-400">{state.error}</span>
         )}
         <div className="inline-flex items-center gap-1.5">
           <span className="text-xs text-navy-400">Remove {label}?</span>
           <button
             type="submit"
             disabled={isPending}
-            className="rounded bg-red-900/40 px-2 py-0.5 text-xs font-semibold text-red-400 hover:bg-red-900/60 disabled:opacity-50"
+            className="rounded bg-red-50 dark:bg-red-900/40 px-2 py-0.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/60 disabled:opacity-50"
           >
             {isPending ? "Removing…" : "Confirm"}
           </button>
@@ -376,7 +376,7 @@ function DeleteCredentialButton({
             type="button"
             onClick={() => setConfirming(false)}
             disabled={isPending}
-            className="rounded bg-navy-700/40 px-2 py-0.5 text-xs text-navy-400 hover:bg-navy-700/60 disabled:opacity-50"
+            className="rounded bg-navy-100/60 dark:bg-navy-700/40 px-2 py-0.5 text-xs text-navy-400 hover:bg-navy-100/60 dark:hover:bg-navy-700/60 disabled:opacity-50"
           >
             Cancel
           </button>
@@ -389,7 +389,7 @@ function DeleteCredentialButton({
     <button
       type="button"
       onClick={() => setConfirming(true)}
-      className="mt-1 inline-flex items-center gap-1 rounded border border-red-800/40 px-2 py-0.5 text-xs font-medium text-red-400 hover:bg-red-900/20 transition-colors"
+      className="mt-1 inline-flex items-center gap-1 rounded border border-red-800/40 px-2 py-0.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
     >
       <span>✕</span>
       <span>Remove</span>
@@ -455,14 +455,14 @@ function CredentialCard({
   }
 
   return (
-    <div className="rounded-xl border border-navy-700/40 bg-navy-800/20 p-4">
+    <div className="rounded-xl border border-navy-700/40 bg-navy-50 dark:bg-navy-800/20 p-4">
       {/* Credential header */}
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <p className="text-sm font-semibold text-navy-100">{cred.label}</p>
+            <p className="text-sm font-semibold text-navy-800 dark:text-navy-100">{cred.label}</p>
             {isActive && (
-              <svg className="h-3.5 w-3.5 animate-spin text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <svg className="h-3.5 w-3.5 animate-spin text-blue-600 dark:text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
@@ -510,7 +510,7 @@ function CredentialCard({
                     "aria-valuemax": 100,
                   }}
                   aria-label={`Discovery progress: ${pct}%`}
-                  className="h-1.5 w-full overflow-hidden rounded-full bg-navy-700/50"
+                  className="h-1.5 w-full overflow-hidden rounded-full bg-navy-100/60 dark:bg-navy-700/50"
                 >
                   <div
                     className="h-full rounded-full bg-teal-500 transition-all duration-700"
@@ -530,7 +530,7 @@ function CredentialCard({
             >
               <summary
                 {...{ "aria-expanded": runsOpen }}
-                className="inline-flex cursor-pointer list-none items-center gap-1 text-xs text-navy-400 hover:text-navy-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-1 rounded-sm"
+                className="inline-flex cursor-pointer list-none items-center gap-1 text-xs text-navy-400 hover:text-navy-500 dark:hover:text-navy-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-1 rounded-sm"
               >
                 <svg
                   aria-hidden="true"
@@ -550,7 +550,7 @@ function CredentialCard({
                     Completed {new Date(latestJob.completedAt!).toLocaleDateString()}
                     {latestJob.completedAt &&
                       Date.now() - new Date(latestJob.completedAt).getTime() < 60_000 && (
-                        <span className="ml-1.5 inline-flex items-center rounded-full bg-teal-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-teal-400">
+                        <span className="ml-1.5 inline-flex items-center rounded-full bg-teal-50 dark:bg-teal-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-teal-700 dark:text-teal-400">
                           ✓ Just completed
                         </span>
                       )}
@@ -616,7 +616,7 @@ function BulkDiscoverButton({
     ? "bg-teal-700 hover:bg-teal-600 focus:ring-teal-500 text-white"
     : "bg-blue-700 hover:bg-blue-600 focus:ring-blue-500 text-white";
   const disabledStyle =
-    "bg-navy-700/40 text-navy-500 cursor-not-allowed";
+    "bg-navy-100/60 dark:bg-navy-700/40 text-navy-500 cursor-not-allowed";
 
   function handleClick() {
     setError(null);
@@ -632,7 +632,7 @@ function BulkDiscoverButton({
 
   return (
     <div className="flex flex-col items-end gap-1 pt-1">
-      {error && <span className="text-xs text-red-400">{error}</span>}
+      {error && <span className="text-xs text-red-600 dark:text-red-400">{error}</span>}
       <button
         type="button"
         onClick={handleClick}

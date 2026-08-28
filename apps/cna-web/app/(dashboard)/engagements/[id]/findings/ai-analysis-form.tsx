@@ -74,9 +74,9 @@ const ANALYSIS_OPTIONS = [
 ];
 
 const CARD_BASE =
-  "flex cursor-pointer items-start gap-3 rounded-xl border border-navy-700 bg-navy-800/30 p-3 transition-colors hover:border-teal-600/60 hover:bg-teal-900/20";
+  "flex cursor-pointer items-start gap-3 rounded-xl border border-navy-700 bg-navy-50 dark:bg-navy-800/30 p-3 transition-colors hover:border-teal-600/60 hover:bg-teal-50 dark:hover:bg-teal-900/20";
 const CARD_CHECKED =
-  "has-[:checked]:border-teal-500 has-[:checked]:bg-teal-900/30";
+  "has-[:checked]:border-teal-500 has-[:checked]:bg-teal-50 dark:bg-teal-900/30";
 
 export function AiAnalysisForm({ engagementId }: { engagementId: string }) {
   const [state, action] = useActionState(runAnalysis, null);
@@ -89,14 +89,14 @@ export function AiAnalysisForm({ engagementId }: { engagementId: string }) {
         <input type="hidden" name="engagementId" value={engagementId} />
 
         {state?.error && (
-          <p className="rounded-xl border border-red-800 bg-red-900/20 px-4 py-3 text-sm text-red-400">
+          <p className="rounded-xl border border-red-800 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-600 dark:text-red-400">
             {state.error}
           </p>
         )}
         {state?.success && (
-          <p className="rounded-xl border border-teal-800 bg-teal-900/20 px-4 py-3 text-sm text-teal-300">
+          <p className="rounded-xl border border-teal-800 bg-teal-50 dark:bg-teal-900/20 px-4 py-3 text-sm text-teal-700 dark:text-teal-300">
             Analysis complete —{" "}
-            <strong className="text-teal-200">{state.count}</strong> new finding
+            <strong className="text-teal-800 dark:text-teal-200">{state.count}</strong> new finding
             {state.count !== 1 ? "s" : ""} generated.
           </p>
         )}
@@ -116,7 +116,7 @@ export function AiAnalysisForm({ engagementId }: { engagementId: string }) {
                       className="mt-0.5 accent-teal-500"
                     />
                     <div>
-                      <p className="text-xs font-semibold text-navy-100">{opt.label}</p>
+                      <p className="text-xs font-semibold text-navy-800 dark:text-navy-100">{opt.label}</p>
                       <p className="mt-0.5 text-xs text-navy-400">{opt.desc}</p>
                     </div>
                   </label>
@@ -147,21 +147,21 @@ export function AiAnalysisForm({ engagementId }: { engagementId: string }) {
           <input type="hidden" name="engagementId" value={engagementId} />
 
           {allState?.error && (
-            <p className="mb-3 rounded-xl border border-red-800 bg-red-900/20 px-4 py-3 text-sm text-red-400">
+            <p className="mb-3 rounded-xl border border-red-800 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-600 dark:text-red-400">
               {allState.error}
             </p>
           )}
           {allState?.success && (
-            <p className="mb-3 rounded-xl border border-teal-800 bg-teal-900/20 px-4 py-3 text-sm text-teal-300">
+            <p className="mb-3 rounded-xl border border-teal-800 bg-teal-50 dark:bg-teal-900/20 px-4 py-3 text-sm text-teal-700 dark:text-teal-300">
               All analyses complete —{" "}
-              <strong className="text-teal-200">{allState.count}</strong> unique new
+              <strong className="text-teal-800 dark:text-teal-200">{allState.count}</strong> unique new
               finding{allState.count !== 1 ? "s" : ""} generated across all 11 focus types.
             </p>
           )}
 
-          <div className="flex items-center justify-between gap-4 rounded-xl border border-navy-700/40 bg-navy-800/20 px-4 py-3">
+          <div className="flex items-center justify-between gap-4 rounded-xl border border-navy-700/40 bg-navy-50 dark:bg-navy-800/20 px-4 py-3">
             <div>
-              <p className="text-xs font-semibold text-navy-200">Run All Analysis</p>
+              <p className="text-xs font-semibold text-navy-500 dark:text-navy-200">Run All Analysis</p>
               <p className="mt-0.5 text-xs text-navy-500">
                 Runs all 11 focus types in parallel. May take a few minutes.
               </p>

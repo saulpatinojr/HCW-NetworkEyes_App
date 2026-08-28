@@ -70,11 +70,11 @@ export default async function AnalysisPage({ params }: PageProps) {
   return (
     <div className="space-y-6">
       {needsResync && hasTopology && (
-        <div className="flex items-center gap-3 rounded-lg border border-amber-700/40 bg-amber-900/20 px-4 py-3">
-          <svg className="h-4 w-4 shrink-0 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+        <div className="flex items-center gap-3 rounded-lg border border-amber-700/40 bg-amber-50 dark:bg-amber-900/20 px-4 py-3">
+          <svg className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm0-2a6 6 0 110-12 6 6 0 010 12zm-1-9a1 1 0 112 0v4a1 1 0 11-2 0V7zm0 6a1 1 0 112 0 1 1 0 01-2 0z" clipRule="evenodd" />
           </svg>
-          <p className="text-sm text-amber-300">
+          <p className="text-sm text-amber-700 dark:text-amber-300">
             <span className="font-semibold">Subscriptions changed</span> — re-sync on the Connections tab before running analysis to ensure findings reflect the current inventory.
           </p>
         </div>
@@ -82,14 +82,14 @@ export default async function AnalysisPage({ params }: PageProps) {
 
       {/* ── AI Analysis ── */}
       <section className="glass p-6">
-        <h2 className="mb-1 text-lg font-semibold text-navy-100">AI Analysis</h2>
+        <h2 className="mb-1 text-lg font-semibold text-navy-800 dark:text-navy-100">AI Analysis</h2>
         <p className="mb-4 text-sm text-navy-400">
           Run a focused security analysis on your discovered topology and uploaded
           documents. Each focus type uses a different analytical lens. Results are
           added to the Findings tab.
         </p>
         {!hasAnalysisData ? (
-          <p className="rounded-lg border border-amber-800/40 bg-amber-900/20 px-4 py-3 text-sm text-amber-400">
+          <p className="rounded-lg border border-amber-800/40 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-600 dark:text-amber-400">
             No data to analyze yet. Run discovery on the Connections tab to capture live
             topology, or upload documents on the Documents tab.
           </p>

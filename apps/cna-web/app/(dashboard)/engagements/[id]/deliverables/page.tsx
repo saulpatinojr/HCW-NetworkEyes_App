@@ -111,17 +111,17 @@ export default async function AssessmentsPage({ params }: PageProps) {
         <p className="mb-5 text-xs text-navy-500">
           AI-powered generation using live topology, uploaded documents, and all findings.
           {findings.length === 0 && (
-            <span className="ml-2 font-medium text-amber-400">
+            <span className="ml-2 font-medium text-amber-600 dark:text-amber-400">
               No findings yet — run discovery or AI analysis first.
             </span>
           )}
         </p>
         {needsResync && (
-          <div className="mb-4 flex items-center gap-3 rounded-lg border border-amber-700/40 bg-amber-900/20 px-4 py-3">
-            <svg aria-hidden="true" focusable="false" className="h-4 w-4 shrink-0 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+          <div className="mb-4 flex items-center gap-3 rounded-lg border border-amber-700/40 bg-amber-50 dark:bg-amber-900/20 px-4 py-3">
+            <svg aria-hidden="true" focusable="false" className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm0-2a6 6 0 110-12 6 6 0 010 12zm-1-9a1 1 0 112 0v4a1 1 0 11-2 0V7zm0 6a1 1 0 112 0 1 1 0 01-2 0z" clipRule="evenodd" />
             </svg>
-            <p className="text-sm text-amber-300">
+            <p className="text-sm text-amber-700 dark:text-amber-300">
               <span className="font-semibold">Subscriptions changed</span> — re-sync on the Connections tab before generating to include the latest inventory.
             </p>
           </div>
@@ -166,8 +166,8 @@ export default async function AssessmentsPage({ params }: PageProps) {
                 <div key={d.id} className="flex items-center gap-4 py-4">
                   {/* Icon */}
                   {meta && (
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-900/30">
-                      <svg aria-hidden="true" focusable="false" className="h-4 w-4 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-50 dark:bg-teal-900/30">
+                      <svg aria-hidden="true" focusable="false" className="h-4 w-4 text-teal-700 dark:text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d={meta.icon} />
                       </svg>
                     </div>
@@ -175,9 +175,9 @@ export default async function AssessmentsPage({ params }: PageProps) {
 
                   {/* Name + meta */}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-navy-100">{d.title}</p>
+                    <p className="truncate text-sm font-semibold text-navy-800 dark:text-navy-100">{d.title}</p>
                     <div className="mt-1 flex flex-wrap items-center gap-2">
-                      <span className="rounded border border-navy-700/40 bg-navy-800/40 px-1.5 py-0.5 text-xs text-navy-400">
+                      <span className="rounded border border-navy-700/40 bg-navy-100/60 dark:bg-navy-800/40 px-1.5 py-0.5 text-xs text-navy-400">
                         {meta?.audience ?? d.type.replace(/_/g, " ")}
                       </span>
                       <span className="text-xs text-navy-600">
@@ -196,7 +196,7 @@ export default async function AssessmentsPage({ params }: PageProps) {
                     {inProgress ? (
                       <DeliverableProgress deliverableId={d.id} />
                     ) : d.status === "FAILED" ? (
-                      <span className="rounded border border-red-800/40 bg-red-900/20 px-2 py-1 text-xs font-medium text-red-400">
+                      <span className="rounded border border-red-800/40 bg-red-50 dark:bg-red-900/20 px-2 py-1 text-xs font-medium text-red-600 dark:text-red-400">
                         Generation failed
                       </span>
                     ) : (
@@ -204,7 +204,7 @@ export default async function AssessmentsPage({ params }: PageProps) {
                       href={`/api/deliverables/${d.id}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-navy-600/60 bg-navy-700/40 px-3 py-1.5 text-xs font-medium text-navy-200 transition-colors hover:bg-navy-700/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-navy-600/60 bg-navy-100/60 dark:bg-navy-700/40 px-3 py-1.5 text-xs font-medium text-navy-500 dark:text-navy-200 transition-colors hover:bg-navy-100/60 dark:hover:bg-navy-700/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
                     >
                       <svg aria-hidden="true" focusable="false" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d={isHtml
@@ -224,7 +224,7 @@ export default async function AssessmentsPage({ params }: PageProps) {
                       <button
                         type="submit"
                         aria-label={`Delete ${d.title}`}
-                        className="flex h-7 w-7 items-center justify-center rounded-lg border border-red-800/40 bg-red-900/20 text-red-400 transition-colors hover:bg-red-900/40 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                        className="flex h-7 w-7 items-center justify-center rounded-lg border border-red-800/40 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 transition-colors hover:bg-red-50 dark:hover:bg-red-900/40 hover:text-red-700 dark:hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                       >
                         <svg aria-hidden="true" focusable="false" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

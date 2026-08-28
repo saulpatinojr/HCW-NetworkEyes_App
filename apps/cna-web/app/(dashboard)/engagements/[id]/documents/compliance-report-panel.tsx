@@ -22,7 +22,7 @@ interface Props {
 }
 
 const CARD_BASE =
-  "flex cursor-pointer items-start gap-3 rounded-xl border border-navy-700 bg-navy-800/30 p-3 transition-colors hover:border-teal-600/60 hover:bg-teal-900/20";
+  "flex cursor-pointer items-start gap-3 rounded-xl border border-navy-700 bg-navy-50 dark:bg-navy-800/30 p-3 transition-colors hover:border-teal-600/60 hover:bg-teal-50 dark:hover:bg-teal-900/20";
 
 export function ComplianceReportPanel({ engagementId, hasTopology, needsResync }: Props) {
   const [framework, setFramework] = useState<Framework>("nist");
@@ -31,24 +31,24 @@ export function ComplianceReportPanel({ engagementId, hasTopology, needsResync }
 
   return (
     <section className="glass p-6">
-      <h2 className="mb-1 text-lg font-semibold text-navy-100">Compliance Check</h2>
+      <h2 className="mb-1 text-lg font-semibold text-navy-800 dark:text-navy-100">Compliance Check</h2>
       <p className="mb-5 text-sm text-navy-400">
         Run a framework-specific compliance gap analysis against your discovered network
         topology. Results are saved as findings with framework control mappings.
       </p>
 
       {!hasTopology && (
-        <p className="mb-4 rounded-lg border border-amber-800/40 bg-amber-900/20 px-4 py-3 text-sm text-amber-400">
+        <p className="mb-4 rounded-lg border border-amber-800/40 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-600 dark:text-amber-400">
           No discovery data yet. Run discovery on the Connections tab first.
         </p>
       )}
 
       {needsResync && hasTopology && (
-        <div className="mb-4 flex items-center gap-3 rounded-lg border border-amber-700/40 bg-amber-900/20 px-4 py-3">
-          <svg aria-hidden="true" focusable="false" className="h-4 w-4 shrink-0 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-amber-700/40 bg-amber-50 dark:bg-amber-900/20 px-4 py-3">
+          <svg aria-hidden="true" focusable="false" className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm0-2a6 6 0 110-12 6 6 0 010 12zm-1-9a1 1 0 112 0v4a1 1 0 11-2 0V7zm0 6a1 1 0 112 0 1 1 0 01-2 0z" clipRule="evenodd" />
           </svg>
-          <p className="text-sm text-amber-300">
+          <p className="text-sm text-amber-700 dark:text-amber-300">
             <span className="font-semibold">Subscriptions changed</span> — re-sync before running compliance checks.
           </p>
         </div>
@@ -68,7 +68,7 @@ export function ComplianceReportPanel({ engagementId, hasTopology, needsResync }
                 key={fw.value}
                 className={`${CARD_BASE} ${
                   framework === fw.value
-                    ? "!border-teal-500 !bg-teal-900/30"
+                    ? "!border-teal-500 !bg-teal-50 dark:bg-teal-900/30"
                     : ""
                 }`}
               >
@@ -81,7 +81,7 @@ export function ComplianceReportPanel({ engagementId, hasTopology, needsResync }
                   className="mt-0.5 accent-teal-500"
                 />
                 <div>
-                  <p className="text-xs font-semibold text-navy-100">{fw.label}</p>
+                  <p className="text-xs font-semibold text-navy-800 dark:text-navy-100">{fw.label}</p>
                   <p className="mt-0.5 text-xs text-navy-400">{fw.desc}</p>
                 </div>
               </label>
@@ -95,14 +95,14 @@ export function ComplianceReportPanel({ engagementId, hasTopology, needsResync }
         </p>
 
         {state?.error && (
-          <p className="rounded-lg border border-red-800/40 bg-red-900/20 px-4 py-2 text-sm text-red-400">
+          <p className="rounded-lg border border-red-800/40 bg-red-50 dark:bg-red-900/20 px-4 py-2 text-sm text-red-600 dark:text-red-400">
             {state.error}
           </p>
         )}
         {state?.success && (
-          <p className="rounded-lg border border-teal-800/40 bg-teal-900/20 px-4 py-2 text-sm text-teal-300">
+          <p className="rounded-lg border border-teal-800/40 bg-teal-50 dark:bg-teal-900/20 px-4 py-2 text-sm text-teal-700 dark:text-teal-300">
             ✓ Compliance check complete —{" "}
-            <strong className="text-teal-200">{state.count}</strong> finding
+            <strong className="text-teal-800 dark:text-teal-200">{state.count}</strong> finding
             {state.count !== 1 ? "s" : ""} added with framework control mappings.
           </p>
         )}
@@ -139,21 +139,21 @@ export function ComplianceReportPanel({ engagementId, hasTopology, needsResync }
           <input type="hidden" name="engagementId" value={engagementId} />
 
           {allState?.error && (
-            <p className="mb-3 rounded-xl border border-red-800 bg-red-900/20 px-4 py-3 text-sm text-red-400">
+            <p className="mb-3 rounded-xl border border-red-800 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-600 dark:text-red-400">
               {allState.error}
             </p>
           )}
           {allState?.success && (
-            <p className="mb-3 rounded-xl border border-teal-800 bg-teal-900/20 px-4 py-3 text-sm text-teal-300">
+            <p className="mb-3 rounded-xl border border-teal-800 bg-teal-50 dark:bg-teal-900/20 px-4 py-3 text-sm text-teal-700 dark:text-teal-300">
               All checks complete —{" "}
-              <strong className="text-teal-200">{allState.count}</strong> unique new
+              <strong className="text-teal-800 dark:text-teal-200">{allState.count}</strong> unique new
               finding{allState.count !== 1 ? "s" : ""} generated across all 6 frameworks.
             </p>
           )}
 
-          <div className="flex items-center justify-between gap-4 rounded-xl border border-navy-700/40 bg-navy-800/20 px-4 py-3">
+          <div className="flex items-center justify-between gap-4 rounded-xl border border-navy-700/40 bg-navy-50 dark:bg-navy-800/20 px-4 py-3">
             <div>
-              <p className="text-xs font-semibold text-navy-200">Run All Checks</p>
+              <p className="text-xs font-semibold text-navy-500 dark:text-navy-200">Run All Checks</p>
               <p className="mt-0.5 text-xs text-navy-500">
                 Runs all 6 frameworks in parallel. May take a few minutes.
               </p>
