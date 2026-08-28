@@ -247,8 +247,13 @@ jobs:
           for root in dev/platform dev/workload prod/platform prod/workload; do
             dir="infra/terraform/environments/aws/${root}"
             echo "::group::terraform validate ${dir}"
-            terraform -chdir="${dir}" init -backend=false -input=false >/dev/null
-            if ! terraform -chdir="${dir}" validate -no-color; then
+            # Guard init as well as validate: under bash -e an unguarded init
+            # failure would kill the whole step before the ::error:: annotation
+            # and skip the remaining roots.
+            if ! terraform -chdir="${dir}" init -backend=false -input=false >/dev/null; then
+              echo "::error::terraform init failed for ${dir}"
+              failed=1
+            elif ! terraform -chdir="${dir}" validate -no-color; then
               echo "::error::terraform validate failed for ${dir}"
               failed=1
             fi
