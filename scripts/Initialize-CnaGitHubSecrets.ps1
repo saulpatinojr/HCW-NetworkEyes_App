@@ -1878,6 +1878,10 @@ if (-not $SkipAzureSetup) {
         "Key Vault Contributor",
         "Cognitive Services Contributor",
         "Managed Identity Contributor",
+        # Managed Identity Operator carries userAssignedIdentities/assign/action,
+        # which Contributor does not: attaching the UAI to Container Apps and the
+        # migrator job fails with LinkedAuthorizationFailed without it.
+        "Managed Identity Operator",
         "Log Analytics Contributor",
         "Monitoring Contributor",
         "CDN Profile Contributor",
