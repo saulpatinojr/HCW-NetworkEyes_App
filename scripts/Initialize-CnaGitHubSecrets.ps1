@@ -1894,11 +1894,31 @@ if (-not $SkipAzureSetup) {
     # against a wide set of */read actions across network resource types
     # (learn.microsoft.com/azure/network-watcher/rbac-permissions#traffic-analytics)
     # and fails with TAUserDoesNotHavePermissions when they are held only at RG
-    # scope. Reader is read-only everywhere; every write TA needs (workspace
-    # shared keys, data-collection rules) is already covered by the RG-scoped
-    # Log Analytics / Monitoring Contributor roles above.
+    # scope. Reader is read-only everywhere; the non-read actions the same doc
+    # table requires (workspace shared keys, data-collection rules/endpoints)
+    # are carried by the custom role below — RG-scoped Log Analytics /
+    # Monitoring Contributor proved insufficient for TA's subscription-scope
+    # check (confirmed empirically on the 2026-08-28 dev rebuild: Reader alone
+    # still failed TAUserDoesNotHavePermissions after propagation).
     New-DeployServicePrincipal -DisplayName "CNA Assessment Tool - $envDisplayName" `
         -Roles @("Reader") -Scope $subscriptionScope | Out-Null
+
+    $cnaTaRoleName = "CNA Traffic Analytics Enabler"
+    Confirm-CnaCustomRole -Name $cnaTaRoleName `
+        -Description "Non-read actions Traffic Analytics enablement requires at subscription scope; Reader supplies the reads. See learn.microsoft.com/azure/network-watcher/rbac-permissions#traffic-analytics." `
+        -Actions @(
+            "Microsoft.OperationalInsights/workspaces/read",
+            "Microsoft.OperationalInsights/workspaces/sharedkeys/action",
+            "Microsoft.Insights/dataCollectionRules/read",
+            "Microsoft.Insights/dataCollectionRules/write",
+            "Microsoft.Insights/dataCollectionRules/delete",
+            "Microsoft.Insights/dataCollectionEndpoints/read",
+            "Microsoft.Insights/dataCollectionEndpoints/write",
+            "Microsoft.Insights/dataCollectionEndpoints/delete"
+        ) `
+        -SubscriptionScope $subscriptionScope
+    New-DeployServicePrincipal -DisplayName "CNA Assessment Tool - $envDisplayName" `
+        -Roles @($cnaTaRoleName) -Scope $subscriptionScope | Out-Null
 
     # Shrink from any previous run's subscription-scope grant now that the
     # RG-scoped roles above are in place — otherwise this SP would accumulate
