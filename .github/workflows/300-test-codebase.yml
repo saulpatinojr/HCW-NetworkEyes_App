@@ -235,6 +235,32 @@ jobs:
       - name: Terraform fmt check (all roots and modules)
         run: terraform fmt -check -recursive infra/terraform/
 
+      # Restored under TODO.md T-409. The original run failed on both AWS
+      # workload roots because providers/aws/runtime/variables.tf carried an
+      # unescaped ${name_prefix} in a variable description — a real config
+      # error, now fixed (escaped as $${name_prefix}). Reproduced and
+      # re-verified locally with terraform 1.9.8 + hashicorp/aws 5.100.0.
+      - name: Terraform validate (AWS roots)
+        run: |
+          set -euo pipefail
+          failed=0
+          for root in dev/platform dev/workload prod/platform prod/workload; do
+            dir="infra/terraform/environments/aws/${root}"
+            echo "::group::terraform validate ${dir}"
+            # Guard init as well as validate: under bash -e an unguarded init
+            # failure would kill the whole step before the ::error:: annotation
+            # and skip the remaining roots.
+            if ! terraform -chdir="${dir}" init -backend=false -input=false >/dev/null; then
+              echo "::error::terraform init failed for ${dir}"
+              failed=1
+            elif ! terraform -chdir="${dir}" validate -no-color; then
+              echo "::error::terraform validate failed for ${dir}"
+              failed=1
+            fi
+            echo "::endgroup::"
+          done
+          exit "${failed}"
+
   # ------------------------------------------------------------------
   # 6. Docker build smoke test
   # ------------------------------------------------------------------

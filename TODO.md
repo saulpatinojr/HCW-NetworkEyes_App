@@ -831,7 +831,34 @@ order; do not reorder it.
      validated by anything, and should be fixed root by root before the step is restored.
   Restore the step in `300-test-codebase.yml` once it passes; the removed version is in this
   repository's history on commit `cc3c9db`.
-- **Status:** Not started
+- **Status:** Done — diagnosed as case 2 (real config errors), fixed, and the validate step
+  restored. The original failure's check-run annotations (readable via the REST checks API even
+  where the Actions log endpoints are not) named exactly the two failing roots: **both workload
+  roots and neither platform root** — which by itself ruled out a registry/egress cause, since
+  `init` had to succeed for the platform validates to pass. Reproduced locally with terraform
+  1.9.8 and providers resolved from `releases.hashicorp.com` / GitHub releases into a filesystem
+  mirror (the registry itself is still egress-blocked from the authoring environment). Two real
+  defects, both in modules only the workload roots consume:
+  1. `providers/aws/runtime/variables.tf:2` — the `name_prefix` variable's *description* embedded
+     an unescaped `${name_prefix}`, which HCL parses as an interpolation inside a variable block:
+     "Variables may not be used here", failing `init` before validate even ran. Escaped to
+     `$${name_prefix}`. A sweep found no other unescaped `${…}` in any description; the other
+     hits are legitimate `${var.*}` interpolations in resource arguments.
+  2. `providers/aws/ai/main.tf:59` — `aws_bedrock_inference_profile.chat` set
+     `type = "APPLICATION"`, an attribute the provider marks read-only (a profile you create is
+     APPLICATION by definition; SYSTEM_DEFINED ones are AWS-managed and only referenced). Removed,
+     with a comment recording why.
+  After both fixes, all four roots validate clean (`Success! The configuration is valid.`) on
+  terraform 1.9.8 with hashicorp/aws 5.100.0, hashicorp/time 0.14.1, hashicorp/random 3.9.0, and
+  integrations/github 6.6.0, and `terraform fmt -check -recursive` stays clean. The
+  `Terraform validate (AWS roots)` step is restored to the `terraform-checks` job in
+  `300-test-codebase.yml`, per-root with `::group::` output and an error naming any failing root.
+  **Still open (small follow-up):** the lock files. `terraform providers lock` needs
+  `registry.terraform.io`, which the authoring environment cannot reach, so the four AWS roots
+  still carry no `.terraform.lock.hcl`. Generate them from a machine with registry access (the
+  self-hosted runner qualifies) with
+  `terraform providers lock -platform=linux_amd64` per root — pinning matches the Azure roots and
+  the CBTS pinned-dependency standard.
 - **Notes for future engineers:** Do not restore the step without first reproducing a green run —
   it blocks every PR when red, which is why it was pulled rather than left failing. Generating the
   lock files (`terraform providers lock` for the four AWS roots) is worth doing regardless of the
