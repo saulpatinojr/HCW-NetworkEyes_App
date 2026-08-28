@@ -56,7 +56,8 @@ resource "aws_bedrock_inference_profile" "chat" {
 
   name        = local.inference_profile_name
   description = "CNA ${var.environment} chat inference profile — mirrors Azure AI Foundry gpt-chat-latest deployment"
-  type        = "APPLICATION"
+  # `type` is read-only on this resource: a profile you create is APPLICATION
+  # by definition (SYSTEM_DEFINED profiles are AWS-managed and only referenced).
 
   model_source {
     copy_from = local.chat_model_arn

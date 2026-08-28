@@ -1,5 +1,5 @@
 variable "name_prefix" {
-  description = "Normalized name prefix for runtime resources (e.g. cna-dev-use1). Also the secret namespace: ${name_prefix}/<secret>."
+  description = "Normalized name prefix for runtime resources (e.g. cna-dev-use1). Also the secret namespace: $${name_prefix}/<secret>."
   type        = string
 }
 
