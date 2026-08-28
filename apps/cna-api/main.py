@@ -1190,12 +1190,232 @@ def intake(body: dict) -> dict:
     )
 
 
-@app.post("/publish", status_code=501)
-def publish(body: dict) -> dict:
-    raise HTTPException(
-        status_code=501,
-        detail="The publish phase is not yet implemented in the API.",
+# ─── Client portal publishing (CNA-0.90 §3: the publish story) ───────────────
+
+
+class PublishRequest(BaseModel):
+    engagement_id: str
+    ttl_hours: int = 168  # AccessManager hard-caps at 7 days
+
+
+def _slugify_filename(title: str, extension: str) -> str:
+    safe = "".join(c if c.isalnum() or c in " -_" else "" for c in title)
+    safe = "-".join(safe.lower().split())[:80] or "deliverable"
+    return f"{safe}{extension}"
+
+
+def _load_published_deliverables(engagement_id: str) -> list[dict]:
+    with _get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT id, title, type, content, "blobPath", "updatedAt"
+                   FROM "Deliverable"
+                   WHERE "engagementId" = %s
+                     AND "publishedAt" IS NOT NULL
+                     AND status = 'COMPLETED'
+                   ORDER BY "createdAt" ASC""",
+                (engagement_id,),
+            )
+            rows = cur.fetchall()
+    return [dict(row) for row in rows]
+
+
+def _load_latest_publication(engagement_id: str) -> dict | None:
+    with _get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT id, "issuedAt", "expiresAt", "ttlHours",
+                          "storageLocation", "deliverableCount"
+                   FROM "PortalPublication"
+                   WHERE "engagementId" = %s
+                   ORDER BY "issuedAt" ASC LIMIT 1""",
+                (engagement_id,),
+            )
+            row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def _record_publication(engagement_id: str, record: dict) -> None:
+    with _get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO "PortalPublication"
+                     (id, "engagementId", cloud, "storageLocation",
+                      "deliverableCount", "ttlHours", "issuedAt", "expiresAt", "createdAt")
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())""",
+                (
+                    str(uuid.uuid4()),
+                    engagement_id,
+                    record["cloud"],
+                    record["storage_location"],
+                    record["deliverable_count"],
+                    record["ttl_hours"],
+                    record["issued_at"],
+                    record["expires_at"],
+                ),
+            )
+        conn.commit()
+
+
+@app.post("/publish")
+def publish(request: PublishRequest) -> dict:
+    """Publish the engagement's published deliverables to a client portal.
+
+    Uploads them to a private per-engagement blob container, generates the
+    portal index via cna.delivery_portal, and returns a TTL-capped SAS portal
+    URL. The signed URL itself is never persisted (AccessManager's contract) —
+    only the publication metadata is recorded, so the caller must surface the
+    URL immediately. The cna-worker placeholder that once sketched this job is
+    superseded by this endpoint.
+    """
+    if not DATABASE_URL:
+        raise HTTPException(status_code=503, detail="DATABASE_URL not configured")
+    account_name = os.environ.get("AZURE_STORAGE_ACCOUNT_NAME", "")
+    if not account_name:
+        raise HTTPException(
+            status_code=503,
+            detail="AZURE_STORAGE_ACCOUNT_NAME is not configured on the API.",
+        )
+
+    engagement_id = request.engagement_id
+    deliverables = _load_published_deliverables(engagement_id)
+    if not deliverables:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "No published deliverables for this engagement — publish at least one "
+                "deliverable in the app before creating the client portal."
+            ),
+        )
+
+    # Lazy: the delivery_portal stack needs azure-storage-blob, which older
+    # API images may not carry.
+    from cna.delivery_portal.access_manager import AccessManager
+    from cna.delivery_portal.azure_blob_deployer import AzureBlobDeployer
+    from cna.delivery_portal.portal_generator import PortalGenerator
+    from cna.delivery_portal.retention_engine import RetentionEngine, RetentionExpiredError
+    from cna.report_engine.deliverable_manifest import DeliverableManifest, DeliverableRecord
+
+    # DD-019: the retention clock starts at the FIRST publication.
+    first_publication = _load_latest_publication(engagement_id)
+    delivery_date = (
+        first_publication["issuedAt"].isoformat()
+        if first_publication and first_publication.get("issuedAt")
+        else None
     )
+    try:
+        RetentionEngine.check(engagement_id, delivery_date)
+    except RetentionExpiredError as exc:
+        raise HTTPException(status_code=410, detail=str(exc)) from None
+
+    try:
+        import tempfile
+
+        with tempfile.TemporaryDirectory(prefix="cna-portal-") as tmp:
+            tmpdir = Path(tmp)
+            manifest = DeliverableManifest(engagement_id=engagement_id)
+            file_paths: list[Path] = []
+            for row in deliverables:
+                content = row.get("content")
+                if not content:
+                    # Blob-only deliverables would need a download leg; every
+                    # current generator stores inline content, so skip and log
+                    # rather than fail the whole publication.
+                    logger.warning(
+                        "publish: deliverable %s has no inline content — skipped", row["id"]
+                    )
+                    continue
+                extension = ".html" if content.lstrip().startswith("<") else ".md"
+                path = tmpdir / _slugify_filename(row["title"], extension)
+                path.write_text(content, encoding="utf-8")
+                file_paths.append(path)
+                manifest.add(
+                    DeliverableRecord(
+                        label=row["title"],
+                        path=str(path),
+                        format=extension.lstrip("."),
+                        lang="en",
+                        rendered_at=(
+                            row["updatedAt"].isoformat()
+                            if row.get("updatedAt")
+                            else datetime.now(UTC).isoformat()
+                        ),
+                    )
+                )
+
+            if not file_paths:
+                raise HTTPException(
+                    status_code=409,
+                    detail="No publishable deliverable content found for this engagement.",
+                )
+
+            # Container per engagement: private, SAS-only, and deletable as a
+            # unit when DD-019 retention expires. Engagement ids are cuids
+            # (lowercase alphanumeric), which are valid container name parts.
+            container = f"portal-{engagement_id.lower()}"[:63]
+            deployer = AzureBlobDeployer(
+                account_name=account_name,
+                container_name=container,
+                sas_ttl_hours=request.ttl_hours,
+            )
+            signed_urls = deployer.upload_all(file_paths)
+            storage_location = f"https://{account_name}.blob.core.windows.net/{container}"
+
+            access_record = AccessManager.build_record(
+                engagement_id=engagement_id,
+                cloud="azure",
+                storage_location=storage_location,
+                deliverable_count=len(file_paths),
+                ttl_hours=request.ttl_hours,
+            )
+
+            entries = PortalGenerator.build_entries(
+                manifest=manifest,
+                signed_urls=signed_urls,
+                current_findings_checksum="",
+            )
+            portal_path = tmpdir / "index.html"
+            PortalGenerator().generate(
+                manifest=manifest,
+                entries=entries,
+                published_at=access_record.issued_at,
+                expires_at=access_record.expires_at,
+                output_path=portal_path,
+            )
+            portal_blob = deployer.upload(portal_path)
+            portal_url = deployer.generate_sas_token(portal_blob)
+
+        _record_publication(
+            engagement_id,
+            {
+                "cloud": "azure",
+                "storage_location": storage_location,
+                "deliverable_count": len(file_paths),
+                "ttl_hours": access_record.ttl_hours,
+                "issued_at": access_record.issued_at,
+                "expires_at": access_record.expires_at,
+            },
+        )
+
+        return {
+            "ok": True,
+            "portal_url": portal_url,
+            "deliverable_count": len(file_paths),
+            "issued_at": access_record.issued_at,
+            "expires_at": access_record.expires_at,
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        # Full details stay server-side; callers get a sanitized message.
+        logger.exception("publish failed for engagement %s", engagement_id)
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "Publishing the client portal failed. Check that the API's identity has "
+                "Storage Blob Data Contributor on the storage account, then try again."
+            ),
+        ) from None
 
 
 class TestConnectionRequest(BaseModel):

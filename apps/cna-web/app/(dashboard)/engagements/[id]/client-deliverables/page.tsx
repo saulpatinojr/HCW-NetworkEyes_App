@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { deleteDeliverableFromPortal, deleteDocument } from "./actions";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
+import { PortalPublishPanel } from "./portal-publish-panel";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -74,6 +75,21 @@ export default async function ClientDeliverablesPage({ params }: PageProps) {
   const publishedAssessments = assessments.filter((d) => d.publishedAt !== null);
   const draftAssessments = assessments.filter((d) => d.publishedAt === null);
 
+  // Latest portal publication — tolerant of a pending migration.
+  let latestPublication: { issuedAt: Date; expiresAt: Date; deliverableCount: number } | null =
+    null;
+  try {
+    latestPublication = await prisma.portalPublication.findFirst({
+      where: { engagementId: id },
+      orderBy: { issuedAt: "desc" },
+      select: { issuedAt: true, expiresAt: true, deliverableCount: true },
+    });
+  } catch {
+    /* migration pending */
+  }
+  const hasPublishedDeliverables =
+    engagement.deliverables.some((d) => d.publishedAt !== null && d.content);
+
   const hasAnyContent =
     interactiveAssessment || publishedAssessments.length > 0 || engagement.documents.length > 0;
 
@@ -87,6 +103,21 @@ export default async function ClientDeliverablesPage({ params }: PageProps) {
           everywhere — including the presentation site.
         </p>
       </div>
+
+      {/* ── Client portal (external, time-limited share) ── */}
+      <PortalPublishPanel
+        engagementId={id}
+        hasPublishedDeliverables={hasPublishedDeliverables}
+        latestPublication={
+          latestPublication
+            ? {
+                issuedAt: latestPublication.issuedAt.toISOString(),
+                expiresAt: latestPublication.expiresAt.toISOString(),
+                deliverableCount: latestPublication.deliverableCount,
+              }
+            : null
+        }
+      />
 
       {!hasAnyContent && (
         <div className="glass flex min-h-[24vh] flex-col items-center justify-center rounded-xl p-10 text-center">

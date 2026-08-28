@@ -160,7 +160,12 @@ FinOps views remain Azure-shaped)*, ~~draw.io rendering inside
 the API image~~ *(landed post-demo-scope: both container images now install the
 pinned draw.io CLI with a headless wrapper, verified end-to-end — see
 `CHANGELOG.md`; the running dev environment gets it on the next
-`200-build-images` → `220-fast-redeploy`)*, the worker/publish story, Aeonik
+`200-build-images` → `220-fast-redeploy`)*, ~~the worker/publish story~~
+*(landed post-demo-scope: `POST /publish` publishes a no-login, TTL-capped
+client portal via the cna delivery_portal stack, with a "Client portal" panel
+on the Client Deliverables page — see `CHANGELOG.md`. The cna-worker
+placeholder is superseded by it and is a retirement candidate, pending the
+owner's call)*, Aeonik
 weight licensing, the self-hosted runner single point of failure, R-007/R-008.
 
 ---

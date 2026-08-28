@@ -100,13 +100,14 @@ model Engagement {
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
-  members          EngagementMember[]
-  documents        IngestedDocument[]
-  findings         Finding[]
-  deliverables     Deliverable[]
-  cloudCredentials CloudCredential[]
-  discoveryJobs    DiscoveryJob[]
-  metricRecords    MetricRecord[]
+  members            EngagementMember[]
+  documents          IngestedDocument[]
+  findings           Finding[]
+  deliverables       Deliverable[]
+  cloudCredentials   CloudCredential[]
+  discoveryJobs      DiscoveryJob[]
+  metricRecords      MetricRecord[]
+  portalPublications PortalPublication[]
 }
 
 enum EngagementStatus {
@@ -306,6 +307,25 @@ enum DeliverableStatus {
   RUNNING
   COMPLETED
   FAILED
+}
+
+// One row per client-portal publication (CNA-0.90 §3: the publish story).
+// Metadata only — the SAS portal URL is never stored (AccessManager's
+// contract); the API returns it once and the operator shares it.
+model PortalPublication {
+  id               String   @id @default(cuid())
+  engagementId     String
+  cloud            String   @default("azure")
+  storageLocation  String
+  deliverableCount Int
+  ttlHours         Int
+  issuedAt         DateTime
+  expiresAt        DateTime
+  createdAt        DateTime @default(now())
+
+  engagement Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+
+  @@index([engagementId])
 }
 
 enum DeliverableType {

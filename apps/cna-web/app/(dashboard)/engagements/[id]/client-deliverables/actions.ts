@@ -178,3 +178,65 @@ export async function deleteDocument(formData: FormData) {
   await prisma.ingestedDocument.delete({ where: { id: documentId } });
   revalidatePath(`/engagements/${engagementId}`);
 }
+
+// ─── Publish client portal ───────────────────────────────────────────────────
+// Delegates to the CNA API, which uploads the published deliverables to a
+// private per-engagement blob container and returns a TTL-capped SAS portal
+// URL. The URL is returned to the caller ONCE and never persisted.
+
+export async function publishClientPortal(
+  engagementId: string,
+  ttlHours: number = 168,
+): Promise<{
+  error?: string;
+  portalUrl?: string;
+  expiresAt?: string;
+  deliverableCount?: number;
+}> {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Not authenticated." };
+
+  const member = await prisma.engagementMember.findUnique({
+    where: { engagementId_userId: { engagementId, userId: session.user.id } },
+  });
+  if (!member) return { error: "Access denied." };
+
+  const apiUrl = process.env.CNA_API_INTERNAL_URL;
+  if (!apiUrl) return { error: "Discovery API is not configured." };
+
+  try {
+    const res = await fetch(`${apiUrl}/publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ engagement_id: engagementId, ttl_hours: ttlHours }),
+    });
+
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { detail?: string } | null;
+      return {
+        error:
+          body?.detail ??
+          "Publishing the client portal failed. Please try again, or contact your administrator if it persists.",
+      };
+    }
+
+    const data = (await res.json()) as {
+      portal_url: string;
+      expires_at: string;
+      deliverable_count: number;
+    };
+
+    revalidatePath(`/engagements/${engagementId}/client-deliverables`);
+    return {
+      portalUrl: data.portal_url,
+      expiresAt: data.expires_at,
+      deliverableCount: data.deliverable_count,
+    };
+  } catch (err: unknown) {
+    console.error("[publishClientPortal] error:", err);
+    return {
+      error:
+        "Could not reach the publishing service. Please try again, or contact your administrator if it persists.",
+    };
+  }
+}
