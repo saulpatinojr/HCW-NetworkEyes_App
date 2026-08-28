@@ -1889,6 +1889,17 @@ if (-not $SkipAzureSetup) {
     $envAppId = New-DeployServicePrincipal -DisplayName "CNA Assessment Tool - $envDisplayName" `
         -Roles $cnaWorkloadDeployRoles -Scope $workloadResourceGroupScope
 
+    # Subscription-scope Reader on top of the RG-scoped write roles: enabling
+    # Traffic Analytics on the VNet flow log validates the enabling principal
+    # against a wide set of */read actions across network resource types
+    # (learn.microsoft.com/azure/network-watcher/rbac-permissions#traffic-analytics)
+    # and fails with TAUserDoesNotHavePermissions when they are held only at RG
+    # scope. Reader is read-only everywhere; every write TA needs (workspace
+    # shared keys, data-collection rules) is already covered by the RG-scoped
+    # Log Analytics / Monitoring Contributor roles above.
+    New-DeployServicePrincipal -DisplayName "CNA Assessment Tool - $envDisplayName" `
+        -Roles @("Reader") -Scope $subscriptionScope | Out-Null
+
     # Shrink from any previous run's subscription-scope grant now that the
     # RG-scoped roles above are in place — otherwise this SP would accumulate
     # both the old broad grant and the new narrow one instead of replacing it.
