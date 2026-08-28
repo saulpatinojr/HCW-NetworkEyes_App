@@ -58,9 +58,9 @@ export default async function ConnectionsPage({ params }: PageProps) {
           Add Cloud Connection
         </h2>
         <p className="mb-4 text-sm text-navy-400">
-          Provide Azure service principal credentials. Once connected, select which
-          subscriptions to add — each becomes its own sync group. Auth credentials are
-          encrypted at rest.
+          Provide Azure service principal credentials — each subscription becomes its own
+          sync group — or an AWS access key plus the read-only role for cross-account
+          discovery. Auth credentials are encrypted at rest.
         </p>
         <CredentialForm engagementId={id} />
       </section>
@@ -84,6 +84,8 @@ export default async function ConnectionsPage({ params }: PageProps) {
             platform: c.platform,
             tenantId: c.tenantId,
             subscriptionIds: c.subscriptionIds,
+            awsRoleArn: c.awsRoleArn,
+            awsRegions: c.awsRegions,
           }))}
           jobs={jobsForPanel}
         />

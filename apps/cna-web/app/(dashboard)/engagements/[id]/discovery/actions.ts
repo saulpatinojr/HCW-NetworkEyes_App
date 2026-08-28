@@ -6,6 +6,34 @@ import { decrypt } from "@/lib/crypto";
 import { revalidatePath } from "next/cache";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { dedupeDiscoveryFindings } from "@/lib/dedupe-findings";
+import type { CloudCredential } from "@prisma/client";
+
+// Platform-shaped /discovery/start payload; secrets are decrypted here, at the
+// last moment before the internal API call, and never persisted in plaintext.
+function buildStartPayload(cred: CloudCredential, jobId: string, engagementId: string) {
+  if (cred.platform === "AWS") {
+    return {
+      job_id: jobId,
+      engagement_id: engagementId,
+      credential_id: cred.id,
+      platform: "AWS",
+      aws_role_arn: cred.awsRoleArn,
+      aws_external_id: cred.awsExternalId,
+      aws_regions: cred.awsRegions,
+      aws_access_key_id: cred.awsAccessKeyId,
+      aws_secret_access_key: cred.awsSecretEnc ? decrypt(cred.awsSecretEnc) : null,
+    };
+  }
+  return {
+    job_id: jobId,
+    engagement_id: engagementId,
+    credential_id: cred.id,
+    tenant_id: cred.tenantId,
+    subscription_ids: cred.subscriptionIds,
+    sp_client_id: cred.spClientId,
+    sp_client_secret: cred.spSecretEnc ? decrypt(cred.spSecretEnc) : null,
+  };
+}
 
 export async function startAllDiscovery(
   engagementId: string,
@@ -50,19 +78,10 @@ export async function startAllDiscovery(
   const results = await Promise.allSettled(
     credentials.map(async (cred, i) => {
       const job = jobs[i];
-      const spSecret = cred.spSecretEnc ? decrypt(cred.spSecretEnc) : null;
       const res = await fetch(`${apiUrl}/discovery/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          job_id: job.id,
-          engagement_id: engagementId,
-          credential_id: cred.id,
-          tenant_id: cred.tenantId,
-          subscription_ids: cred.subscriptionIds,
-          sp_client_id: cred.spClientId,
-          sp_client_secret: spSecret,
-        }),
+        body: JSON.stringify(buildStartPayload(cred, job.id, engagementId)),
       });
       if (!res.ok) {
         await prisma.discoveryJob.update({
@@ -144,21 +163,11 @@ export async function startDiscovery(
     return { error: "Discovery API is not configured." };
   }
 
-  const spSecret = cred.spSecretEnc ? decrypt(cred.spSecretEnc) : null;
-
   try {
     const res = await fetch(`${apiUrl}/discovery/start`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        job_id: job.id,
-        engagement_id: engagementId,
-        credential_id: cred.id,
-        tenant_id: cred.tenantId,
-        subscription_ids: cred.subscriptionIds,
-        sp_client_id: cred.spClientId,
-        sp_client_secret: spSecret,
-      }),
+      body: JSON.stringify(buildStartPayload(cred, job.id, engagementId)),
     });
 
     if (!res.ok) {

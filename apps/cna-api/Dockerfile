@@ -26,6 +26,7 @@ RUN pip install --no-cache-dir --prefix=/install \
     "azure-mgmt-monitor>=6.0" \
     "azure-mgmt-loganalytics>=13.0" \
     "azure-mgmt-compute>=30.0" \
+    "boto3>=1.34" \
     "tenacity>=8.4" \
     "jinja2>=3.1" \
     "httpx>=0.27" \

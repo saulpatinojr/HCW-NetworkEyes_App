@@ -1232,20 +1232,86 @@ async def test_connection(request: TestConnectionRequest) -> dict:
         ) from None
 
 
+class AwsTestConnectionRequest(BaseModel):
+    role_arn: str
+    external_id: str | None = None
+    access_key_id: str
+    secret_access_key: str  # plaintext — decrypted by web layer
+
+
+@app.post("/discovery/test-connection-aws")
+async def test_connection_aws(request: AwsTestConnectionRequest) -> dict:
+    """Validate AWS keys and prove the CNA read-only role can be assumed."""
+    try:
+        import boto3  # lazy: keeps Azure-only deployments importable without boto3
+
+        session = boto3.Session(
+            aws_access_key_id=request.access_key_id,
+            aws_secret_access_key=request.secret_access_key,
+        )
+        sts = session.client("sts")
+        identity = sts.get_caller_identity()
+        kwargs: dict[str, Any] = {
+            "RoleArn": request.role_arn,
+            "RoleSessionName": "CNA-TestConnection",
+            "DurationSeconds": 900,
+        }
+        if request.external_id:
+            kwargs["ExternalId"] = request.external_id
+        assumed = sts.assume_role(**kwargs)
+        return {
+            "ok": True,
+            "caller_account": identity["Account"],
+            "assumed_role_arn": assumed["AssumedRoleUser"]["Arn"],
+        }
+    except Exception:
+        # Full details stay server-side; callers get a sanitized message.
+        logger.exception("test-connection-aws failed for role %s", request.role_arn)
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "Could not validate the AWS credentials or assume the read-only role. "
+                "Check the access key, secret, role ARN, and external ID, then try again."
+            ),
+        ) from None
+
+
 class DiscoveryStartRequest(BaseModel):
     job_id: str
     engagement_id: str
     credential_id: str | None = None
+    platform: str = "AZURE"  # "AZURE" | "AWS"
+    # Azure
     tenant_id: str | None = None
     subscription_ids: list[str] = []
     sp_client_id: str | None = None
     sp_client_secret: str | None = None  # plaintext — decrypted by web layer
+    # AWS
+    aws_role_arn: str | None = None
+    aws_external_id: str | None = None
+    aws_regions: list[str] = []
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: str | None = None  # plaintext — decrypted by web layer
 
 
 @app.post("/discovery/start")
 async def start_discovery(
     request: DiscoveryStartRequest, background_tasks: BackgroundTasks
 ) -> dict:
+    if request.platform.upper() == "AWS":
+        if not request.aws_role_arn:
+            raise HTTPException(
+                status_code=422, detail="aws_role_arn is required for AWS discovery"
+            )
+        if not request.aws_access_key_id or not request.aws_secret_access_key:
+            raise HTTPException(
+                status_code=422,
+                detail="aws_access_key_id and aws_secret_access_key are required for AWS discovery",
+            )
+        _update_job(request.job_id, status="RUNNING", startedAt=datetime.now(UTC))
+        background_tasks.add_task(_run_aws_discovery, request)
+        return {"job_id": request.job_id, "status": "RUNNING"}
+
     if not request.tenant_id:
         raise HTTPException(status_code=422, detail="tenant_id is required")
     _update_job(request.job_id, status="RUNNING", startedAt=datetime.now(UTC))
@@ -1372,6 +1438,114 @@ def _run_azure_discovery(request: DiscoveryStartRequest) -> None:
 
     except Exception as exc:
         logger.exception("[job:%s] discovery failed", job_id)
+        _update_job(
+            job_id,
+            status="FAILED",
+            errorMessage=str(exc),
+            completedAt=datetime.now(UTC),
+            progressLog=json.dumps(progress),
+        )
+
+
+def _run_aws_discovery(request: DiscoveryStartRequest) -> None:
+    """AWS counterpart of _run_azure_discovery (CNA-0.90 §3: AWS end-to-end).
+
+    Findings come from the cna package's AnalysisEngine AWS rules rather than
+    a second bespoke rule set here — the ~1,000 lines of _check_* helpers
+    above are Azure-shaped, and the engine's AWS rules are already tested.
+    The FinOps/BC-DR generators are typed AzureTopology-only and are skipped.
+    """
+    job_id = request.job_id
+    engagement_id = request.engagement_id
+    progress: list[str] = []
+
+    def _log(msg: str) -> None:
+        ts = datetime.now(UTC).strftime("%H:%M:%S")
+        entry = f"[{ts} UTC] {msg}"
+        progress.append(entry)
+        logger.info("[job:%s] %s", job_id, msg)
+        _update_job(job_id, progressLog=json.dumps(progress))
+
+    try:
+        # Lazy: keeps Azure-only deployments importable without boto3.
+        from cna.ai_engine.analysis_engine import AnalysisEngine, AnalysisOptions
+        from cna.modules.network.discovery.aws_discovery import (
+            AWSDiscovery,
+        )
+        from cna.modules.network.discovery.aws_discovery import (
+            DiscoveryOptions as AwsDiscoveryOptions,
+        )
+
+        _log("Initialising AWS discovery engine…")
+        tmpdir = Path(mkdtemp(prefix="cna-discovery-"))
+        store = EngagementStore(data_dir=tmpdir, engagement_id=engagement_id)
+
+        options = AwsDiscoveryOptions(
+            org_role_arn=request.aws_role_arn,  # type: ignore[arg-type]  # validated at the endpoint
+            external_id=request.aws_external_id,
+            regions=request.aws_regions,
+            access_key_id=request.aws_access_key_id,
+            secret_access_key=request.aws_secret_access_key,
+        )
+
+        _log(f"Role: {request.aws_role_arn}")
+        if request.aws_regions:
+            _log(
+                f"Targeting {len(request.aws_regions)} region(s): {', '.join(request.aws_regions)}"
+            )
+        else:
+            _log("No region filter — will discover all enabled regions.")
+
+        discovery = AWSDiscovery(store, options)
+
+        _log("Running discovery — this may take a few minutes…")
+        topology = discovery.run()
+
+        blocked = sum(1 for r in topology.regions if r.discovery_blocked)
+        _log(
+            f"Scanned {len(topology.regions)} region(s) across "
+            f"{len(topology.accounts)} account(s)" + (f" — {blocked} blocked." if blocked else ".")
+        )
+
+        _log("Running analysis rules…")
+        engine = AnalysisEngine(
+            store=store,
+            options=AnalysisOptions(load_aws=True, load_azure=False, dry_run=True),
+        )
+        report = engine.run(aws_topology=topology)
+        all_findings = [_finding_model_to_dict(f) for f in report.findings]
+        _log(f"Analysis → {len(all_findings)} finding(s).")
+
+        # Tag findings with a traffic-direction plane (same as the Azure path)
+        for f in all_findings:
+            if not f.get("traffic_direction"):
+                f["traffic_direction"] = classify_traffic_direction(
+                    f.get("rule_id", ""),
+                    f.get("category", ""),
+                    f.get("resource_type", ""),
+                )
+
+        if not DATABASE_URL:
+            logger.warning(
+                "[job:%s] DATABASE_URL is not set — %d finding(s) will NOT be persisted.",
+                job_id,
+                len(all_findings),
+            )
+        _log(f"Writing {len(all_findings)} finding(s) to database…")
+        _replace_discovery_findings(engagement_id, request.credential_id, all_findings)
+        _advance_engagement_status(engagement_id)
+
+        _update_job(
+            job_id,
+            status="COMPLETED",
+            completedAt=datetime.now(UTC),
+            findingsCount=len(all_findings),
+            topologyJson=topology.model_dump_json(),
+            progressLog=json.dumps(progress + ["Done."]),
+        )
+
+    except Exception as exc:
+        logger.exception("[job:%s] AWS discovery failed", job_id)
         _update_job(
             job_id,
             status="FAILED",

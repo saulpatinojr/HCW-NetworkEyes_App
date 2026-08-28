@@ -234,3 +234,119 @@ export async function getDecryptedCredential(credentialId: string, userId: strin
     spSecret: cred.spSecretEnc ? decrypt(cred.spSecretEnc) : null,
   };
 }
+
+// ─── Add AWS credential ──────────────────────────────────────────────────────
+
+export async function addAwsCredential(
+  _prev: { error?: string; success?: boolean } | null,
+  formData: FormData,
+): Promise<{ error?: string; success?: boolean }> {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Not authenticated." };
+
+  const engagementId = formData.get("engagementId") as string | null;
+  const label = (formData.get("label") as string | null)?.trim() ?? "";
+  const awsRoleArn = (formData.get("awsRoleArn") as string | null)?.trim() ?? "";
+  const awsExternalId = (formData.get("awsExternalId") as string | null)?.trim() ?? "";
+  const awsRegionsRaw = (formData.get("awsRegions") as string | null)?.trim() ?? "";
+  const awsAccessKeyId = (formData.get("awsAccessKeyId") as string | null)?.trim() ?? "";
+  const awsSecretAccessKey = (formData.get("awsSecretAccessKey") as string | null)?.trim() ?? "";
+
+  if (!engagementId || !label || !awsRoleArn) {
+    return { error: "Label and read-only Role ARN are required." };
+  }
+  if (!/^arn:aws[a-z-]*:iam::\d{12}:role\/.+$/.test(awsRoleArn)) {
+    return { error: "Role ARN must look like arn:aws:iam::123456789012:role/CNA-ReadOnly." };
+  }
+  if (!awsAccessKeyId || !awsSecretAccessKey) {
+    return { error: "Access Key ID and Secret Access Key are required." };
+  }
+
+  const member = await prisma.engagementMember.findUnique({
+    where: { engagementId_userId: { engagementId, userId: session.user.id } },
+  });
+  if (!member) return { error: "Access denied." };
+
+  const awsRegions = awsRegionsRaw
+    ? awsRegionsRaw.split(",").map((s) => s.trim()).filter(Boolean)
+    : [];
+
+  const awsSecretEnc = encrypt(awsSecretAccessKey);
+
+  await prisma.cloudCredential.upsert({
+    where: { engagementId_label: { engagementId, label } },
+    create: {
+      engagementId,
+      platform: "AWS",
+      label,
+      awsRoleArn,
+      awsExternalId: awsExternalId || null,
+      awsRegions,
+      awsAccessKeyId,
+      awsSecretEnc,
+    },
+    update: {
+      awsRoleArn,
+      awsExternalId: awsExternalId || null,
+      awsRegions,
+      awsAccessKeyId,
+      awsSecretEnc,
+    },
+  });
+
+  revalidatePath(`/engagements/${engagementId}`);
+  return { success: true };
+}
+
+// ─── Test AWS connection ─────────────────────────────────────────────────────
+// Validated by the CNA API (which has boto3) rather than in the web layer.
+
+export async function testAwsConnection(params: {
+  roleArn: string;
+  externalId?: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+}): Promise<{ ok: boolean; callerAccount?: string; assumedRoleArn?: string; error?: string }> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, error: "Not authenticated." };
+
+  const { roleArn, externalId, accessKeyId, secretAccessKey } = params;
+  if (!roleArn || !accessKeyId || !secretAccessKey) {
+    return { ok: false, error: "Role ARN, Access Key ID, and Secret Access Key are all required." };
+  }
+
+  const apiUrl = process.env.CNA_API_INTERNAL_URL;
+  if (!apiUrl) return { ok: false, error: "Discovery API is not configured." };
+
+  try {
+    const res = await fetch(`${apiUrl}/discovery/test-connection-aws`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        role_arn: roleArn,
+        external_id: externalId || null,
+        access_key_id: accessKeyId,
+        secret_access_key: secretAccessKey,
+      }),
+    });
+
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { detail?: string } | null;
+      return {
+        ok: false,
+        error:
+          body?.detail ??
+          "AWS rejected the credentials. Verify the access key, secret, role ARN, and external ID.",
+      };
+    }
+
+    const data = (await res.json()) as { caller_account?: string; assumed_role_arn?: string };
+    return { ok: true, callerAccount: data.caller_account, assumedRoleArn: data.assumed_role_arn };
+  } catch (err: unknown) {
+    console.error("[testAwsConnection] error:", err);
+    return {
+      ok: false,
+      error: "Could not reach the discovery service to validate the AWS credentials. Please try again.",
+    };
+  }
+}

@@ -215,10 +215,12 @@ model CloudCredential {
   spClientId      String?    // service principal client ID
   spSecretEnc     String?    @db.Text // AES-256-GCM encrypted client secret
 
-  // AWS (future — fields present but UI disabled until AWS phase)
-  awsRoleArn    String?
-  awsExternalId String?
-  awsRegions    String[]
+  // AWS
+  awsRoleArn      String?
+  awsExternalId   String?
+  awsRegions      String[]
+  awsAccessKeyId  String?
+  awsSecretEnc    String?  @db.Text // AES-256-GCM encrypted secret access key
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

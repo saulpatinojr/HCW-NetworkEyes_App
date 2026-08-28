@@ -153,7 +153,10 @@ codes and sanitized messages; loud startup log when `DATABASE_URL` is unset.
 **Out of scope for 0.9.0 demo (tracked honestly, not hidden):** ~~CLI command wiring +
 the eight `EngagementStore` readers (T-412)~~ *(landed post-demo-scope: the readers are
 implemented, the five guards removed, and the CLI registry is real — see `TODO.md`
-T-412 and `CHANGELOG.md`)*, AWS end-to-end, ~~draw.io rendering inside
+T-412 and `CHANGELOG.md`)*, ~~AWS end-to-end~~ *(v1 landed post-demo-scope:
+AWS credentials → connection test → discovery → findings work through the web
+platform via the cna engine's AWS rules — see `CHANGELOG.md`; inventory/diagram/
+FinOps views remain Azure-shaped)*, ~~draw.io rendering inside
 the API image~~ *(landed post-demo-scope: both container images now install the
 pinned draw.io CLI with a headless wrapper, verified end-to-end — see
 `CHANGELOG.md`; the running dev environment gets it on the next
