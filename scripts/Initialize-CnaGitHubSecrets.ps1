@@ -1471,7 +1471,8 @@ function Confirm-TfstateBackendResources {
         [string]$ResourceGroupName,
         [string]$StorageAccountName,
         [string]$ContainerName,
-        [string]$ClientId
+        [string]$ClientId,
+        [string]$EnvClientId = ""
     )
 
     Write-Step "Ensuring Terraform backend prerequisites"
@@ -1554,6 +1555,44 @@ function Confirm-TfstateBackendResources {
         }
     } else {
         Write-Warn "Could not resolve service principal object ID for $ClientId. Workflow 000 may need to assign storage RBAC itself."
+    }
+
+    # The ENVIRONMENT deploy SP also needs the tfstate storage account: 211's
+    # plan/apply jobs (and the drift workflows) run under environment:<env> and
+    # `terraform init` must read the account and list its keys for the azurerm
+    # backend. The env SP's roles are RG-scoped to the WORKLOAD resource group,
+    # which does not cover this account in the -tfstate RG — under the old
+    # subscription-wide Contributor this was invisible, and the least-privilege
+    # shrink exposed it (terraform init failed with storageAccounts/read
+    # AuthorizationFailed). Storage Account Contributor scoped to just this
+    # account provides control-plane read + listKeys and nothing broader.
+    if (-not [string]::IsNullOrWhiteSpace($EnvClientId)) {
+        $envObjectId = & az ad sp show --id $EnvClientId --query id --output tsv 2>$null
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($envObjectId)) {
+            $envAssignmentCount = & az role assignment list `
+                --assignee-object-id $envObjectId `
+                --scope $storageId `
+                --subscription $SubscriptionId `
+                --query "[?roleDefinitionName=='Storage Account Contributor'] | length(@)" `
+                --output tsv 2>$null
+            if ($LASTEXITCODE -eq 0 -and $envAssignmentCount -eq "0") {
+                if ($PSCmdlet.ShouldProcess($StorageAccountName, "assign Storage Account Contributor to environment deploy SP")) {
+                    & az role assignment create `
+                        --role "Storage Account Contributor" `
+                        --assignee-object-id $envObjectId `
+                        --assignee-principal-type ServicePrincipal `
+                        --scope $storageId `
+                        --subscription $SubscriptionId `
+                        --output none
+                    if ($LASTEXITCODE -ne 0) { throw "Failed to assign Storage Account Contributor on '$StorageAccountName' to the environment deploy SP." }
+                }
+                Write-Ok "Assigned Storage Account Contributor on tfstate storage to environment deploy SP"
+            } else {
+                Write-Ok "Environment deploy SP already has Storage Account Contributor on tfstate storage"
+            }
+        } else {
+            Write-Warn "Could not resolve environment deploy SP object ID for $EnvClientId. Terraform init in 211 will fail until Storage Account Contributor is granted on '$StorageAccountName' manually."
+        }
     }
 
     return [pscustomobject]@{
@@ -2041,7 +2080,8 @@ if (-not $SkipAzureSetup) {
         -ResourceGroupName $bootstrapTfstateResourceGroup `
         -StorageAccountName $bootstrapTfstateStorageAccount `
         -ContainerName $bootstrapTfstateContainer `
-        -ClientId $mainAppId
+        -ClientId $mainAppId `
+        -EnvClientId $envAppId
 }
 
 if (-not $SkipBootstrapDispatch) {
