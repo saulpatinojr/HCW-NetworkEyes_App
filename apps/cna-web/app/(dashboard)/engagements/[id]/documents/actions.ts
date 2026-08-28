@@ -83,10 +83,11 @@ export async function runComplianceCheck(
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    console.error("[runComplianceCheck][error]", err);
     if (msg.includes("401") || msg.includes("PermissionDenied") || msg.includes("lacks the required")) {
       return { error: "AI analysis failed: the web app is missing the required 'Cognitive Services User' access on the active AI resource." };
     }
-    return { error: `Compliance check failed: ${msg.slice(0, 200)}` };
+    return { error: "Compliance check failed. Check that the active AI engine is reachable, then try again — the full error has been logged." };
   }
 
   if (rawFindings.length > 0) {

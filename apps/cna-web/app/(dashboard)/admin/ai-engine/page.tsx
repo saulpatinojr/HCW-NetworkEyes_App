@@ -9,7 +9,7 @@ function StatusPill({ active, configured }: { active?: boolean; configured?: boo
   const styles = active
     ? "border-teal-300 bg-teal-50 text-teal-700"
     : configured
-      ? "border-blue-200 bg-blue-50 text-blue-700"
+      ? "border-navy-200 bg-navy-50 text-navy-700"
       : "border-amber-200 bg-amber-50 text-amber-700";
 
   return (
@@ -30,7 +30,7 @@ export default async function AiEnginePage() {
           <div>
             <Link
               href="/dashboard"
-              className="text-sm font-semibold text-blue-700 hover:text-blue-900 dark:text-blue-300"
+              className="text-sm font-semibold text-teal-700 hover:text-teal-800 dark:text-teal-300"
             >
               &larr; Dashboard
             </Link>

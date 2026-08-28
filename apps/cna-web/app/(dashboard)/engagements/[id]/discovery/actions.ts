@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { revalidatePath } from "next/cache";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { dedupeDiscoveryFindings } from "@/lib/dedupe-findings";
 
 export async function startAllDiscovery(
   engagementId: string,
@@ -27,6 +28,9 @@ export async function startAllDiscovery(
     where: { engagementId },
   });
   if (!credentials.length) return { error: "No credentials configured." };
+
+  // Clean up legacy duplicate findings at this mutation point (see helper).
+  await dedupeDiscoveryFindings(engagementId);
 
   const apiUrl = process.env.CNA_API_INTERNAL_URL;
   if (!apiUrl) return { error: "Discovery API is not configured." };
@@ -73,10 +77,10 @@ export async function startAllDiscovery(
   const started = results.filter((r) => r.status === "fulfilled").length;
   const failed = results.filter((r) => r.status === "rejected").length;
   if (failed > 0) {
-    const errors = results
-      .filter((r): r is PromiseRejectedResult => r.status === "rejected")
-      .map((r) => String(r.reason))
-      .join("; ");
+    console.error(
+      `startAllDiscovery: ${failed} job(s) failed for engagement ${engagementId}:`,
+      results.filter((r) => r.status === "rejected").map((r) => (r as PromiseRejectedResult).reason),
+    );
     await Promise.allSettled(
       results.map((r, i) => {
         if (r.status === "rejected") {
@@ -87,7 +91,10 @@ export async function startAllDiscovery(
         }
       }),
     );
-    if (started === 0) return { error: `All ${failed} discovery job(s) failed: ${errors}` };
+    if (started === 0)
+      return {
+        error: `All ${failed} discovery job(s) failed to start. Check the credential configuration and try again — details are in the job list below.`,
+      };
   }
 
   revalidatePath(`/engagements/${engagementId}`);
@@ -120,6 +127,9 @@ export async function startDiscovery(
     where: { id: credentialId },
   });
   if (!cred || cred.engagementId !== engagementId) return { error: "Credential not found." };
+
+  // Clean up legacy duplicate findings at this mutation point (see helper).
+  await dedupeDiscoveryFindings(engagementId);
 
   const job = await prisma.discoveryJob.create({
     data: { engagementId, credentialId, status: "QUEUED" },
@@ -161,11 +171,12 @@ export async function startDiscovery(
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
+    console.error(`Discovery start failed for job ${job.id}:`, err);
     await prisma.discoveryJob.update({
       where: { id: job.id },
       data: { status: "FAILED", errorMessage: message },
     });
-    return { error: `Could not reach discovery API: ${message}` };
+    return { error: "Could not reach the discovery service. Please try again, or contact your administrator if it persists." };
   }
 
   revalidatePath(`/engagements/${engagementId}`);

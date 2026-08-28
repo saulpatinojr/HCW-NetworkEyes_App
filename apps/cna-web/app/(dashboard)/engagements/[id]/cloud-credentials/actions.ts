@@ -189,7 +189,14 @@ export async function testAzureConnection(params: {
 
     if (!res.ok) {
       const body = await res.text();
-      return { ok: false, error: `ARM API ${res.status}: ${body.slice(0, 200)}` };
+      console.error(`[testConnection] ARM API ${res.status}:`, body.slice(0, 500));
+      return {
+        ok: false,
+        error:
+          res.status === 401 || res.status === 403
+            ? "Azure rejected the credentials. Verify the Tenant ID, SP Client ID, and SP Client Secret, and that the service principal has been granted access."
+            : `Azure did not accept the request (HTTP ${res.status}). Please try again, or contact your administrator if it persists.`,
+      };
     }
 
     const data = (await res.json()) as {
@@ -201,8 +208,12 @@ export async function testAzureConnection(params: {
 
     return { ok: true, subscriptions };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: message };
+    console.error("[testConnection] error:", err);
+    return {
+      ok: false,
+      error:
+        "Could not validate the credentials against Azure. Verify the Tenant ID, SP Client ID, and SP Client Secret, then try again.",
+    };
   }
 }
 

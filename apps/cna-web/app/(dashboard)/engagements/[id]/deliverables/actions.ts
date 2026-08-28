@@ -129,14 +129,13 @@ async function runComprehensiveInBackground(
       data: { status: "REVIEW" },
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
     console.error("[runComprehensiveInBackground][error]", err);
     await prisma.deliverable
       .update({
         where: { id: deliverableId },
         data: {
           status: "FAILED",
-          progressLog: JSON.stringify([...steps, { stepId: "fatal", label: msg.slice(0, 300), status: "failed" }]),
+          progressLog: JSON.stringify([...steps, { stepId: "fatal", label: "Generation failed — the error has been logged. Retry, or contact your administrator if it persists.", status: "failed" }]),
         },
       })
       .catch(() => {});
@@ -275,9 +274,8 @@ export async function generateDeliverable(
       }
       content = json.content
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
       console.error("[generateDeliverable][encyclopedia][error]", err);
-      return { error: `Could not reach report API: ${msg}` };
+      return { error: "Could not reach the report service. Please try again, or contact your administrator if it persists." };
     }
 
     const fileName = `${type.toLowerCase()}-${Date.now()}.html`;

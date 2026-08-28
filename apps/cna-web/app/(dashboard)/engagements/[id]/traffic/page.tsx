@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { EmptyState } from "@/components/ui/empty-state";
 import { deriveStatMasters } from "@/lib/derive-stat-masters";
 import { getStatMasters } from "@/lib/metrics-api";
 import { TRAFFIC_DIRECTION_LABELS } from "@/components/charts/chart-theme";
@@ -112,15 +113,12 @@ export default async function TrafficMatrixPage({ params, searchParams }: PagePr
       </nav>
 
       {engagement.findings.length === 0 ? (
-        <div className="glass flex flex-col items-center gap-3 rounded-xl border border-dashed border-navy-700 px-8 py-10 text-center">
-          <p className="text-sm font-semibold text-navy-300">No findings yet</p>
-          <p className="text-xs text-navy-500">
-            Run discovery and AI analysis to populate the traffic matrix.{" "}
-            <Link href={`/engagements/${id}/connections`} className="font-semibold text-teal-500 hover:underline">
-              Go to Connections →
-            </Link>
-          </p>
-        </div>
+        <EmptyState title="No findings yet">
+          Run discovery and AI analysis to populate the traffic matrix.{" "}
+          <Link href={`/engagements/${id}/connections`} className="font-semibold text-teal-600 dark:text-teal-400 hover:underline">
+            Go to Connections →
+          </Link>
+        </EmptyState>
       ) : (
         <>
           {/* ── Breakdown chart ── */}

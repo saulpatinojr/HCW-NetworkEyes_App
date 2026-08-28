@@ -9,11 +9,11 @@ export const CBTS_BRIGHT_TEAL = "#00e9bb";
 export const CBTS_ORANGE = "#ffac00";
 export const CBTS_WARM_GRAY = "#f2f1ed";
 
-/** Grid / axis line color used by the existing SVG charts (dark glass panels). */
-export const CHART_GRID = "#1e2d3d";
-/** Muted label text color used by the existing SVG charts. */
-export const CHART_TEXT = "#94a3b8";
-export const CHART_TEXT_DIM = "#64748b";
+/** Grid / axis line color — theme-aware CSS variable defined in globals.css. */
+export const CHART_GRID = "var(--chart-grid)";
+/** Muted label text color — theme-aware CSS variable defined in globals.css. */
+export const CHART_TEXT = "var(--chart-text)";
+export const CHART_TEXT_DIM = "var(--chart-text-dim)";
 
 /** Matches SEV_COLORS[*].hex in presentation/_lib/metrics.ts */
 export const SEVERITY_HEX: Record<string, string> = {

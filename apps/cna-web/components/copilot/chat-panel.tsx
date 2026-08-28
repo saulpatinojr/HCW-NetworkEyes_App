@@ -93,7 +93,7 @@ export function ChatPanel({ engagementId }: { engagementId: string }) {
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 space-y-4">
         {turns.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center text-center gap-4">
-            <p className="text-sm text-navy-600 dark:text-warm-300 max-w-md">
+            <p className="text-sm text-navy-600 dark:text-warmgray-300 max-w-md">
               Ask about this engagement&apos;s network assessment — findings, traffic
               direction risks, cost signals, and topology. Answers are grounded in
               discovered data and cite rule IDs.
@@ -104,7 +104,7 @@ export function ChatPanel({ engagementId }: { engagementId: string }) {
                   key={s}
                   type="button"
                   onClick={() => void send(s)}
-                  className="glass-sm rounded-full px-3 py-1.5 text-xs text-navy-700 dark:text-warm-200 hover:border-teal-400/60 transition-colors"
+                  className="glass-sm rounded-full px-3 py-1.5 text-xs text-navy-700 dark:text-warmgray-200 hover:border-teal-400/60 transition-colors"
                 >
                   {s}
                 </button>
@@ -118,7 +118,7 @@ export function ChatPanel({ engagementId }: { engagementId: string }) {
             <div
               className={
                 turn.role === "user"
-                  ? "max-w-[80%] rounded-2xl rounded-br-sm bg-teal-500/15 px-4 py-2.5 text-sm text-navy-800 dark:text-warm-100"
+                  ? "max-w-[80%] rounded-2xl rounded-br-sm bg-teal-500/15 px-4 py-2.5 text-sm text-navy-800 dark:text-warmgray-100"
                   : "max-w-[85%] rounded-2xl rounded-bl-sm glass-sm px-4 py-3 text-sm"
               }
             >
@@ -137,7 +137,7 @@ export function ChatPanel({ engagementId }: { engagementId: string }) {
                       key={`${c.rule_id}-${c.resource_id}-${j}`}
                       href={`/engagements/${engagementId}/findings`}
                       title={c.title}
-                      className={`rounded-full px-2 py-0.5 text-[11px] font-medium hover:underline ${SEV_CHIP[c.severity] ?? "bg-navy-500/10 text-navy-600 dark:text-warm-300"}`}
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-medium hover:underline ${SEV_CHIP[c.severity] ?? "bg-navy-500/10 text-navy-600 dark:text-warmgray-300"}`}
                     >
                       {c.rule_id}
                       {c.resource_id ? ` · ${c.resource_id.split("/").pop()}` : ""}
@@ -151,7 +151,7 @@ export function ChatPanel({ engagementId }: { engagementId: string }) {
 
         {loading && (
           <div className="flex justify-start">
-            <div className="glass-sm rounded-2xl rounded-bl-sm px-4 py-3 text-sm text-navy-500 dark:text-warm-300 animate-pulse">
+            <div className="glass-sm rounded-2xl rounded-bl-sm px-4 py-3 text-sm text-navy-500 dark:text-warmgray-300 animate-pulse">
               Consulting assessment data…
             </div>
           </div>
@@ -177,7 +177,7 @@ export function ChatPanel({ engagementId }: { engagementId: string }) {
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask about findings, traffic risks, costs…"
           disabled={loading}
-          className="flex-1 rounded-xl glass-sm px-4 py-2.5 text-sm text-navy-800 dark:text-warm-100 placeholder:text-navy-400 dark:placeholder:text-warm-400 focus:outline-none focus:ring-2 focus:ring-teal-400/50 disabled:opacity-60"
+          className="flex-1 rounded-xl glass-sm px-4 py-2.5 text-sm text-navy-800 dark:text-warmgray-100 placeholder:text-navy-400 dark:placeholder:text-warmgray-400 focus:outline-none focus:ring-2 focus:ring-teal-400/50 disabled:opacity-60"
         />
         <button
           type="submit"

@@ -95,7 +95,7 @@ async function runSection(
       await onProgress?.({ stepId: spec.id, label: spec.title, status: "failed" });
       return {
         spec,
-        markdown: `## ${spec.number}. ${spec.title}\n\n[REVIEW REQUIRED] Automated generation of this section failed (${err instanceof Error ? err.message : "unknown error"}). Regenerate the assessment or author this section manually before publishing.`,
+        markdown: `## ${spec.number}. ${spec.title}\n\n*This section is pending review — automated generation did not complete. Regenerate the assessment or author this section manually before publishing.*`,
         summary: `${spec.title}: generation failed; section requires manual authoring.`,
       };
     }

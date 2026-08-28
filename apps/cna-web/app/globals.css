@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 /* ─────────────────────────────────────────────────────────────────────────────
    CBTS Design System · Official brand palette (Marketing Guidelines)
@@ -78,6 +79,11 @@
 
   /* WAI-09: Contrast-compliant navy-400 for light mode */
   --navy-400: #1c5874;
+
+  /* Chart tokens — grid lines and label text, theme-aware */
+  --chart-grid:     rgba(1, 38, 56, 0.14);
+  --chart-text:     #1c5874;
+  --chart-text-dim: #5f93ad;
 }
 
 /* ── Design tokens — dark mode ────────────────────────────────────────────── */
@@ -104,6 +110,11 @@
     --accent-subtle-border: rgba(0, 233, 187, 0.25);
     /* Bright teal is contrast-safe as text on dark navy */
     --accent-text:       #2ef0c8;
+
+    /* Chart tokens — grid lines and label text, theme-aware */
+    --chart-grid:     #1e2d3d;
+    --chart-text:     #9fc2d2;
+    --chart-text-dim: #5f93ad;
   }
 }
 

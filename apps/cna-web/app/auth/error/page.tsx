@@ -23,21 +23,18 @@ export default async function AuthErrorPage({
   const message = AUTH_ERROR_MESSAGES[error] ?? AUTH_ERROR_MESSAGES.Default;
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50">
-      <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
-        <h1 className="mb-2 text-2xl font-semibold tracking-tight text-gray-900">
+    <div className="flex min-h-screen flex-col items-center justify-center">
+      <div className="glass w-full max-w-sm p-8">
+        <h1 className="mb-2 text-2xl font-black tracking-tight text-navy-800 dark:text-navy-50">
           Sign-in failed
         </h1>
-        <p className="mb-6 text-sm text-gray-500">{message}</p>
+        <p className="mb-6 text-sm text-navy-400 dark:text-navy-300">{message}</p>
         {process.env.NODE_ENV !== "production" && (
-          <p className="mb-4 rounded bg-gray-100 p-2 font-mono text-xs text-gray-600">
+          <p className="mb-4 rounded-lg bg-navy-50 dark:bg-navy-800/50 p-2 font-mono text-xs text-navy-500 dark:text-navy-300">
             error: {error}
           </p>
         )}
-        <a
-          href="/auth/signin"
-          className="block w-full rounded-lg bg-blue-600 px-4 py-2.5 text-center text-sm font-medium text-white hover:bg-blue-700"
-        >
+        <a href="/auth/signin" className="btn-teal w-full justify-center">
           Try again
         </a>
       </div>

@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { EmptyState } from "@/components/ui/empty-state";
 import { SeverityDonut } from "@/components/charts/severity-donut";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { SEV_ORDER } from "../presentation/_lib/metrics";
@@ -61,15 +62,12 @@ export default async function ResiliencePage({ params }: PageProps) {
       </div>
 
       {resilienceFindings.length === 0 ? (
-        <div className="glass flex flex-col items-center gap-3 rounded-xl border border-dashed border-navy-700 px-8 py-10 text-center">
-          <p className="text-sm font-semibold text-navy-300">No observability or BC/DR findings</p>
-          <p className="text-xs text-navy-500">
-            Either no gaps were detected or analysis has not run yet.{" "}
-            <Link href={`/engagements/${id}/analysis`} className="font-semibold text-teal-500 hover:underline">
-              Run AI analysis →
-            </Link>
-          </p>
-        </div>
+        <EmptyState title="No observability or BC/DR findings">
+          Either no gaps were detected or analysis has not run yet.{" "}
+          <Link href={`/engagements/${id}/analysis`} className="font-semibold text-teal-600 dark:text-teal-400 hover:underline">
+            Run AI analysis →
+          </Link>
+        </EmptyState>
       ) : (
         <>
           {/* ── Severity donut + summary ── */}

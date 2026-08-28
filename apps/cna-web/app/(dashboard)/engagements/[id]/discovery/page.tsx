@@ -103,7 +103,7 @@ export default async function DiscoveryLandingPage({ params }: PageProps) {
           </Link>
         </div>
         {engagement.cloudCredentials.length === 0 ? (
-          <p className="py-6 text-center text-xs text-navy-500">
+          <p className="py-6 text-center text-xs text-navy-400 dark:text-navy-400">
             No cloud credentials yet — add one on the Connections page to begin discovery.
           </p>
         ) : (
@@ -135,7 +135,7 @@ export default async function DiscoveryLandingPage({ params }: PageProps) {
           </Link>
         </div>
         {engagement.discoveryJobs.length === 0 ? (
-          <p className="py-6 text-center text-xs text-navy-500">No discovery jobs yet.</p>
+          <p className="py-6 text-center text-xs text-navy-400 dark:text-navy-400">No discovery jobs yet.</p>
         ) : (
           <ul className="divide-y divide-navy-700/30">
             {engagement.discoveryJobs.map((j) => (

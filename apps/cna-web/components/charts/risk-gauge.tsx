@@ -10,7 +10,7 @@ export function RiskGauge({ score, color }: { score: number; color: string }) {
   const filled = (score / 100) * arcLen;
 
   return (
-    <svg viewBox="0 0 180 180" className="h-44 w-44">
+    <svg viewBox="0 0 180 180" className="h-44 w-44 text-navy-800 dark:text-navy-100">
       {/* Track */}
       <circle
         cx="90" cy="90" r={r}
@@ -37,8 +37,7 @@ export function RiskGauge({ score, color }: { score: number; color: string }) {
         textAnchor="middle"
         fontSize="38"
         fontWeight="900"
-        fill="white"
-        fontFamily="sans-serif"
+        fill="currentColor"
       >
         {score}
       </text>
@@ -47,7 +46,6 @@ export function RiskGauge({ score, color }: { score: number; color: string }) {
         textAnchor="middle"
         fontSize="9"
         fill={CHART_TEXT_DIM}
-        fontFamily="sans-serif"
         letterSpacing="1"
       >
         RISK SCORE

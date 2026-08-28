@@ -67,40 +67,35 @@ export default async function FindingsPage({ params }: PageProps) {
   const isMember = engagement.members.some((m) => m.userId === session?.user?.id);
   if (!isMember) notFound();
 
-  // ── Deduplicate discovery findings silently on every page load ────────────────
-  // Before the dedup fix, each sync run added NEW rows for already-existing findings
-  // instead of replacing them. This cleanup keeps the newest copy per
-  // (credentialId, title) group and deletes all older duplicates.
-  // It is safe to run repeatedly — idempotent, fast on already-clean data.
-  try {
-    const allDiscovery = await prisma.finding.findMany({
-      where: { engagementId: id, aiGenerated: false },
-      orderBy: { createdAt: "desc" },
-      select: { id: true, title: true, credentialId: true },
-    });
-    const seen = new Set<string>();
-    const toDelete: string[] = [];
-    for (const f of allDiscovery) {
-      const key = `${f.credentialId ?? "__none__"}::${f.title.toLowerCase().trim()}`;
-      if (seen.has(key)) {
-        toDelete.push(f.id);
-      } else {
-        seen.add(key);
-      }
-    }
-    if (toDelete.length > 0) {
-      await prisma.finding.deleteMany({ where: { id: { in: toDelete } } });
-    }
-  } catch { /* non-fatal */ }
-
-  // ── Load findings (now deduplicated) ─────────────────────────────────────────
   const rawFindings = await prisma.finding.findMany({
     where: { engagementId: id },
     orderBy: [{ severity: "asc" }, { category: "asc" }],
   });
 
+  // ── Non-destructive display dedupe ────────────────────────────────────────────
+  // Legacy duplicate rows (from pre-dedup-fix syncs) are deleted by
+  // dedupeDiscoveryFindings() when a discovery run starts — never here: a GET
+  // must not delete rows. Until that runs, hide older copies per
+  // (credentialId, title) group for display only.
+  const seen = new Set<string>();
+  const keep = new Set<string>();
+  const newestFirst = [...rawFindings].sort(
+    (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+  );
+  for (const f of newestFirst) {
+    if (f.aiGenerated) {
+      keep.add(f.id);
+      continue;
+    }
+    const key = `${f.credentialId ?? "__none__"}::${f.title.toLowerCase().trim()}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      keep.add(f.id);
+    }
+  }
+
   // Attach MS Learn URLs server-side so the client doesn't need the lookup tables
-  const findings: FindingItem[] = rawFindings.map((f) => ({
+  const findings: FindingItem[] = rawFindings.filter((f) => keep.has(f.id)).map((f) => ({
     id: f.id,
     title: f.title,
     category: f.category,

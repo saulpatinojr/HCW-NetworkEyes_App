@@ -22,10 +22,10 @@ export default async function CopilotPage({ params }: PageProps) {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-semibold text-navy-900 dark:text-warm-100">
+        <h1 className="text-2xl font-semibold text-navy-900 dark:text-warmgray-100">
           Assessment Copilot
         </h1>
-        <p className="text-sm text-navy-600 dark:text-warm-300 mt-1">
+        <p className="text-sm text-navy-600 dark:text-warmgray-300 mt-1">
           Grounded Q&amp;A over {engagement.name}&apos;s discovered topology, findings,
           and cost signals. Every answer cites the rule IDs it draws from — the
           copilot will not speculate beyond assessment data.

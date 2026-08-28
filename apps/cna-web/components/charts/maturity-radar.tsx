@@ -98,14 +98,13 @@ export function MaturityRadar({
           fontSize={fontSize}
           fontWeight={centerLabel ? 600 : undefined}
           fill={CHART_TEXT}
-          fontFamily="sans-serif"
         >
           {ax.label}
         </text>
       ))}
       {/* Center label (lg variant only) */}
       {centerLabel && (
-        <text x={cx} y={cy - 4} textAnchor="middle" fontSize="9" fill={CHART_TEXT_DIM} fontFamily="sans-serif">
+        <text x={cx} y={cy - 4} textAnchor="middle" fontSize="9" fill={CHART_TEXT_DIM}>
           Maturity
         </text>
       )}

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { getMergedTopology } from "../presentation/_lib/get-merged-topology";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   buildChargeableInventory,
   buildEgressSpend,
@@ -60,8 +61,8 @@ export default async function FinOpsPage({ params }: PageProps) {
         </h1>
         <p className="mt-1 text-xs text-navy-400">
           Measured egress spend from Azure Cost Management actuals, the full chargeable network
-          inventory with static list-price estimates, and waste findings. Estimates carry a
-          [VERIFY] flag — confirm against the client&apos;s negotiated rates before presenting.
+          inventory with static list-price estimates, and waste findings. Estimated figures are
+          marked with a dagger (†) — see the footnote below.
           {jobDate && (
             <> Data collected {jobDate.toLocaleDateString("en-US", { dateStyle: "medium" })}.</>
           )}
@@ -79,14 +80,11 @@ export default async function FinOpsPage({ params }: PageProps) {
           )}
         </div>
         {measuredRows.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-navy-700 px-6 py-8 text-center">
-            <p className="text-sm font-semibold text-navy-300">No measured spend yet</p>
-            <p className="max-w-md text-xs text-navy-500">
-              Month-to-date egress actuals are pulled from the Azure Cost Management API (Bandwidth
-              and Virtual Network meters) during discovery. Re-run discovery with a credential that
-              has Cost Management Reader to populate this section.
-            </p>
-          </div>
+          <EmptyState variant="inline" title="No measured spend yet">
+            Month-to-date egress actuals are pulled from the Azure Cost Management API (Bandwidth
+            and Virtual Network meters) during discovery. Re-run discovery with a credential that
+            has Cost Management Reader to populate this section.
+          </EmptyState>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-xs">
@@ -137,13 +135,13 @@ export default async function FinOpsPage({ params }: PageProps) {
           {groups.length > 0 && (
             <span className="text-sm font-black text-navy-800 dark:text-navy-100">
               {formatUsd(inventoryTotal)}{" "}
-              <span className="font-medium text-navy-400">est./mo [VERIFY]</span>
+              <span className="font-medium text-navy-400">est./mo&nbsp;†</span>
             </span>
           )}
         </div>
         <p className="mb-4 text-xs text-navy-400">
           Every discovered network resource that bills monthly, priced from static East-US
-          pay-as-you-go list rates [VERIFY]. Data-processing and per-GB charges are excluded.
+          pay-as-you-go list rates&nbsp;†. Data-processing and per-GB charges are excluded.
           {flaggedTotal > 0 && (
             <span className="ml-1 font-semibold text-amber-500">
               {flaggedTotal} resource{flaggedTotal === 1 ? "" : "s"} flagged as likely waste.
@@ -151,13 +149,10 @@ export default async function FinOpsPage({ params }: PageProps) {
           )}
         </p>
         {groups.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-navy-700 px-6 py-8 text-center">
-            <p className="text-sm font-semibold text-navy-300">No inventory yet</p>
-            <p className="max-w-md text-xs text-navy-500">
-              Run discovery to populate the chargeable-resource inventory (public IPs, gateways,
-              firewalls, Bastion, NAT gateways, App Gateway, private endpoints, DNS zones).
-            </p>
-          </div>
+          <EmptyState variant="inline" title="No inventory yet">
+            Run discovery to populate the chargeable-resource inventory (public IPs, gateways,
+            firewalls, Bastion, NAT gateways, App Gateway, private endpoints, DNS zones).
+          </EmptyState>
         ) : (
           <div className="space-y-5">
             {groups.map((group) => (
@@ -185,7 +180,7 @@ export default async function FinOpsPage({ params }: PageProps) {
                         <th className="pb-1.5 text-left font-medium text-navy-500">Region</th>
                         <th className="pb-1.5 text-left font-medium text-navy-500">SKU / Detail</th>
                         <th className="pb-1.5 text-right font-medium text-navy-500">
-                          Est. $/mo [VERIFY]
+                          Est. $/mo&nbsp;†
                         </th>
                         <th className="pb-1.5 text-left font-medium text-navy-500">Flags</th>
                       </tr>
@@ -254,7 +249,7 @@ export default async function FinOpsPage({ params }: PageProps) {
                   <th className="pb-2 text-left font-medium text-navy-500">Severity</th>
                   <th className="pb-2 text-left font-medium text-navy-500">Finding</th>
                   <th className="pb-2 text-right font-medium text-navy-500">
-                    Est. $/mo [VERIFY]
+                    Est. $/mo&nbsp;†
                   </th>
                   <th className="pb-2 pl-4 text-left font-medium text-navy-500">Recommendation</th>
                 </tr>
@@ -288,6 +283,12 @@ export default async function FinOpsPage({ params }: PageProps) {
           </div>
         )}
       </div>
+
+      {/* ── Estimate footnote ── */}
+      <p className="text-[11px] text-navy-400 dark:text-navy-500">
+        † Estimated from static East-US pay-as-you-go list rates. Confirm against the
+        client&apos;s negotiated rates and actual usage before presenting.
+      </p>
     </div>
   );
 }

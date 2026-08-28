@@ -33,7 +33,7 @@ export function SpHelpModal() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-xs text-blue-600 hover:underline"
+        className="text-xs text-teal-700 hover:underline"
       >
         How do I create these?
       </button>
@@ -61,7 +61,7 @@ export function SpHelpModal() {
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Close dialog"
-                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
               >
                 <svg
                   className="h-5 w-5"
@@ -83,7 +83,7 @@ export function SpHelpModal() {
             <div className="space-y-6 px-6 py-5 text-sm text-gray-700">
 
               {/* What is an SP */}
-              <div className="rounded-lg bg-blue-50 px-4 py-3 text-xs text-blue-800">
+              <div className="rounded-lg bg-teal-50 px-4 py-3 text-xs text-teal-900">
                 <p className="font-semibold">Why is this needed?</p>
                 <p className="mt-1">
                   CNA needs access to your Azure environment to discover network
@@ -255,7 +255,7 @@ export function SpHelpModal() {
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                className="rounded-lg bg-teal-500 px-4 py-2 text-sm font-bold text-navy-800 hover:bg-[#00c9a2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
               >
                 Got it
               </button>
@@ -280,7 +280,7 @@ function Step({
   return (
     <div>
       <div className="mb-2 flex items-center gap-2">
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-teal-500 text-xs font-bold text-navy-800">
           {number}
         </span>
         <h3 className="font-semibold text-gray-900">{title}</h3>
@@ -339,7 +339,7 @@ function ExternalLink({
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 text-blue-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+      className="inline-flex items-center gap-1 text-teal-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
     >
       {children}
       <span className="sr-only">(opens in new tab)</span>
