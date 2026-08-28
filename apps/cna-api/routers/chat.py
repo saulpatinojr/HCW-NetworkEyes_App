@@ -177,8 +177,12 @@ def chat(engagement_id: str, request: ChatRequest) -> dict:
     except ChatConfigError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 — surface upstream failures as 502
+        # Full details stay in the server log; callers get a sanitized message.
         logger.exception("chat completion failed for %s", engagement_id)
-        raise HTTPException(status_code=502, detail=f"AI engine request failed: {exc}") from exc
+        raise HTTPException(
+            status_code=502,
+            detail="AI engine request failed — see the API logs for details.",
+        ) from exc
 
     return {
         "answer": result.text,

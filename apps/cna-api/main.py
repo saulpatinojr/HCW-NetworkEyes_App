@@ -19,7 +19,7 @@ from typing import Any
 
 import psycopg2
 import psycopg2.extras
-from fastapi import BackgroundTasks, FastAPI
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from pydantic import BaseModel
 
 # Ensure the repo root is on the path so `cna` package is importable.
@@ -55,6 +55,12 @@ from routers.metrics import router as metrics_router  # noqa: E402
 from routers.reports import router as reports_router  # noqa: E402
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
+
+if not DATABASE_URL:
+    logger.warning(
+        "DATABASE_URL is not set — discovery results will NOT be persisted. "
+        "Jobs, findings, and metrics writes will be silently skipped until it is configured."
+    )
 
 app = FastAPI(title="CNA API", version="0.2.0")
 app.include_router(metrics_router)
@@ -1175,15 +1181,21 @@ def health() -> dict:
     return {"status": "ok", "service": "cna-api", "version": "0.2.0"}
 
 
-# Keep legacy endpoints so nothing breaks
-@app.post("/intake")
+# Legacy phase endpoints — honest 501s until the phases are actually wired up.
+@app.post("/intake", status_code=501)
 def intake(body: dict) -> dict:
-    return {"status": "accepted"}
+    raise HTTPException(
+        status_code=501,
+        detail="The intake phase is not yet implemented in the API.",
+    )
 
 
-@app.post("/publish")
+@app.post("/publish", status_code=501)
 def publish(body: dict) -> dict:
-    return {"status": "published"}
+    raise HTTPException(
+        status_code=501,
+        detail="The publish phase is not yet implemented in the API.",
+    )
 
 
 class TestConnectionRequest(BaseModel):
@@ -1208,9 +1220,16 @@ async def test_connection(request: TestConnectionRequest) -> dict:
             "ok": True,
             "subscriptions": [{"id": s.subscription_id, "name": s.display_name} for s in subs],
         }
-    except Exception as exc:
-        logger.warning("test-connection failed: %s", exc)
-        return {"ok": False, "error": str(exc)}
+    except Exception:
+        # Full details stay server-side; callers get a sanitized message.
+        logger.exception("test-connection failed for tenant %s", request.tenant_id)
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "Could not validate the service principal against the Azure tenant. "
+                "Check the tenant ID, client ID, and client secret, then try again."
+            ),
+        ) from None
 
 
 class DiscoveryStartRequest(BaseModel):
@@ -1228,7 +1247,7 @@ async def start_discovery(
     request: DiscoveryStartRequest, background_tasks: BackgroundTasks
 ) -> dict:
     if not request.tenant_id:
-        return {"error": "tenant_id is required"}
+        raise HTTPException(status_code=422, detail="tenant_id is required")
     _update_job(request.job_id, status="RUNNING", startedAt=datetime.now(UTC))
     background_tasks.add_task(_run_azure_discovery, request)
     return {"job_id": request.job_id, "status": "RUNNING"}
@@ -1237,7 +1256,7 @@ async def start_discovery(
 @app.get("/discovery/jobs/{job_id}")
 def get_job_status(job_id: str) -> dict:
     if not DATABASE_URL:
-        return {"error": "DATABASE_URL not configured"}
+        raise HTTPException(status_code=503, detail="DATABASE_URL not configured")
     with _get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -1248,7 +1267,7 @@ def get_job_status(job_id: str) -> dict:
             )
             row = cur.fetchone()
     if not row:
-        return {"error": "job not found"}
+        raise HTTPException(status_code=404, detail="job not found")
     return dict(row)
 
 
@@ -1324,6 +1343,12 @@ def _run_azure_discovery(request: DiscoveryStartRequest) -> None:
                     f.get("resource_type", ""),
                 )
 
+        if not DATABASE_URL:
+            logger.warning(
+                "[job:%s] DATABASE_URL is not set — %d finding(s) will NOT be persisted.",
+                job_id,
+                len(all_findings),
+            )
         _log(f"Writing {len(all_findings)} finding(s) to database…")
         _replace_discovery_findings(engagement_id, request.credential_id, all_findings)
         _advance_engagement_status(engagement_id)
