@@ -75,7 +75,11 @@ class RenderPipeline:
         self._manifest = DeliverableManifest(engagement_id=self.engagement_id)
 
     def _output_dir(self) -> Path:
-        base = self.opts.output_dir or (Path("engagements") / self.engagement_id / "deliverables")
+        # The default must follow the store's data_dir (it was previously a
+        # hardcoded ./engagements, which ignored `cna report --data-dir`).
+        base = self.opts.output_dir or (
+            self.store.engagement_dir(self.engagement_id) / "deliverables"
+        )
         base.mkdir(parents=True, exist_ok=True)
         return base
 

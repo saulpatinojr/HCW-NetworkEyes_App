@@ -197,3 +197,175 @@ class TestReportWrites:
             engagement_id=config.engagement_id, manifest={"records": []}
         )
         assert path.is_file()
+
+
+class TestReadSideMethods:
+    """The eight read-side methods added under TODO.md T-412.
+
+    Before these existed, `cna analyze`, `cna report`, and `cna publish`
+    died with AttributeError; each is now exercised against a real store
+    on tmp_path, reading back exactly what the discovery/analysis/render
+    writers put on disk.
+    """
+
+    def _write_aws_checkpoint(self, store, engagement_id, account_id, region, **kwargs):
+        from cna.core.topology_schema import AWSRegionTopology
+
+        topo = AWSRegionTopology(account_id=account_id, region=region, **kwargs)
+        # Same key shape AWSDiscovery uses: aws_{account}_{region}
+        store.write_discovery_checkpoint(
+            engagement_id, "aws", f"aws_{account_id}_{region}", json.loads(topo.model_dump_json())
+        )
+
+    def _write_azure_checkpoint(self, store, engagement_id, sub_id, tenant_id, **kwargs):
+        from cna.core.topology_schema import AzureSubscriptionTopology
+
+        topo = AzureSubscriptionTopology(subscription_id=sub_id, tenant_id=tenant_id, **kwargs)
+        store.write_discovery_checkpoint(
+            engagement_id, "azure", sub_id, json.loads(topo.model_dump_json())
+        )
+
+    def test_aws_topology_reassembles_from_region_checkpoints(self, store, config):
+        eid = config.engagement_id
+        self._write_aws_checkpoint(store, eid, "111111111111", "us-east-1")
+        self._write_aws_checkpoint(
+            store,
+            eid,
+            "111111111111",
+            "eu-west-1",
+            discovery_blocked=True,
+            block_reason="AccessDenied",
+        )
+
+        topo = store.load_aws_topology(eid)
+
+        assert topo.engagement_id == eid
+        assert len(topo.regions) == 2
+        assert sorted(r.region for r in topo.regions) == ["eu-west-1", "us-east-1"]
+        assert sum(1 for r in topo.regions if r.discovery_blocked) == 1
+
+    def test_azure_topology_recovers_tenant_from_checkpoints(self, store, config):
+        eid = config.engagement_id
+        tenant = "11111111-1111-1111-1111-111111111111"
+        self._write_azure_checkpoint(store, eid, "sub-aaaa", tenant)
+        self._write_azure_checkpoint(store, eid, "sub-bbbb", tenant)
+
+        topo = store.load_azure_topology(eid)
+
+        assert topo.engagement_id == eid
+        assert topo.tenant_id == tenant
+        assert sorted(s.subscription_id for s in topo.subscriptions) == ["sub-aaaa", "sub-bbbb"]
+
+    def test_topology_loads_are_scoped_per_platform(self, store, config):
+        """An Azure checkpoint must not satisfy an AWS load, and vice versa."""
+        eid = config.engagement_id
+        self._write_azure_checkpoint(store, eid, "sub-aaaa", "tenant-1")
+
+        with pytest.raises(FileNotFoundError):
+            store.load_aws_topology(eid)
+        assert len(store.load_azure_topology(eid).subscriptions) == 1
+
+    def test_missing_checkpoints_raise_file_not_found(self, store, config):
+        """`cna analyze` catches exactly FileNotFoundError for its friendly message."""
+        store.init(config)
+        with pytest.raises(FileNotFoundError):
+            store.load_aws_topology(config.engagement_id)
+        with pytest.raises(FileNotFoundError):
+            store.load_azure_topology(config.engagement_id)
+
+    def test_findings_report_round_trips_through_model_dump(self, store, config):
+        """AnalysisEngine writes `model_dump()` (enums + datetimes intact)."""
+        from datetime import UTC, datetime
+
+        from cna.core.findings_schema import (
+            Finding,
+            FindingSeverity,
+            FindingsReport,
+            ObservedState,
+        )
+
+        eid = config.engagement_id
+        report = FindingsReport(
+            engagement_id=eid,
+            findings=[
+                Finding(
+                    severity=FindingSeverity.HIGH,
+                    title="Open SSH to world",
+                    observed_state=ObservedState(fact="0.0.0.0/0 on 22", evidence_ref="nsg1"),
+                )
+            ],
+            total_count=1,
+            critical_count=0,
+            high_count=1,
+            medium_count=0,
+            low_count=0,
+            generated_at=datetime.now(UTC).isoformat(),
+        )
+        store.write_findings_report(eid, report.model_dump())
+
+        loaded = store.load_findings_report(eid)
+
+        assert loaded.total_count == 1
+        assert loaded.findings[0].severity == FindingSeverity.HIGH
+        assert loaded.review_complete is False
+
+    def test_findings_report_json_is_the_file_verbatim(self, store, config):
+        """DD-013 staleness checksums must hash the stored bytes, not a re-dump."""
+        eid = config.engagement_id
+        path = store.write_findings_report(eid, {"total_count": 2})
+
+        assert store.load_findings_report_json(eid) == path.read_text(encoding="utf-8")
+
+    def test_missing_findings_report_raises_file_not_found(self, store, config):
+        store.init(config)
+        with pytest.raises(FileNotFoundError):
+            store.load_findings_report(config.engagement_id)
+        with pytest.raises(FileNotFoundError):
+            store.load_findings_report_json(config.engagement_id)
+
+    def test_deliverable_manifest_reads_back_what_was_written(self, store, config):
+        eid = config.engagement_id
+        manifest = {
+            "engagement_id": eid,
+            "total_deliverables": 1,
+            "records": [{"label": "Executive Report (PDF)", "path": "/out/exec.pdf"}],
+        }
+        store.write_deliverable_manifest(engagement_id=eid, manifest=manifest)
+
+        assert store.load_deliverable_manifest(eid) == manifest
+
+    def test_missing_manifest_raises_file_not_found(self, store, config):
+        store.init(config)
+        with pytest.raises(FileNotFoundError):
+            store.load_deliverable_manifest(config.engagement_id)
+
+    def test_access_record_round_trips(self, store, config):
+        eid = config.engagement_id
+        record = {
+            "engagement_id": eid,
+            "cloud": "azure",
+            "issued_at": "2026-08-28T00:00:00+00:00",
+            "expires_at": "2026-09-04T00:00:00+00:00",
+            "ttl_hours": 168,
+            "storage_location": "https://acct.blob.core.windows.net/cont",
+            "deliverable_count": 3,
+        }
+        path = store.write_access_record(engagement_id=eid, record=record)
+
+        assert path.name == store.ACCESS_RECORD_FILE
+        assert store.load_access_record(eid) == record
+
+    def test_missing_access_record_raises_file_not_found(self, store, config):
+        store.init(config)
+        with pytest.raises(FileNotFoundError):
+            store.load_access_record(config.engagement_id)
+
+    def test_delivery_date_none_until_first_publish(self, store, config):
+        """DD-019: retention clock starts at the first `cna publish run`."""
+        eid = config.engagement_id
+        assert store.get_delivery_date(eid) is None
+
+        store.write_access_record(
+            engagement_id=eid, record={"issued_at": "2026-08-28T00:00:00+00:00"}
+        )
+        assert store.get_delivery_date(eid) == "2026-08-28T00:00:00+00:00"

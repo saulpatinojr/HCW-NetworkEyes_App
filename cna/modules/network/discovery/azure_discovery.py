@@ -368,10 +368,16 @@ class AzureDiscovery:
         mg_list = []
         try:
             for mg in mg_client.management_groups.list():
+                # The SDK types every name as str | None; a nameless group
+                # cannot be fetched or modelled, so skip it.
+                if not mg.name:
+                    continue
                 detail = mg_client.management_groups.get(mg.name, expand="children", recurse=False)
-                child_mg_ids = []
-                sub_ids = []
+                child_mg_ids: list[str] = []
+                sub_ids: list[str] = []
                 for child in detail.children or []:
+                    if not child.name:
+                        continue
                     if "/managementGroups/" in (child.id or ""):
                         child_mg_ids.append(child.name)
                     elif "/subscriptions/" in (child.id or ""):

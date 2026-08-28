@@ -150,8 +150,10 @@ dead Future-state toggle; soften the AWS coming-soon copy.
 `/publish` return 501 instead of fake success; error responses use real HTTP status
 codes and sanitized messages; loud startup log when `DATABASE_URL` is unset.
 
-**Out of scope for 0.9.0 demo (tracked honestly, not hidden):** CLI command wiring +
-the eight `EngagementStore` readers (T-412), AWS end-to-end, draw.io rendering inside
+**Out of scope for 0.9.0 demo (tracked honestly, not hidden):** ~~CLI command wiring +
+the eight `EngagementStore` readers (T-412)~~ *(landed post-demo-scope: the readers are
+implemented, the five guards removed, and the CLI registry is real — see `TODO.md`
+T-412 and `CHANGELOG.md`)*, AWS end-to-end, draw.io rendering inside
 the API image, the worker/publish story, Aeonik weight licensing, the self-hosted
 runner single point of failure, R-007/R-008.
 

@@ -1135,9 +1135,29 @@ order; do not reorder it.
   `DELIVERABLE_MANIFEST_FILE`) alongside the existing ones, not inline literals. Parameter names
   match the existing call sites exactly — `write_deliverable_manifest` is called with keywords.
   Covered by five tests in `tests/unit/test_persistence.py` against a real store on `tmp_path`.
-  **The eight read-side methods are still missing**, so the five CLI guards stay as they are. When
+  ~~**The eight read-side methods are still missing**, so the five CLI guards stay as they are. When
   those commands become real, these two writers pin down the on-disk layout the readers must
-  match.
+  match.~~
+  **Closed — the eight read-side methods are implemented and the five guards are removed** (0.9.x
+  follow-up, after the demo scope in `CNA-0.90-updates.md` §3 shipped). `EngagementStore` now has
+  `load_aws_topology()` / `load_azure_topology()` (rebuilt from the per-region / per-subscription
+  discovery checkpoints, since the root topology models are never persisted; the Azure tenant id is
+  recovered from the first subscription checkpoint), `load_findings_report()`,
+  `load_findings_report_json()` (the stored file text verbatim — DD-013 checksums the bytes on
+  disk), `load_deliverable_manifest()`, `write_access_record()` / `load_access_record()`
+  (`access_record.json` at the engagement root, metadata only), and `get_delivery_date()`
+  (the publish record's `issued_at`, `None` until first publish — DD-019's "clock not started").
+  Every missing-file path raises `FileNotFoundError` with a "run X first" message, the exact type
+  the CLI commands catch. The CLI registry (`cna/cli/main.py`) now registers the real commands —
+  including a real `cna init` and a new `cna review complete` (the DD-009 sign-off `cna report`
+  names) — and the superseded "Phase X: TODO" stubs are deleted; `diagram` and `module` remain
+  stubs pending their engines' CLI wiring. Two adjacent defects fixed in the process:
+  `RenderPipeline._output_dir` hardcoded `./engagements` and ignored `--data-dir`, and
+  `cna publish run` called signing methods against the `S3Deployer | AzureBlobDeployer` union
+  (now per-branch closures). Covered per the recommendation: 13 read-side tests against a real
+  store on `tmp_path` in `test_persistence.py`, plus `test_cli_pipeline.py` — 14 tests driving the
+  registered CLI end-to-end (init → seeded checkpoints → analyze → review gate → report →
+  publish status) with no mocks.
 - **Notes for future engineers:** The existing tests never caught this because they mock the store.
   That is also how the `write_audit_event` `TypeError` fixed under T-402 survived. When testing
   anything that touches persistence, prefer a real `EngagementStore` pointed at `tmp_path`.

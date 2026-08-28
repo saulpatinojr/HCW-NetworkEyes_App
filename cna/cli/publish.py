@@ -50,18 +50,6 @@ def run(engagement_id, cloud, bucket, s3_prefix, storage_account, container, ttl
         --storage-account cnadeliveries \\
         --container acme-20260305-a3f2
     """
-    # SCAFFOLD — not implemented (TODO.md T-412).
-    #
-    # Calls EngagementStore.get_delivery_date(), load_deliverable_manifest(),
-    # load_findings_report_json(), write_access_record(), and
-    # load_access_record() — five methods, none of which exist, so this died
-    # with an unhandled AttributeError.
-    raise NotImplementedError(
-        "`cna publish run` is not implemented yet. It needs five EngagementStore "
-        "methods that do not exist: get_delivery_date(), "
-        "load_deliverable_manifest(), load_findings_report_json(), "
-        "write_access_record(), and load_access_record() — see TODO.md T-412."
-    )
     from cna.core.persistence import EngagementStore
     from cna.delivery_portal.access_manager import AccessManager
     from cna.delivery_portal.portal_generator import PortalGenerator
@@ -116,29 +104,40 @@ def run(engagement_id, cloud, bucket, s3_prefix, storage_account, container, ttl
         click.echo(f"   {name}: {pct}%", nl=False)
         click.echo("\r", nl=False)
 
+    # Each branch keeps its deployer under its own name and hands back a
+    # publish_portal closure, so no call is ever made against the
+    # S3Deployer | AzureBlobDeployer union (their signing methods differ).
     if cloud == "aws":
         from cna.delivery_portal.s3_deployer import S3Deployer
 
         prefix = s3_prefix or engagement_id
-        deployer = S3Deployer(
+        s3_deployer = S3Deployer(
             bucket=bucket,
             prefix=prefix,
             presigned_ttl_seconds=ttl_hours * 3600,
         )
-        signed_urls = deployer.upload_all(file_paths, progress_callback=_progress)
+        signed_urls = s3_deployer.upload_all(file_paths, progress_callback=_progress)
         storage_location = f"s3://{bucket}/{prefix}"
 
-    elif cloud == "azure":
+        def publish_portal(portal_path: Path) -> str:
+            key = s3_deployer.upload(portal_path)
+            return s3_deployer.generate_presigned_url(key)
+
+    else:
         from cna.delivery_portal.azure_blob_deployer import AzureBlobDeployer
 
         cont = container or engagement_id
-        deployer = AzureBlobDeployer(
+        blob_deployer = AzureBlobDeployer(
             account_name=storage_account,
             container_name=cont,
             sas_ttl_hours=ttl_hours,
         )
-        signed_urls = deployer.upload_all(file_paths, progress_callback=_progress)
+        signed_urls = blob_deployer.upload_all(file_paths, progress_callback=_progress)
         storage_location = f"https://{storage_account}.blob.core.windows.net/{cont}"
+
+        def publish_portal(portal_path: Path) -> str:
+            blob = blob_deployer.upload(portal_path)
+            return blob_deployer.generate_sas_token(blob)
 
     click.echo("")
 
@@ -179,13 +178,7 @@ def run(engagement_id, cloud, bucket, s3_prefix, storage_account, container, ttl
             expires_at=access_record.expires_at,
             output_path=portal_path,
         )
-        # Upload portal index
-        if cloud == "aws":
-            key = deployer.upload(portal_path)
-            portal_url = deployer.generate_presigned_url(key)
-        else:
-            blob = deployer.upload(portal_path)
-            portal_url = deployer.generate_sas_token(blob)
+        portal_url = publish_portal(portal_path)
 
     # Store access record (metadata only, no URL)
     store.write_access_record(
@@ -214,14 +207,6 @@ def status(engagement_id, data_dir):
     Example:
       cna publish status --engagement-id acme-20260305-a3f2
     """
-    # SCAFFOLD — not implemented (TODO.md T-412).
-    #
-    # Calls EngagementStore.load_access_record(), which does not exist.
-    raise NotImplementedError(
-        "`cna publish status` is not implemented yet. It needs "
-        "EngagementStore.load_access_record(), which does not exist — "
-        "see TODO.md T-412."
-    )
     from cna.core.persistence import EngagementStore
     from cna.delivery_portal.access_manager import AccessRecord
 
