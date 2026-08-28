@@ -1,5 +1,5 @@
 # python:3.14-slim digest pinned — see root Dockerfile for the same pattern.
-FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4 AS builder
+FROM python:3.14-slim@sha256:cae66f2ef0ec51a9891263eeee7f987dacf0a9879e8aa9353d5606e0530619a5 AS builder
 
 WORKDIR /build
 
@@ -41,7 +41,7 @@ RUN pip install --no-cache-dir --no-deps --prefix=/install .
 # Pinned draw.io desktop release, verified by checksum before it can reach
 # the final image. Used headlessly (see scripts/drawio-headless.sh) so the
 # encyclopedia report's diagram SVGs render instead of silently degrading.
-FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4 AS drawio-fetch
+FROM python:3.14-slim@sha256:cae66f2ef0ec51a9891263eeee7f987dacf0a9879e8aa9353d5606e0530619a5 AS drawio-fetch
 
 ARG DRAWIO_VERSION=31.3.2
 ARG DRAWIO_SHA256=725453f32ef7f2f63f8b50b374857a5c312e2aaabcf221cb0600332741ae1094
@@ -53,7 +53,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
   && echo "${DRAWIO_SHA256}  /tmp/drawio.deb" | sha256sum -c -
 
 # ---- final stage ----
-FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4
+FROM python:3.14-slim@sha256:cae66f2ef0ec51a9891263eeee7f987dacf0a9879e8aa9353d5606e0530619a5
 
 # Non-root user — uid/gid 1001 (matches root Dockerfile's cna user).
 RUN groupadd --gid 1001 cna \
@@ -67,9 +67,15 @@ RUN groupadd --gid 1001 cna \
 COPY --from=drawio-fetch /tmp/drawio.deb /tmp/drawio.deb
 COPY --chmod=755 scripts/drawio-headless.sh /usr/local/bin/drawio
 RUN apt-get update \
- && apt-get install -y --no-install-recommends /tmp/drawio.deb xvfb \
+ && apt-get -y upgrade \
+ && apt-get install -y --no-install-recommends /tmp/drawio.deb xvfb xauth \
  && rm -rf /var/lib/apt/lists/* /tmp/drawio.deb \
  && drawio --version
+
+# The base image ships its own pip toolchain (setuptools pinned upstream) that
+# periodically carries fixable CVEs Docker Scout gates on — keep it at or
+# above the fixed versions.
+RUN pip install --no-cache-dir "setuptools>=78.1.1" "msgpack>=1.2.1"
 
 WORKDIR /app
 COPY --from=builder --chown=cna:cna /install /usr/local

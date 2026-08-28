@@ -8,8 +8,8 @@
 #   6. HEALTHCHECK added (required for ECS/AKS task definitions)
 #   7. .dockerignore referenced — see .dockerignore in repo root
 
-# python:3.12-slim digest pinned 2026-04-08
-FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4 AS builder
+# python:3.14-slim digest pinned 2026-08-28 (refreshed for the 2026-08 OpenSSL DSA)
+FROM python:3.14-slim@sha256:cae66f2ef0ec51a9891263eeee7f987dacf0a9879e8aa9353d5606e0530619a5 AS builder
 
 ARG CNA_VERSION=dev
 WORKDIR /build
@@ -28,7 +28,7 @@ RUN pip install --no-cache-dir --prefix=/install .
 # the final image. The export pipeline (cna/diagram_engine/export_pipeline.py)
 # degrades to XML-only output without it — its own warning promises the CLI
 # is available "inside the Docker container", which is made true here.
-FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4 AS drawio-fetch
+FROM python:3.14-slim@sha256:cae66f2ef0ec51a9891263eeee7f987dacf0a9879e8aa9353d5606e0530619a5 AS drawio-fetch
 
 ARG DRAWIO_VERSION=31.3.2
 ARG DRAWIO_SHA256=725453f32ef7f2f63f8b50b374857a5c312e2aaabcf221cb0600332741ae1094
@@ -40,7 +40,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
   && echo "${DRAWIO_SHA256}  /tmp/drawio.deb" | sha256sum -c -
 
 # ---- final stage ----
-FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4
+FROM python:3.14-slim@sha256:cae66f2ef0ec51a9891263eeee7f987dacf0a9879e8aa9353d5606e0530619a5
 
 ARG CNA_VERSION=dev
 LABEL org.opencontainers.image.title="CNA Platform" \
@@ -49,11 +49,18 @@ LABEL org.opencontainers.image.title="CNA Platform" \
       org.opencontainers.image.source="https://github.com/saulpatinojr/Work-Cloud_Network_Assessment" \
       org.opencontainers.image.licenses="Proprietary"
 
-# System deps for diagram generation (runtime only)
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# System deps for diagram generation (runtime only). The `upgrade` pulls
+# pending Debian security fixes (e.g. the 2026-08 OpenSSL DSA) so the gating
+# Docker Scout check doesn't fail on base-image debs between digest bumps.
+RUN apt-get update && apt-get -y upgrade && apt-get install -y --no-install-recommends \
     graphviz libcairo2 libpango-1.0-0 \
     libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 \
     && rm -rf /var/lib/apt/lists/*
+
+# The base image ships its own pip toolchain (setuptools pinned upstream) that
+# periodically carries fixable CVEs Docker Scout gates on — keep it at or
+# above the fixed versions.
+RUN pip install --no-cache-dir "setuptools>=78.1.1" "msgpack>=1.2.1"
 
 # draw.io desktop CLI + xvfb for headless diagram export (.drawio -> .svg).
 # The wrapper shadows /usr/bin/drawio on PATH and supplies xvfb-run,
@@ -62,7 +69,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=drawio-fetch /tmp/drawio.deb /tmp/drawio.deb
 COPY --chmod=755 scripts/drawio-headless.sh /usr/local/bin/drawio
 RUN apt-get update \
- && apt-get install -y --no-install-recommends /tmp/drawio.deb xvfb \
+ && apt-get install -y --no-install-recommends /tmp/drawio.deb xvfb xauth \
  && rm -rf /var/lib/apt/lists/* /tmp/drawio.deb \
  && drawio --version
 
