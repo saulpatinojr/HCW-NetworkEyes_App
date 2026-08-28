@@ -146,7 +146,7 @@ export default async function ReportBookModePage({ params, searchParams }: PageP
 
       {!hasData && (
         <div className="glass flex flex-col items-center gap-3 rounded-xl border border-dashed border-navy-700 px-8 py-10 text-center print:hidden">
-          <p className="text-sm font-semibold text-navy-300">No assessment data yet</p>
+          <p className="text-sm font-semibold text-navy-400 dark:text-navy-300">No assessment data yet</p>
           <p className="text-xs text-navy-500">
             Run discovery and AI analysis to populate the report.{" "}
             <Link href={`/engagements/${id}/discovery`} className="font-semibold text-teal-500 hover:underline">
@@ -158,7 +158,8 @@ export default async function ReportBookModePage({ params, searchParams }: PageP
 
       {/* ── Cover ── */}
       <section className="page-break glass flex min-h-[60vh] flex-col items-center justify-center gap-6 rounded-xl p-10 text-center">
-        <Image src="/cbts-logo-dark-teal.svg" alt="CBTS" width={180} height={48} className="dark:invert-0" />
+        <Image src="/cbts-logo-dark-teal.svg" alt="CBTS" width={180} height={48} className="dark:hidden" />
+        <Image src="/cbts-logo-bright-teal.svg" alt="CBTS" width={180} height={48} className="hidden dark:block" />
         <div>
           <p className="label-caps text-teal-500">Cloud Network Assessment</p>
           <h2 className="mt-2 text-3xl font-black text-navy-800 dark:text-navy-100">

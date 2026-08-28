@@ -52,7 +52,7 @@ export default async function TechnicalPage({ params }: PageProps) {
       {/* ── Header ── */}
       <div>
         <h2 className="label-caps text-navy-500">Technical Network Findings</h2>
-        <h1 className="mt-0.5 text-xl font-black text-navy-100">{engagement.clientOrg}</h1>
+        <h1 className="mt-0.5 text-xl font-black text-navy-800 dark:text-navy-100">{engagement.clientOrg}</h1>
         {jobDate && (
           <p className="mt-0.5 text-xs text-navy-500">
             Discovery completed:{" "}
@@ -80,7 +80,7 @@ export default async function TechnicalPage({ params }: PageProps) {
               key={s.label}
               className="glass rounded-xl border border-navy-700/40 p-3 text-center"
             >
-              <p className="text-2xl font-black text-navy-100">{s.value}</p>
+              <p className="text-2xl font-black text-navy-800 dark:text-navy-100">{s.value}</p>
               <p className="mt-0.5 text-xs text-navy-400">{s.label}</p>
             </div>
           ))}
@@ -90,7 +90,7 @@ export default async function TechnicalPage({ params }: PageProps) {
       {/* ── Risk Matrix ── */}
       {findings.length > 0 && categories.length > 0 && (
         <div className="glass overflow-hidden rounded-xl p-6">
-          <h2 className="mb-4 text-base font-bold text-navy-100">Risk Matrix</h2>
+          <h2 className="mb-4 text-base font-bold text-navy-800 dark:text-navy-100">Risk Matrix</h2>
           <div className="overflow-x-auto">
             <table className="min-w-full text-xs">
               <thead>
@@ -112,7 +112,7 @@ export default async function TechnicalPage({ params }: PageProps) {
                   const total = cells.reduce((a, b) => a + b, 0);
                   return (
                     <tr key={cat}>
-                      <td className="py-2 pr-4 text-xs font-medium text-navy-200">{cat}</td>
+                      <td className="py-2 pr-4 text-xs font-medium text-navy-500 dark:text-navy-200">{cat}</td>
                       {cells.map((count, i) => (
                         <td key={i} className="py-2 text-center">
                           {count > 0 ? (
@@ -126,7 +126,7 @@ export default async function TechnicalPage({ params }: PageProps) {
                           )}
                         </td>
                       ))}
-                      <td className="py-2 text-center text-xs font-bold text-navy-200">{total}</td>
+                      <td className="py-2 text-center text-xs font-bold text-navy-500 dark:text-navy-200">{total}</td>
                     </tr>
                   );
                 })}
@@ -139,7 +139,7 @@ export default async function TechnicalPage({ params }: PageProps) {
       {/* ── Finding Details ── */}
       {findings.length > 0 ? (
         <div className="glass rounded-xl p-6">
-          <h2 className="mb-4 text-base font-bold text-navy-100">
+          <h2 className="mb-4 text-base font-bold text-navy-800 dark:text-navy-100">
             All Findings ({findings.length})
           </h2>
           <div className="space-y-6">
@@ -158,17 +158,17 @@ export default async function TechnicalPage({ params }: PageProps) {
                       return (
                         <div key={f.id ?? i} className={`rounded-xl border p-4 ${style.bg}`}>
                           <div className="flex flex-wrap items-start justify-between gap-2">
-                            <p className="text-sm font-semibold text-navy-100">{f.title}</p>
+                            <p className="text-sm font-semibold text-navy-800 dark:text-navy-100">{f.title}</p>
                             <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${style.badge}`}>
                               {f.category}
                             </span>
                           </div>
-                          <p className="mt-2 text-sm leading-relaxed text-navy-300">
+                          <p className="mt-2 text-sm leading-relaxed text-navy-400 dark:text-navy-300">
                             {f.description}
                           </p>
                           {f.recommendation && (
-                            <div className="mt-3 rounded-lg bg-navy-900/40 px-4 py-3 text-xs text-navy-200">
-                              <span className="font-bold text-navy-100">Recommendation: </span>
+                            <div className="mt-3 rounded-lg bg-navy-50 px-4 py-3 text-xs text-navy-500 dark:bg-navy-900/40 dark:text-navy-200">
+                              <span className="font-bold text-navy-800 dark:text-navy-100">Recommendation: </span>
                               {f.recommendation}
                             </div>
                           )}
@@ -195,7 +195,7 @@ export default async function TechnicalPage({ params }: PageProps) {
       {/* ── Network Inventory ── */}
       {topology && (
         <div className="glass rounded-xl p-6">
-          <h2 className="mb-4 text-base font-bold text-navy-100">Network Inventory</h2>
+          <h2 className="mb-4 text-base font-bold text-navy-800 dark:text-navy-100">Network Inventory</h2>
           {topology.subscriptions.map((sub) => (
             <div key={sub.subscription_id} className="mb-6 last:mb-0">
               <h3 className="label-caps mb-2 text-navy-500">
@@ -207,9 +207,9 @@ export default async function TechnicalPage({ params }: PageProps) {
                     key={vnet.name}
                     className="mb-3 overflow-hidden rounded-xl border border-navy-700/40 last:mb-0"
                   >
-                    <div className="flex items-center justify-between bg-navy-800/40 px-4 py-2.5">
+                    <div className="flex items-center justify-between bg-navy-50 px-4 py-2.5 dark:bg-navy-800/40">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-navy-100">{vnet.name}</span>
+                        <span className="text-sm font-semibold text-navy-800 dark:text-navy-100">{vnet.name}</span>
                         <span className="text-xs text-navy-500">{vnet.location}</span>
                       </div>
                       <span className="font-mono text-xs text-navy-400">
@@ -232,19 +232,19 @@ export default async function TechnicalPage({ params }: PageProps) {
                             return (
                               <tr
                                 key={s.name}
-                                className={missingNsg ? "bg-amber-900/10" : ""}
+                                className={missingNsg ? "bg-amber-50/60 dark:bg-amber-900/10" : ""}
                               >
-                                <td className="px-4 py-1.5 text-navy-200">{s.name}</td>
+                                <td className="px-4 py-1.5 text-navy-500 dark:text-navy-200">{s.name}</td>
                                 <td className="px-4 py-1.5 font-mono text-navy-400">
                                   {s.address_prefix}
                                 </td>
                                 <td className="px-4 py-1.5 text-center">
                                   {s.nsg_name ? (
-                                    <span className="text-teal-400" title={s.nsg_name}>✓</span>
+                                    <span className="text-teal-700 dark:text-teal-400" title={s.nsg_name}>✓</span>
                                   ) : isPlatform ? (
                                     <span className="text-navy-600">—</span>
                                   ) : (
-                                    <span className="font-medium text-amber-400">None</span>
+                                    <span className="font-medium text-amber-600 dark:text-amber-400">None</span>
                                   )}
                                 </td>
                               </tr>
@@ -266,16 +266,16 @@ export default async function TechnicalPage({ params }: PageProps) {
                   <div className="divide-y divide-navy-700/30 rounded-xl border border-navy-700/40">
                     {sub.firewalls.map((fw) => (
                       <div key={fw.name} className="flex items-center justify-between px-4 py-2.5">
-                        <span className="text-xs font-medium text-navy-200">{fw.name}</span>
+                        <span className="text-xs font-medium text-navy-500 dark:text-navy-200">{fw.name}</span>
                         <div className="flex items-center gap-2">
-                          <span className="rounded bg-navy-700 px-2 py-0.5 text-xs text-navy-300">
+                          <span className="rounded bg-navy-100 px-2 py-0.5 text-xs text-navy-500 dark:bg-navy-700 dark:text-navy-300">
                             {fw.sku_tier}
                           </span>
                           <span
                             className={`rounded px-2 py-0.5 text-xs ${
                               fw.threat_intel_mode === "Deny"
-                                ? "bg-teal-900/30 text-teal-400"
-                                : "bg-amber-900/30 text-amber-400"
+                                ? "bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400"
+                                : "bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400"
                             }`}
                           >
                             Threat Intel: {fw.threat_intel_mode}

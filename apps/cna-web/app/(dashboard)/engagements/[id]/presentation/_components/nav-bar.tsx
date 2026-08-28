@@ -15,7 +15,7 @@ export function PresentationNavBar({ base }: { base: string }) {
   const pathname = usePathname();
 
   return (
-    <nav className="mb-5 flex items-center gap-1 overflow-x-auto rounded-xl border border-navy-700/40 bg-navy-800/40 p-1">
+    <nav className="mb-5 flex items-center gap-1 overflow-x-auto rounded-xl border border-navy-100/60 bg-navy-50 p-1 dark:border-navy-700/40 dark:bg-navy-800/40">
       {SUB_PAGES.map((p) => {
         const href = `${base}${p.path}`;
         const isActive =
@@ -31,7 +31,7 @@ export function PresentationNavBar({ base }: { base: string }) {
               "flex-1 whitespace-nowrap rounded-lg px-4 py-1.5 text-center text-sm font-medium transition-colors",
               isActive
                 ? "bg-teal-600 text-white shadow-sm"
-                : "text-navy-300 hover:bg-navy-700/60 hover:text-navy-100",
+                : "text-navy-400 hover:bg-navy-100 hover:text-navy-800 dark:text-navy-300 dark:hover:bg-navy-700/60 dark:hover:text-navy-100",
             ].join(" ")}
           >
             {p.label}

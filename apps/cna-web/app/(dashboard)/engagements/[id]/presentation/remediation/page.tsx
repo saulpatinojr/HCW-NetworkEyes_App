@@ -12,9 +12,9 @@ interface PageProps {
 }
 
 const PHASE_ACCENTS = [
-  { ring: "border-red-700/60",    bg: "bg-red-900/10",    icon: "bg-red-900/40 text-red-400",    num: "text-red-400"    },
-  { ring: "border-orange-700/60", bg: "bg-orange-900/10", icon: "bg-orange-900/40 text-orange-400", num: "text-orange-400" },
-  { ring: "border-amber-700/60",  bg: "bg-amber-900/10",  icon: "bg-amber-900/40 text-amber-400",  num: "text-amber-400"  },
+  { ring: "border-red-200 dark:border-red-700/60",       bg: "bg-red-50 dark:bg-red-900/10",       icon: "bg-red-50 text-red-600 dark:bg-red-900/40 dark:text-red-400",          num: "text-red-600 dark:text-red-400"    },
+  { ring: "border-orange-200 dark:border-orange-700/60", bg: "bg-orange-50 dark:bg-orange-900/10", icon: "bg-orange-50 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400", num: "text-orange-600 dark:text-orange-400" },
+  { ring: "border-amber-200 dark:border-amber-700/60",   bg: "bg-amber-50 dark:bg-amber-900/10",   icon: "bg-amber-50 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400",    num: "text-amber-600 dark:text-amber-400"  },
 ];
 
 export default async function RemediationPage({ params }: PageProps) {
@@ -42,18 +42,18 @@ export default async function RemediationPage({ params }: PageProps) {
       {/* ── Header ── */}
       <div>
         <h2 className="label-caps text-navy-500">Remediation & Transformation Plan</h2>
-        <h1 className="mt-0.5 text-xl font-black text-navy-100">{engagement.clientOrg}</h1>
+        <h1 className="mt-0.5 text-xl font-black text-navy-800 dark:text-navy-100">{engagement.clientOrg}</h1>
       </div>
 
       {/* ── Summary ── */}
       <div className="glass rounded-xl p-5">
         <div className="flex flex-wrap items-center gap-6">
           <div className="text-center">
-            <p className="text-3xl font-black text-navy-100">{totalActionable}</p>
+            <p className="text-3xl font-black text-navy-800 dark:text-navy-100">{totalActionable}</p>
             <p className="mt-0.5 text-xs text-navy-500">Actionable Items</p>
           </div>
           <div className="text-center">
-            <p className="text-3xl font-black text-navy-100">{phases.length}</p>
+            <p className="text-3xl font-black text-navy-800 dark:text-navy-100">{phases.length}</p>
             <p className="mt-0.5 text-xs text-navy-500">Remediation Phases</p>
           </div>
           <div className="flex-1">
@@ -77,8 +77,8 @@ export default async function RemediationPage({ params }: PageProps) {
 
       {/* ── Introduction ── */}
       <div className="glass rounded-xl p-6">
-        <h2 className="mb-3 text-base font-bold text-navy-100">Remediation Approach</h2>
-        <p className="text-sm leading-relaxed text-navy-300">
+        <h2 className="mb-3 text-base font-bold text-navy-800 dark:text-navy-100">Remediation Approach</h2>
+        <p className="text-sm leading-relaxed text-navy-400 dark:text-navy-300">
           This plan organizes all identified security findings into three phased remediation
           tracks based on severity and business impact. Critical findings require immediate
           escalation and remediation within 30 days. High severity findings should be
@@ -106,7 +106,7 @@ export default async function RemediationPage({ params }: PageProps) {
                 {phase.phase}
               </div>
               <div>
-                <h2 className="text-base font-bold text-navy-100">{phase.label}</h2>
+                <h2 className="text-base font-bold text-navy-800 dark:text-navy-100">{phase.label}</h2>
                 <p className="text-xs text-navy-400">
                   Target timeframe: {phase.timeframe} · {phase.items.length} finding{phase.items.length !== 1 ? "s" : ""}
                 </p>
@@ -118,14 +118,14 @@ export default async function RemediationPage({ params }: PageProps) {
               {phase.items.map((item, j) => {
                 const style = SEV_COLORS[item.severity as keyof typeof SEV_COLORS];
                 return (
-                  <div key={j} className="rounded-xl border border-navy-700/40 bg-navy-800/30 p-4">
+                  <div key={j} className="rounded-xl border border-navy-100/60 bg-navy-50 p-4 dark:border-navy-700/40 dark:bg-navy-800/30">
                     <div className="flex flex-wrap items-start justify-between gap-2">
-                      <p className="text-sm font-semibold text-navy-100">{item.title}</p>
+                      <p className="text-sm font-semibold text-navy-800 dark:text-navy-100">{item.title}</p>
                       <div className="flex items-center gap-1.5">
                         <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${style.badge}`}>
                           {item.severity[0] + item.severity.slice(1).toLowerCase()}
                         </span>
-                        <span className="rounded bg-navy-700/60 px-2 py-0.5 text-xs text-navy-400">
+                        <span className="rounded bg-navy-100/60 px-2 py-0.5 text-xs text-navy-500 dark:bg-navy-700/60 dark:text-navy-400">
                           {item.category}
                         </span>
                       </div>
@@ -146,7 +146,7 @@ export default async function RemediationPage({ params }: PageProps) {
                           d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
                         />
                       </svg>
-                      <p className="text-xs leading-relaxed text-navy-300">{item.recommendation}</p>
+                      <p className="text-xs leading-relaxed text-navy-400 dark:text-navy-300">{item.recommendation}</p>
                     </div>
                   </div>
                 );
@@ -159,12 +159,12 @@ export default async function RemediationPage({ params }: PageProps) {
       {/* ── Strategic Roadmap ── */}
       {phases.length > 0 && (
         <div className="glass rounded-xl p-6">
-          <h2 className="mb-4 text-base font-bold text-navy-100">
+          <h2 className="mb-4 text-base font-bold text-navy-800 dark:text-navy-100">
             Strategic Transformation Roadmap
           </h2>
           <div className="relative">
             {/* Timeline line */}
-            <div className="absolute left-4 top-0 h-full w-0.5 bg-navy-700/60" />
+            <div className="absolute left-4 top-0 h-full w-0.5 bg-navy-200 dark:bg-navy-700/60" />
             <div className="space-y-6 pl-12">
               {[
                 { label: "0–30 days",   title: "Immediate Stabilization",   desc: "Resolve all critical vulnerabilities, isolate exposed resources, and apply emergency network controls." },
@@ -173,11 +173,11 @@ export default async function RemediationPage({ params }: PageProps) {
                 { label: "180+ days",   title: "Continuous Improvement",    desc: "Ongoing security posture management, periodic reassessment, and maturity advancement across all dimensions." },
               ].map((item, i) => (
                 <div key={i} className="relative">
-                  <div className="absolute -left-8 flex h-6 w-6 items-center justify-center rounded-full border-2 border-navy-700 bg-navy-900 text-xs font-bold text-navy-400">
+                  <div className="absolute -left-8 flex h-6 w-6 items-center justify-center rounded-full border-2 border-navy-200 bg-navy-50 text-xs font-bold text-navy-400 dark:border-navy-700 dark:bg-navy-900">
                     {i + 1}
                   </div>
                   <p className="text-xs font-bold text-teal-500">{item.label}</p>
-                  <p className="mt-0.5 text-sm font-semibold text-navy-100">{item.title}</p>
+                  <p className="mt-0.5 text-sm font-semibold text-navy-800 dark:text-navy-100">{item.title}</p>
                   <p className="mt-1 text-xs leading-relaxed text-navy-400">{item.desc}</p>
                 </div>
               ))}

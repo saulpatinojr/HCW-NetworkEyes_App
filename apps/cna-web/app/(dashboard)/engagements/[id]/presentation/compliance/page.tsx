@@ -55,11 +55,11 @@ const FRAMEWORKS = [
 ];
 
 function maturityLabel(score: number): { label: string; cls: string } {
-  if (score >= 9) return { label: "Optimizing",   cls: "text-green-400 bg-green-900/20 border-green-800/40"   };
-  if (score >= 7) return { label: "Managed",      cls: "text-teal-400 bg-teal-900/20 border-teal-800/40"       };
-  if (score >= 5) return { label: "Defined",      cls: "text-amber-400 bg-amber-900/20 border-amber-800/40"   };
-  if (score >= 3) return { label: "Developing",   cls: "text-orange-400 bg-orange-900/20 border-orange-800/40" };
-  return               { label: "Initial",       cls: "text-red-400 bg-red-900/20 border-red-800/40"          };
+  if (score >= 9) return { label: "Optimizing",   cls: "text-green-700 bg-green-50/60 border-green-200 dark:text-green-400 dark:bg-green-900/20 dark:border-green-800/40"   };
+  if (score >= 7) return { label: "Managed",      cls: "text-teal-700 bg-teal-50/60 border-teal-200 dark:text-teal-400 dark:bg-teal-900/20 dark:border-teal-800/40"       };
+  if (score >= 5) return { label: "Defined",      cls: "text-amber-700 bg-amber-50/60 border-amber-200 dark:text-amber-400 dark:bg-amber-900/20 dark:border-amber-800/40"   };
+  if (score >= 3) return { label: "Developing",   cls: "text-orange-700 bg-orange-50/60 border-orange-200 dark:text-orange-400 dark:bg-orange-900/20 dark:border-orange-800/40" };
+  return               { label: "Initial",       cls: "text-red-700 bg-red-50/60 border-red-200 dark:text-red-400 dark:bg-red-900/20 dark:border-red-800/40"          };
 }
 
 export default async function CompliancePage({ params }: PageProps) {
@@ -91,7 +91,7 @@ export default async function CompliancePage({ params }: PageProps) {
       {/* ── Header ── */}
       <div>
         <h2 className="label-caps text-navy-500">Compliance & Maturity Assessment</h2>
-        <h1 className="mt-0.5 text-xl font-black text-navy-100">{engagement.clientOrg}</h1>
+        <h1 className="mt-0.5 text-xl font-black text-navy-800 dark:text-navy-100">{engagement.clientOrg}</h1>
       </div>
 
       {/* ── Overall Score ── */}
@@ -101,7 +101,7 @@ export default async function CompliancePage({ params }: PageProps) {
           <div className="flex-1 space-y-3">
             <div>
               <h2 className="label-caps text-navy-500">Overall Security Maturity</h2>
-              <p className="mt-1 text-4xl font-black text-navy-100">{avgScore}<span className="text-xl text-navy-400">/10</span></p>
+              <p className="mt-1 text-4xl font-black text-navy-800 dark:text-navy-100">{avgScore}<span className="text-xl text-navy-400">/10</span></p>
               <span className={`mt-1 inline-block rounded-full border px-3 py-0.5 text-xs font-bold ${overallLabel.cls}`}>
                 {overallLabel.label}
               </span>
@@ -123,7 +123,7 @@ export default async function CompliancePage({ params }: PageProps) {
 
       {/* ── Dimension Details ── */}
       <div className="glass rounded-xl p-6">
-        <h2 className="mb-4 text-base font-bold text-navy-100">Dimension Breakdown</h2>
+        <h2 className="mb-4 text-base font-bold text-navy-800 dark:text-navy-100">Dimension Breakdown</h2>
         <div className="space-y-4">
           {dims.map((d) => {
             const ml = maturityLabel(d.score);
@@ -138,7 +138,7 @@ export default async function CompliancePage({ params }: PageProps) {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold text-navy-100">{d.fullLabel}</p>
+                      <p className="text-sm font-semibold text-navy-800 dark:text-navy-100">{d.fullLabel}</p>
                       <span className={`rounded-full border px-2 py-0.5 text-xs font-bold ${ml.cls}`}>
                         {d.score}/10 · {ml.label}
                       </span>
@@ -147,7 +147,7 @@ export default async function CompliancePage({ params }: PageProps) {
                   </div>
                 </div>
                 {/* Progress bar */}
-                <div className="mt-3 overflow-hidden rounded-full bg-navy-800">
+                <div className="mt-3 overflow-hidden rounded-full bg-navy-100 dark:bg-navy-800">
                   {/* eslint-disable-next-line react/forbid-dom-props */}
                   <div
                     className="h-2 rounded-full bg-teal-500 transition-all"
@@ -160,7 +160,7 @@ export default async function CompliancePage({ params }: PageProps) {
                   return (
                     <div key={i} className={`mt-2 flex items-center gap-2 rounded-lg border px-3 py-1.5 ${style.bg}`}>
                       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${style.bar}`} />
-                      <p className="text-xs text-navy-300">{f.title}</p>
+                      <p className="text-xs text-navy-400 dark:text-navy-300">{f.title}</p>
                       <span className={`ml-auto shrink-0 text-xs font-semibold ${style.text}`}>
                         {f.severity[0] + f.severity.slice(1).toLowerCase()}
                       </span>
@@ -175,14 +175,14 @@ export default async function CompliancePage({ params }: PageProps) {
 
       {/* ── Maturity Scale Reference ── */}
       <div className="glass rounded-xl p-6">
-        <h2 className="mb-4 text-base font-bold text-navy-100">Maturity Scale</h2>
+        <h2 className="mb-4 text-base font-bold text-navy-800 dark:text-navy-100">Maturity Scale</h2>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-5">
           {[
-            { range: "1–2", label: "Initial",     desc: "Ad-hoc, unpredictable processes", cls: "text-red-400 border-red-800/40 bg-red-900/10"       },
-            { range: "3–4", label: "Developing",  desc: "Partial implementation, inconsistent", cls: "text-orange-400 border-orange-800/40 bg-orange-900/10" },
-            { range: "5–6", label: "Defined",     desc: "Documented and consistently applied", cls: "text-amber-400 border-amber-800/40 bg-amber-900/10"   },
-            { range: "7–8", label: "Managed",     desc: "Measured, quantitatively controlled", cls: "text-teal-400 border-teal-800/40 bg-teal-900/10"       },
-            { range: "9–10",label: "Optimizing",  desc: "Continuous improvement focus", cls: "text-green-400 border-green-800/40 bg-green-900/10"      },
+            { range: "1–2", label: "Initial",     desc: "Ad-hoc, unpredictable processes", cls: "text-red-700 border-red-200 bg-red-50/60 dark:text-red-400 dark:border-red-800/40 dark:bg-red-900/10"       },
+            { range: "3–4", label: "Developing",  desc: "Partial implementation, inconsistent", cls: "text-orange-700 border-orange-200 bg-orange-50/60 dark:text-orange-400 dark:border-orange-800/40 dark:bg-orange-900/10" },
+            { range: "5–6", label: "Defined",     desc: "Documented and consistently applied", cls: "text-amber-700 border-amber-200 bg-amber-50/60 dark:text-amber-400 dark:border-amber-800/40 dark:bg-amber-900/10"   },
+            { range: "7–8", label: "Managed",     desc: "Measured, quantitatively controlled", cls: "text-teal-700 border-teal-200 bg-teal-50/60 dark:text-teal-400 dark:border-teal-800/40 dark:bg-teal-900/10"       },
+            { range: "9–10",label: "Optimizing",  desc: "Continuous improvement focus", cls: "text-green-700 border-green-200 bg-green-50/60 dark:text-green-400 dark:border-green-800/40 dark:bg-green-900/10"      },
           ].map((level) => (
             <div key={level.label} className={`rounded-xl border p-3 text-center ${level.cls}`}>
               <p className="text-lg font-black">{level.range}</p>
@@ -195,7 +195,7 @@ export default async function CompliancePage({ params }: PageProps) {
 
       {/* ── Framework Mapping ── */}
       <div className="glass rounded-xl p-6">
-        <h2 className="mb-4 text-base font-bold text-navy-100">Framework Alignment</h2>
+        <h2 className="mb-4 text-base font-bold text-navy-800 dark:text-navy-100">Framework Alignment</h2>
         <p className="mb-4 text-xs text-navy-400">
           Maturity dimensions map to the following industry frameworks and controls.
         </p>
@@ -203,7 +203,7 @@ export default async function CompliancePage({ params }: PageProps) {
           {FRAMEWORKS.map((fw) => (
             <div key={fw.name}>
               <div className="mb-2 flex items-center gap-2">
-                <p className="text-sm font-semibold text-navy-100">{fw.name}</p>
+                <p className="text-sm font-semibold text-navy-800 dark:text-navy-100">{fw.name}</p>
                 <span className="text-xs text-navy-500">— {fw.description}</span>
               </div>
               <div className="overflow-x-auto">
@@ -223,9 +223,9 @@ export default async function CompliancePage({ params }: PageProps) {
                       const ml = maturityLabel(score);
                       return (
                         <tr key={row.dim}>
-                          <td className="py-2 pr-4 font-medium text-navy-200">{row.dim}</td>
+                          <td className="py-2 pr-4 font-medium text-navy-500 dark:text-navy-200">{row.dim}</td>
                           <td className="py-2 pr-4 text-navy-400">{row.func}</td>
-                          <td className="py-2 text-center font-bold text-teal-400">{score}/10</td>
+                          <td className="py-2 text-center font-bold text-teal-700 dark:text-teal-400">{score}/10</td>
                           <td className="py-2">
                             <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${ml.cls}`}>
                               {ml.label}

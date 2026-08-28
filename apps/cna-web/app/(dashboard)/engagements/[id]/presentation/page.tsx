@@ -45,7 +45,7 @@ function NavCard({
         {children}
       </div>
       <div>
-        <p className="text-sm font-semibold text-navy-100 group-hover:text-white">{label}</p>
+        <p className="text-sm font-semibold text-navy-800 group-hover:text-navy-900 dark:text-navy-100 dark:group-hover:text-white">{label}</p>
         <p className="mt-0.5 text-xs text-navy-400">{description}</p>
       </div>
       <span className="mt-auto text-xs font-medium text-teal-500 group-hover:text-teal-400">
@@ -92,7 +92,7 @@ export default async function PresentationOverviewPage({ params }: PageProps) {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="label-caps text-navy-500">Assessment Overview</h2>
-          <h1 className="mt-0.5 text-xl font-black text-navy-100">{engagement.clientOrg}</h1>
+          <h1 className="mt-0.5 text-xl font-black text-navy-800 dark:text-navy-100">{engagement.clientOrg}</h1>
         </div>
         {jobDate && (
           <p className="text-xs text-navy-500">
@@ -123,7 +123,7 @@ export default async function PresentationOverviewPage({ params }: PageProps) {
                   <span className={`text-xs font-semibold w-20 ${SEV_COLORS[sev as keyof typeof SEV_COLORS].text}`}>
                     {sev[0] + sev.slice(1).toLowerCase()}
                   </span>
-                  <span className="text-sm font-black text-navy-100">{bySev[sev]?.length ?? 0}</span>
+                  <span className="text-sm font-black text-navy-800 dark:text-navy-100">{bySev[sev]?.length ?? 0}</span>
                 </div>
               ))}
             </div>
@@ -138,14 +138,14 @@ export default async function PresentationOverviewPage({ params }: PageProps) {
             {dims.map((d) => (
               <div key={d.label} className="flex items-center gap-2">
                 <span className="w-24 truncate text-xs text-navy-400">{d.fullLabel}</span>
-                <div className="flex-1 overflow-hidden rounded-full bg-navy-800">
+                <div className="flex-1 overflow-hidden rounded-full bg-navy-100 dark:bg-navy-800">
                   {/* eslint-disable-next-line react/forbid-dom-props */}
                   <div
                     className="h-1.5 rounded-full bg-teal-500"
                     {...makeStyle({ width: `${(d.score / 10) * 100}%` })}
                   />
                 </div>
-                <span className="w-5 text-right text-xs font-bold text-teal-400">{d.score}</span>
+                <span className="w-5 text-right text-xs font-bold text-teal-700 dark:text-teal-400">{d.score}</span>
               </div>
             ))}
           </div>
@@ -217,9 +217,9 @@ export default async function PresentationOverviewPage({ params }: PageProps) {
             ].map((s) => (
               <div
                 key={s.label}
-                className="col-span-2 flex flex-col items-center rounded-xl border border-navy-700/40 bg-navy-800/30 p-3 text-center"
+                className="col-span-2 flex flex-col items-center rounded-xl border border-navy-100/60 bg-navy-50 p-3 text-center dark:border-navy-700/40 dark:bg-navy-800/30"
               >
-                <p className="text-2xl font-black text-navy-100">{s.value}</p>
+                <p className="text-2xl font-black text-navy-800 dark:text-navy-100">{s.value}</p>
                 <p className="mt-0.5 text-xs text-navy-400">{s.label}</p>
               </div>
             ))}
@@ -232,7 +232,7 @@ export default async function PresentationOverviewPage({ params }: PageProps) {
           <svg aria-hidden="true" focusable="false" className="h-8 w-8 text-navy-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.633 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z" />
           </svg>
-          <p className="text-sm font-semibold text-navy-300">No assessment data yet</p>
+          <p className="text-sm font-semibold text-navy-400 dark:text-navy-300">No assessment data yet</p>
           <p className="text-xs text-navy-500">
             Run discovery and AI analysis to populate this dashboard.
           </p>
@@ -247,7 +247,7 @@ export default async function PresentationOverviewPage({ params }: PageProps) {
             href={`${base}/executive`}
             label="Executive Summary"
             description="Risk posture, key metrics, and leadership narrative"
-            accent="bg-red-900/40 text-red-400"
+            accent="bg-red-50 text-red-600 dark:bg-red-900/40 dark:text-red-400"
           >
             <svg aria-hidden="true" focusable="false" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -258,7 +258,7 @@ export default async function PresentationOverviewPage({ params }: PageProps) {
             href={`${base}/technical`}
             label="Technical Findings"
             description="Full findings list, risk matrix, and network inventory"
-            accent="bg-orange-900/40 text-orange-400"
+            accent="bg-orange-50 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400"
           >
             <svg aria-hidden="true" focusable="false" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
@@ -269,7 +269,7 @@ export default async function PresentationOverviewPage({ params }: PageProps) {
             href={`${base}/remediation`}
             label="Remediation Plan"
             description="Phased action plan with timelines and priorities"
-            accent="bg-amber-900/40 text-amber-400"
+            accent="bg-amber-50 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400"
           >
             <svg aria-hidden="true" focusable="false" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
@@ -280,7 +280,7 @@ export default async function PresentationOverviewPage({ params }: PageProps) {
             href={`${base}/compliance`}
             label="Compliance & Maturity"
             description="Maturity radar, dimension scores, and framework mapping"
-            accent="bg-teal-900/40 text-teal-400"
+            accent="bg-teal-50 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400"
           >
             <svg aria-hidden="true" focusable="false" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
