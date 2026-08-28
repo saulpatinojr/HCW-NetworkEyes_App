@@ -198,9 +198,9 @@ Each one actively misleads an engineer or a workflow run.
   omission.
 - **Status:** Done — verified and documented in code. `grep -rn thumbprint infra/` returns **only
   comment lines**: there is no `thumbprint_list` value anywhere under `infra/`, so nothing was
-  copied forward. The legacy placeholder does still exist in the superseded root, at
+  copied forward. The legacy placeholder existed only in the superseded root, at
   `migrate/iam.tf:139` and `migrate/scripts/Initialize-Migration.ps1:97` — forty `f`s, never a real
-  thumbprint — and goes away with T-401.
+  thumbprint — and is now gone from the tree with T-401 (recoverable from history at `7a6b1fa`).
   A short comment already existed above `aws_iam_openid_connect_provider.github`; it was expanded
   rather than duplicated, and now records three things a future reviewer needs: *why* the omission
   is correct (provider 5.x validates GitHub's endpoint against its own trusted CA store), that the
@@ -495,7 +495,18 @@ order; do not reorder it.
 - **Recommended action:** Confirm `migrate/` is fully superseded, check the assessment-level IAM
   policies below against the current `identity` module, then delete the directory and its
   bootstrap script.
-- **Status:** Not started
+- **Status:** Done — the directory and its bootstrap script are deleted. The gate below was
+  verified first: `infra/terraform/providers/aws/identity/main.tf` attaches all three
+  assessment-level policies to the `github_deploy` role (`ReadOnlyAccess`, `SecurityAudit`,
+  `AWSBillingReadOnlyAccess`, each partition-aware via `data.aws_partition`), plus the scoped
+  `deploy_write` policy — so nothing the `migrate/` role granted is lost. The stale
+  `.secrets.baseline` entries for `migrate/secrets.tf` and `migrate/terraform.tfvars.example`
+  were pruned and the gating detect-secrets scan re-verified green. For R-002 (AWS bootstrap):
+  `migrate/scripts/Initialize-Migration.ps1` last exists at commit `7a6b1fa` on `main` — read it
+  from history (`git show 7a6b1fa:migrate/scripts/Initialize-Migration.ps1`), and remember its
+  `iam.tf` neighbour carries the obsolete OIDC thumbprint T-203 says must not be copied forward.
+  The IAM policy mapping and directory inventory preserved in the notes below remain queued for
+  the Wiki under T-601.
 - **Notes for future engineers:** The current stack supersedes `migrate/` on every axis: eight
   module boundaries mirroring Azure, split platform/workload state, VPC endpoints, X-Ray, Bedrock,
   and autoscaling. `migrate/` has none of those. Treat it as history, not as an alternative. The

@@ -52,7 +52,6 @@ infra/terraform/
 ├── providers/azure/   Reusable modules: ai, compute, database, identity,
 │                      security, storage, runtime, observability
 └── providers/aws/     The same eight module boundaries, mirrored
-migrate/              Superseded standalone AWS Terraform root — retirement tracked in TODO.md → T-401
 scripts/              Bootstrap, validation, cleanup, and CI helper scripts
 tests/                unit/ and integration/
 .github/workflows/    Numbered workflow sequence (see conventions below)
