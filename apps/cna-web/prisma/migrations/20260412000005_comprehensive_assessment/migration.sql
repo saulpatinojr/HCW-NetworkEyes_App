@@ -1,2 +1,0 @@
--- AlterEnum
-ALTER TYPE "DeliverableType" ADD VALUE 'COMPREHENSIVE_ASSESSMENT';
