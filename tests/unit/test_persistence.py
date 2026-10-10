@@ -209,7 +209,7 @@ class TestReadSideMethods:
     """
 
     def _write_aws_checkpoint(self, store, engagement_id, account_id, region, **kwargs):
-        from cna.core.topology_schema import AWSRegionTopology
+        from cna.core.topology.aws import AWSRegionTopology
 
         topo = AWSRegionTopology(account_id=account_id, region=region, **kwargs)
         # Same key shape AWSDiscovery uses: aws_{account}_{region}
@@ -218,7 +218,7 @@ class TestReadSideMethods:
         )
 
     def _write_azure_checkpoint(self, store, engagement_id, sub_id, tenant_id, **kwargs):
-        from cna.core.topology_schema import AzureSubscriptionTopology
+        from cna.core.topology.azure import AzureSubscriptionTopology
 
         topo = AzureSubscriptionTopology(subscription_id=sub_id, tenant_id=tenant_id, **kwargs)
         store.write_discovery_checkpoint(

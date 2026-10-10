@@ -37,7 +37,7 @@ from azure.core.exceptions import HttpResponseError
 from cna.core.exceptions import CNAAuthError
 from cna.core.persistence import EngagementStore
 from cna.core.throttle import with_retry
-from cna.core.topology_schema import (
+from cna.core.topology.azure import (
     AppGatewayMetric,
     ApplicationGateway,
     AzureBastionHost,
@@ -80,10 +80,10 @@ from cna.core.topology_schema import (
     NSGSecurityRule,
     ObservabilityData,
     PrivateDnsZone,
-    SubnetType,
     VNet,
     VNetPeering,
 )
+from cna.core.topology.common import SubnetType
 
 logger = logging.getLogger("cna.discovery.azure")
 
@@ -108,7 +108,7 @@ def _rg_from_id(resource_id: str) -> str:
     try:
         idx = next(i for i, p in enumerate(parts) if p.lower() == "resourcegroups")
         return parts[idx + 1]
-    except (StopIteration, IndexError):
+    except StopIteration, IndexError:
         return parts[_RG_PARTS_INDEX] if len(parts) > _RG_PARTS_INDEX else ""
 
 
@@ -118,7 +118,7 @@ def _sub_from_id(resource_id: str) -> str:
     try:
         idx = next(i for i, p in enumerate(parts) if p.lower() == "subscriptions")
         return parts[idx + 1]
-    except (StopIteration, IndexError):
+    except StopIteration, IndexError:
         return ""
 
 

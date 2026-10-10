@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cna.core.topology_schema import AzureSubscriptionTopology
+from cna.core.topology.azure import AzureSubscriptionTopology
 from cna.diagram_engine.drawio_generator import generate_vnet_topology
 from cna.diagram_engine.export_pipeline import DiagramExporter
 

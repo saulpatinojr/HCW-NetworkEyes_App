@@ -1,6 +1,6 @@
 """draw.io XML generator — Phase B core.
 
-Converts topology Pydantic models (cna.core.topology_schema) into
+Converts topology Pydantic models (cna.core.topology.azure, cna.core.topology.aws) into
 draw.io-compatible XML strings. Handles XML-unsafe characters, empty
 resource sets, and oversized topologies gracefully.
 
@@ -24,14 +24,9 @@ import logging
 import textwrap
 import uuid
 
-from cna.core.topology_schema import (
-    AWSRegionTopology,
-    AzureSubscriptionTopology,
-    AzureTopology,
-    AzureVWan,
-    SubnetType,
-    TransitGateway,
-)
+from cna.core.topology.aws import AWSRegionTopology, TransitGateway
+from cna.core.topology.azure import AzureSubscriptionTopology, AzureTopology, AzureVWan
+from cna.core.topology.common import SubnetType
 from cna.diagram_engine.future_state import (
     FutureStateModel,
     FutureStateNode,

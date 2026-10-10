@@ -18,7 +18,7 @@ from click.testing import CliRunner
 
 from cna.cli.main import cli
 from cna.core.persistence import EngagementStore
-from cna.core.topology_schema import (
+from cna.core.topology.azure import (
     AzureNSG,
     AzureSubnet,
     AzureSubscriptionTopology,

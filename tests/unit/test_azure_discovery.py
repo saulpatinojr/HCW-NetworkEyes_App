@@ -21,12 +21,8 @@ import pytest
 from azure.core.exceptions import HttpResponseError
 
 from cna.core.exceptions import CNAAuthError
-from cna.core.topology_schema import (
-    AppGatewayMetric,
-    AzureSubscriptionTopology,
-    NetworkMetrics,
-    SubnetType,
-)
+from cna.core.topology.azure import AppGatewayMetric, AzureSubscriptionTopology, NetworkMetrics
+from cna.core.topology.common import SubnetType
 from cna.modules.network.discovery.azure_discovery import (
     AzureDiscovery,
     AzureDiscoveryOptions,

@@ -59,7 +59,7 @@ class ExecutiveReportRenderer:
 
                 WP(string=html, base_url=str(_TEMPLATES_DIR)).write_pdf(str(output_path))
                 logger.info("Executive PDF written: %s", output_path)
-            except (ImportError, OSError):
+            except ImportError, OSError:
                 logger.warning(
                     "WeasyPrint not installed. PDF skipped. HTML written to %s. "
                     "Install with: pip install weasyprint",

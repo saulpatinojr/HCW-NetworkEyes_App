@@ -134,7 +134,7 @@ def normalize_finding(finding: Finding | dict) -> dict:
     cost = _get(finding, "est_monthly_cost_usd", "est_cost_impact", "estCostImpact")
     try:
         cost = float(cost) if cost is not None else None
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         cost = None
 
     return {
@@ -601,7 +601,7 @@ class EncyclopediaReportRenderer:
 
                 WP(string=html, base_url=str(_TEMPLATES_DIR)).write_pdf(str(output_path))
                 logger.info("Encyclopedia (%s) PDF written: %s", self.edition, output_path)
-            except (ImportError, OSError):
+            except ImportError, OSError:
                 # OSError: WeasyPrint installed but native GTK/Pango libs missing
                 logger.warning(
                     "WeasyPrint unavailable. Encyclopedia PDF skipped. HTML written to %s.",

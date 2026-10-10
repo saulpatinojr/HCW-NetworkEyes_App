@@ -24,7 +24,7 @@ import boto3
 import botocore.exceptions
 
 from cna.core.throttle import with_retry
-from cna.core.topology_schema import AWSSecurityFinding
+from cna.core.topology.aws import AWSSecurityFinding
 
 logger = logging.getLogger("cna.discovery.aws.security")
 
@@ -166,7 +166,7 @@ class AWSSecurityDiscovery:
         """Map GuardDuty's numeric severity (0.1-8.9) onto a normalized label."""
         try:
             score = float(value)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return "MEDIUM"
         if score >= 7.0:
             return "HIGH"

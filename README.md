@@ -47,10 +47,12 @@ apps/
 ├── cna-web/          Next.js web platform (8-step journey, encyclopedia, copilot)
 ├── cna-api/          FastAPI — metrics, chat, reports, discovery routers
 └── cna-worker/       Python background worker — discovery + report generation
+packages/             cna-azure-network-engine — the Azure engine (model, typed rules, classifier,
+                      Resource Graph normalizer, renderers); a uv workspace member the cna package consumes
 cna/                  Python package, installed as the `cna` CLI
-├── core/             topology_schema · findings_schema · stat_masters · engagement
+├── core/             topology/{common,azure,aws} · findings_schema · stat_masters · engagement
 ├── modules/          AWS + Azure discovery, FinOps signals, BC/DR signals, topology classifier
-├── ai_engine/        Analysis engine, recommendation engine, chat agent
+├── ai_engine/        Azure rule registry (azure_rules), AWS analysis engine, recommendation engine, chat agent
 ├── report_engine/    Encyclopedia renderer, WeasyPrint PDF, radar chart SVG
 ├── diagram_engine/   Draw.io generator, future-state model
 ├── delivery_portal/  Client deliverable delivery

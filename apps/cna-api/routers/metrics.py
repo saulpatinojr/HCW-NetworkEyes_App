@@ -101,7 +101,7 @@ def _load_latest_topology(engagement_id: str) -> Any | None:
     if not row or not row["topologyJson"]:
         return None
     try:
-        from cna.core.topology_schema import AzureTopology
+        from cna.core.topology.azure import AzureTopology
 
         return AzureTopology.model_validate_json(row["topologyJson"])
     except Exception as exc:  # noqa: BLE001 — metadata only, never fatal

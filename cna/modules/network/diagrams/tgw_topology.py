@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cna.core.topology_schema import AWSRegionTopology
+from cna.core.topology.aws import AWSRegionTopology
 from cna.diagram_engine.drawio_generator import generate_tgw_topology
 from cna.diagram_engine.export_pipeline import DiagramExporter
 

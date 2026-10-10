@@ -26,7 +26,8 @@ from pydantic import BaseModel
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from cna.ai_engine.diagram_authoring import author_engagement_bundle
-from cna.core.topology_schema import AWSTopology, AzureTopology
+from cna.core.topology.aws import AWSTopology
+from cna.core.topology.azure import AzureTopology
 from cna.diagram_engine.c4_layering import C4Layer
 from cna.diagram_engine.drawio_generator import merge_diagrams
 

@@ -6,8 +6,11 @@ build-backend = "setuptools.build_meta"
 name = "cna"
 version = "0.8.0b0"
 description = "Cloud Network Assessment Platform CLI"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 dependencies = [
+    # The Azure assessment engine (model, typed rules, classifier, normalizer, renderers):
+    # a workspace member under packages/ until it is published (REFACTOR_APP.md change set C).
+    "cna-azure-network-engine",
     "click>=8.4.2",
     "rich>=15.0.0",
     "boto3>=1.43.40",
@@ -142,23 +145,26 @@ worker = [
 # updater, which runs its own bundled uv (older than the one pinned here).
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "packages/cna-azure-network-engine/tests"]
 addopts = "-ra -q"
 
-# Type checking (TODO.md T-402). Matches the ruff posture: py311, project
+# Type checking (TODO.md T-402). Matches the ruff posture: py314, project
 # source only, no widened ignore lists. `ty check cna/` is NOT yet green — see
 # TODO.md T-410 for the remaining findings, which are to be fixed rather than
 # silenced. Nothing here suppresses a rule.
 [tool.ty.environment]
-python-version = "3.11"
+python-version = "3.14"
+# The engine is a workspace member under packages/: its import root is not a site-packages
+# path, so the checker is told where cna_azure_network_engine resolves from.
+extra-paths = ["packages/cna-azure-network-engine"]
 
 [tool.ty.src]
-include = ["cna"]
+include = ["cna", "packages/cna-azure-network-engine/cna_azure_network_engine"]
 exclude = ["local"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py314"
 # .claude, .agents, .codex, and .kiro are vendored agent/skill/tooling
 # configuration (Kiro's spec workspace included), not this repo's own source — they aren't held to project lint
 # standards. Kept in sync with EXCLUDED_DIRS in
@@ -190,12 +196,16 @@ ignore = [
     "S311",   # pseudo-random — used for jitter/throttle, not cryptography
 ]
 
+[tool.ruff.lint.isort]
+# The engine is developed in this tree (packages/): group it with the first-party imports.
+known-first-party = ["cna", "cna_azure_network_engine"]
+
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S", "N"]   # relax security + naming rules in tests
 "cna/diagram_engine/diagrams_generator.py" = ["N811"]  # VPC imported as SubnetNode is a deliberate alias
 
 [tool.coverage.run]
-source = ["cna"]
+source = ["cna", "cna_azure_network_engine"]
 omit = [
     # CLI entry points — covered by integration tests, not unit tests
     "cna/cli/*",
@@ -229,3 +239,12 @@ exclude_lines = [
 
 [tool.setuptools.packages.find]
 include = ["cna*"]
+
+# The engine is developed in-tree and consumed as a workspace member, so nothing is
+# duplicated between cna/ and packages/ (uv resolves it from the path; pip installs it
+# first in CI and in the images). Once published, replace the source with an exact version.
+[tool.uv.workspace]
+members = ["packages/cna-azure-network-engine"]
+
+[tool.uv.sources]
+cna-azure-network-engine = { workspace = true }

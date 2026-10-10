@@ -143,7 +143,7 @@ def _load_topology_classification(engagement_id: str) -> tuple[str | None, str |
     if not row or not row["topologyJson"]:
         return None, None
     try:
-        from cna.core.topology_schema import AzureTopology
+        from cna.core.topology.azure import AzureTopology
         from cna.modules.network.analysis.topology_classifier import classify_topology
 
         classification = classify_topology(AzureTopology.model_validate_json(row["topologyJson"]))

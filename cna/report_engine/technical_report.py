@@ -50,7 +50,7 @@ class TechnicalReportRenderer:
 
                 WP(string=html, base_url=str(_TEMPLATES_DIR)).write_pdf(str(output_path))
                 logger.info("Technical PDF written: %s", output_path)
-            except (ImportError, OSError):
+            except ImportError, OSError:
                 logger.warning(
                     "WeasyPrint not installed. Technical PDF skipped. HTML written to %s.",
                     html_path,

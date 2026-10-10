@@ -12,7 +12,7 @@ from cna.core.findings_schema import (
     FrameworkMapping,
 )
 from cna.core.stat_masters import build_stat_masters
-from cna.core.topology_schema import (
+from cna.core.topology.azure import (
     AzureFirewall,
     AzurePublicIP,
     AzureSubnet,

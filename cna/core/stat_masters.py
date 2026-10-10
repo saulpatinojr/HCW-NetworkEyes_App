@@ -8,7 +8,7 @@ subscription_id, resource_type, category, rule_id) + 3 measures
 
 `build_stat_masters` is a pure function: it accepts both
 cna.core.findings_schema.Finding models and plain dict findings (the shape
-produced by apps/cna-api/main.py::_topology_to_findings and by Prisma
+written by apps/cna-api/finding_records.py::finding_to_record and by Prisma
 Finding rows), and an optional AzureTopology for classification metadata.
 Unknown dimension values fall back to the same labels the frontend
 derive-stat-masters.ts uses ("Unmapped", "Unknown", "default", "Other",
@@ -130,7 +130,7 @@ def _cost_of(finding: Finding | dict) -> float:
         value = finding.est_monthly_cost_usd
     try:
         return float(value) if value is not None else 0.0
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 0.0
 
 
@@ -148,7 +148,7 @@ def build_stat_masters(
     """Aggregate findings into one StatMasterRecord per unique dimension tuple.
 
     Pure and deterministic. `topology` is an optional AzureTopology
-    (cna/core/topology_schema.py) used only for bundle metadata — pass
+    (cna/core/topology/azure.py) used only for bundle metadata — pass
     None when no topology checkpoint is available.
 
     Measures per group:

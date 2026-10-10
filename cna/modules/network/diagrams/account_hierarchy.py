@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cna.core.topology_schema import AWSTopology
+from cna.core.topology.aws import AWSTopology
 from cna.diagram_engine.mermaid_generator import generate_aws_account_hierarchy
 
 

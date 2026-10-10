@@ -2,7 +2,7 @@
 
 import xml.etree.ElementTree as ET
 
-from cna.core.topology_schema import (
+from cna.core.topology.azure import (
     AzureRouteServer,
     AzureSubscriptionTopology,
     AzureTopology,

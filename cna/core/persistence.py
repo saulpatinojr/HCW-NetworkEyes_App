@@ -24,12 +24,8 @@ from pathlib import Path
 
 from cna.core.engagement import EngagementConfig
 from cna.core.findings_schema import FindingsReport
-from cna.core.topology_schema import (
-    AWSRegionTopology,
-    AWSTopology,
-    AzureSubscriptionTopology,
-    AzureTopology,
-)
+from cna.core.topology.aws import AWSRegionTopology, AWSTopology
+from cna.core.topology.azure import AzureSubscriptionTopology, AzureTopology
 
 logger = logging.getLogger("cna.core.persistence")
 

@@ -1,45 +1,58 @@
-"""Universal findings schema.
+"""Universal findings schema — the monorepo's view of the engine's contract.
+
+The contract (``ObservedState`` with its ``state``, ``Finding`` with ``rule_version``,
+``remediation`` and ``learn_url``, ``Unknown``, ``FindingsReport`` with ``rules_version``,
+``model_version`` and ``unknowns``) lives in ``cna_azure_network_engine.findings.schema``
+(REFACTOR_APP.md section 9). This module subclasses it with the fields only the monorepo's web
+tier, report engine and review flow read: MCP recommendations (DD-003), the review flags
+(DD-009), the legacy flat recommendation and the static cost estimate the FinOps annotation
+attaches. ``Finding.from_engine`` upcasts an engine finding into this shape.
 
 DD-002: observed_state is REQUIRED — only what was discovered, no assumptions.
 DD-003: recommendation sourced from MCP servers, not custom prompts.
 """
 
+from __future__ import annotations
+
 import enum
-from datetime import UTC, datetime
-from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
-FINDINGS_SCHEMA_VERSION = "1.0.0"
+from cna_azure_network_engine.findings.schema import (
+    FINDINGS_SCHEMA_VERSION,
+    EvidenceState,
+    FindingSeverity,
+    FrameworkMapping,
+    ObservedState,
+    Unknown,
+)
+from cna_azure_network_engine.findings.schema import Finding as EngineFinding
+from cna_azure_network_engine.findings.schema import FindingsReport as EngineFindingsReport
+from cna_azure_network_engine.model.azure import TOPOLOGY_MODEL_VERSION
+from cna_azure_network_engine.rules.registry import RULES_VERSION
 
+__all__ = [
+    "FINDINGS_SCHEMA_VERSION",
+    "EngineFinding",
+    "EngineFindingsReport",
+    "EvidenceState",
+    "Finding",
+    "FindingRecommendation",
+    "FindingSeverity",
+    "FindingStatus",
+    "FindingsReport",
+    "FrameworkMapping",
+    "ObservedState",
+    "Unknown",
+]
 
-class FindingSeverity(enum.StrEnum):
-    CRITICAL = "critical"
-    HIGH = "high"
-    MEDIUM = "medium"
-    LOW = "low"
-    INFORMATIONAL = "informational"
+_PLATFORM_SOURCE = "CNA Platform"
 
 
 class FindingStatus(enum.StrEnum):
     OPEN = "open"
     CLOSED = "closed"
     SUPPRESSED = "suppressed"
-
-
-class ObservedState(BaseModel):
-    fact: str
-    evidence_ref: str
-
-
-class FrameworkMapping(BaseModel):
-    framework: str  # e.g. "CIS AWS Foundations Benchmark"
-    version: str | None = None
-    pillar: str | None = None
-    control: str | None = None
-    control_id: str | None = None
-    control_name: str | None = None
-    alignment: str | None = None
 
 
 class FindingRecommendation(BaseModel):
@@ -50,55 +63,49 @@ class FindingRecommendation(BaseModel):
     reference_url: str = ""
 
 
-class Finding(BaseModel):
-    id: str | None = None
-    rule_id: str | None = None
-    severity: FindingSeverity  # critical | high | medium | low | informational
-    platform: str | None = None  # aws | azure | both
-    region: str | None = None
-    category: str | None = None
-    title: str
-    description: str | None = None
-    resource_id: str | None = None
-    resource_type: str | None = None
-    account_id: str | None = None
-    observed_state: ObservedState  # DD-002: ONLY what was discovered — no assumptions
+class Finding(EngineFinding):
+    """The engine's finding plus the monorepo's web-tier and review fields."""
 
-    @field_validator("observed_state", mode="before")
-    @classmethod
-    def _coerce_observed_state(cls, v: Any) -> Any:
-        """Accept a plain string for observed_state by wrapping it in ObservedState."""
-        if isinstance(v, str):
-            return ObservedState(fact=v, evidence_ref="")
-        return v
-
-    affected_resources: list[str] = Field(default_factory=list)
-    framework_mappings: list[FrameworkMapping] = Field(default_factory=list)
-    recommendations: list["FindingRecommendation"] = Field(default_factory=list)  # DD-003: from MCP
+    recommendations: list[FindingRecommendation] = Field(default_factory=list)  # DD-003: from MCP
     status: FindingStatus | None = None
     data_confidence: str = "HIGH"  # HIGH | MEDIUM | LOW
     recommendation_source: str | None = None  # MCP server reference URL (legacy)
-    recommendation: str | None = None  # From MCP — not our opinion (legacy flat field)
-    # Traffic plane: "east_west" | "north_south" | "management" | "" (unclassified).
-    # Populated by cna.core.finding_taxonomy.classify_traffic_direction.
-    traffic_direction: str = ""
-    # Estimated monthly cost impact in USD (FinOps findings). Static-price
-    # estimate — must be marked [VERIFY] wherever it is rendered.
+    recommendation: str | None = None  # legacy flat field; the engine's remediation lands here
+    # Estimated monthly cost impact in USD (FinOps findings). Static-price estimate attached
+    # by cna.modules.network.analysis.finops_signals — marked [VERIFY] wherever it is rendered.
     est_monthly_cost_usd: float | None = None
     human_reviewed: bool = False  # DD-009: must be True before report
     human_notes: str | None = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    version: str = FINDINGS_SCHEMA_VERSION
+
+    @classmethod
+    def from_engine(cls, finding: EngineFinding) -> Finding:
+        """Upcast an engine finding: status OPEN, the remediation as the flat recommendation."""
+        if isinstance(finding, cls):
+            return finding
+        recommendations = (
+            [
+                FindingRecommendation(
+                    source=_PLATFORM_SOURCE,
+                    text=finding.remediation,
+                    reference_url=finding.learn_url or "",
+                )
+            ]
+            if finding.remediation
+            else []
+        )
+        return cls.model_validate(
+            {
+                **finding.model_dump(),
+                "status": FindingStatus.OPEN,
+                "recommendation": finding.remediation,
+                "recommendations": recommendations,
+            }
+        )
 
 
-class FindingsReport(BaseModel):
-    engagement_id: str
-    schema_version: str = FINDINGS_SCHEMA_VERSION
+class FindingsReport(EngineFindingsReport):
+    """The engine's report over the monorepo's findings; versions default to the registry's."""
+
+    rules_version: str = RULES_VERSION
+    model_version: str = TOPOLOGY_MODEL_VERSION
     findings: list[Finding]
-    total_count: int
-    critical_count: int
-    high_count: int
-    medium_count: int
-    low_count: int
-    review_complete: bool = False  # DD-009
-    generated_at: str

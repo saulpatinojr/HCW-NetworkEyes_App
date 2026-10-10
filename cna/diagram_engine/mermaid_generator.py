@@ -12,7 +12,8 @@ For stand-alone SVG export, call export_pipeline.mmdc_to_svg().
 
 from __future__ import annotations
 
-from cna.core.topology_schema import AWSTopology, AzureTopology, ManagementGroup
+from cna.core.topology.aws import AWSTopology
+from cna.core.topology.azure import AzureTopology, ManagementGroup
 
 _SAFE_CHARS = str.maketrans({" ": "_", "/": "_", ".": "_", "-": "_", "(": "", ")": ""})
 

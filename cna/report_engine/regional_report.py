@@ -71,7 +71,7 @@ class RegionalReportRenderer:
 
                 WP(string=html, base_url=str(_TEMPLATES_DIR)).write_pdf(str(output_path))
                 logger.info("Regional %s PDF written: %s", self._lang.upper(), output_path)
-            except (ImportError, OSError):
+            except ImportError, OSError:
                 logger.warning(
                     "WeasyPrint not installed. Regional %s PDF skipped. HTML at %s.",
                     self._lang.upper(),
