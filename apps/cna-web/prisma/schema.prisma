@@ -217,8 +217,8 @@ model CloudCredential {
   // Azure
   tenantId        String?
   subscriptionIds String[]   // empty = all accessible subscriptions
-  spClientId      String?    // service principal client ID
-  spSecretEnc     String?    @db.Text // AES-256-GCM encrypted client secret
+  // No service-principal columns: Azure discovery runs as the appliance's managed
+  // identity (REFACTOR_APP.md change set G; migration 20261010000016_drop_sp_secret).
 
   // AWS
   awsRoleArn      String?

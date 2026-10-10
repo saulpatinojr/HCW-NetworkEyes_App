@@ -57,34 +57,38 @@ class TestAWSCredentials:
 
 
 class TestAzureCredentials:
-    def test_constructor_stores_fields(self):
-        creds = AzureCredentials(
-            tenant_id="tenant-abc",
-            client_id="client-xyz",
-            client_secret="super-secret",
-        )
+    """No client secret anywhere: the identity is a tenant plus an optional client id."""
+
+    def test_constructor_stores_fields_and_has_no_secret_slot(self):
+        creds = AzureCredentials(tenant_id="tenant-abc", client_id="client-xyz")
         assert creds.tenant_id == "tenant-abc"
         assert creds.client_id == "client-xyz"
-        assert creds._client_secret == "super-secret"
+        assert not hasattr(creds, "_client_secret")
 
-    def test_client_secret_optional(self):
-        creds = AzureCredentials(tenant_id="t", client_id="c")
-        assert creds._client_secret is None
+    def test_client_id_optional(self):
+        assert AzureCredentials(tenant_id="t").client_id is None
 
-    def test_get_credential_raises_not_implemented(self):
-        """Phase C — azure-identity credential not yet implemented."""
-        creds = AzureCredentials(tenant_id="t", client_id="c", client_secret="s")
-        with pytest.raises(NotImplementedError):
-            creds.get_credential()
+    def test_get_credential_uses_the_platform_factory(self, monkeypatch):
+        captured = {}
 
-    def test_from_env_reads_env_vars(self, monkeypatch):
+        def fake_build(env):
+            captured["env"] = dict(env)
+            return "credential"
+
+        monkeypatch.setattr("cna.core.auth.build_azure_credential", fake_build)
+        monkeypatch.delenv("AZURE_CLIENT_ID", raising=False)
+        creds = AzureCredentials(tenant_id="t", client_id="00000000-0000-0000-0000-000000000003")
+        assert creds.get_credential() == "credential"
+        assert captured["env"]["AZURE_CLIENT_ID"] == "00000000-0000-0000-0000-000000000003"
+
+    def test_from_env_reads_tenant_and_client_id(self, monkeypatch):
         monkeypatch.setenv("AZURE_TENANT_ID", "my-tenant-id")
         monkeypatch.setenv("AZURE_CLIENT_ID", "my-client-id")
-        monkeypatch.setenv("AZURE_CLIENT_SECRET", "my-secret")
+        for name in ("AZURE_CLIENT_SECRET", "AZURE_FEDERATED_TOKEN_FILE"):
+            monkeypatch.delenv(name, raising=False)
         creds = AzureCredentials.from_env()
         assert creds.tenant_id == "my-tenant-id"
         assert creds.client_id == "my-client-id"
-        assert creds._client_secret == "my-secret"
 
     def test_from_env_raises_if_tenant_missing(self, monkeypatch):
         monkeypatch.delenv("AZURE_TENANT_ID", raising=False)
@@ -92,18 +96,18 @@ class TestAzureCredentials:
         with pytest.raises(OSError, match="AZURE_TENANT_ID"):
             AzureCredentials.from_env()
 
-    def test_from_env_raises_if_client_id_missing(self, monkeypatch):
-        monkeypatch.setenv("AZURE_TENANT_ID", "tenant-id")
-        monkeypatch.delenv("AZURE_CLIENT_ID", raising=False)
-        with pytest.raises(OSError, match="AZURE_CLIENT_ID"):
-            AzureCredentials.from_env()
+    def test_from_env_client_id_none_if_empty(self, monkeypatch):
+        monkeypatch.setenv("AZURE_TENANT_ID", "t")
+        monkeypatch.setenv("AZURE_CLIENT_ID", "")
+        monkeypatch.delenv("AZURE_CLIENT_SECRET", raising=False)
+        assert AzureCredentials.from_env().client_id is None
 
-    def test_from_env_secret_none_if_empty(self, monkeypatch):
+    def test_from_env_refuses_a_secret_shaped_variable(self, monkeypatch):
         monkeypatch.setenv("AZURE_TENANT_ID", "t")
         monkeypatch.setenv("AZURE_CLIENT_ID", "c")
-        monkeypatch.setenv("AZURE_CLIENT_SECRET", "")
-        creds = AzureCredentials.from_env()
-        assert creds._client_secret is None
+        monkeypatch.setenv("AZURE_CLIENT_SECRET", "not-a-real-secret")
+        with pytest.raises(SystemExit, match="AZURE_CLIENT_SECRET"):
+            AzureCredentials.from_env()
 
 
 # ── KeyVaultCredentialProvider ─────────────────────────────────────────────────

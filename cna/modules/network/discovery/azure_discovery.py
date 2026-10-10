@@ -1,7 +1,7 @@
 """Azure Network Discovery — Phase C core.
 
 Discovers all network topology resources across every subscription in an
-Azure tenant using DefaultAzureCredential (or service principal).
+Azure tenant as the platform's identity (cna.core.auth.build_azure_credential).
 
 Design principles:
   - ARM REST API + Azure Resource Graph for efficient cross-subscription queries.
@@ -94,8 +94,6 @@ class AzureDiscoveryOptions:
     subscription_ids: list[str] = field(default_factory=list)  # empty = all
     resume: bool = False
     use_resource_graph: bool = True  # faster cross-sub queries
-    client_id: str | None = None  # for service principal auth
-    client_secret: str | None = None  # never logged, in-memory only
 
 
 _RG_PARTS_INDEX = 4  # fallback index for resource group in a split ARM resource ID
@@ -237,22 +235,19 @@ class AzureDiscovery:
     # ------------------------------------------------------------------ auth
 
     def _init_credentials(self) -> None:
-        """Initialize Azure credentials using DefaultAzureCredential chain."""
+        """Initialize the platform's Azure credential (managed identity or ``az login``).
+
+        There is no service-principal path: ``build_azure_credential`` excludes the
+        environment and interactive credentials, and the appliance refuses to start with
+        a secret-shaped variable set (REFACTOR_APP.md change set G).
+        """
         try:
-            from azure.identity import ClientSecretCredential, DefaultAzureCredential
             from azure.mgmt.subscription import SubscriptionClient
 
-            if self.opts.client_id and self.opts.client_secret:
-                logger.info("Using service principal credentials")
-                self._credential = ClientSecretCredential(
-                    tenant_id=self.opts.tenant_id,
-                    client_id=self.opts.client_id,
-                    client_secret=self.opts.client_secret,
-                )
-            else:
-                logger.info("Using DefaultAzureCredential chain")
-                self._credential = DefaultAzureCredential()
+            from cna.core.auth import build_azure_credential
 
+            logger.info("Using the platform identity (managed identity / az login)")
+            self._credential = build_azure_credential()
             self._sub_client = SubscriptionClient(self._credential)
         except ImportError as e:
             raise CNAAuthError(

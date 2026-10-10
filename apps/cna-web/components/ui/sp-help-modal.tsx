@@ -50,11 +50,11 @@ export function SpHelpModal() {
             <div className="sticky top-0 flex items-center justify-between border-b border-gray-200 dark:border-navy-700 bg-white dark:bg-navy-900 px-6 py-4">
               <div>
                 <h2 id="sp-modal-title" className="text-base font-semibold text-gray-900 dark:text-navy-50">
-                  Creating an Azure Service Principal
+                  Granting the appliance read access
                 </h2>
                 <p className="mt-0.5 text-xs text-gray-500 dark:text-navy-400">
-                  A Service Principal lets CNA read your Azure tenant without
-                  using a personal account.
+                  The appliance signs in with its own managed identity. There is
+                  no app registration to create and no secret to copy.
                 </p>
               </div>
               <button
@@ -82,98 +82,56 @@ export function SpHelpModal() {
             {/* Body */}
             <div className="space-y-6 px-6 py-5 text-sm text-gray-700 dark:text-navy-200">
 
-              {/* What is an SP */}
+              {/* Why a managed identity */}
               <div className="rounded-lg bg-teal-50 dark:bg-teal-900/20 px-4 py-3 text-xs text-teal-900 dark:text-teal-200">
-                <p className="font-semibold">Why is this needed?</p>
+                <p className="font-semibold">How does the appliance authenticate?</p>
                 <p className="mt-1">
-                  CNA needs access to your Azure environment to discover network
-                  topology, NSG rules, VNets, and firewall configurations. A
-                  Service Principal acts like a dedicated &quot;robot user&quot; — it only
-                  gets the permissions you explicitly grant (<strong>Reader</strong> on
-                  each subscription, plus the optional reader roles in the table below).
-                  No personal account credentials are ever stored.
+                  The appliance runs with a user-assigned managed identity that the
+                  platform issues tokens to. Nothing is typed into this form except
+                  the tenant and the subscriptions to scan; no password, certificate
+                  or client secret is ever stored. Access is granted by assigning
+                  roles to that identity (<strong>Reader</strong> on each
+                  subscription, plus the optional reader roles in the table below).
                 </p>
               </div>
 
               {/* Step 1 */}
-              <Step number={1} title="Register the application in Entra ID">
+              <Step number={1} title="Find the appliance identity">
                 <ol className="list-decimal space-y-1.5 pl-5 text-gray-600 dark:text-navy-300">
                   <li>
                     Open the{" "}
-                    <ExternalLink href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade">
-                      Azure Portal → App registrations
+                    <ExternalLink href="https://portal.azure.com/#view/HubsExtension/BrowseResource/resourceType/Microsoft.ManagedIdentity%2FuserAssignedIdentities">
+                      Azure Portal → Managed Identities
                     </ExternalLink>
                   </li>
                   <li>
-                    Click <Kbd>+ New registration</Kbd>
+                    Open the identity the appliance deployment created (its name is
+                    printed by the appliance&apos;s Terraform output{" "}
+                    <Code>appliance_identity_name</Code>)
                   </li>
                   <li>
-                    <strong>Name:</strong> something descriptive, e.g.{" "}
-                    <Code>cna-discovery-sp</Code>
-                  </li>
-                  <li>
-                    <strong>Supported account types:</strong> leave as
-                    &quot;Accounts in this organizational directory only&quot;
-                  </li>
-                  <li>
-                    Click <Kbd>Register</Kbd>
+                    On the Overview page note the <strong>Name</strong>; it is the
+                    member you will add in step 3
                   </li>
                 </ol>
               </Step>
 
               {/* Step 2 */}
-              <Step number={2} title="Copy your Tenant ID and SP Client ID">
+              <Step number={2} title="Copy your Tenant ID">
                 <p className="mb-2 text-gray-600 dark:text-navy-300">
-                  On the app&apos;s Overview page you&apos;ll see two important values:
+                  On the identity&apos;s Overview page:
                 </p>
                 <div className="space-y-2 rounded-lg border border-gray-200 dark:border-navy-700 bg-gray-50 dark:bg-navy-800/60 p-3">
                   <FieldRow
-                    label="Application (client) ID"
-                    target="SP Client ID field"
-                    note="Identifies this specific app registration"
-                  />
-                  <FieldRow
-                    label="Directory (tenant) ID"
+                    label="Tenant ID"
                     target="Tenant ID field"
-                    note="Identifies your Azure Active Directory tenant"
+                    note="Identifies the Entra tenant the identity lives in"
                   />
                 </div>
               </Step>
 
               {/* Step 3 */}
-              <Step number={3} title="Create a client secret">
-                <ol className="list-decimal space-y-1.5 pl-5 text-gray-600 dark:text-navy-300">
-                  <li>
-                    In the left menu select{" "}
-                    <strong>Certificates &amp; secrets</strong>
-                  </li>
-                  <li>
-                    Click <Kbd>+ New client secret</Kbd>
-                  </li>
-                  <li>
-                    Enter a description (e.g. <Code>cna-discovery</Code>) and
-                    choose an expiry (24 months is typical)
-                  </li>
-                  <li>
-                    Click <Kbd>Add</Kbd>
-                  </li>
-                  <li>
-                    Copy the <strong>Value</strong> column immediately —{" "}
-                    <span className="font-medium text-red-600 dark:text-red-400">
-                      it is only shown once.
-                    </span>{" "}
-                    Paste it into the <strong>SP Client Secret</strong> field.
-                  </li>
-                </ol>
-                <p className="mt-2 rounded bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-                  If you navigate away before copying, you must delete the
-                  secret and create a new one. The ID column is not the secret —
-                  only the Value column is.
-                </p>
-              </Step>
-
-              {/* Step 4 */}
-              <Step number={4} title="Assign Reader (and the optional reader roles) on your subscriptions">
+              <Step number={3} title="Assign Reader (and the optional reader roles) on your subscriptions">
                 <p className="mb-2 text-gray-600 dark:text-navy-300">
                   Repeat for each subscription you want CNA to discover:
                 </p>
@@ -198,9 +156,8 @@ export function SpHelpModal() {
                     in the table below)
                   </li>
                   <li>
-                    <strong>Members:</strong> click &quot;+ Select members&quot; and
-                    search for your app registration name (e.g.{" "}
-                    <Code>cna-discovery-sp</Code>)
+                    <strong>Members:</strong> choose <strong>Managed identity</strong>,
+                    then the appliance identity from step 1
                   </li>
                   <li>
                     Click <Kbd>Review + assign</Kbd> twice to confirm
@@ -210,6 +167,15 @@ export function SpHelpModal() {
                   Tip: if you have hundreds of subscriptions, assign Reader at the
                   Management Group level and it propagates to all child subscriptions
                   automatically.
+                </p>
+              </Step>
+
+              {/* Step 4 */}
+              <Step number={4} title="Test access">
+                <p className="text-gray-600 dark:text-navy-300">
+                  Save the tenant, then press <Kbd>Test access</Kbd>. The appliance lists
+                  the subscriptions its identity can read; any you entered that are
+                  missing from the list still need a role assignment.
                 </p>
               </Step>
 
@@ -255,8 +221,8 @@ export function SpHelpModal() {
               {/* Microsoft docs link */}
               <p className="text-xs text-gray-500 dark:text-navy-400">
                 Microsoft documentation:{" "}
-                <ExternalLink href="https://learn.microsoft.com/en-us/entra/identity-platform/howto-create-service-principal-portal">
-                  Create a service principal in the Azure portal
+                <ExternalLink href="https://learn.microsoft.com/en-us/entra/identity/managed-identities-azure-resources/how-manage-user-assigned-managed-identities">
+                  Manage user-assigned managed identities
                 </ExternalLink>
               </p>
             </div>

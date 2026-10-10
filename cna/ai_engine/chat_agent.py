@@ -12,7 +12,7 @@ ids, same env vars, same resolution rules. The appliance's deploy-time AI mode
 
   saas      — the cloud-native engine for this appliance's cloud
               (``CNA_APPLIANCE_CLOUD``): ``azure-openai`` on Azure (Azure
-              OpenAI via managed identity — DefaultAzureCredential bearer
+              OpenAI via managed identity — ``build_azure_credential`` bearer
               token, same scope as lib/ai-engine.ts getAzureClient()), or
               ``bedrock`` on AWS (Bedrock Converse via the task role).
   byo-api   — bring-your-own provider: ``anthropic`` and/or ``openai``,
@@ -526,9 +526,9 @@ class GroundedChatAgent:
             _clean(os.environ.get("AZURE_OPENAI_API_VERSION")) or DEFAULT_AZURE_API_VERSION
         )
 
-        from azure.identity import DefaultAzureCredential
+        from cna.core.auth import build_azure_credential
 
-        token = DefaultAzureCredential().get_token("https://cognitiveservices.azure.com/.default")
+        token = build_azure_credential().get_token("https://cognitiveservices.azure.com/.default")
 
         url = (
             f"{endpoint.rstrip('/')}/openai/deployments/{deployment}"

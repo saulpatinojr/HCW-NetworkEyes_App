@@ -2,7 +2,7 @@
 
 Commands:
   cna discover aws    — STS AssumeRole cross-account discovery
-  cna discover azure  — DefaultAzureCredential subscription discovery
+  cna discover azure  — subscription discovery as the platform identity (az login / managed identity)
 """
 
 from __future__ import annotations
@@ -124,16 +124,6 @@ def discover_aws(  # noqa: PLR0913
     help="Comma-separated subscription IDs. Default: all enabled subscriptions.",
 )
 @click.option(
-    "--client-id",
-    default=None,
-    help="Service principal client ID (optional — DefaultAzureCredential if not set)",
-)
-@click.option(
-    "--client-secret",
-    default=None,
-    help="Service principal secret (in-memory only, never logged or written to disk)",
-)
-@click.option(
     "--resume", is_flag=True, default=False, help="Skip subscriptions with existing checkpoints."
 )
 @click.option(
@@ -149,8 +139,6 @@ def discover_azure(  # noqa: PLR0913
     engagement_id,
     tenant_id,
     subscriptions,
-    client_id,
-    client_secret,
     resume,
     no_resource_graph,
     data_dir,
@@ -159,17 +147,10 @@ def discover_azure(  # noqa: PLR0913
 
     \b
     Examples:
-      # DefaultAzureCredential (az login / managed identity / env vars)
+      # The platform identity: az login on a workstation, the managed identity in the appliance
       cna discover azure \\
         --engagement-id acme-20260305-a3f2 \\
         --tenant-id 00000000-0000-0000-0000-000000000000
-
-      # Service principal
-      cna discover azure \\
-        --engagement-id acme-20260305-a3f2 \\
-        --tenant-id 00000000-0000-0000-0000-000000000000 \\
-        --client-id <app-id> \\
-        --client-secret <secret>
 
       # Specific subscriptions + resume
       cna discover azure \\
@@ -190,13 +171,11 @@ def discover_azure(  # noqa: PLR0913
         subscription_ids=sub_list,
         resume=resume,
         use_resource_graph=not no_resource_graph,
-        client_id=client_id,
-        client_secret=client_secret,
     )
 
     click.echo(f"\u25b6 Starting Azure discovery for engagement: {engagement_id}")
     click.echo(f"  Tenant: {tenant_id}")
-    click.echo(f"  Auth: {'Service Principal' if client_id else 'DefaultAzureCredential'}")
+    click.echo("  Auth: platform identity (az login / managed identity)")
     click.echo(f"  Resume: {resume}")
 
     try:

@@ -20,14 +20,9 @@ export async function addCloudCredential(
   const label = (formData.get("label") as string | null)?.trim() ?? "";
   const tenantId = (formData.get("tenantId") as string | null)?.trim() ?? "";
   const subscriptionIdsRaw = (formData.get("subscriptionIds") as string | null)?.trim() ?? "";
-  const spClientId = (formData.get("spClientId") as string | null)?.trim() ?? "";
-  const spClientSecret = (formData.get("spClientSecret") as string | null)?.trim() ?? "";
 
   if (!engagementId || !label || !tenantId) {
     return { error: "Label and Tenant ID are required." };
-  }
-  if (!spClientId || !spClientSecret) {
-    return { error: "Service Principal Client ID and Secret are required." };
   }
 
   const member = await prisma.engagementMember.findUnique({
@@ -39,8 +34,8 @@ export async function addCloudCredential(
     ? subscriptionIdsRaw.split(",").map((s) => s.trim()).filter(Boolean)
     : [];
 
-  const spSecretEnc = encrypt(spClientSecret);
-
+  // No secret is stored for Azure: discovery runs as the appliance's managed identity
+  // (REFACTOR_APP.md change set G). The row names the tenant and the subscriptions only.
   await prisma.cloudCredential.upsert({
     where: { engagementId_label: { engagementId, label } },
     create: {
@@ -49,14 +44,10 @@ export async function addCloudCredential(
       label,
       tenantId,
       subscriptionIds,
-      spClientId,
-      spSecretEnc,
     },
     update: {
       tenantId,
       subscriptionIds,
-      spClientId,
-      spSecretEnc,
     },
   });
 
@@ -69,17 +60,15 @@ export async function addCloudCredential(
 export async function addBulkCredentials(params: {
   engagementId: string;
   tenantId: string;
-  spClientId: string;
-  spClientSecret: string;
   subscriptions: { name: string; subscriptionId: string; tenantId?: string }[];
 }): Promise<{ error?: string; success?: boolean; count?: number }> {
   const session = await auth();
   if (!session?.user?.id) return { error: "Not authenticated." };
 
-  const { engagementId, tenantId, spClientId, spClientSecret, subscriptions } = params;
+  const { engagementId, tenantId, subscriptions } = params;
 
-  if (!engagementId || !tenantId || !spClientId || !spClientSecret) {
-    return { error: "Tenant ID, Client ID, and Client Secret are all required." };
+  if (!engagementId || !tenantId) {
+    return { error: "Tenant ID is required." };
   }
   if (!subscriptions.length) {
     return { error: "Add at least one subscription." };
@@ -89,8 +78,6 @@ export async function addBulkCredentials(params: {
     where: { engagementId_userId: { engagementId, userId: session.user.id } },
   });
   if (!member) return { error: "Access denied." };
-
-  const spSecretEnc = encrypt(spClientSecret);
 
   // Deduplicate by label before saving (last row with same name wins).
   const byLabel = new Map<string, (typeof subscriptions)[0]>();
@@ -108,14 +95,10 @@ export async function addBulkCredentials(params: {
           label: sub.name,
           tenantId: effectiveTenantId,
           subscriptionIds: [sub.subscriptionId],
-          spClientId,
-          spSecretEnc,
         },
         update: {
           tenantId: effectiveTenantId,
           subscriptionIds: [sub.subscriptionId],
-          spClientId,
-          spSecretEnc,
         },
       });
     }),
@@ -171,60 +154,65 @@ export async function deleteCloudCredential(
   }
 }
 
-// ─── Test Azure connection ────────────────────────────────────────────────────
-// Called directly from a client component (not via form submission).
+// ─── Test Azure access ───────────────────────────────────────────────────────
+// Called directly from a client component (not via form submission). The web tier
+// holds no Azure credential: the API proves that the appliance's managed identity can
+// read the subscriptions (REFACTOR_APP.md change set G).
 
-export async function testAzureConnection(params: {
+export async function testAzureAccess(params: {
   tenantId: string;
-  spClientId: string;
-  spClientSecret: string;
-}): Promise<{ ok: boolean; subscriptions?: string[]; error?: string }> {
+  subscriptionIds: string[];
+}): Promise<{ ok: boolean; subscriptions?: string[]; missing?: string[]; error?: string }> {
   const session = await auth();
   if (!session?.user?.id) return { ok: false, error: "Not authenticated." };
 
-  const { tenantId, spClientId, spClientSecret } = params;
-  if (!tenantId || !spClientId || !spClientSecret) {
-    return { ok: false, error: "Tenant ID, Client ID, and Client Secret are all required." };
+  const { tenantId, subscriptionIds } = params;
+  if (!tenantId) {
+    return { ok: false, error: "Tenant ID is required." };
   }
 
-  try {
-    const { ClientSecretCredential } = await import("@azure/identity");
-    const credential = new ClientSecretCredential(tenantId, spClientId, spClientSecret);
-    const tokenResponse = await credential.getToken(
-      "https://management.azure.com/.default",
-    );
+  const apiUrl = process.env.CNA_API_INTERNAL_URL;
+  if (!apiUrl) return { ok: false, error: "Discovery API is not configured." };
 
-    const res = await fetch(
-      "https://management.azure.com/subscriptions?api-version=2022-12-01",
-      { headers: { Authorization: `Bearer ${tokenResponse.token}` } },
-    );
+  try {
+    const res = await fetch(`${apiUrl}/discovery/test-access`, {
+      method: "POST",
+      headers: apiHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ tenant_id: tenantId, subscription_ids: subscriptionIds }),
+    });
 
     if (!res.ok) {
-      const body = await res.text();
-      console.error(`[testConnection] ARM API ${res.status}:`, body.slice(0, 500));
+      const body = (await res.json().catch(() => null)) as { detail?: string } | null;
       return {
         ok: false,
-        error:
-          res.status === 401 || res.status === 403
-            ? "Azure rejected the credentials. Verify the Tenant ID, SP Client ID, and SP Client Secret, and that the service principal has been granted access."
-            : `Azure did not accept the request (HTTP ${res.status}). Please try again, or contact your administrator if it persists.`,
+        error: sanitizeBackendDetail(
+          body?.detail,
+          "Azure rejected the appliance identity. Verify the Tenant ID and that the managed identity holds Reader on the subscriptions.",
+        ),
       };
     }
 
     const data = (await res.json()) as {
-      value?: { subscriptionId: string; displayName: string }[];
+      ok?: boolean;
+      subscriptions?: { id: string; name: string }[];
+      missing?: string[];
     };
-    const subscriptions = (data.value ?? []).map(
-      (s) => `${s.displayName} (${s.subscriptionId})`,
-    );
-
-    return { ok: true, subscriptions };
+    const subscriptions = (data.subscriptions ?? []).map((s) => `${s.name} (${s.id})`);
+    const missing = data.missing ?? [];
+    return {
+      ok: data.ok !== false,
+      subscriptions,
+      missing,
+      error:
+        missing.length > 0
+          ? `The appliance identity cannot read ${missing.length} of the requested subscription${missing.length !== 1 ? "s" : ""}. Assign Reader on each one and retry.`
+          : undefined,
+    };
   } catch (err: unknown) {
-    console.error("[testConnection] error:", err);
+    console.error("[testAzureAccess] error:", err);
     return {
       ok: false,
-      error:
-        "Could not validate the credentials against Azure. Verify the Tenant ID, SP Client ID, and SP Client Secret, then try again.",
+      error: "Could not reach the discovery service to validate access. Please try again.",
     };
   }
 }

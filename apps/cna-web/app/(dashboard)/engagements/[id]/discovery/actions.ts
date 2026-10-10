@@ -32,8 +32,6 @@ function buildStartPayload(cred: CloudCredential, jobId: string, engagementId: s
     credential_id: cred.id,
     tenant_id: cred.tenantId,
     subscription_ids: cred.subscriptionIds,
-    sp_client_id: cred.spClientId,
-    sp_client_secret: cred.spSecretEnc ? decrypt(cred.spSecretEnc) : null,
   };
 }
 

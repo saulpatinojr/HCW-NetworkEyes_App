@@ -17,7 +17,7 @@ in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG
 | [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-419 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements + appliance migration | T-501 – T-509 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
-| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-722 |
+| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-723 |
 
 ---
 
@@ -2187,4 +2187,24 @@ modal now carry the roles table of `REFACTOR_APP.md` section 13 (`CHANGELOG.md` 
   every assessed scope plus the optional roles behind `var.enable_live_rules`; `Work-Cloud_Network_AWS_Appliance`
   is unaffected (its read-only role is the existing STS AssumeRole path). Record the acceptance run
   with exactly these roles (zero `HTTP 403` warnings in the progress log) under `REVIEW.md` → R-008.
-- The modal still describes a service principal; change set G turns it into managed-identity guidance.
+- The modal still describes a service principal; change set G turned it into managed-identity guidance.
+
+### T-723 — Managed identity in both appliances; retire the client-secret contract (change set G)
+`cna.core.auth.build_azure_credential` is the one Azure credential; the service-principal secret path,
+Prisma's `spClientId`/`spSecretEnc` and `AZURE_CLIENT_SECRET` are gone (`CHANGELOG.md` `[Unreleased]`;
+`tests/security/test_no_client_secret.py`, `tests/security/test_forbidden_env.py`). Open:
+- Core ↔ appliance contract: `Work-Cloud_Network_Azure_Appliance` creates a user-assigned managed
+  identity, attaches it to the api, worker and web Container Apps and sets `AZURE_CLIENT_ID` on each; its
+  Terraform must stop passing any `AZURE_CLIENT_SECRET` secret and must not set any variable of
+  `cna.core.auth.FORBIDDEN_CREDENTIAL_ENV` (the api refuses to start). `Work-Cloud_Network_AWS_Appliance`
+  keeps the STS AssumeRole path (`aws_secret_access_key` on the credential form stays, encrypted at rest).
+- The Prisma migration `20261010000016_drop_sp_secret` drops two columns and is destructive; the migrator
+  job runs it on the appliance's next release. Engagements that stored a service principal need the
+  identity assigned the T-722 roles on the same subscriptions before their next discovery; `POST
+  /discovery/test-access` (the form's **Test access** button) shows which subscriptions are still missing.
+- `[REVIEW REQUIRED]` The credential chain keeps workload identity, managed identity, Azure CLI, Azure
+  PowerShell and Azure Developer CLI (owner instruction: `DefaultAzureCredential` with exclusions, not
+  `ManagedIdentityCredential` alone, so `az login` works locally). Confirm that the developer paths are
+  acceptable inside the appliance image, or exclude them there too behind `CNA_APPLIANCE_CLOUD`.
+- The web tier's `@azure/identity` (Blob, AI) is unchanged and already uses `DefaultAzureCredential`
+  without exclusions; align it with the factory's exclusions when the web tier is next touched.

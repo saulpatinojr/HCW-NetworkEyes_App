@@ -33,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from cna.api_errors import sanitize_downstream_error
 from cna.api_status import Outcome, status_for
+from cna.core.auth import refuse_forbidden_credential_env
 from cna.core.finding_taxonomy import classify_traffic_direction
 from cna.core.logging_config import JSONFormatter
 from cna.core.persistence import EngagementStore
@@ -151,6 +152,10 @@ def _validate_startup_config(env: Mapping[str, str]) -> None:
     appliance = bool(env.get("CNA_APPLIANCE_CLOUD"))
     token = env.get("CNA_API_TOKEN", "")
     database_url = env.get("DATABASE_URL", "")
+    if appliance:
+        # No secret-shaped credential variable may reach an appliance process: the
+        # identity is the user-assigned managed identity (change set G).
+        refuse_forbidden_credential_env(env)
 
     if appliance and not database_url:
         raise SystemExit(
@@ -664,33 +669,45 @@ def publish(request: PublishRequest) -> dict:
         ) from None
 
 
-class TestConnectionRequest(BaseModel):
+class TestAccessRequest(BaseModel):
     tenant_id: str
-    sp_client_id: str
-    sp_client_secret: str
+    subscription_ids: list[str] = []
 
 
-@app.post("/discovery/test-connection")
-async def test_connection(request: TestConnectionRequest) -> dict:
-    """Validate SP credentials against the Azure tenant."""
+@app.post("/discovery/test-access")
+async def test_access(request: TestAccessRequest) -> dict:
+    """Prove the process identity can read the requested subscriptions.
+
+    Replaces ``/discovery/test-connection`` (REFACTOR_APP.md change set G): there is no
+    client secret to validate. The appliance's user-assigned managed identity (or ``az
+    login`` locally) lists the subscriptions it can see; the response names which of the
+    requested ids are reachable and which are not, by id only.
+    """
     try:
-        from azure.identity import ClientSecretCredential
         from azure.mgmt.subscription import SubscriptionClient
 
-        cred = ClientSecretCredential(
-            request.tenant_id, request.sp_client_id, request.sp_client_secret
-        )
-        client = SubscriptionClient(cred)
-        subs = list(client.subscriptions.list())
+        from cna.core.auth import build_azure_credential
+
+        client = SubscriptionClient(build_azure_credential())
+        visible = {
+            s.subscription_id: s.display_name
+            for s in client.subscriptions.list()
+            if s.subscription_id
+        }
+        requested = [sid for sid in request.subscription_ids if sid]
+        reachable = [sid for sid in requested if sid in visible] if requested else sorted(visible)
+        missing = [sid for sid in requested if sid not in visible]
         return {
-            "ok": True,
-            "subscriptions": [{"id": s.subscription_id, "name": s.display_name} for s in subs],
+            "ok": not missing,
+            "identity": "managed-identity",
+            "subscriptions": [{"id": sid, "name": visible[sid]} for sid in reachable],
+            "missing": missing,
         }
     except Exception as exc:
         # Raw Azure SDK detail is logged server-side; the caller gets a
         # sanitized, category-level message with no raw text (Requirement 2.3).
         sanitized = sanitize_downstream_error(
-            exc, logger=logger, context=f"test-connection for tenant {request.tenant_id}"
+            exc, logger=logger, context=f"test-access for tenant {request.tenant_id}"
         )
         raise HTTPException(
             status_code=status_for(sanitized.outcome),
@@ -750,8 +767,6 @@ class DiscoveryStartRequest(BaseModel):
     # Azure
     tenant_id: str | None = None
     subscription_ids: list[str] = []
-    sp_client_id: str | None = None
-    sp_client_secret: str | None = None  # plaintext — decrypted by web layer
     # AWS
     aws_role_arn: str | None = None
     aws_external_id: str | None = None
@@ -836,13 +851,9 @@ def _run_azure_discovery(request: DiscoveryStartRequest) -> None:
         options = AzureDiscoveryOptions(
             tenant_id=request.tenant_id,  # type: ignore[arg-type]
             subscription_ids=request.subscription_ids,
-            client_id=request.sp_client_id,
-            client_secret=request.sp_client_secret,
         )
 
-        using_sp = bool(request.sp_client_id and request.sp_client_secret)
-        auth_method = "service principal" if using_sp else "managed identity (no SP secret)"
-        _log(f"Auth: {auth_method} | tenant {request.tenant_id}")
+        _log(f"Auth: platform identity (managed identity) | tenant {request.tenant_id}")
         if request.subscription_ids:
             sub_list = ", ".join(request.subscription_ids)
             _log(f"Targeting {len(request.subscription_ids)} subscription(s): {sub_list}")
