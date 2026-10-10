@@ -22,6 +22,9 @@ WORKDIR /build
 # wheel (psycopg2-binary included), so no compiler or libpq-dev is needed.
 COPY --from=uv /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
+# The engine package is a uv workspace member: its pyproject.toml must be present for
+# `uv export --locked` to resolve the workspace, before the source tree is copied.
+COPY packages/cna-azure-network-engine/pyproject.toml packages/cna-azure-network-engine/
 RUN uv export --locked --no-default-groups --no-emit-project --no-emit-workspace --extra api -o /tmp/requirements.txt \
  && uv pip install --system --no-cache --require-hashes --no-deps --prefix=/install -r /tmp/requirements.txt \
  && uv export --locked --only-group build -o /tmp/build-requirements.txt \
