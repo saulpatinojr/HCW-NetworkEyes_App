@@ -25,6 +25,7 @@ dependencies = [
     "azure-ai-agents>=1.1.0,<2",         # provides AIProjectClient.agents in 1.x
     "azure-mgmt-network>=31.0.1",
     "azure-mgmt-resource>=26.0.0",
+    "azure-mgmt-resourcegraph>=8.0.0,<9",  # Resource Graph discovery (change set D) [VERIFY] bound
     "azure-mgmt-subscription>=3.1.1",
     "azure-storage-blob>=12.30.0",       # Phase F: Azure Blob Storage deployer
     "openai>=2.45.0",

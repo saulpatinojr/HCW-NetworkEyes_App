@@ -46,9 +46,21 @@ def store():
 
 @pytest.fixture
 def opts():
+    """The ARM backend: these tests exercise the per-subscription list loop that
+    ``CNA_DISCOVERY_BACKEND=arm`` keeps for one release (change set D)."""
     return AzureDiscoveryOptions(
         tenant_id="00000000-0000-0000-0000-000000000001",
         subscription_ids=["sub-0001"],
+        backend="arm",
+    )
+
+
+@pytest.fixture
+def rg_opts():
+    return AzureDiscoveryOptions(
+        tenant_id="00000000-0000-0000-0000-000000000001",
+        subscription_ids=["00000000-0000-0000-0000-000000000011"],
+        backend="resource-graph",
     )
 
 
@@ -59,12 +71,36 @@ def discovery(store, opts):
 
 
 class TestAzureDiscoveryOptions:
-    def test_defaults(self):
+    def test_defaults(self, monkeypatch):
+        monkeypatch.delenv("CNA_DISCOVERY_BACKEND", raising=False)
         opts = AzureDiscoveryOptions(tenant_id="tenant-001")
         assert opts.subscription_ids == []
         assert opts.resume is False
         assert opts.use_resource_graph is True
+        assert opts.backend == "resource-graph"
+        assert opts.scopes == []
         assert not hasattr(opts, "client_secret")
+
+    def test_env_selects_the_arm_backend_for_one_release(self, monkeypatch):
+        monkeypatch.setenv("CNA_DISCOVERY_BACKEND", "arm")
+        opts = AzureDiscoveryOptions(tenant_id="tenant-001")
+        assert opts.backend == "arm"
+        assert opts.use_resource_graph is False
+
+    def test_an_unknown_backend_exits_before_any_query(self, monkeypatch):
+        monkeypatch.setenv("CNA_DISCOVERY_BACKEND", "graphql")
+        with pytest.raises(SystemExit, match="CNA_DISCOVERY_BACKEND"):
+            AzureDiscoveryOptions(tenant_id="tenant-001")
+        with pytest.raises(SystemExit, match="not one of"):
+            AzureDiscoveryOptions(tenant_id="tenant-001", backend="soap")
+
+    def test_the_legacy_flag_maps_to_arm_and_an_explicit_backend_wins(self, monkeypatch):
+        monkeypatch.delenv("CNA_DISCOVERY_BACKEND", raising=False)
+        assert AzureDiscoveryOptions(tenant_id="t", use_resource_graph=False).backend == "arm"
+        explicit = AzureDiscoveryOptions(
+            tenant_id="t", use_resource_graph=False, backend="resource-graph"
+        )
+        assert explicit.backend == "resource-graph" and explicit.use_resource_graph is True
 
 
 class TestCollectVNets:
@@ -1297,30 +1333,47 @@ class TestCollectBastionHosts:
         assert bh.kerberos_enabled is False
 
 
-class TestValidatePeDns:
-    def test_no_custom_dns_but_private_ips_is_treated_as_valid(self):
-        assert AzureDiscovery._validate_pe_dns([], ["10.0.0.4"]) is True
+class TestPrivateEndpointDns:
+    """The scanner host no longer resolves customer FQDNs (change set D): the field is
+    ``None`` — unknown — and nothing under ``cna/`` or ``packages/`` calls ``gethostbyname``."""
 
-    def test_no_custom_dns_and_no_private_ips_is_inconclusive(self):
-        assert AzureDiscovery._validate_pe_dns([], []) is None
+    def test_the_dns_field_is_unknown(self, discovery):
+        net = MagicMock()
+        net.network_interfaces.get.return_value = _Arm(
+            ip_configurations=[_Arm(private_ip_address="10.0.0.4")]
+        )
+        net.private_endpoints.list_by_subscription.return_value = [
+            _Arm(
+                id="/subscriptions/sub-0001/resourceGroups/rg-net/providers/x/pe-1",
+                name="pe-1",
+                location="eastus",
+                subnet=_Arm(id="subnet-1"),
+                network_interfaces=[_Arm(id="/subscriptions/s/resourceGroups/rg/x/nic-1")],
+                custom_dns_configs=[_Arm(fqdn="db.privatelink.example")],
+                private_dns_zone_groups=[],
+                private_link_service_connections=[],
+                manual_private_link_service_connections=[],
+                tags={},
+            )
+        ]
 
-    def test_resolution_to_an_rfc1918_address_passes(self):
-        with patch("socket.gethostbyname", return_value="10.1.2.3"):
-            assert AzureDiscovery._validate_pe_dns(["db.privatelink.example"], []) is True
+        assert (
+            discovery._collect_private_endpoints(net, "sub-0001")[0].dns_resolves_to_private_ip
+            is None
+        )
 
-    def test_resolution_to_a_public_address_fails(self):
-        """A private endpoint FQDN resolving publicly means DNS is misconfigured."""
-        with patch("socket.gethostbyname", return_value="93.184.216.34"):
-            assert AzureDiscovery._validate_pe_dns(["db.privatelink.example"], []) is False
+    def test_no_hostname_resolution_anywhere(self):
+        from pathlib import Path
 
-    def test_unresolvable_names_are_inconclusive_rather_than_a_failure(self):
-        with patch("socket.gethostbyname", side_effect=OSError("NXDOMAIN")):
-            assert AzureDiscovery._validate_pe_dns(["nope.example"], []) is None
-
-    def test_checks_at_most_three_names(self):
-        with patch("socket.gethostbyname", return_value="93.184.216.34") as resolve:
-            AzureDiscovery._validate_pe_dns([f"h{i}.example" for i in range(10)], [])
-        assert resolve.call_count == 3
+        root = Path(__file__).resolve().parents[2]
+        hits = [
+            str(path.relative_to(root))
+            for base in ("cna", "packages")
+            for path in (root / base).rglob("*.py")
+            if "gethostbyname" in path.read_text(encoding="utf-8", errors="replace")
+        ]
+        assert hits == []
+        assert not hasattr(AzureDiscovery, "_validate_pe_dns")
 
 
 class TestPrivateEndpointHelpers:
@@ -2329,3 +2382,176 @@ class TestCollectFrontDoorWafPolicies:
 
         with patch("azure.mgmt.network.NetworkManagementClient", net):
             assert discovery._collect_front_door_waf_policies("sub-0001") == []
+
+
+class TestResourceGraphBackend:
+    """``CNA_DISCOVERY_BACKEND=resource-graph`` (the default, change set D): the engine
+    package's ``ResourceGraphDiscovery`` builds the model; ARM runs only the live
+    collectors, each fault-isolated."""
+
+    SUB = "00000000-0000-0000-0000-000000000011"
+
+    def _rg_topology(self):
+        from cna.core.topology.azure import AzureTopology
+
+        return AzureTopology(
+            source="discovery",
+            subscriptions=[
+                AzureSubscriptionTopology(
+                    subscription_id=self.SUB, subscription_name="hcw-sample-prod", tenant_id="t"
+                )
+            ],
+        )
+
+    def _discovery(self, store, rg_opts, messages=None):
+        d = AzureDiscovery(
+            store=store,
+            options=rg_opts,
+            progress_callback=messages.append if messages is not None else None,
+        )
+        d._credential = MagicMock()
+        d._sub_client = MagicMock()
+        return d
+
+    def test_run_builds_the_model_from_resource_graph_and_never_lists_arm(self, store, rg_opts):
+        messages: list[str] = []
+        discovery = self._discovery(store, rg_opts, messages)
+        fake = MagicMock()
+        fake.run.return_value = self._rg_topology()
+        with (
+            patch.object(discovery, "validate_access"),
+            patch(
+                "cna.modules.network.discovery.azure_discovery.ResourceGraphDiscovery",
+                return_value=fake,
+            ) as factory,
+            patch.object(discovery, "_discover_subscription") as arm_loop,
+            patch.object(discovery, "_run_live_collectors") as live,
+        ):
+            topology = discovery.run()
+
+        scopes = factory.call_args.args[1]
+        assert [(s.subscription_id, s.resource_group) for s in scopes] == [(self.SUB, None)]
+        assert topology.engagement_id == store.engagement_id
+        assert topology.source == "discovery"
+        arm_loop.assert_not_called()
+        live.assert_called_once()
+        store.write_discovery_checkpoint.assert_called_once()
+        assert store.write_discovery_checkpoint.call_args.args[:3] == (
+            store.engagement_id,
+            "azure",
+            self.SUB,
+        )
+        assert any("Backend: resource-graph" in m for m in messages)
+
+    def test_explicit_scopes_are_parsed_and_passed_through(self, store, rg_opts):
+        rg_opts.scopes = [f"/subscriptions/{self.SUB}/resourceGroups/RG-Hub"]
+        discovery = self._discovery(store, rg_opts)
+        fake = MagicMock()
+        fake.run.return_value = self._rg_topology()
+        with (
+            patch.object(discovery, "validate_access"),
+            patch(
+                "cna.modules.network.discovery.azure_discovery.ResourceGraphDiscovery",
+                return_value=fake,
+            ) as factory,
+            patch.object(discovery, "_run_live_collectors"),
+        ):
+            discovery.run()
+
+        scopes = factory.call_args.args[1]
+        assert [(s.subscription_id, s.resource_group) for s in scopes] == [(self.SUB, "rg-hub")]
+
+    def test_a_bad_scope_exits_before_any_query(self, store, rg_opts):
+        rg_opts.scopes = ["/resourceGroups/only"]
+        discovery = self._discovery(store, rg_opts)
+        with (
+            patch.object(discovery, "validate_access"),
+            patch(
+                "cna.modules.network.discovery.azure_discovery.ResourceGraphDiscovery"
+            ) as factory,
+            pytest.raises(SystemExit, match="CNA_SCOPES"),
+        ):
+            discovery.run()
+        factory.assert_not_called()
+
+    def test_without_ids_every_listed_subscription_becomes_a_scope(self, store, rg_opts):
+        rg_opts.subscription_ids = []
+        discovery = self._discovery(store, rg_opts)
+        fake = MagicMock()
+        fake.run.return_value = self._rg_topology()
+        with (
+            patch.object(discovery, "validate_access"),
+            patch.object(
+                discovery,
+                "_list_subscriptions",
+                return_value=[{"id": self.SUB.upper(), "name": "prod", "tenant_id": "t"}],
+            ),
+            patch(
+                "cna.modules.network.discovery.azure_discovery.ResourceGraphDiscovery",
+                return_value=fake,
+            ) as factory,
+            patch.object(discovery, "_run_live_collectors"),
+        ):
+            discovery.run()
+
+        assert [s.subscription_id for s in factory.call_args.args[1]] == [self.SUB]
+
+    def test_resume_skips_a_subscription_with_a_checkpoint(self, store, rg_opts):
+        rg_opts.resume = True
+        store.list_completed_checkpoints.return_value = [f"azure-{self.SUB}.json"]
+        discovery = self._discovery(store, rg_opts)
+        fake = MagicMock()
+        fake.run.return_value = self._rg_topology()
+        with (
+            patch.object(discovery, "validate_access"),
+            patch(
+                "cna.modules.network.discovery.azure_discovery.ResourceGraphDiscovery",
+                return_value=fake,
+            ),
+            patch.object(discovery, "_run_live_collectors") as live,
+        ):
+            discovery.run()
+
+        live.assert_not_called()
+        store.write_discovery_checkpoint.assert_not_called()
+
+    def test_a_reader_only_error_from_a_live_collector_is_unknown_not_an_exception(
+        self, store, rg_opts
+    ):
+        """The plan's acceptance: a live permission the identity lacks leaves the field
+        empty, the run completes, and the live-only rules report ``unknown``."""
+        from cna_azure_network_engine.rules.registry import evaluate
+
+        messages: list[str] = []
+        discovery = self._discovery(store, rg_opts, messages)
+        topo = self._rg_topology().subscriptions[0]
+        forbidden = HttpResponseError(message="AuthorizationFailed on Microsoft.Insights")
+        forbidden.status_code = 403
+        with (
+            patch("azure.mgmt.network.NetworkManagementClient", return_value=MagicMock()),
+            patch.object(discovery, "_collect_bgp_data", side_effect=forbidden),
+            patch.object(discovery, "_collect_observability", side_effect=forbidden),
+            patch.object(discovery, "_collect_network_metrics", side_effect=forbidden),
+        ):
+            discovery._run_live_collectors(topo, self.SUB, "prod")
+
+        assert topo.network_metrics is None and topo.observability is None
+        assert any("Metrics skipped" in m and "HTTP 403" in m for m in messages)
+        assert not any("AuthorizationFailed" in m for m in messages)
+        from cna.core.topology.azure import AzureTopology
+
+        report = evaluate(AzureTopology(source="discovery", subscriptions=[topo]))
+        unknown_ids = {u.rule_id for u in report.unknowns}
+        assert unknown_ids & {"AZ-NET-008", "AZ-NET-013", "AZ-COST-002"}
+
+    def test_a_network_client_failure_skips_the_live_collectors_quietly(self, store, rg_opts):
+        messages: list[str] = []
+        discovery = self._discovery(store, rg_opts, messages)
+        topo = self._rg_topology().subscriptions[0]
+        with (
+            patch("azure.mgmt.network.NetworkManagementClient", side_effect=RuntimeError("boom")),
+            patch.object(discovery, "_run_bgp_scan") as bgp,
+        ):
+            discovery._run_live_collectors(topo, self.SUB, "prod")
+        bgp.assert_not_called()
+        assert any("Live collectors skipped: RuntimeError" in m for m in messages)

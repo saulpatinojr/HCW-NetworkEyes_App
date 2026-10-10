@@ -1,0 +1,10 @@
+[
+  {"id": "/subscriptions/00000000-0000-0000-0000-000000000001", "name": "hcw-sample-prod", "type": "microsoft.resources/subscriptions",
+   "properties": {"state": "Enabled", "managementGroupAncestorsChain": [{"name": "hcw-sample-landing", "displayName": "Landing zones"}, {"name": "hcw-sample-root", "displayName": "Tenant root"}]}},
+  {"id": "/subscriptions/00000000-0000-0000-0000-000000000002", "name": "hcw-sample-other", "type": "microsoft.resources/subscriptions", "properties": {"state": "Enabled"}},
+  {"id": "/subscriptions/00000000-0000-0000-0000-000000000001/resourceGroups/hcw-sample-rg", "name": "hcw-sample-rg", "type": "microsoft.resources/subscriptions/resourcegroups", "properties": {}},
+  {"id": "/providers/Microsoft.Management/managementGroups/hcw-sample-root", "name": "hcw-sample-root", "type": "microsoft.management/managementgroups",
+   "properties": {"displayName": "Tenant root", "tenantId": "00000000-0000-0000-0000-00000000aaaa"}},
+  {"id": "/providers/Microsoft.Management/managementGroups/hcw-sample-landing", "name": "hcw-sample-landing", "type": "microsoft.management/managementgroups",
+   "properties": {"displayName": "Landing zones", "details": {"parent": {"id": "/providers/Microsoft.Management/managementGroups/hcw-sample-root", "name": "hcw-sample-root"}}}}
+]

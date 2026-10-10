@@ -620,6 +620,7 @@ dependencies = [
     { name = "azure-identity" },
     { name = "azure-mgmt-network" },
     { name = "azure-mgmt-resource" },
+    { name = "azure-mgmt-resourcegraph" },
     { name = "azure-mgmt-subscription" },
     { name = "azure-storage-blob" },
     { name = "boto3" },
@@ -704,6 +705,7 @@ requires-dist = [
     { name = "azure-mgmt-network", specifier = ">=31.0.1" },
     { name = "azure-mgmt-privatedns", marker = "extra == 'enrichment'", specifier = ">=2.0.0,<3" },
     { name = "azure-mgmt-resource", specifier = ">=26.0.0" },
+    { name = "azure-mgmt-resourcegraph", specifier = ">=8.0.0,<9" },
     { name = "azure-mgmt-security", marker = "extra == 'enrichment'", specifier = ">=7.0.0,<8" },
     { name = "azure-mgmt-subscription", specifier = ">=3.1.1" },
     { name = "azure-monitor-query", marker = "extra == 'enrichment'", specifier = ">=2.0.0,<3" },
@@ -771,20 +773,18 @@ azure = [
     { name = "azure-mgmt-monitor" },
     { name = "azure-mgmt-network" },
     { name = "azure-mgmt-resourcegraph" },
-    { name = "azure-mgmt-security" },
     { name = "azure-monitor-query" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "azure-identity", marker = "extra == 'azure'", specifier = ">=1.25.3" },
-    { name = "azure-mgmt-costmanagement", marker = "extra == 'azure'", specifier = "<5" },
-    { name = "azure-mgmt-loganalytics", marker = "extra == 'azure'", specifier = "<15" },
-    { name = "azure-mgmt-monitor", marker = "extra == 'azure'", specifier = "<7" },
+    { name = "azure-mgmt-costmanagement", marker = "extra == 'azure'", specifier = ">=4.0.1,<5" },
+    { name = "azure-mgmt-loganalytics", marker = "extra == 'azure'", specifier = ">=14.0.0,<15" },
+    { name = "azure-mgmt-monitor", marker = "extra == 'azure'", specifier = ">=6.0.2,<7" },
     { name = "azure-mgmt-network", marker = "extra == 'azure'", specifier = ">=31.0.1" },
-    { name = "azure-mgmt-resourcegraph", marker = "extra == 'azure'", specifier = ">=8.0.0" },
-    { name = "azure-mgmt-security", marker = "extra == 'azure'", specifier = "<8" },
-    { name = "azure-monitor-query", marker = "extra == 'azure'", specifier = "<3" },
+    { name = "azure-mgmt-resourcegraph", marker = "extra == 'azure'", specifier = ">=8.0.0,<9" },
+    { name = "azure-monitor-query", marker = "extra == 'azure'", specifier = ">=2.0.0,<3" },
     { name = "pydantic", specifier = ">=2.13,<3" },
 ]
 provides-extras = ["azure"]

@@ -51,6 +51,7 @@ from cna.core.topology.azure import (
     VNetPeering,
 )
 from cna.core.topology.common import PeeringState
+from cna_azure_network_engine.rules.registry import evaluate
 
 
 @pytest.fixture
@@ -226,6 +227,9 @@ class TestAWSNetFindingRules:
 
 
 class TestAzureNetFindingRules:
+    """Azure rules are evaluated through the engine package's pure ``evaluate(topology)``
+    (change set E): no store, no wrapper, the same call the API and the lab make."""
+
     def _make_sub(self, sub_id="sub-001") -> AzureSubscriptionTopology:
         return AzureSubscriptionTopology(
             subscription_id=sub_id,
@@ -238,7 +242,7 @@ class TestAzureNetFindingRules:
             private_dns_zones=[],
         )
 
-    def test_vnet_no_ddos_produces_finding(self, engine):
+    def test_vnet_no_ddos_produces_finding(self):
         sub = self._make_sub()
         vnet = VNet(
             id="/subs/sub-001/vnet-prod",
@@ -253,10 +257,10 @@ class TestAzureNetFindingRules:
         )
         sub.vnets = [vnet]
         topo = AzureTopology(engagement_id="test", tenant_id="tenant-001", subscriptions=[sub])
-        report = engine.run(azure_topology=topo)
+        report = evaluate(topo)
         assert any(f.rule_id == "AZ-NET-001" for f in report.findings)
 
-    def test_subnet_no_nsg_produces_high_finding(self, engine):
+    def test_subnet_no_nsg_produces_high_finding(self):
         sub = self._make_sub()
         vnet = VNet(
             id="/subs/sub-001/vnet-prod",
@@ -278,12 +282,12 @@ class TestAzureNetFindingRules:
         )
         sub.vnets = [vnet]
         topo = AzureTopology(engagement_id="test", tenant_id="tenant-001", subscriptions=[sub])
-        report = engine.run(azure_topology=topo)
+        report = evaluate(topo)
         nsg_findings = [f for f in report.findings if f.rule_id == "AZ-NET-002"]
         assert len(nsg_findings) == 1
         assert nsg_findings[0].severity == FindingSeverity.HIGH
 
-    def test_gateway_subnet_no_nsg_not_flagged(self, engine):
+    def test_gateway_subnet_no_nsg_not_flagged(self):
         """GatewaySubnet must not be flagged for missing NSG — NSGs not allowed there."""
         sub = self._make_sub()
         vnet = VNet(
@@ -306,11 +310,11 @@ class TestAzureNetFindingRules:
         )
         sub.vnets = [vnet]
         topo = AzureTopology(engagement_id="test", tenant_id="tenant-001", subscriptions=[sub])
-        report = engine.run(azure_topology=topo)
+        report = evaluate(topo)
         nsg_findings = [f for f in report.findings if f.rule_id == "AZ-NET-002"]
         assert len(nsg_findings) == 0
 
-    def test_firewall_threat_intel_alert_is_critical(self, engine):
+    def test_firewall_threat_intel_alert_is_critical(self):
         sub = self._make_sub()
         fw = AzureFirewall(
             id="/subs/sub-001/fw-hub",
@@ -322,12 +326,12 @@ class TestAzureNetFindingRules:
         )
         sub.firewalls = [fw]
         topo = AzureTopology(engagement_id="test", tenant_id="tenant-001", subscriptions=[sub])
-        report = engine.run(azure_topology=topo)
+        report = evaluate(topo)
         fw_findings = [f for f in report.findings if f.rule_id == "AZ-NET-003"]
         assert len(fw_findings) == 1
         assert fw_findings[0].severity == FindingSeverity.CRITICAL
 
-    def test_blocked_subscription_produces_no_findings(self, engine):
+    def test_blocked_subscription_produces_no_findings(self):
         sub = AzureSubscriptionTopology(
             subscription_id="sub-001",
             tenant_id="tenant-001",
@@ -335,10 +339,10 @@ class TestAzureNetFindingRules:
             block_reason="HTTP 403",
         )
         topo = AzureTopology(engagement_id="test", tenant_id="tenant-001", subscriptions=[sub])
-        report = engine.run(azure_topology=topo)
+        report = evaluate(topo)
         assert report.total_count == 0
 
-    def test_app_gateway_waf_disabled_maps_to_applications_and_workloads(self, engine):
+    def test_app_gateway_waf_disabled_maps_to_applications_and_workloads(self):
         sub = self._make_sub()
         sub.application_gateways = [
             ApplicationGateway(
@@ -353,7 +357,7 @@ class TestAzureNetFindingRules:
         ]
         topo = AzureTopology(engagement_id="test", tenant_id="tenant-001", subscriptions=[sub])
 
-        report = engine.run(azure_topology=topo)
+        report = evaluate(topo)
         finding = next(f for f in report.findings if f.rule_id == "AZ-NET-007")
 
         assert any(
@@ -361,7 +365,7 @@ class TestAzureNetFindingRules:
             for m in finding.framework_mappings
         )
 
-    def test_front_door_waf_detection_maps_to_applications_and_workloads(self, engine):
+    def test_front_door_waf_detection_maps_to_applications_and_workloads(self):
         sub = self._make_sub()
         sub.front_door_waf_policies = [
             FrontDoorWAFPolicy(
@@ -374,7 +378,7 @@ class TestAzureNetFindingRules:
         ]
         topo = AzureTopology(engagement_id="test", tenant_id="tenant-001", subscriptions=[sub])
 
-        report = engine.run(azure_topology=topo)
+        report = evaluate(topo)
         finding = next(f for f in report.findings if f.rule_id == "AZ-NET-018")
 
         assert any(
@@ -511,9 +515,9 @@ class TestAzurePeeringGatewayTransit:
     """
 
     @staticmethod
-    def _transit_findings(engine, sub):
+    def _transit_findings(sub):
         topo = AzureTopology(engagement_id="test", tenant_id="tenant-001", subscriptions=[sub])
-        return [f for f in engine.run(azure_topology=topo).findings if f.rule_id == "AZ-NET-005"]
+        return [f for f in evaluate(topo).findings if f.rule_id == "AZ-NET-005"]
 
     def _vnet(self, vnet_id, allow_gateway_transit=True):
         return VNet(
@@ -548,26 +552,24 @@ class TestAzurePeeringGatewayTransit:
             subnet_id=subnet_id,
         )
 
-    def test_does_not_raise_when_a_gateway_is_present(self, engine):
+    def test_does_not_raise_when_a_gateway_is_present(self):
         """The regression itself: this used to be an AttributeError."""
         vnet_id = "/subs/sub-001/vnet-prod"
         sub = AzureSubscriptionTopology(subscription_id="sub-001", tenant_id="tenant-001")
         sub.vnets = [self._vnet(vnet_id)]
         sub.virtual_network_gateways = [self._gateway(f"{vnet_id}/subnets/GatewaySubnet")]
 
-        self._transit_findings(engine, sub)  # must not raise
+        self._transit_findings(sub)  # must not raise
 
-    def test_a_gateway_in_this_vnet_suppresses_the_finding(self, engine):
+    def test_a_gateway_in_this_vnet_suppresses_the_finding(self):
         vnet_id = "/subs/sub-001/vnet-prod"
         sub = AzureSubscriptionTopology(subscription_id="sub-001", tenant_id="tenant-001")
         sub.vnets = [self._vnet(vnet_id)]
         sub.virtual_network_gateways = [self._gateway(f"{vnet_id}/subnets/GatewaySubnet")]
 
-        assert self._transit_findings(engine, sub) == [], (
-            "a local gateway should suppress the finding"
-        )
+        assert self._transit_findings(sub) == [], "a local gateway should suppress the finding"
 
-    def test_a_gateway_in_a_different_vnet_does_not_count(self, engine):
+    def test_a_gateway_in_a_different_vnet_does_not_count(self):
         """Prefix matching must not treat another VNet's gateway as local."""
         vnet_id = "/subs/sub-001/vnet-prod"
         sub = AzureSubscriptionTopology(subscription_id="sub-001", tenant_id="tenant-001")
@@ -576,6 +578,6 @@ class TestAzurePeeringGatewayTransit:
             self._gateway("/subs/sub-001/vnet-other/subnets/GatewaySubnet")
         ]
 
-        assert len(self._transit_findings(engine, sub)) == 1, (
+        assert len(self._transit_findings(sub)) == 1, (
             "no local gateway — the finding should be emitted"
         )

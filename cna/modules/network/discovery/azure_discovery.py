@@ -29,7 +29,8 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Callable
+import os
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
 from azure.core.exceptions import HttpResponseError
@@ -85,8 +86,29 @@ from cna.core.topology.azure import (
     VNetPeering,
 )
 from cna.core.topology.common import SubnetType
+from cna_azure_network_engine.discovery.resource_graph import (
+    ResourceGraphDiscovery,
+    Scope,
+    parse_scopes,
+)
 
 logger = logging.getLogger("cna.discovery.azure")
+
+
+DISCOVERY_BACKENDS = ("resource-graph", "arm")
+DEFAULT_BACKEND = "resource-graph"
+
+
+def backend_from_env(env: Mapping[str, str] | None = None) -> str:
+    """``CNA_DISCOVERY_BACKEND``: ``resource-graph`` (default) or ``arm`` (kept for one
+    release, change set D). Anything else exits before any query."""
+    source = os.environ if env is None else env
+    value = (source.get("CNA_DISCOVERY_BACKEND") or DEFAULT_BACKEND).strip().lower()
+    if value not in DISCOVERY_BACKENDS:
+        raise SystemExit(
+            f"CNA_DISCOVERY_BACKEND={value!r} is not one of {', '.join(DISCOVERY_BACKENDS)}"
+        )
+    return value
 
 
 @dataclass
@@ -94,7 +116,23 @@ class AzureDiscoveryOptions:
     tenant_id: str
     subscription_ids: list[str] = field(default_factory=list)  # empty = all
     resume: bool = False
-    use_resource_graph: bool = True  # faster cross-sub queries
+    # ``False`` selects the ARM loop; the explicit ``backend`` wins when both are given.
+    use_resource_graph: bool = True
+    # ``resource-graph`` (default, from CNA_DISCOVERY_BACKEND) or ``arm``.
+    backend: str | None = None
+    # ``/subscriptions/<id>`` or ``/subscriptions/<id>/resourceGroups/<name>`` scopes
+    # (``CNA_SCOPES``); empty means the subscription ids above, or every accessible one.
+    scopes: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if self.backend is None:
+            self.backend = backend_from_env() if self.use_resource_graph else "arm"
+        self.backend = self.backend.strip().lower()
+        if self.backend not in DISCOVERY_BACKENDS:
+            raise SystemExit(
+                f"discovery backend {self.backend!r} is not one of {', '.join(DISCOVERY_BACKENDS)}"
+            )
+        self.use_resource_graph = self.backend == "resource-graph"
 
 
 _RG_PARTS_INDEX = 4  # fallback index for resource group in a split ARM resource ID
@@ -1087,37 +1125,6 @@ class AzureDiscovery:
     # ------------------------------------------------------------------ Private Endpoints
 
     @staticmethod
-    def _validate_pe_dns(custom_dns: list[str], private_ips: list[str]) -> bool | None:
-        """Validate that private endpoint FQDNs resolve to RFC-1918 addresses.
-
-        Returns True if at least one FQDN resolves to a private IP, False if one
-        resolves to a public IP, or None when resolution is inconclusive.
-        """
-        if not custom_dns and private_ips:
-            return True
-        if not custom_dns:
-            return None
-        import ipaddress as _ipaddr
-        import socket as _socket
-
-        _rfc1918 = (
-            _ipaddr.ip_network("10.0.0.0/8"),
-            _ipaddr.ip_network("172.16.0.0/12"),
-            _ipaddr.ip_network("192.168.0.0/16"),
-        )
-        result: bool | None = None
-        for fqdn in custom_dns[:3]:
-            try:
-                resolved_ip = _socket.gethostbyname(fqdn)
-                addr = _ipaddr.ip_address(resolved_ip)
-                if any(addr in net_range for net_range in _rfc1918):
-                    return True
-                result = False
-            except Exception as _e:
-                logger.debug("DNS resolution skipped for %s: %s", fqdn, _e)
-        return result
-
-    @staticmethod
     def _pe_private_ips(net, pe) -> list[str]:
         """Collect private IPs from a private endpoint's attached NICs."""
         private_ips: list[str] = []
@@ -1183,7 +1190,8 @@ class AzureDiscovery:
                     service_connections=service_conns,
                     dns_zone_group_names=dns_group_names,
                     custom_dns_configs=custom_dns,
-                    dns_resolves_to_private_ip=self._validate_pe_dns(custom_dns, private_ips),
+                    # Not resolved from the scanner host (change set D): None is ``unknown``.
+                    dns_resolves_to_private_ip=None,
                     tags=dict(pe.tags or {}),
                 )
             )
@@ -2496,6 +2504,96 @@ class AzureDiscovery:
 
         self.validate_access()
 
+        if self.opts.backend == "resource-graph":
+            return self._run_resource_graph(engagement_id)
+        return self._run_arm(engagement_id)
+
+    # ---------------------------------------------------------------- resource graph
+
+    def _scopes(self) -> list[Scope]:
+        """The scopes to assess: ``opts.scopes`` parsed, else the subscription ids, else
+        every accessible subscription (``subscriptions.list``)."""
+        if self.opts.scopes:
+            return parse_scopes(" ".join(self.opts.scopes))
+        if self.opts.subscription_ids:
+            return [Scope(s.strip().lower(), None) for s in self.opts.subscription_ids if s.strip()]
+        return [Scope(sub["id"].lower(), None) for sub in self._list_subscriptions()]
+
+    def _run_resource_graph(self, engagement_id: str) -> AzureTopology:
+        """One paged Resource Graph query set builds the model; ARM runs only the live
+        collectors Resource Graph has no data for (BGP, metrics, diagnostics, cost, Log
+        Analytics)."""
+        scopes = self._scopes()
+        self._progress(
+            f"Backend: resource-graph — {len(scopes)} scope(s), "
+            f"{len({s.subscription_id for s in scopes})} subscription(s)"
+        )
+        discovery = ResourceGraphDiscovery(self._cred, scopes, progress=self._progress)
+        topology = discovery.run()
+        topology.engagement_id = engagement_id
+        topology.tenant_id = self.opts.tenant_id
+        logger.info(
+            "[%s] %d management groups, %d subscriptions from Resource Graph",
+            engagement_id,
+            len(topology.management_groups),
+            len(topology.subscriptions),
+        )
+        completed = (
+            set(self.store.list_completed_checkpoints(engagement_id, "azure"))
+            if self.opts.resume
+            else set()
+        )
+        for sub_topo in topology.subscriptions:
+            sub_id = sub_topo.subscription_id
+            sub_name = sub_topo.subscription_name or sub_id
+            if any(sub_id in c for c in completed):
+                logger.info(
+                    "[%s] Skipping %s — checkpoint exists (--resume)", engagement_id, sub_id
+                )
+                continue
+            self._progress(f"Live collectors: {sub_name} ({sub_id})…")
+            self._run_live_collectors(sub_topo, sub_id, sub_name)
+            self.store.write_discovery_checkpoint(
+                engagement_id, "azure", sub_id, json.loads(sub_topo.model_dump_json())
+            )
+            self._progress(
+                f"  {sub_name}: {len(sub_topo.vnets)} VNet(s), {len(sub_topo.nsgs)} NSG(s), "
+                f"{len(sub_topo.load_balancers)} LB(s), "
+                f"{len(sub_topo.virtual_network_gateways)} GW(s), "
+                f"{len(sub_topo.private_endpoints)} PE(s), {len(sub_topo.nvas)} NVA(s)"
+            )
+        logger.info(
+            "[%s] Azure discovery complete. %d subscriptions collected.",
+            engagement_id,
+            len(topology.subscriptions),
+        )
+        return topology
+
+    def _run_live_collectors(
+        self, topo: AzureSubscriptionTopology, sub_id: str, sub_name: str
+    ) -> None:
+        """The ARM reads Resource Graph cannot answer, each fault-isolated: a Reader-only
+        identity that lacks a live permission leaves the field empty (the rule reports
+        ``unknown``) and never raises."""
+        try:
+            from azure.mgmt.network import NetworkManagementClient
+
+            net = NetworkManagementClient(self._cred, sub_id)
+        except Exception as e:
+            logger.debug("[%s] network client unavailable for live collectors: %s", sub_id, e)
+            self._progress(f"[{sub_name}] Live collectors skipped: {redact_exception(e)}")
+            return
+        self._run_bgp_scan(topo, net, sub_id, sub_name)
+        self._run_observability_scan(topo, net, sub_id, sub_name)
+        self._run_metrics_scan(topo, sub_id, sub_name)
+
+    # ---------------------------------------------------------------- arm (one release)
+
+    def _run_arm(self, engagement_id: str) -> AzureTopology:
+        """The pre-D per-subscription ARM list loop, behind ``CNA_DISCOVERY_BACKEND=arm``."""
+        self._progress(
+            "Backend: arm (deprecated; CNA_DISCOVERY_BACKEND=resource-graph is the default)"
+        )
         topology = AzureTopology(
             engagement_id=engagement_id,
             tenant_id=self.opts.tenant_id,
