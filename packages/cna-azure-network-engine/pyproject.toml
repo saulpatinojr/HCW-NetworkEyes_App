@@ -16,17 +16,21 @@ dependencies = [
 # [REVIEW REQUIRED] licence and copyright holder: REFACTOR_APP.md section 22, item 1.
 
 [project.optional-dependencies]
-# Upper bounds as the monorepo's `enrichment` extra already justifies (TODO.md T-413, T-414).
+# Live discovery (change set D). Lower bounds are the versions the code was written
+# against; upper bounds follow the monorepo's `enrichment` extra (TODO.md T-413, T-414),
+# whose majors renamed or removed the APIs used. Every bound is [VERIFY] until the
+# acceptance run against a Reader-only identity (TODO.md T-726).
 azure = [
-    "azure-identity>=1.25.3",
-    "azure-mgmt-resourcegraph>=8.0.0",
-    "azure-mgmt-network>=31.0.1",
-    "azure-mgmt-monitor<7",
-    "azure-monitor-query<3",
-    "azure-mgmt-costmanagement<5",
-    "azure-mgmt-loganalytics<15",
-    "azure-mgmt-security<8",
+    "azure-identity>=1.25.3",                 # [VERIFY] credential chain
+    "azure-mgmt-resourcegraph>=8.0.0,<9",     # [VERIFY] QueryRequest/QueryRequestOptions, skip_token
+    "azure-mgmt-network>=31.0.1",             # [VERIFY] BGP begin_get_* actions (live only)
+    "azure-mgmt-monitor>=6.0.2,<7",           # [VERIFY] diagnostic settings, alert counts
+    "azure-monitor-query>=2.0.0,<3",          # [VERIFY] metrics, Traffic Analytics
+    "azure-mgmt-costmanagement>=4.0.1,<5",    # [VERIFY] AZ-COST live reads
+    "azure-mgmt-loganalytics>=14.0.0,<15",    # [VERIFY] workspace lookup
 ]
+# Not needed any more: Defender assessments and NVAs come from Resource Graph
+# (SecurityResources, Resources), so azure-mgmt-security and azure-mgmt-compute are gone.
 
 [tool.setuptools.packages.find]
 include = ["cna_azure_network_engine*"]

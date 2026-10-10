@@ -8,6 +8,7 @@ Commands:
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -130,7 +131,14 @@ def discover_aws(  # noqa: PLR0913
     "--no-resource-graph",
     is_flag=True,
     default=False,
-    help="Disable Azure Resource Graph (use ARM REST only — slower).",
+    help="Use the ARM list loop (CNA_DISCOVERY_BACKEND=arm; kept for one release).",
+)
+@click.option(
+    "--scope",
+    "scopes",
+    multiple=True,
+    help="Assess only this scope: /subscriptions/<id> or /subscriptions/<id>/resourceGroups/<name>. "
+    "Repeatable; also CNA_SCOPES (space-separated).",
 )
 @click.option(
     "--data-dir", default="./engagements", help="Engagement data directory (default: ./engagements)"
@@ -141,6 +149,7 @@ def discover_azure(  # noqa: PLR0913
     subscriptions,
     resume,
     no_resource_graph,
+    scopes,
     data_dir,
 ):
     """Discover Azure network topology via ARM REST + Resource Graph.
@@ -166,15 +175,18 @@ def discover_azure(  # noqa: PLR0913
 
     sub_list = [s.strip() for s in subscriptions.split(",")] if subscriptions else []
 
+    scope_list = list(scopes) or os.environ.get("CNA_SCOPES", "").split()
     opts = AzureDiscoveryOptions(
         tenant_id=tenant_id,
         subscription_ids=sub_list,
         resume=resume,
         use_resource_graph=not no_resource_graph,
+        scopes=scope_list,
     )
 
     click.echo(f"\u25b6 Starting Azure discovery for engagement: {engagement_id}")
     click.echo(f"  Tenant: {tenant_id}")
+    click.echo(f"  Backend: {opts.backend}")
     click.echo("  Auth: platform identity (az login / managed identity)")
     click.echo(f"  Resume: {resume}")
 

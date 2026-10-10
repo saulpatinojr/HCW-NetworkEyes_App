@@ -17,7 +17,7 @@ in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG
 | [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-419 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements + appliance migration | T-501 – T-509 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
-| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-725 |
+| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-726 |
 
 ---
 
@@ -2242,3 +2242,29 @@ container at a time (`CHANGELOG.md` `[Unreleased]`; `tests/unit/test_cna_api_aut
   plan's sketch, recorded in the CHANGELOG entry).
 - The dynamic check runs `python -I` against the workspace-installed package; a wheel built by
   `tests/packaging/test_engine_wheel.py` is the stronger proof and already imports in a clean venv.
+
+### T-726 — Resource Graph discovery: acceptance run, live collectors into the package, remove the ARM loop (change set D)
+`cna_azure_network_engine.discovery.resource_graph` builds the model; `CNA_DISCOVERY_BACKEND=arm` keeps the
+old loop for one release (`CHANGELOG.md` `[Unreleased]`). Open:
+- `[VERIFY]` Acceptance with a Reader-only identity (the T-722 role set, no write role): zero
+  `HttpResponseError` from list calls, every live-only rule in `unknowns[]` until the optional roles are
+  added, and the wall time for a 500-resource subscription recorded here — seconds, not minutes. No cloud
+  was reachable from the session that wrote the code, so nothing below has run against a tenant.
+- `[VERIFY]` The Resource Graph column shapes the attach functions read: `SecurityResources`
+  `properties.metadata.{categories,severity,description,remediationDescription,implementationEffort,threats,userImpact}`
+  and `properties.resourceDetails.{Id,ResourceType}`; `ResourceContainers`
+  `properties.managementGroupAncestorsChain[]` and `properties.details.parent.id`; VM `plan` column and
+  `properties.networkProfile.networkInterfaces[].id`; NIC `properties.enableIPForwarding`.
+- `[VERIFY]` Every bound in the package's `[azure]` extra (`packages/cna-azure-network-engine/pyproject.toml`).
+- The live collector bodies still live in `cna/modules/network/discovery/azure_discovery.py` and run from
+  `_run_live_collectors`; the plan's `discovery/live_bgp.py`, `live_metrics.py`, `live_diagnostics.py`,
+  `live_cost.py` and `live_law.py` in the package are the next move (they need `with_retry` and
+  `redact_exception` or equivalents inside the package first, since the engine imports nothing from `cna`).
+- The registry has no NVA live rule and the renderer no Defender section; `nvas` and `defender_assessments`
+  are attached and carried but not yet read by a rule (plan section 7.B/7.D). Add them as rules AZ-NET-034+
+  through `scripts/author-rules`-style authoring upstream, never by editing findings by hand.
+- Remove the `arm` backend, `_run_arm`, `_discover_subscription` and the fifteen ARM list collectors in the
+  release after the acceptance run; `tests/unit/test_azure_discovery.py` keeps only the live-collector tests.
+- Core ↔ appliance contract: both appliances may set `CNA_SCOPES` (space-separated scopes) and
+  `CNA_DISCOVERY_BACKEND`; the Azure appliance's identity needs no `Microsoft.Compute` or
+  `Microsoft.Security` SDK permissions beyond Reader for the Resource Graph tables.
