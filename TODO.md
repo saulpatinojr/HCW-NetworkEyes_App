@@ -2293,27 +2293,32 @@ log in to Docker Hub through its OIDC connection (`CHANGELOG.md` `[Unreleased]`;
 Nothing publishes until the owner flips the variables below. Open, in order:
 - `[REVIEW REQUIRED]` **PyPI trusted publisher.** In a browser, at
   <https://pypi.org/manage/account/publishing/>, add a pending publisher with PyPI project name
-  `cna-azure-network-engine`, owner `saulpatinojr`, repository `Work-Cloud_Network_Core`, workflow
+  `cna-azure-network-engine`, owner `saulpatinojr`, repository `HCW-NetworkEyes_App`, workflow
   `320-release-engine.yml`, environment left blank. Then, PowerShell:
 
   ```powershell
-  gh variable set PYPI_PUBLISH_ENABLED --body true --repo saulpatinojr/Work-Cloud_Network_Core
+  gh variable set PYPI_PUBLISH_ENABLED --body true --repo saulpatinojr/HCW-NetworkEyes_App
   ```
 
-  Success looks like: `gh variable list --repo saulpatinojr/Work-Cloud_Network_Core` shows
+  Success looks like: `gh variable list --repo saulpatinojr/HCW-NetworkEyes_App` shows
   `PYPI_PUBLISH_ENABLED  true`. Until then the `publish-pypi` job is skipped and the tag still builds,
   tests and attaches the wheel to the GitHub Release.
-- `[REVIEW REQUIRED]` **Docker Hub OIDC connection.** In a browser, on the organisation's Docker Hub
-  settings under <https://app.docker.com/>, create an OIDC connection for GitHub Actions scoped to
-  `saulpatinojr/Work-Cloud_Network_Core` `[VERIFY]` (the exact page lives under the organisation's
-  *Settings* and Docker names it *OIDC connections*; copy the connection id it shows). Then, PowerShell,
-  which reads the id from the prompt so nothing is retyped into the command:
+- `[REVIEW REQUIRED]` **Docker Hub OIDC connection.** In a browser at <https://app.docker.com/>, switch to
+  the **hybridcloudworks** organisation, open **Identity & auth** → **OIDC connections** → **Create OIDC
+  connection** (provider GitHub Actions), and add one ruleset with two subject-claim rules, read and write
+  on the `hybridcloudworks/cna` repository (the ids are GitHub's immutable owner and repository ids, so a
+  rename never breaks the rule):
+  `repo:saulpatinojr@34853639/HCW-NetworkEyes_App@1173847343:ref:refs/heads/main` (for `200-build-images.yml`)
+  and `repo:saulpatinojr@34853639/HCW-NetworkEyes_App@1173847343:ref:refs/tags/*` (for `310-release-version.yml`).
+  Copy the connection id it shows. Then, PowerShell, which reads the id from the prompt so nothing is
+  retyped into the command:
 
   ```powershell
   $conn = Read-Host "Docker Hub OIDC connection id"
-  gh variable set DOCKERHUB_CONNECTION --body $conn --repo saulpatinojr/Work-Cloud_Network_Core
-  gh variable set DOCKERHUB_ENABLED --body true --repo saulpatinojr/Work-Cloud_Network_Core
-  gh secret delete DOCKERHUB_TOKEN --repo saulpatinojr/Work-Cloud_Network_Core
+  gh variable set DOCKERHUB_NAMESPACE --body hybridcloudworks --repo saulpatinojr/HCW-NetworkEyes_App
+  gh variable set DOCKERHUB_CONNECTION --body $conn --repo saulpatinojr/HCW-NetworkEyes_App
+  gh variable set DOCKERHUB_ENABLED --body true --repo saulpatinojr/HCW-NetworkEyes_App
+  gh secret delete DOCKERHUB_TOKEN --repo saulpatinojr/HCW-NetworkEyes_App
   ```
 
   Success looks like: the next push to `main` that touches a Dockerfile runs `200-build-images.yml`
