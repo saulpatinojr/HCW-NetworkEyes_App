@@ -32,14 +32,15 @@ def test_findings_are_well_formed_and_in_area():
 
 
 def test_topology_covers_all_core_workflows():
-    """5.1: exactly four workflows, all GitHub-hosted since the runner retired."""
+    """5.1: exactly five workflows, all GitHub-hosted since the runner retired."""
     assert len(SELF_HOSTED_ONLY_WORKFLOWS) == 0
-    assert len(GITHUB_HOSTED_WORKFLOWS) == 4
-    assert len(_ALL_WORKFLOWS) == 4
+    assert len(GITHUB_HOSTED_WORKFLOWS) == 5
+    assert len(_ALL_WORKFLOWS) == 5
     assert GITHUB_HOSTED_WORKFLOWS == (
         "200-build-images.yml",
         "300-test-codebase.yml",
         "310-release-version.yml",
+        "320-release-engine.yml",
         "370-registry-cleanup.yml",
     )
     # No workflow is both self-hosted-only and GitHub-hosted.
@@ -91,7 +92,7 @@ def test_all_core_workflows_are_covered():
         if f.dedup_key.startswith("cicd:self-hosted-spof:")
     }
     assert covered == set(_ALL_WORKFLOWS)
-    assert len(covered) == 4
+    assert len(covered) == 5
 
 
 def test_best_practice_gaps_are_recorded():
@@ -191,6 +192,7 @@ def test_all_workflow_files_parse_as_yaml():
         "200-build-images.yml",
         "300-test-codebase.yml",
         "310-release-version.yml",
+        "320-release-engine.yml",
         "370-registry-cleanup.yml",
     }
     for path in files:

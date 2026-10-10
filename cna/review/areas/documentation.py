@@ -22,9 +22,9 @@ findings so the plan captures what was checked, not only what broke:
     ``CHANGELOG.md``, ``REVIEW.md``, ``TODO.md`` and the one optional
     ``CNA-0.90-updates.md`` — consistent.
   * **Numbered workflows.** ``README`` conventions describe numeric workflow
-    bands shared with the appliances and name the four workflows the core keeps
+    bands shared with the appliances and name the five workflows the core keeps
     (``200-build-images.yml``, ``300-test-codebase.yml``,
-    ``310-release-version.yml``, ``370-registry-cleanup.yml``). All four exist
+    ``310-release-version.yml``, ``320-release-engine.yml``, ``370-registry-cleanup.yml``). All five exist
     under ``.github/workflows/`` and every referenced filename resolves —
     consistent (the deploy and operations workflows left with the deployment
     layer, ``TODO.md`` T-504).
@@ -113,9 +113,9 @@ def _accuracy_findings() -> list[Finding]:
             area=_AREA,
             severity=Severity.INFORMATIONAL,
             proposed_action=(
-                "Verified compliant: the four core workflows exist under "
+                "Verified compliant: the five core workflows exist under "
                 ".github/workflows/ (200-build-images.yml, 300-test-codebase.yml, "
-                "310-release-version.yml, 370-registry-cleanup.yml) and every "
+                "310-release-version.yml, 320-release-engine.yml, 370-registry-cleanup.yml) and every "
                 "workflow filename README references resolves; the deploy and "
                 "operations workflows live in the appliance repositories (TODO.md "
                 "T-504). Reference workflows by filename per the numbered-workflow "
@@ -247,7 +247,7 @@ def _verify_findings() -> list[Finding]:
         ``apps/cna-web/``).
       * **Command / workflow-name resolution.** Every workflow filename README
         references by name (``200-build-images.yml``, ``300-test-codebase.yml``,
-        ``310-release-version.yml``, ``370-registry-cleanup.yml``) exists under
+        ``310-release-version.yml``, ``320-release-engine.yml``, ``370-registry-cleanup.yml``) exists under
         ``.github/workflows/``, and the
         documented ``cna`` CLI command resolves to a declared entry point
         (``pyproject.toml`` ``[project.scripts] cna = "cna.cli.main:cli"`` with
@@ -293,7 +293,7 @@ def _verify_findings() -> list[Finding]:
             proposed_action=(
                 "Verified compliant: every workflow filename README references "
                 "by name (200-build-images.yml, 300-test-codebase.yml, "
-                "310-release-version.yml, 370-registry-cleanup.yml) exists under "
+                "310-release-version.yml, 320-release-engine.yml, 370-registry-cleanup.yml) exists under "
                 ".github/workflows/, and the "
                 "documented `cna` command resolves to its declared entry point "
                 '(pyproject.toml [project.scripts] cna = "cna.cli.main:cli", '

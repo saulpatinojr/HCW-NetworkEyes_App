@@ -3,8 +3,8 @@
 # Builds the Docker image, pushes to Docker Hub, creates a GitHub Release
 # with auto-generated changelog from PRs merged since last tag.
 #
-# Required repository secrets:
-#   DOCKERHUB_NAMESPACE / DOCKERHUB_TOKEN — Docker Hub image push
+# Required repository variables (no secret): DOCKERHUB_NAMESPACE, DOCKERHUB_CONNECTION
+# (the Docker Hub OIDC connection id) and DOCKERHUB_ENABLED == 'true'.
 #
 # Required repository settings:
 #   Actions > General > Workflow permissions: Read and write
@@ -35,7 +35,7 @@ jobs:
   release:
     name: Build, Push, Release
     runs-on: ubuntu-latest
-    if: vars.DOCKERHUB_ENABLED == 'true' # owner step: Docker Hub OIDC connection + variables (REFACTOR_APP.md change set J)
+    if: vars.DOCKERHUB_ENABLED == 'true'
     timeout-minutes: 30
     env:
       REGISTRY: docker.io
@@ -61,11 +61,17 @@ jobs:
 
       # Log in to Docker Hub
       - name: Log in to Docker Hub
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
+        # Docker Hub's OIDC connection (REFACTOR_APP.md change set J): the action
+        # exchanges this job's id-token for a 15-minute registry credential, so no
+        # long-lived access token is stored. [VERIFY] the env variable names and the
+        # minimum login-action version against the Docker Hub OIDC documentation.
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
+        env:
+          DOCKERHUB_OIDC_CONNECTIONID: ${{ vars.DOCKERHUB_CONNECTION }}
+          DOCKERHUB_OIDC_EXPIREIN: '900'
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ vars.DOCKERHUB_NAMESPACE }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       # Docker Buildx for multi-platform + cache
       - name: Set up Docker Buildx

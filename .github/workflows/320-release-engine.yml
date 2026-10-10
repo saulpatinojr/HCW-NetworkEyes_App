@@ -1,0 +1,126 @@
+name: "320 · Release Engine Package"
+
+# Builds, tests and publishes the cna-azure-network-engine wheel on an
+# `engine-v*` tag (REFACTOR_APP.md change set J). Runs on GitHub-hosted
+# runners; nothing here needs a private network or a cloud credential.
+#
+# Publishing is trusted publishing only: `uv publish --trusted-publishing
+# always` exchanges this job's OIDC token with PyPI, so no registry token
+# exists anywhere in this repository. It is gated on the repository variable
+# PYPI_PUBLISH_ENABLED == 'true' so the first tags can exercise the build
+# before the PyPI trusted publisher is configured. The GitHub Release upload
+# is the only job with write access to the repository.
+#
+# Every third-party action is pinned to a full commit SHA with its version
+# beside it; the pins are the ones the Core's other workflows and the sibling
+# repositories already carry.
+
+on:
+  push:
+    tags:
+      - 'engine-v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-engine-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PACKAGE_DIR: packages/cna-azure-network-engine
+
+jobs:
+
+  build-test:
+    name: Build and test the wheel
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.14"
+
+      # The tag names the version the package declares; a mismatch is a stop.
+      - name: Check the tag against the package version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          declared=$(python -c "import tomllib; print(tomllib.load(open('$PACKAGE_DIR/pyproject.toml','rb'))['project']['version'])")
+          if [ "$TAG" != "engine-v${declared}" ]; then
+            echo "::error::tag ${TAG} does not match the package version ${declared} (expected engine-v${declared})."
+            exit 1
+          fi
+
+      - name: Install uv
+        # Keep in step with the `uv==` pins in 300-test-codebase.yml and the Dockerfiles' uv stage.
+        run: pip install uv==0.12.21
+
+      - name: Build the wheel and sdist
+        run: uv build "$PACKAGE_DIR" --out-dir dist
+
+      - name: Install the wheel in a fresh venv and import it
+        run: |
+          set -euo pipefail
+          uv venv --python 3.14 /tmp/engine-venv
+          uv pip install --python /tmp/engine-venv/bin/python dist/cna_azure_network_engine-*.whl
+          /tmp/engine-venv/bin/python -I -c "import cna_azure_network_engine as e; print(e.RULES_VERSION)"
+          /tmp/engine-venv/bin/python -I -m cna_azure_network_engine.edition
+
+      - name: Run the package tests against the installed wheel
+        run: |
+          set -euo pipefail
+          uv pip install --python /tmp/engine-venv/bin/python pytest
+          /tmp/engine-venv/bin/python -m pytest "$PACKAGE_DIR/tests" -q --tb=short -p no:cacheprovider
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: engine-dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-pypi:
+    name: Publish to PyPI (trusted publishing)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [build-test]
+    if: vars.PYPI_PUBLISH_ENABLED == 'true'
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: engine-dist
+          path: dist/
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Install uv
+        run: pip install uv==0.12.21
+      # OIDC to PyPI through uv itself: no third-party publishing action, no token.
+      - name: Publish
+        run: uv publish --trusted-publishing always dist/*
+
+  release-upload:
+    name: Attach the artifacts to the GitHub Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [build-test]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: engine-dist
+          path: dist/
+      - name: Create the release from the tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --notes-from-tag dist/*

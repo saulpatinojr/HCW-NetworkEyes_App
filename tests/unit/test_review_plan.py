@@ -111,7 +111,7 @@ def test_coverage_terraform_areas_point_at_the_appliances():
 
 def test_coverage_all_core_ci_workflows_present():
     """Requirement 5.1: every core CI workflow appears as a subject."""
-    assert len(_ALL_WORKFLOWS) == 4
+    assert len(_ALL_WORKFLOWS) == 5
     tokens = _all_subject_tokens(build_remediation_plan())
     for workflow in _ALL_WORKFLOWS:
         expected = f".github/workflows/{workflow}"

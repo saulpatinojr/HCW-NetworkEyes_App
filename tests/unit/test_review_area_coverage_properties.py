@@ -308,7 +308,7 @@ def test_property2_real_plan_covers_all_core_workflows() -> None:
 
     The real plan represents every core CI workflow (Requirement 5.1) as a subject.
     """
-    assert len(_ALL_WORKFLOWS) == 4
+    assert len(_ALL_WORKFLOWS) == 5
     tokens = _subject_tokens(build_remediation_plan())
     missing = _EXPECTED_WORKFLOW_SUBJECTS - tokens
     assert not missing, f"CI workflows not covered: {sorted(missing)}"

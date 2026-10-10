@@ -17,7 +17,7 @@ in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG
 | [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-419 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements + appliance migration | T-501 – T-509 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
-| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-727 |
+| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-728 |
 
 ---
 
@@ -2286,3 +2286,50 @@ old loop for one release (`CHANGELOG.md` `[Unreleased]`). Open:
 - The AddOn builds its deployable lab image from the published engine with the same pattern (its
   `infrastructure/docker/Dockerfile`); once the engine is on PyPI (T-728) its `edition.py` can import
   `cna_azure_network_engine.edition` instead of carrying its own copy.
+
+### T-728 — Engine release and OIDC registry login: the owner steps, and the appliances on digests (change set J)
+`320-release-engine.yml` publishes the engine wheel by trusted publishing on `engine-v*` tags; `200` and `310`
+log in to Docker Hub through its OIDC connection (`CHANGELOG.md` `[Unreleased]`; `tests/unit/test_build_manifest.py`).
+Nothing publishes until the owner flips the variables below. Open, in order:
+- `[REVIEW REQUIRED]` **PyPI trusted publisher.** In a browser, at
+  <https://pypi.org/manage/account/publishing/>, add a pending publisher with PyPI project name
+  `cna-azure-network-engine`, owner `saulpatinojr`, repository `Work-Cloud_Network_Core`, workflow
+  `320-release-engine.yml`, environment left blank. Then, PowerShell:
+
+  ```powershell
+  gh variable set PYPI_PUBLISH_ENABLED --body true --repo saulpatinojr/Work-Cloud_Network_Core
+  ```
+
+  Success looks like: `gh variable list --repo saulpatinojr/Work-Cloud_Network_Core` shows
+  `PYPI_PUBLISH_ENABLED  true`. Until then the `publish-pypi` job is skipped and the tag still builds,
+  tests and attaches the wheel to the GitHub Release.
+- `[REVIEW REQUIRED]` **Docker Hub OIDC connection.** In a browser, on the organisation's Docker Hub
+  settings under <https://app.docker.com/>, create an OIDC connection for GitHub Actions scoped to
+  `saulpatinojr/Work-Cloud_Network_Core` `[VERIFY]` (the exact page lives under the organisation's
+  *Settings* and Docker names it *OIDC connections*; copy the connection id it shows). Then, PowerShell,
+  which reads the id from the prompt so nothing is retyped into the command:
+
+  ```powershell
+  $conn = Read-Host "Docker Hub OIDC connection id"
+  gh variable set DOCKERHUB_CONNECTION --body $conn --repo saulpatinojr/Work-Cloud_Network_Core
+  gh variable set DOCKERHUB_ENABLED --body true --repo saulpatinojr/Work-Cloud_Network_Core
+  gh secret delete DOCKERHUB_TOKEN --repo saulpatinojr/Work-Cloud_Network_Core
+  ```
+
+  Success looks like: the next push to `main` that touches a Dockerfile runs `200-build-images.yml`
+  with the `Log in to Docker Hub` step green and no `password` input in its log; a failed exchange reads
+  `unable to exchange OIDC token` and means the connection id or its repository scope is wrong. Delete the
+  secret only after that first green run.
+- `[VERIFY]` `DOCKERHUB_OIDC_CONNECTIONID` / `DOCKERHUB_OIDC_EXPIREIN` and the minimum `docker/login-action`
+  release that reads them, against Docker's documentation at the time of enabling; `actionlint` over
+  `.github/workflows/` on the first pull request (not installed where this was written).
+- **First engine release.** Bump `packages/cna-azure-network-engine/pyproject.toml` `version`, then,
+  PowerShell: `git tag engine-v0.1.0; git push origin engine-v0.1.0`. `build-test` refuses a tag that does
+  not equal `engine-v<version>`. Success looks like: a GitHub Release named `engine-v0.1.0` carrying the
+  wheel and sdist, and — once enabled — `pip download cna-azure-network-engine --no-deps -d ./wheel`
+  succeeding. Then `HCW-NetworkEyes_AddOn` replaces its ported engine with the published wheel (its
+  `REFACTOR_APP.md` change set C) through its `core-update` workflow.
+- Core ↔ appliance contract: `Work-Cloud_Network_Azure_Appliance` and `Work-Cloud_Network_AWS_Appliance`
+  read `digests{}` from `.deployment-catalog/latest-build.json` (`name@sha256:…`, same keys as `images{}`)
+  in their `230-image-update` consumers and pin by digest; `images{}` stays for the transition. Their own
+  Docker Hub logins move to the same OIDC form.

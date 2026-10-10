@@ -3,7 +3,7 @@
 This is a *verify-then-close-gaps* record for the numbered GitHub Actions
 workflows under ``.github/workflows/``. Since the deployment layer left the core
 (``TODO.md`` T-504) the tree holds four workflows — ``200-build-images``,
-``300-test-codebase``, ``310-release-version`` and ``370-registry-cleanup``; the
+``300-test-codebase``, ``310-release-version``, ``320-release-engine`` and ``370-registry-cleanup``; the
 deploy and operations workflows are reviewed in the appliance repositories. The audit against Requirement 5 covers
 runner topology (5.1, 5.2), least-privilege ``permissions`` blocks, concurrency
 guards, and per-job timeouts. Third-party action SHA-pinning (5.3) is recorded
@@ -50,6 +50,7 @@ GITHUB_HOSTED_WORKFLOWS: tuple[str, ...] = (
     "200-build-images.yml",
     "300-test-codebase.yml",
     "310-release-version.yml",
+    "320-release-engine.yml",
     "370-registry-cleanup.yml",
 )
 
