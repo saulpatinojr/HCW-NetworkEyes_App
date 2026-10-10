@@ -17,7 +17,7 @@ in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG
 | [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-419 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements + appliance migration | T-501 – T-509 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
-| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-720 |
+| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-721 |
 
 ---
 
@@ -2118,9 +2118,9 @@ first release carrying the split): delete `cna/core/topology_schema.py`, delete
 Azure field shapes and already names `cna/core/topology/azure.py`.
 
 ### T-720 — Azure rule registry follow-ups (change set B)
-`cna/ai_engine/azure_rules` replaced the API's Engine B and Engine A's Azure rules (`CHANGELOG.md`
-`[Unreleased]`; change set B of the `REFACTOR_APP.md` plan held in `HCW-NetworkEyes_App`). Left open, in
-the order the plan takes them:
+The typed Azure rule registry replaced the API's Engine B and Engine A's Azure rules (`CHANGELOG.md`
+`[Unreleased]`; change set B of the `REFACTOR_APP.md` plan held in `HCW-NetworkEyes_App`); change set C
+moved it into `packages/cna-azure-network-engine` (T-721). Left open, in the order the plan takes them:
 - Engine B checks dropped without a typed equivalent — return them as `applies_to="live-only"` rules once
   change set D's collectors feed the model: NVA inventory and the per-NVA checks (fewer than two NICs, NIC
   without NSG, IP forwarding without a known NVA publisher), BGP disabled on a gateway with connections,
@@ -2141,3 +2141,32 @@ the order the plan takes them:
 - `RULES_VERSION` and the rule id:version table are pinned together in `tests/unit/test_registry.py`, and
   the lab edition pins `rules_digest()` over the same table: bump both, never one.
 - Plan change sets C–K are still not folded into this backlog (see T-719).
+
+### T-721 — Engine package follow-ups (change set C)
+`packages/cna-azure-network-engine` is the Azure engine and the monorepo consumes it as a uv workspace
+member (`CHANGELOG.md` `[Unreleased]`). Open:
+- `[REVIEW REQUIRED]` Licence and copyright holder of the package (plan section 22, item 1): its
+  `pyproject.toml` carries no `license` field until the owner decides, and the wheel is not published
+  before that.
+- `[REVIEW REQUIRED]` The PyPI name `cna-azure-network-engine` and trusted publishing (plan section 22,
+  item 2; change set J's `320-release-engine.yml`). Until then the monorepo consumes the workspace member
+  and CI installs it from the tree before `cna`.
+- Model version: the plan declared `TOPOLOGY_MODEL_VERSION = "1.3.0"`; the engine ships `1.4.0` because
+  the lab edition's normalizer fills fields 1.3.0 lacks (firewall and WAF policies, flow logs,
+  `ip_configuration_count`, export provenance). The lab edition's `core-update` PR replaces `lab-1.0.0`
+  with it and deletes `src/network_assessment/{model,rules,classify,ingestion/normalize}` (plan section
+  21); its `/api/health model.version` then reads `1.4.0`, and its `rules_digest()` pin equals this
+  tree's `tests/unit/test_registry.py` table.
+- The static cost estimates (`est_monthly_cost_usd`, `azure_network_prices.py`) stay in the monorepo
+  (`finops_signals.attach_cost_estimates`); the engine's `AZ-COST-*` findings carry none. If the
+  appliance's public surface needs them, add them there, never to the engine.
+- `requires-python` moved to `>=3.14` for the monorepo (plan section 11) and CI tests 3.14 only;
+  `uv.lock` dropped the 3.11–3.13 wheel entries. A developer on 3.13 runs `uv python install 3.14`.
+- `[VERIFY]` The three Dockerfiles and the lockfile CI job were edited for the workspace member
+  (`--no-emit-workspace`, install from the tree) but no image was built in the session that made the
+  change (no Docker daemon); the first `200-build-images` run on `main` is the check.
+- Keep the monorepo's re-export shims (`cna.core.topology.azure` / `.common`,
+  `cna.ai_engine.observed_state_enforcer`, `cna.modules.network.analysis.topology_classifier`) until change
+  set K removes `topology_schema` (T-719); then import the engine directly where it is cheaper.
+- Change set D fills `cna_azure_network_engine/discovery/` behind the `[azure]` extra;
+  `require_azure_extra()` is the guard today.
