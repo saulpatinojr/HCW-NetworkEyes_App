@@ -51,6 +51,8 @@ _FINOPS_FRAMEWORK = [
     ),
 ]
 
+FINOPS_FRAMEWORK: tuple[FrameworkMapping, ...] = tuple(_FINOPS_FRAMEWORK)
+
 
 def _verify(amount: float) -> str:
     """Render a monthly estimate string with the mandatory [VERIFY] flag."""
@@ -138,7 +140,7 @@ def _check_orphaned_pips(sub_id: str, sub, prices) -> list[Finding]:
     return findings
 
 
-def _check_gateway_metrics(sub_id: str, gw_by_name: dict, metrics, prices) -> list[Finding]:
+def _check_idle_gateways(sub_id: str, gw_by_name: dict, metrics, prices) -> list[Finding]:
     findings: list[Finding] = []
     for gm in metrics.gateway_metrics:
         gw = gw_by_name.get(gm.gateway_name)
@@ -184,6 +186,15 @@ def _check_gateway_metrics(sub_id: str, gw_by_name: dict, metrics, prices) -> li
                 )
             )
 
+    return findings
+
+
+def _check_oversized_gateways(sub_id: str, gw_by_name: dict, metrics, prices) -> list[Finding]:
+    findings: list[Finding] = []
+    for gm in metrics.gateway_metrics:
+        gw = gw_by_name.get(gm.gateway_name)
+        sku = gw.sku_name if gw else ""
+
         if (
             gw
             and gm.gateway_type == "Vpn"
@@ -205,8 +216,8 @@ def _check_gateway_metrics(sub_id: str, gw_by_name: dict, metrics, prices) -> li
                             resource_id=gw.id,
                             resource_type="Microsoft.Network/virtualNetworkGateways",
                             title=(
-                                f"VPN gateway '{gm.gateway_name}' SKU appears "
-                                f"oversized for observed traffic"
+                                f"VPN gateway '{gm.gateway_name}' SKU is oversized "
+                                f"for observed traffic"
                             ),
                             fact=(
                                 f"VPN gateway {gm.gateway_name} (SKU: {sku}) peaked "
@@ -332,23 +343,54 @@ def _check_idle_nat_gateways(sub_id: str, sub) -> list[Finding]:
     return findings
 
 
-def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
+def orphaned_public_ips(sub: AzureSubscriptionTopology) -> list[Finding]:
+    """AZ-COST-001: public IPs attached to nothing."""
     from cna.modules.network.analysis import azure_network_prices as prices
 
-    sub_id = sub.subscription_id
-    findings: list[Finding] = []
+    return _check_orphaned_pips(sub.subscription_id, sub, prices)
 
-    findings.extend(_check_orphaned_pips(sub_id, sub, prices))
 
-    if sub.network_metrics:
-        gw_by_name = {gw.name: gw for gw in sub.virtual_network_gateways}
-        findings.extend(_check_gateway_metrics(sub_id, gw_by_name, sub.network_metrics, prices))
-        fw_by_name = {fw.name: fw for fw in sub.firewalls}
-        findings.extend(_check_firewall_metrics(sub_id, fw_by_name, sub.network_metrics))
+def idle_gateways(sub: AzureSubscriptionTopology) -> list[Finding]:
+    """AZ-COST-002: gateways that moved no traffic in the 24-hour metric window."""
+    from cna.modules.network.analysis import azure_network_prices as prices
 
-    findings.extend(_check_idle_nat_gateways(sub_id, sub))
+    if not sub.network_metrics:
+        return []
+    gw_by_name = {gw.name: gw for gw in sub.virtual_network_gateways}
+    return _check_idle_gateways(sub.subscription_id, gw_by_name, sub.network_metrics, prices)
 
-    return findings
+
+def oversized_vpn_gateways(sub: AzureSubscriptionTopology) -> list[Finding]:
+    """AZ-COST-003: VPN gateway SKUs far above their observed peak utilization."""
+    from cna.modules.network.analysis import azure_network_prices as prices
+
+    if not sub.network_metrics:
+        return []
+    gw_by_name = {gw.name: gw for gw in sub.virtual_network_gateways}
+    return _check_oversized_gateways(sub.subscription_id, gw_by_name, sub.network_metrics, prices)
+
+
+def firewalls_without_traffic(sub: AzureSubscriptionTopology) -> list[Finding]:
+    """AZ-COST-005: firewalls billed while their rules recorded no hits."""
+    if not sub.network_metrics:
+        return []
+    fw_by_name = {fw.name: fw for fw in sub.firewalls}
+    return _check_firewall_metrics(sub.subscription_id, fw_by_name, sub.network_metrics)
+
+
+def idle_nat_gateways(sub: AzureSubscriptionTopology) -> list[Finding]:
+    """AZ-COST-004: NAT gateways with no associated subnets."""
+    return _check_idle_nat_gateways(sub.subscription_id, sub)
+
+
+def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
+    return [
+        *orphaned_public_ips(sub),
+        *idle_gateways(sub),
+        *oversized_vpn_gateways(sub),
+        *firewalls_without_traffic(sub),
+        *idle_nat_gateways(sub),
+    ]
 
 
 def generate_finops_findings(topology: AzureTopology) -> list[Finding]:

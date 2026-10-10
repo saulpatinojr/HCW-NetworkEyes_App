@@ -1,9 +1,9 @@
 """BC/DR signals — AZ-BCDR-* resilience findings from discovery checkpoints.
 
 Pure post-processing over an existing AzureTopology (DD-008: data store
-only). Kept separate from cna/ai_engine/analysis_engine.py so the rule
-engine stays focused on security/network rules; both generators are wired
-into the analysis flow where discovery findings are produced.
+only). Each rule is its own function so the Azure rule registry
+(``cna.ai_engine.azure_rules.azure_bcdr``) registers it under its id;
+``generate_bcdr_findings`` composes them for callers that want the set.
 
 Rule IDs:
   AZ-BCDR-001 — Azure Firewall not zone-redundant
@@ -30,6 +30,9 @@ from cna.core.topology.azure import AzureSubscriptionTopology, AzureTopology
 
 _MIN_REDUNDANCY_ZONES = 2
 _SINGLE_GATEWAY = 1
+_GATEWAY_TYPE_VPN = "Vpn"
+_GATEWAY_TYPE_EXPRESSROUTE = "ExpressRoute"
+_SKU_BASIC = "Basic"
 
 R_AZ_BCDR_FW_NOT_ZONE_REDUNDANT = "AZ-BCDR-001"
 R_AZ_BCDR_VPN_ACTIVE_PASSIVE = "AZ-BCDR-002"
@@ -52,6 +55,8 @@ _BCDR_FRAMEWORK = [
         alignment="Redundant network components prevent single points of failure",
     ),
 ]
+
+BCDR_FRAMEWORK: tuple[FrameworkMapping, ...] = tuple(_BCDR_FRAMEWORK)
 
 
 @dataclass
@@ -90,11 +95,10 @@ def _finding(p: _FindingParams) -> Finding:
     )
 
 
-def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
-    findings: list[Finding] = []
+def firewall_not_zone_redundant(sub: AzureSubscriptionTopology) -> list[Finding]:
+    """AZ-BCDR-001: Azure Firewall deployed in fewer than two availability zones."""
     sub_id = sub.subscription_id
-
-    # AZ-BCDR-001: firewall not zone-redundant
+    findings: list[Finding] = []
     for fw in sub.firewalls:
         if len(fw.zones) >= _MIN_REDUNDANCY_ZONES:
             continue
@@ -127,114 +131,185 @@ def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
                 )
             )
         )
+    return findings
 
-    er_gateways = [gw for gw in sub.virtual_network_gateways if gw.gateway_type == "ExpressRoute"]
 
+def vpn_gateway_active_passive(sub: AzureSubscriptionTopology) -> list[Finding]:
+    """AZ-BCDR-002: VPN gateway running active-passive."""
+    sub_id = sub.subscription_id
+    findings: list[Finding] = []
     for gw in sub.virtual_network_gateways:
-        # AZ-BCDR-002: VPN gateway active-passive
-        if gw.gateway_type == "Vpn" and not gw.active_active:
-            findings.append(
-                _finding(
-                    _FindingParams(
-                        rule_id=R_AZ_BCDR_VPN_ACTIVE_PASSIVE,
-                        severity=FindingSeverity.MEDIUM,
-                        sub_id=sub_id,
-                        region=gw.location,
-                        resource_id=gw.id,
-                        resource_type="Microsoft.Network/virtualNetworkGateways",
-                        title=f"VPN gateway '{gw.name}' runs in active-passive mode",
-                        fact=(
-                            f"VPN gateway {gw.name} (SKU: {gw.sku_name}) has active_active=False."
-                        ),
-                        evidence_ref=(
-                            f"discovery:azure_{sub_id}"
-                            f".virtual_network_gateways[id={gw.id}].active_active"
-                        ),
-                        recommendation=(
-                            "Enable active-active mode (requires a second public IP and "
-                            "VpnGw2+ SKU) and BGP for automatic failover. Active-standby "
-                            "failover interrupts tunnels for up to 90 seconds on "
-                            "unplanned events."
-                        ),
-                        description=(
-                            "Active-passive VPN gateways interrupt hybrid connectivity "
-                            "during failover and planned maintenance."
-                        ),
-                    )
-                )
-            )
-
-        # AZ-BCDR-005: gateway not zone-redundant (non-Basic SKUs)
-        if gw.sku_name != "Basic" and len(gw.zones) < _MIN_REDUNDANCY_ZONES:
-            findings.append(
-                _finding(
-                    _FindingParams(
-                        rule_id=R_AZ_BCDR_GW_NOT_ZONE_REDUNDANT,
-                        severity=FindingSeverity.MEDIUM,
-                        sub_id=sub_id,
-                        region=gw.location,
-                        resource_id=gw.id,
-                        resource_type="Microsoft.Network/virtualNetworkGateways",
-                        title=f"Gateway '{gw.name}' is not zone-redundant",
-                        fact=(
-                            f"{gw.gateway_type} gateway {gw.name} (SKU: {gw.sku_name}) "
-                            f"is deployed in {len(gw.zones)} availability zone(s)."
-                        ),
-                        evidence_ref=(
-                            f"discovery:azure_{sub_id}.virtual_network_gateways[id={gw.id}].zones"
-                        ),
-                        recommendation=(
-                            "Migrate to an AZ SKU (e.g. VpnGw2AZ / ErGw2AZ) deployed "
-                            "with zones=[1,2,3] and zone-redundant public IPs."
-                        ),
-                        description=(
-                            "A zonal failure would take down all tunnels/circuit "
-                            "connectivity terminating on this gateway."
-                        ),
-                    )
-                )
-            )
-
-    # AZ-BCDR-003: ER circuits present but only one ER gateway terminates them
-    if sub.express_route_circuits and len(er_gateways) == _SINGLE_GATEWAY:
-        gw = er_gateways[0]
-        circuit_names = ", ".join(c.name for c in sub.express_route_circuits[:5])
+        if gw.gateway_type != _GATEWAY_TYPE_VPN or gw.active_active:
+            continue
         findings.append(
             _finding(
                 _FindingParams(
-                    rule_id=R_AZ_BCDR_SINGLE_ER_GATEWAY,
-                    severity=FindingSeverity.HIGH,
+                    rule_id=R_AZ_BCDR_VPN_ACTIVE_PASSIVE,
+                    severity=FindingSeverity.MEDIUM,
                     sub_id=sub_id,
                     region=gw.location,
                     resource_id=gw.id,
                     resource_type="Microsoft.Network/virtualNetworkGateways",
-                    title=(
-                        f"Single ExpressRoute gateway '{gw.name}' terminates all circuit connectivity"
-                    ),
-                    fact=(
-                        f"Subscription {sub_id} has "
-                        f"{len(sub.express_route_circuits)} ExpressRoute circuit(s) "
-                        f"({circuit_names}) but only one ExpressRoute gateway "
-                        f"({gw.name}, SKU: {gw.sku_name})."
-                    ),
+                    title=f"VPN gateway '{gw.name}' runs in active-passive mode",
+                    fact=(f"VPN gateway {gw.name} (SKU: {gw.sku_name}) has active_active=False."),
                     evidence_ref=(
-                        f"discovery:azure_{sub_id}.virtual_network_gateways[gateway_type=ExpressRoute]"
+                        f"discovery:azure_{sub_id}"
+                        f".virtual_network_gateways[id={gw.id}].active_active"
                     ),
                     recommendation=(
-                        "Deploy a second ExpressRoute gateway in another region (or a "
-                        "zone-redundant SKU plus VPN failover) so a gateway failure "
-                        "does not sever all on-premises connectivity."
+                        "Enable active-active mode (requires a second public IP and "
+                        "VpnGw2+ SKU) and BGP for automatic failover. Active-standby "
+                        "failover interrupts tunnels for up to 90 seconds on "
+                        "unplanned events."
                     ),
                     description=(
-                        "All ExpressRoute private connectivity depends on a single "
-                        "gateway — a regional or gateway-level failure severs hybrid "
-                        "connectivity."
+                        "Active-passive VPN gateways interrupt hybrid connectivity "
+                        "during failover and planned maintenance."
                     ),
                 )
             )
         )
-
     return findings
+
+
+def gateway_not_zone_redundant(sub: AzureSubscriptionTopology) -> list[Finding]:
+    """AZ-BCDR-005: non-Basic virtual network gateway in fewer than two zones."""
+    sub_id = sub.subscription_id
+    findings: list[Finding] = []
+    for gw in sub.virtual_network_gateways:
+        if gw.sku_name == _SKU_BASIC or len(gw.zones) >= _MIN_REDUNDANCY_ZONES:
+            continue
+        findings.append(
+            _finding(
+                _FindingParams(
+                    rule_id=R_AZ_BCDR_GW_NOT_ZONE_REDUNDANT,
+                    severity=FindingSeverity.MEDIUM,
+                    sub_id=sub_id,
+                    region=gw.location,
+                    resource_id=gw.id,
+                    resource_type="Microsoft.Network/virtualNetworkGateways",
+                    title=f"Gateway '{gw.name}' is not zone-redundant",
+                    fact=(
+                        f"{gw.gateway_type} gateway {gw.name} (SKU: {gw.sku_name}) "
+                        f"is deployed in {len(gw.zones)} availability zone(s)."
+                    ),
+                    evidence_ref=(
+                        f"discovery:azure_{sub_id}.virtual_network_gateways[id={gw.id}].zones"
+                    ),
+                    recommendation=(
+                        "Migrate to an AZ SKU (e.g. VpnGw2AZ / ErGw2AZ) deployed "
+                        "with zones=[1,2,3] and zone-redundant public IPs."
+                    ),
+                    description=(
+                        "A zonal failure would take down all tunnels/circuit "
+                        "connectivity terminating on this gateway."
+                    ),
+                )
+            )
+        )
+    return findings
+
+
+def single_expressroute_gateway(sub: AzureSubscriptionTopology) -> list[Finding]:
+    """AZ-BCDR-003: ER circuits present but only one ER gateway terminates them."""
+    sub_id = sub.subscription_id
+    er_gateways = [
+        gw for gw in sub.virtual_network_gateways if gw.gateway_type == _GATEWAY_TYPE_EXPRESSROUTE
+    ]
+    if not sub.express_route_circuits or len(er_gateways) != _SINGLE_GATEWAY:
+        return []
+    gw = er_gateways[0]
+    circuit_names = ", ".join(c.name for c in sub.express_route_circuits[:5])
+    return [
+        _finding(
+            _FindingParams(
+                rule_id=R_AZ_BCDR_SINGLE_ER_GATEWAY,
+                severity=FindingSeverity.HIGH,
+                sub_id=sub_id,
+                region=gw.location,
+                resource_id=gw.id,
+                resource_type="Microsoft.Network/virtualNetworkGateways",
+                title=(
+                    f"Single ExpressRoute gateway '{gw.name}' terminates all circuit connectivity"
+                ),
+                fact=(
+                    f"Subscription {sub_id} has "
+                    f"{len(sub.express_route_circuits)} ExpressRoute circuit(s) "
+                    f"({circuit_names}) but only one ExpressRoute gateway "
+                    f"({gw.name}, SKU: {gw.sku_name})."
+                ),
+                evidence_ref=(
+                    f"discovery:azure_{sub_id}.virtual_network_gateways[gateway_type=ExpressRoute]"
+                ),
+                recommendation=(
+                    "Deploy a second ExpressRoute gateway in another region (or a "
+                    "zone-redundant SKU plus VPN failover) so a gateway failure "
+                    "does not sever all on-premises connectivity."
+                ),
+                description=(
+                    "All ExpressRoute private connectivity depends on a single "
+                    "gateway — a regional or gateway-level failure severs hybrid "
+                    "connectivity."
+                ),
+            )
+        )
+    ]
+
+
+def single_firewall_spof(topology: AzureTopology) -> list[Finding]:
+    """AZ-BCDR-004: one firewall protecting a multi-VNet footprint, tenant-wide."""
+    all_firewalls = []
+    vnet_count = 0
+    for sub in topology.subscriptions:
+        if sub.discovery_blocked:
+            continue
+        all_firewalls.extend((sub.subscription_id, fw) for fw in sub.firewalls)
+        vnet_count += len(sub.vnets)
+    if len(all_firewalls) != 1 or vnet_count <= 1:
+        return []
+    sub_id, fw = all_firewalls[0]
+    return [
+        _finding(
+            _FindingParams(
+                rule_id=R_AZ_BCDR_SINGLE_FIREWALL_SPOF,
+                severity=FindingSeverity.HIGH,
+                sub_id=sub_id,
+                region=fw.location,
+                resource_id=fw.id,
+                resource_type="Microsoft.Network/azureFirewalls",
+                title=(
+                    f"Azure Firewall '{fw.name}' is a single point of failure for {vnet_count} VNets"
+                ),
+                fact=(
+                    f"One Azure Firewall ({fw.name}, {fw.sku_tier} tier, "
+                    f"{len(fw.zones)} zone(s)) was discovered across the tenant "
+                    f"while {vnet_count} VNets were discovered."
+                ),
+                evidence_ref=f"discovery:azure_{sub_id}.firewalls[id={fw.id}]",
+                recommendation=(
+                    "Deploy the firewall zone-redundant (zones=[1,2,3]) and "
+                    "define a documented bypass/failover runbook. For "
+                    "multi-region footprints, evaluate a secured-hub-per-region "
+                    "design (Azure Firewall in each regional hub or vWAN secured "
+                    "hubs)."
+                ),
+                description=(
+                    "If spoke traffic is force-tunneled through one firewall, a "
+                    "firewall outage halts east-west and internet-bound traffic "
+                    "for the entire footprint."
+                ),
+            )
+        )
+    ]
+
+
+def _analyze_subscription(sub: AzureSubscriptionTopology) -> list[Finding]:
+    return [
+        *firewall_not_zone_redundant(sub),
+        *vpn_gateway_active_passive(sub),
+        *gateway_not_zone_redundant(sub),
+        *single_expressroute_gateway(sub),
+    ]
 
 
 def generate_bcdr_findings(topology: AzureTopology) -> list[Finding]:
@@ -244,51 +319,9 @@ def generate_bcdr_findings(topology: AzureTopology) -> list[Finding]:
     single-firewall SPOF check (AZ-BCDR-004) across subscriptions.
     """
     findings: list[Finding] = []
-    all_firewalls = []
-    vnet_count = 0
     for sub in topology.subscriptions:
         if sub.discovery_blocked:
             continue
         findings.extend(_analyze_subscription(sub))
-        all_firewalls.extend((sub.subscription_id, fw) for fw in sub.firewalls)
-        vnet_count += len(sub.vnets)
-
-    # AZ-BCDR-004: a single firewall protecting a multi-VNet footprint
-    if len(all_firewalls) == 1 and vnet_count > 1:
-        sub_id, fw = all_firewalls[0]
-        findings.append(
-            _finding(
-                _FindingParams(
-                    rule_id=R_AZ_BCDR_SINGLE_FIREWALL_SPOF,
-                    severity=FindingSeverity.HIGH,
-                    sub_id=sub_id,
-                    region=fw.location,
-                    resource_id=fw.id,
-                    resource_type="Microsoft.Network/azureFirewalls",
-                    title=(
-                        f"Azure Firewall '{fw.name}' is a single point of failure "
-                        f"for {vnet_count} VNets"
-                    ),
-                    fact=(
-                        f"One Azure Firewall ({fw.name}, {fw.sku_tier} tier, "
-                        f"{len(fw.zones)} zone(s)) was discovered across the tenant "
-                        f"while {vnet_count} VNets were discovered."
-                    ),
-                    evidence_ref=f"discovery:azure_{sub_id}.firewalls[id={fw.id}]",
-                    recommendation=(
-                        "Deploy the firewall zone-redundant (zones=[1,2,3]) and "
-                        "define a documented bypass/failover runbook. For "
-                        "multi-region footprints, evaluate a secured-hub-per-region "
-                        "design (Azure Firewall in each regional hub or vWAN secured "
-                        "hubs)."
-                    ),
-                    description=(
-                        "If spoke traffic is force-tunneled through one firewall, a "
-                        "firewall outage halts east-west and internet-bound traffic "
-                        "for the entire footprint."
-                    ),
-                )
-            )
-        )
-
+    findings.extend(single_firewall_spof(topology))
     return findings

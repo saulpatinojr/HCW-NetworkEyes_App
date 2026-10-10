@@ -10,8 +10,8 @@ and the stat-master aggregations:
   management  — control-plane and observability concerns (flow logs,
                 diagnostics, Bastion, Network Watcher, log retention)
 
-Classification is rule_id-first (stable identifiers from
-cna/ai_engine/analysis_engine.py and the AZ-COST-*/AZ-BCDR-* generators),
+Classification is rule_id-first (stable identifiers from the Azure rule
+registry in cna/ai_engine/azure_rules and the AWS rules in analysis_engine.py),
 falling back to category, then resource_type. Returns "" when the
 direction cannot be determined — callers must treat "" as "unclassified",
 never guess.
@@ -24,8 +24,8 @@ NORTH_SOUTH = "north_south"
 MANAGEMENT = "management"
 
 # ── Rule-ID mapping tables ─────────────────────────────────────────────────
-# Rule IDs from cna/ai_engine/analysis_engine.py plus the Phase B
-# AZ-COST-* (finops_signals.py) and AZ-BCDR-* (bcdr_signals.py) generators.
+# Rule IDs from the Azure rule registry (cna/ai_engine/azure_rules: AZ-NET-*,
+# AZ-BCDR-*, AZ-COST-*) and the AWS rules of cna/ai_engine/analysis_engine.py.
 
 _EAST_WEST_RULES: frozenset[str] = frozenset(
     {
@@ -38,6 +38,9 @@ _EAST_WEST_RULES: frozenset[str] = frozenset(
         "AZ-NET-005",  # peering allows gateway transit without gateway
         "AZ-NET-011",  # VNet IP exhaustion (intra-VNet capacity)
         "AZ-NET-012",  # spoke UDR missing — hub firewall bypass
+        "AZ-NET-021",  # NSG wildcard allow-all rule
+        "AZ-NET-023",  # BGP route propagation disabled on a route table
+        "AZ-NET-031",  # private endpoint connection pending
     }
 )
 
@@ -63,6 +66,15 @@ _NORTH_SOUTH_RULES: frozenset[str] = frozenset(
         "AZ-NET-017",  # DDoS attack detected
         "AZ-NET-018",  # Front Door WAF in Detection mode
         "AZ-NET-019",  # App Gateway high latency / failures
+        "AZ-NET-020",  # NSG allows RDP/SSH from the internet
+        "AZ-NET-022",  # route table default route straight to the internet
+        "AZ-NET-025",  # App Gateway WAF in Detection mode
+        "AZ-NET-026",  # load balancer Basic SKU
+        "AZ-NET-027",  # public IP Basic SKU
+        "AZ-NET-028",  # VPN gateway Basic SKU
+        "AZ-NET-029",  # VPN gateway Generation 1
+        "AZ-NET-030",  # gateway connection not connected
+        "AZ-NET-032",  # no Azure Firewall with VNets present
         # FinOps — perimeter resources (public IPs, gateways, NAT, firewall)
         "AZ-COST-001",
         "AZ-COST-002",
@@ -75,6 +87,8 @@ _NORTH_SOUTH_RULES: frozenset[str] = frozenset(
         "AZ-BCDR-003",
         "AZ-BCDR-004",
         "AZ-BCDR-005",
+        "AZ-BCDR-006",
+        "AZ-BCDR-007",
     }
 )
 
@@ -86,12 +100,14 @@ _MANAGEMENT_RULES: frozenset[str] = frozenset(
         "AZ-NET-013",  # firewall without diagnostics
         "AZ-NET-014",  # Traffic Analytics missing
         "AZ-NET-015",  # Bastion without session audit logging
+        "AZ-NET-024",  # VNet custom DNS servers
+        "AZ-NET-033",  # no Azure Bastion with VNets present
     }
 )
 
 # ── Category fallback ──────────────────────────────────────────────────────
-# Categories emitted by apps/cna-api/main.py::_topology_to_findings, which
-# produces dict findings without rule IDs.
+# Categories carried by rule metadata (RuleMeta.category) and by findings that
+# arrive without a rule id; the rule-id tables above take precedence.
 
 _EAST_WEST_CATEGORIES: frozenset[str] = frozenset(
     {

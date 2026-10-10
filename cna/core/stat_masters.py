@@ -8,7 +8,7 @@ subscription_id, resource_type, category, rule_id) + 3 measures
 
 `build_stat_masters` is a pure function: it accepts both
 cna.core.findings_schema.Finding models and plain dict findings (the shape
-produced by apps/cna-api/main.py::_topology_to_findings and by Prisma
+written by apps/cna-api/finding_records.py::finding_to_record and by Prisma
 Finding rows), and an optional AzureTopology for classification metadata.
 Unknown dimension values fall back to the same labels the frontend
 derive-stat-masters.ts uses ("Unmapped", "Unknown", "default", "Other",

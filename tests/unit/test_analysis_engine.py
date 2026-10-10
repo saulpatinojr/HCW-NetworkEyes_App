@@ -499,9 +499,9 @@ class TestReportCounts:
 
 
 class TestAzurePeeringGatewayTransit:
-    """`_check_azure_peering_gateway_transit` (TODO.md T-410).
+    """AZ-NET-005 (TODO.md T-410), now evaluated through the Azure rule registry.
 
-    This read `gw.vnet_id`, which `AzureVirtualNetworkGateway` does not have —
+    The rule read `gw.vnet_id`, which `AzureVirtualNetworkGateway` does not have —
     the model carries `subnet_id`. Any subscription that actually had a gateway
     raised `AttributeError`, so the rule only ever "worked" when the gateway list
     was empty and the short-circuit skipped it.
@@ -509,6 +509,11 @@ class TestAzurePeeringGatewayTransit:
     An ARM subnet id nests under its VNet id (`<vnet_id>/subnets/<name>`), which
     is the real link between a gateway and its VNet.
     """
+
+    @staticmethod
+    def _transit_findings(engine, sub):
+        topo = AzureTopology(engagement_id="test", tenant_id="tenant-001", subscriptions=[sub])
+        return [f for f in engine.run(azure_topology=topo).findings if f.rule_id == "AZ-NET-005"]
 
     def _vnet(self, vnet_id, allow_gateway_transit=True):
         return VNet(
@@ -550,7 +555,7 @@ class TestAzurePeeringGatewayTransit:
         sub.vnets = [self._vnet(vnet_id)]
         sub.virtual_network_gateways = [self._gateway(f"{vnet_id}/subnets/GatewaySubnet")]
 
-        engine._check_azure_peering_gateway_transit(sub, "sub-001")  # must not raise
+        self._transit_findings(engine, sub)  # must not raise
 
     def test_a_gateway_in_this_vnet_suppresses_the_finding(self, engine):
         vnet_id = "/subs/sub-001/vnet-prod"
@@ -558,9 +563,9 @@ class TestAzurePeeringGatewayTransit:
         sub.vnets = [self._vnet(vnet_id)]
         sub.virtual_network_gateways = [self._gateway(f"{vnet_id}/subnets/GatewaySubnet")]
 
-        before = len(engine._findings)
-        engine._check_azure_peering_gateway_transit(sub, "sub-001")
-        assert len(engine._findings) == before, "a local gateway should suppress the finding"
+        assert self._transit_findings(engine, sub) == [], (
+            "a local gateway should suppress the finding"
+        )
 
     def test_a_gateway_in_a_different_vnet_does_not_count(self, engine):
         """Prefix matching must not treat another VNet's gateway as local."""
@@ -571,6 +576,6 @@ class TestAzurePeeringGatewayTransit:
             self._gateway("/subs/sub-001/vnet-other/subnets/GatewaySubnet")
         ]
 
-        before = len(engine._findings)
-        engine._check_azure_peering_gateway_transit(sub, "sub-001")
-        assert len(engine._findings) > before, "no local gateway — the finding should be emitted"
+        assert len(self._transit_findings(engine, sub)) == 1, (
+            "no local gateway — the finding should be emitted"
+        )
