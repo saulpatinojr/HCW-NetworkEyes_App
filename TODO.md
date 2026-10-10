@@ -17,7 +17,7 @@ in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG
 | [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-419 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements + appliance migration | T-501 – T-509 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
-| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-721 |
+| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-722 |
 
 ---
 
@@ -2170,3 +2170,21 @@ member (`CHANGELOG.md` `[Unreleased]`). Open:
   set K removes `topology_schema` (T-719); then import the engine directly where it is cheaper.
 - Change set D fills `cna_azure_network_engine/discovery/` behind the `[azure]` extra;
   `require_azure_extra()` is the guard today.
+
+### T-722 — Least-privilege roles: verify the actions, assign them in both appliances (change set F)
+`docs/roles/cna-network-bgp-reader.json`, `cna/modules/network/module.yaml`, `.env.example` and the help
+modal now carry the roles table of `REFACTOR_APP.md` section 13 (`CHANGELOG.md` `[Unreleased]`). Open:
+- `[VERIFY actions]` Every action string in the custom role and in `module.yaml` is to be checked against
+  the current `Microsoft.Network` provider operations before the role is created:
+  `az provider operation show --namespace Microsoft.Network -o json | ConvertFrom-Json` (PowerShell) and
+  look for each of the six names; then `az role definition create --role-definition
+  '@docs/roles/cna-network-bgp-reader.json'` from a checkout of `main` that carries the file.
+- `[REVIEW REQUIRED]` The role set itself (Reader + the optional reader roles + the custom role) is an
+  owner decision on what the appliance identity may read; Cost Management Reader and Log Analytics
+  Reader are only needed for the live cost and Traffic Analytics rules.
+- Core ↔ appliance contract: `Work-Cloud_Network_Azure_Appliance` gains `azurerm_role_definition` from
+  the JSON (`assignable_scopes = var.assessment_scope_ids`) and `azurerm_role_assignment` for Reader on
+  every assessed scope plus the optional roles behind `var.enable_live_rules`; `Work-Cloud_Network_AWS_Appliance`
+  is unaffected (its read-only role is the existing STS AssumeRole path). Record the acceptance run
+  with exactly these roles (zero `HTTP 403` warnings in the progress log) under `REVIEW.md` → R-008.
+- The modal still describes a service principal; change set G turns it into managed-identity guidance.

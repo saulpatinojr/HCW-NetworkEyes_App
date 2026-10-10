@@ -1,0 +1,17 @@
+{
+  "Name": "CNA Network BGP Reader",
+  "IsCustom": true,
+  "Description": "Read-only BGP state for Cloud Network Assessment: POST actions that return data and change nothing. [VERIFY actions] Check every action against the current Microsoft.Network provider operations (az provider operation show --namespace Microsoft.Network) before az role definition create. AssignableScopes is rewritten by the appliance Terraform to the assessed scopes; the sample subscription id here is fictional.",
+  "Actions": [
+    "Microsoft.Network/virtualNetworkGateways/getBgpPeerStatus/action",
+    "Microsoft.Network/virtualNetworkGateways/getLearnedRoutes/action",
+    "Microsoft.Network/virtualNetworkGateways/getAdvertisedRoutes/action",
+    "Microsoft.Network/virtualHubs/bgpConnections/learnedRoutes/action",
+    "Microsoft.Network/virtualHubs/bgpConnections/advertisedRoutes/action",
+    "Microsoft.Network/expressRouteCircuits/peerings/routeTables/read"
+  ],
+  "NotActions": [],
+  "DataActions": [],
+  "NotDataActions": [],
+  "AssignableScopes": ["/subscriptions/00000000-0000-0000-0000-000000000001"]
+}

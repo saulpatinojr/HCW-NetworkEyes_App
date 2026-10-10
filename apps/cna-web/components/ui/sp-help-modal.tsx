@@ -89,8 +89,8 @@ export function SpHelpModal() {
                   CNA needs access to your Azure environment to discover network
                   topology, NSG rules, VNets, and firewall configurations. A
                   Service Principal acts like a dedicated &quot;robot user&quot; — it only
-                  gets the permissions you explicitly grant (minimum:{" "}
-                  <strong>Network Contributor</strong> on each subscription).
+                  gets the permissions you explicitly grant (<strong>Reader</strong> on
+                  each subscription, plus the optional reader roles in the table below).
                   No personal account credentials are ever stored.
                 </p>
               </div>
@@ -173,7 +173,7 @@ export function SpHelpModal() {
               </Step>
 
               {/* Step 4 */}
-              <Step number={4} title="Grant Network Contributor access to your subscriptions">
+              <Step number={4} title="Assign Reader (and the optional reader roles) on your subscriptions">
                 <p className="mb-2 text-gray-600 dark:text-navy-300">
                   Repeat for each subscription you want CNA to discover:
                 </p>
@@ -194,7 +194,8 @@ export function SpHelpModal() {
                   </li>
                   <li>
                     <strong>Role:</strong> search for and select{" "}
-                    <Code>Network Contributor</Code>
+                    <Code>Reader</Code> (then, if you want those checks, the optional roles
+                    in the table below)
                   </li>
                   <li>
                     <strong>Members:</strong> click &quot;+ Select members&quot; and
@@ -206,39 +207,49 @@ export function SpHelpModal() {
                   </li>
                 </ol>
                 <p className="mt-2 text-xs text-gray-500 dark:text-navy-400">
-                  Tip: if you have hundreds of subscriptions, assign Network Contributor at
-                  the Management Group level and it propagates to all child
-                  subscriptions automatically.
+                  Tip: if you have hundreds of subscriptions, assign Reader at the
+                  Management Group level and it propagates to all child subscriptions
+                  automatically.
                 </p>
               </Step>
 
-              {/* Minimum permissions callout */}
+              {/* Roles table */}
               <div className="rounded-lg border border-amber-100 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-xs">
                 <p className="mb-1.5 font-semibold text-amber-800 dark:text-amber-300">
-                  Why Network Contributor and not Reader?
+                  Why Reader, and not a write role?
                 </p>
                 <p className="text-amber-700 dark:text-amber-300 mb-2">
-                  Some Azure network APIs (e.g. Virtual Network Gateways) require
-                  Network Contributor to enumerate resources across resource groups.
-                  CNA only reads — it never creates, modifies, or deletes anything.
+                  The scan is read-only: every call it makes is a read, including listing
+                  virtual network gateways. The only non-read calls are the BGP state actions
+                  (peer status, learned and advertised routes), which the custom role
+                  <Code>CNA Network BGP Reader</Code> grants and nothing else. A write role
+                  gives CNA permissions it never uses.
                 </p>
-                <p className="font-semibold text-gray-700 dark:text-navy-200 mb-1">Key permissions granted by Network Contributor:</p>
-                <ul className="space-y-0.5 text-gray-500 dark:text-navy-400">
-                  {[
-                    "Microsoft.Network/virtualNetworks/read",
-                    "Microsoft.Network/networkSecurityGroups/read",
-                    "Microsoft.Network/azureFirewalls/read",
-                    "Microsoft.Network/virtualNetworkGateways/read",
-                    "Microsoft.Network/virtualNetworkGateways/list",
-                    "Microsoft.Network/loadBalancers/read",
-                    "Microsoft.Network/privateDnsZones/read",
-                    "Microsoft.Resources/subscriptions/resourceGroups/read",
-                  ].map((p) => (
-                    <li key={p}>
-                      <Code>{p}</Code>
-                    </li>
-                  ))}
-                </ul>
+                <p className="font-semibold text-gray-700 dark:text-navy-200 mb-1">Roles, and what each unlocks:</p>
+                <table className="w-full text-left text-gray-600 dark:text-navy-300">
+                  <thead>
+                    <tr className="text-gray-500 dark:text-navy-400">
+                      <th className="pr-3 font-medium">Role</th>
+                      <th className="pr-3 font-medium">Kind</th>
+                      <th className="font-medium">Required for</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ROLES.map((r) => (
+                      <tr key={r.role} className="align-top">
+                        <td className="pr-3 py-0.5"><Code>{r.role}</Code></td>
+                        <td className="pr-3 py-0.5">{r.kind}</td>
+                        <td className="py-0.5">{r.purpose}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="mt-2 text-gray-500 dark:text-navy-400">
+                  The custom role&apos;s six actions are listed in{" "}
+                  <Code>docs/roles/cna-network-bgp-reader.json</Code> and are marked for
+                  verification against the current Microsoft.Network operations before the
+                  role is created.
+                </p>
               </div>
 
               {/* Microsoft docs link */}
@@ -265,6 +276,18 @@ export function SpHelpModal() {
       </>
     );
   }
+
+// ── Roles (REFACTOR_APP.md section 13, the single source for this table) ─────
+// [REVIEW REQUIRED] role decisions; the custom role's actions are [VERIFY actions].
+
+const ROLES = [
+  { role: "Reader", kind: "built-in", purpose: "Every export rule and Resource Graph discovery" },
+  { role: "Security Reader", kind: "built-in", purpose: "Defender assessments" },
+  { role: "Cost Management Reader", kind: "built-in", purpose: "Cost rules (AZ-COST-002/003/005)" },
+  { role: "Log Analytics Reader", kind: "built-in", purpose: "Traffic Analytics (AZ-NET-014 live form)" },
+  { role: "CNA Network BGP Reader", kind: "custom", purpose: "BGP peer status, learned and advertised routes" },
+  { role: "Management Group Reader", kind: "built-in", purpose: "Management-group tree (optional)" },
+] as const;
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
 
