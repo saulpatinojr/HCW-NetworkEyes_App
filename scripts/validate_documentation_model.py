@@ -140,7 +140,7 @@ def tracked_files() -> list[Path]:
             text=True,
             check=True,
         )
-    except (OSError, subprocess.CalledProcessError):
+    except OSError, subprocess.CalledProcessError:
         print(
             "WARNING: git unavailable — falling back to a filesystem walk. "
             "Untracked files may be reported.",
