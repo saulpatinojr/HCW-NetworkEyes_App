@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=83.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cna-azure-network-engine"
+version = "0.1.0"
+description = "Azure network assessment engine: topology model, typed rule registry, classifier, Resource Graph normalizer and report renderers. Base install needs pydantic only."
+requires-python = ">=3.14"
+# The base distribution carries no cloud SDK: the downstream lab edition installs it to
+# prove it cannot reach Azure (tests/security/test_edition_boundary.py there). Discovery
+# lives behind the [azure] extra (change set D of REFACTOR_APP.md).
+dependencies = [
+    "pydantic>=2.13,<3",
+]
+# [REVIEW REQUIRED] licence and copyright holder: REFACTOR_APP.md section 22, item 1.
+
+[project.optional-dependencies]
+# Upper bounds as the monorepo's `enrichment` extra already justifies (TODO.md T-413, T-414).
+azure = [
+    "azure-identity>=1.25.3",
+    "azure-mgmt-resourcegraph>=8.0.0",
+    "azure-mgmt-network>=31.0.1",
+    "azure-mgmt-monitor<7",
+    "azure-monitor-query<3",
+    "azure-mgmt-costmanagement<5",
+    "azure-mgmt-loganalytics<15",
+    "azure-mgmt-security<8",
+]
+
+[tool.setuptools.packages.find]
+include = ["cna_azure_network_engine*"]
+
+[tool.setuptools.package-data]
+cna_azure_network_engine = ["py.typed"]
+
+[tool.coverage.run]
+source = ["cna_azure_network_engine"]
+
+[tool.coverage.report]
+fail_under = 85

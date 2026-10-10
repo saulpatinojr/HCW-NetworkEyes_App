@@ -2,9 +2,10 @@
 
 The Prisma ``Finding`` table has no ``ruleId`` column, so the rule id is embedded as a title
 prefix (``"AZ-NET-020: …"``); the stat-master, encyclopedia and copilot loaders all recover it
-with the shared ``_RULE_ID_RE`` extraction. Both discovery runners (Azure through the rule
+with the shared ``_RULE_ID_RE`` extraction. Both discovery runners (Azure through the engine's rule
 registry, AWS through ``AnalysisEngine``) write through this one mapper, so every persisted
-finding carries its rule id the same way.
+finding carries its rule id the same way; an engine finding without the monorepo's
+web-tier fields maps too.
 """
 
 from __future__ import annotations
@@ -20,8 +21,11 @@ def finding_to_record(finding: Finding) -> dict:
     title = finding.title
     if rule_id and rule_id not in title:
         title = f"{rule_id}: {title}"
-    recommendation = finding.recommendation or (
-        finding.recommendations[0].text if finding.recommendations else ""
+    recommendations = getattr(finding, "recommendations", None) or []
+    recommendation = (
+        getattr(finding, "recommendation", None)
+        or finding.remediation
+        or (recommendations[0].text if recommendations else "")
     )
     return {
         "rule_id": rule_id,
@@ -33,5 +37,5 @@ def finding_to_record(finding: Finding) -> dict:
         "traffic_direction": finding.traffic_direction,
         "region": finding.region or "",
         "resource_type": finding.resource_type or "",
-        "est_cost_impact": finding.est_monthly_cost_usd,
+        "est_cost_impact": getattr(finding, "est_monthly_cost_usd", None),
     }

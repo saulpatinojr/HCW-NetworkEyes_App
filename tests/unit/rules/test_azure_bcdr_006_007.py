@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from cna.ai_engine.azure_rules import RULES, evaluate
 from cna.core.findings_schema import FindingSeverity
 from cna.core.topology.azure import (
     ApplicationGateway,
@@ -10,6 +9,7 @@ from cna.core.topology.azure import (
     AzureSubscriptionTopology,
     AzureTopology,
 )
+from cna_azure_network_engine.rules import RULES, evaluate
 
 SUB = "00000000-0000-0000-0000-000000000001"
 RG = "hcw-sample-rg"

@@ -1,36 +1,37 @@
 """Azure network rules ``AZ-NET-001..033``.
 
-``AZ-NET-001..019`` moved here from ``AnalysisEngine`` (Engine A) with their facts,
-evidence references and framework mappings intact; ``AZ-NET-020..033`` are the checks that
-only the API's Engine B carried, now typed, versioned and hedge-checked (plan table 7.B).
-Each rule is a pure function over one subscription's checkpoint and yields
-``Observation`` values; the registry turns them into findings.
+``AZ-NET-001..019`` are Engine A's rules (facts, evidence references and framework mappings
+intact); ``AZ-NET-020..033`` are the checks the API's Engine B alone carried, typed under the
+ids and severities of plan table 7.B. Each rule is a pure function over one subscription's
+checkpoint and yields ``Observation`` values (or ``NotEvaluable`` when the topology cannot
+answer it); the registry turns them into findings.
 
-Version bumps carried by this move, each a text change on an existing id:
+Rule versions follow the downstream lab edition's table, which is the contract both
+editions pin: ``AZ-NET-002/003/006/007/011/012/014`` are at version 2 (merged platform-subnet
+skip list; threat intelligence read through the linked firewall policy; flow logs and
+Traffic Analytics read from flow-log rows when the topology is an export; subnet IP
+exhaustion derived from ``ipConfigurations``; hedge-free facts and titles).
 
-* ``AZ-NET-002`` v2 — the skip list merges Engine B's platform subnets (``PLATFORM_SUBNETS``).
-* ``AZ-NET-009`` v2 and ``AZ-NET-012`` v2 — their facts (and 012's first title) carried the
-  hedge word "may", which ``ObservedStateEnforcer`` rejects; they were rewritten as
-  observations. In Engine A the enforcer raised the moment either rule fired.
-
-Every ``learn_url`` below is a Microsoft Learn path recorded without a retrieval check and
-stays ``[VERIFY]`` until the owner confirms it; every framework control reference is a
-claim shown to customers and is ``[REVIEW REQUIRED]`` (plan section 22, item 5).
+Every ``learn_url`` is a Microsoft Learn path recorded without a retrieval check and stays
+``[VERIFY]`` until the owner confirms it; every framework control reference is a claim shown
+to customers and is ``[REVIEW REQUIRED]`` (plan section 22, item 5).
 """
 
 from __future__ import annotations
 
+import ipaddress
 from collections.abc import Iterator
 
-from cna.ai_engine.azure_rules.registry import Observation, rule
-from cna.core.findings_schema import FindingSeverity, FrameworkMapping
-from cna.core.topology.azure import (
+from cna_azure_network_engine.findings.schema import FindingSeverity
+from cna_azure_network_engine.model.azure import (
     AzureRouteTable,
     AzureSubscriptionTopology,
     AzureTopology,
     NSGSecurityRule,
     VNet,
 )
+from cna_azure_network_engine.rules import frameworks as fw
+from cna_azure_network_engine.rules.registry import NotEvaluable, Observation, rule
 
 # ---------------------------------------------------------------------------
 # Rule ids — stable across runs, never reused
@@ -90,6 +91,9 @@ _SKU_BASIC = "basic"
 _GATEWAY_TYPE_VPN = "Vpn"
 _CONNECTED_STATES: frozenset[str] = frozenset({"connected", "unknown"})
 _PENDING = "pending"
+_IP_EXHAUSTION_PCT: float = 80.0
+_RESERVED_ADDRESSES_PER_SUBNET = 5  # Azure reserves the first four and the last address
+_NO_FLOW_LOG_ROWS = "the export has no networkwatchers/flowlogs rows; flow log state is unknown"
 
 # Service-tagged or wildcard sources that mean "anywhere on the internet" in an NSG rule.
 _INTERNET_SOURCES: frozenset[str] = frozenset({"*", "internet", "any", "0.0.0.0/0"})
@@ -143,81 +147,6 @@ _LEARN_VPN_GW_TROUBLESHOOT = (
 _LEARN_PRIVATE_ENDPOINT = _LEARN + "private-link/private-endpoint-overview"
 _LEARN_FIREWALL = _LEARN + "firewall/overview"
 _LEARN_BASTION = _LEARN + "bastion/bastion-overview"
-
-# ---------------------------------------------------------------------------
-# Framework mappings — [REVIEW REQUIRED]: compliance claims shown to customers
-# ---------------------------------------------------------------------------
-
-
-def _waf(pillar: str, control: str) -> FrameworkMapping:
-    return FrameworkMapping(
-        framework="Azure Well-Architected Framework", pillar=pillar, control=control
-    )
-
-
-def _cisa(control_id: str, control_name: str, alignment: str, pillar: str = "Networks"):
-    return FrameworkMapping(
-        framework="CISA ZTMM v2",
-        version="v2",
-        pillar=pillar,
-        control_id=control_id,
-        control_name=control_name,
-        alignment=alignment,
-    )
-
-
-def _iso(control: str) -> FrameworkMapping:
-    return FrameworkMapping(framework="ISO 27001:2022", pillar="Network Security", control=control)
-
-
-def _hipaa(control: str) -> FrameworkMapping:
-    return FrameworkMapping(
-        framework="HIPAA §164.312", pillar="Technical Safeguards", control=control
-    )
-
-
-def _fedramp(pillar: str, control: str) -> FrameworkMapping:
-    return FrameworkMapping(framework="FedRAMP Moderate", pillar=pillar, control=control)
-
-
-def _pci(control: str) -> FrameworkMapping:
-    return FrameworkMapping(
-        framework="PCI-DSS 4.0", pillar="Network Security Controls", control=control
-    )
-
-
-def _nist(pillar: str, control: str) -> FrameworkMapping:
-    return FrameworkMapping(framework="NIST CSF", pillar=pillar, control=control)
-
-
-def _cis(control: str) -> FrameworkMapping:
-    return FrameworkMapping(
-        framework="CIS Microsoft Azure Foundations Benchmark", pillar="Networking", control=control
-    )
-
-
-def _asb(control: str) -> FrameworkMapping:
-    return FrameworkMapping(
-        framework="Azure Security Benchmark", pillar="Network Security", control=control
-    )
-
-
-_WAF_NS1 = _waf("Security", "NS-1 — Establish network segmentation boundaries")
-_WAF_NS2 = _waf("Security", "NS-2 — Monitor network security")
-_WAF_NS4 = _waf("Security", "NS-4 — Protect applications from external network attacks")
-_WAF_RE3 = _waf("Reliability", "RE-3 — Use redundant connectivity")
-_WAF_PE3 = _waf("Performance Efficiency", "PE-3 — Monitor and optimize network performance")
-_FEDRAMP_SC7 = _fedramp("System and Communications Protection", "SC-7 — Boundary Protection")
-_FEDRAMP_SC5 = _fedramp(
-    "System and Communications Protection", "SC-5 — Denial of Service Protection"
-)
-_PCI_1_3 = _pci("Req 1.3 — Restrict inbound and outbound traffic")
-_PCI_1_2 = _pci("Req 1.2 — Network security controls configured and maintained")
-_ISO_8_20 = _iso("A.8.20 — Networks security")
-_ISO_8_22 = _iso("A.8.22 — Segregation of networks")
-_CISA_SEGMENTATION = "Network Segmentation"
-_CISA_TRAFFIC = "Traffic Management"
-_CISA_RESILIENCE = "Network Resilience"
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -301,6 +230,23 @@ def _subscription_resource_id(sub: AzureSubscriptionTopology) -> str:
     return f"/subscriptions/{sub.subscription_id}"
 
 
+def _export_without_flow_logs(topology: AzureTopology) -> bool:
+    """An export that carries no flow-log rows cannot say whether flow logs exist."""
+    return topology.source == "export" and not any(s.flow_logs for s in topology.subscriptions)
+
+
+def _usable_addresses(prefixes: list[str]) -> int:
+    total = 0
+    for prefix in prefixes:
+        try:
+            network = ipaddress.ip_network(prefix, strict=False)
+        except ValueError:
+            continue
+        if network.version == 4:
+            total += network.num_addresses
+    return total - _RESERVED_ADDRESSES_PER_SUBNET
+
+
 # ---------------------------------------------------------------------------
 # AZ-NET-001..007 — configuration rules from Engine A
 # ---------------------------------------------------------------------------
@@ -314,14 +260,14 @@ def _subscription_resource_id(sub: AzureSubscriptionTopology) -> str:
     version=1,
     learn_url=_LEARN_DDOS,
     frameworks=(
-        _WAF_NS1,
-        _ISO_8_20,
-        _hipaa(
+        fw.WAF_NS1,
+        fw.ISO_8_20,
+        fw.hipaa(
             "(e)(2)(ii) — Encryption and decryption (addressable); "
             "integrity controls for ePHI in transit"
         ),
-        _FEDRAMP_SC5,
-        _cisa("3.4", _CISA_RESILIENCE, "DDoS protection is a network resilience control"),
+        fw.FEDRAMP_SC5,
+        fw.cisa("3.4", fw.CISA_RESILIENCE, "DDoS protection is a network resilience control"),
     ),
     applies_to="export",
     evidence="vnets[].ddos_protection_enabled",
@@ -350,16 +296,16 @@ def vnet_without_ddos_protection(
     version=2,
     learn_url=_LEARN_NSG,
     frameworks=(
-        _WAF_NS1,
-        _cis("6.2"),
-        _PCI_1_2,
-        _ISO_8_22,
-        _hipaa(
+        fw.WAF_NS1,
+        fw.cis("6.2"),
+        fw.PCI_1_2,
+        fw.ISO_8_22,
+        fw.hipaa(
             "(a)(1) — Access control: unique user identification "
             "and network access controls for ePHI systems"
         ),
-        _FEDRAMP_SC7,
-        _cisa("3.1", _CISA_SEGMENTATION, "NSGs enforce micro-segmentation between subnets"),
+        fw.FEDRAMP_SC7,
+        fw.cisa("3.1", fw.CISA_SEGMENTATION, "NSGs enforce micro-segmentation between subnets"),
     ),
     applies_to="export",
     evidence="vnets[].subnets[].nsg_id",
@@ -387,40 +333,43 @@ def subnet_without_nsg(
     title="Azure Firewall Threat Intelligence mode is not set to Deny",
     severity=FindingSeverity.CRITICAL,
     category="Network Security",
-    version=1,
+    version=2,
     learn_url=_LEARN_FIREWALL_THREAT_INTEL,
     frameworks=(
-        _WAF_NS4,
-        _nist("Protect", "PR.PT-4"),
-        _PCI_1_3,
-        _ISO_8_20,
-        _hipaa(
+        fw.WAF_NS4,
+        fw.NIST_PR_PT_4,
+        fw.PCI_1_3,
+        fw.ISO_8_20,
+        fw.hipaa(
             "(e)(1) — Transmission security: guard against unauthorized access to ePHI in transit"
         ),
-        _FEDRAMP_SC7,
-        _cisa(
+        fw.FEDRAMP_SC7,
+        fw.cisa(
             "3.2",
-            _CISA_TRAFFIC,
+            fw.CISA_TRAFFIC,
             "Threat intel-based blocking controls traffic flows to known malicious destinations",
         ),
     ),
     applies_to="export",
-    evidence="firewalls[].threat_intel_mode",
+    evidence="firewalls[].threat_intel_mode (or the linked firewall policy's)",
 )
 def firewall_threat_intel_not_deny(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
     sub_id = sub.subscription_id
-    for fw in sub.firewalls:
-        if fw.threat_intel_mode.lower() != "deny":
-            yield Observation(
-                resource_id=fw.id,
-                resource_type="Microsoft.Network/azureFirewalls",
-                region=fw.location,
-                fact=f"Azure Firewall {fw.name} has ThreatIntelMode='{fw.threat_intel_mode}'. "
-                f"Known malicious IPs and domains are not actively blocked.",
-                evidence_ref=f"discovery:azure_{sub_id}.firewalls[id={fw.id}].threat_intel_mode",
-            )
+    for firewall in sub.firewalls:
+        mode = firewall.effective_threat_intel_mode
+        if mode.lower() == "deny":
+            continue
+        via = " (from its firewall policy)" if firewall.firewall_policy else ""
+        yield Observation(
+            resource_id=firewall.id,
+            resource_type="Microsoft.Network/azureFirewalls",
+            region=firewall.location,
+            fact=f"Azure Firewall {firewall.name} has ThreatIntelMode='{mode}'{via}. "
+            f"Known malicious IPs and domains are not actively blocked.",
+            evidence_ref=f"discovery:azure_{sub_id}.firewalls[id={firewall.id}].threat_intel_mode",
+        )
 
 
 @rule(
@@ -431,20 +380,21 @@ def firewall_threat_intel_not_deny(
     version=1,
     learn_url=_LEARN_ER_HA,
     frameworks=(
-        _WAF_RE3,
-        _iso("A.8.21 — Security of network services"),
-        _hipaa(
+        fw.WAF_RE3,
+        fw.ISO_8_21,
+        fw.hipaa(
             "(a)(2)(ii) — Automatic logoff / contingency operations; availability of ePHI systems"
         ),
-        _fedramp("Contingency Planning", "CP-8 — Telecommunications Services (redundancy)"),
-        _cisa(
+        fw.FEDRAMP_CP8_REDUNDANCY,
+        fw.cisa(
             "3.4",
-            _CISA_RESILIENCE,
+            fw.CISA_RESILIENCE,
             "Redundant circuits prevent single points of failure in hybrid connectivity",
         ),
     ),
     applies_to="export",
     evidence="express_route_circuits[]",
+    needs_properties=False,
 )
 def single_expressroute_circuit(
     sub: AzureSubscriptionTopology, topology: AzureTopology
@@ -470,10 +420,10 @@ def single_expressroute_circuit(
     version=1,
     learn_url=_LEARN_GATEWAY_TRANSIT,
     frameworks=(
-        _WAF_NS1,
-        _FEDRAMP_SC7,
-        _cisa(
-            "3.1", _CISA_SEGMENTATION, "Misconfigured peering can create unintended network paths"
+        fw.WAF_NS1,
+        fw.FEDRAMP_SC7,
+        fw.cisa(
+            "3.1", fw.CISA_SEGMENTATION, "Misconfigured peering can create unintended network paths"
         ),
     ),
     applies_to="export",
@@ -512,28 +462,31 @@ def peering_gateway_transit_without_gateway(
     title="VNet has no NSG flow logs enabled",
     severity=FindingSeverity.HIGH,
     category="Monitoring & Visibility",
-    version=1,
+    version=2,
     learn_url=_LEARN_VNET_FLOW_LOGS,
     frameworks=(
-        _WAF_NS2,
-        _nist(
+        fw.WAF_NS2,
+        fw.nist(
             "Detect", "DE.CM-1 — The network is monitored to detect potential cybersecurity events"
         ),
-        _hipaa("(b) — Audit controls: hardware/software activity records for ePHI systems"),
-        _fedramp("Audit and Accountability", "AU-2 — Audit Events"),
-        _cisa(
+        fw.hipaa("(b) — Audit controls: hardware/software activity records for ePHI systems"),
+        fw.FEDRAMP_AU2,
+        fw.cisa(
             "3.2",
-            _CISA_TRAFFIC,
+            fw.CISA_TRAFFIC,
             "Flow logs enable traffic visibility required for zero trust enforcement",
         ),
     ),
     applies_to="export",
-    evidence="vnets[].flow_logs_enabled",
+    evidence="vnets[].flow_logs_enabled (an export: networkwatchers/flowlogs rows projected onto the VNet)",
 )
 def vnet_without_flow_logs(
     sub: AzureSubscriptionTopology, topology: AzureTopology
-) -> Iterator[Observation]:
+) -> Iterator[Observation | NotEvaluable]:
     sub_id = sub.subscription_id
+    if _export_without_flow_logs(topology):
+        yield NotEvaluable(_NO_FLOW_LOG_ROWS)
+        return
     for vnet in sub.vnets:
         if not vnet.flow_logs_enabled:
             yield Observation(
@@ -552,22 +505,22 @@ def vnet_without_flow_logs(
     title="Application Gateway WAF is disabled",
     severity=FindingSeverity.HIGH,
     category="Application Security",
-    version=1,
+    version=2,
     learn_url=_LEARN_APPGW_WAF,
     frameworks=(
-        _WAF_NS4,
-        _PCI_1_3,
-        _iso("A.8.23 — Web filtering"),
-        _hipaa(
+        fw.WAF_NS4,
+        fw.PCI_1_3,
+        fw.ISO_8_23,
+        fw.hipaa(
             "(e)(1) — Transmission security: protect ePHI APIs from injection and web-layer attacks"
         ),
-        _FEDRAMP_SC7,
-        _cisa(
+        fw.FEDRAMP_SC7,
+        fw.cisa(
             "3.2",
-            _CISA_TRAFFIC,
+            fw.CISA_TRAFFIC,
             "WAF provides application-layer traffic filtering at the perimeter",
         ),
-        _cisa(
+        fw.cisa(
             "4.0",
             "Application and Workload Protection",
             "Disabled WAF leaves application workloads without HTTP-layer attack inspection",
@@ -608,12 +561,13 @@ def application_gateway_waf_disabled(
     version=1,
     learn_url=_LEARN_VPN_GW_MONITOR,
     frameworks=(
-        _WAF_PE3,
-        _cisa(
-            "3.4", _CISA_RESILIENCE, "Gateway saturation degrades hybrid connectivity resilience"
+        fw.WAF_PE3,
+        fw.cisa(
+            "3.4", fw.CISA_RESILIENCE, "Gateway saturation degrades hybrid connectivity resilience"
         ),
     ),
     applies_to="live-only",
+    inputs=("network_metrics",),
     evidence="network_metrics.gateway_metrics[].utilization_pct",
 )
 def gateway_saturation(
@@ -638,13 +592,14 @@ def gateway_saturation(
     title="Azure Firewall present but processes 0 traffic",
     severity=FindingSeverity.HIGH,
     category="Network Security",
-    version=2,
+    version=1,
     learn_url=_LEARN_FIREWALL_LOGS,
     frameworks=(
-        _WAF_NS4,
-        _cisa("3.2", _CISA_TRAFFIC, "Zero rule hits suggests traffic bypasses the firewall"),
+        fw.WAF_NS4,
+        fw.cisa("3.2", fw.CISA_TRAFFIC, "Zero rule hits suggests traffic bypasses the firewall"),
     ),
     applies_to="live-only",
+    inputs=("network_metrics",),
     evidence="network_metrics.firewall_metrics[]",
 )
 def firewall_without_traffic(
@@ -680,14 +635,15 @@ def firewall_without_traffic(
     version=1,
     learn_url=_LEARN_LB_OUTBOUND,
     frameworks=(
-        _waf("Reliability", "RE-4 — Design for scale out"),
-        _cisa(
+        fw.WAF_RE4_SCALE,
+        fw.cisa(
             "3.4",
-            _CISA_RESILIENCE,
+            fw.CISA_RESILIENCE,
             "SNAT exhaustion causes connection failures affecting resilience",
         ),
     ),
     applies_to="live-only",
+    inputs=("network_metrics",),
     evidence="network_metrics.lb_metrics[].snat_port_utilization_pct",
 )
 def load_balancer_snat_exhaustion(
@@ -710,22 +666,46 @@ def load_balancer_snat_exhaustion(
 
 @rule(
     id=R_AZ_VNET_IP_EXHAUSTION,
-    title="VNet IP space utilization exceeds 85%",
+    title="Subnet address space is close to exhaustion",
     severity=FindingSeverity.HIGH,
     category="Network Segmentation",
-    version=1,
+    version=2,
     learn_url=_LEARN_VNET_PLAN,
     frameworks=(
-        _waf("Reliability", "RE-2 — Design for capacity"),
-        _cisa("3.4", _CISA_RESILIENCE, "IP space exhaustion prevents new workload deployments"),
+        fw.WAF_RE2,
+        fw.cisa("3.4", fw.CISA_RESILIENCE, "IP space exhaustion prevents new workload deployments"),
     ),
-    applies_to="live-only",
-    evidence="network_metrics.vnet_utilization",
+    applies_to="export",
+    evidence="vnets[].subnets[].ip_configuration_count against the prefix size minus the 5 reserved "
+    "addresses (80 percent); network_metrics.vnet_utilization when a live collector ran",
 )
 def vnet_ip_exhaustion(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
     sub_id = sub.subscription_id
+    for vnet in sub.vnets:
+        for subnet in vnet.subnets:
+            if not subnet.ip_configuration_count:
+                continue
+            prefixes = subnet.address_prefixes or (
+                [subnet.address_prefix] if subnet.address_prefix else []
+            )
+            usable = _usable_addresses(prefixes)
+            if usable <= 0:
+                continue
+            pct = subnet.ip_configuration_count / usable * 100
+            if pct < _IP_EXHAUSTION_PCT:
+                continue
+            yield Observation(
+                resource_id=subnet.id,
+                resource_type="Microsoft.Network/virtualNetworks/subnets",
+                region=vnet.location,
+                fact=f"Subnet {subnet.name} ({', '.join(prefixes)}) in VNet {vnet.name} lists "
+                f"{subnet.ip_configuration_count} ipConfigurations against {usable} usable "
+                f"addresses ({pct:.0f} percent).",
+                evidence_ref=f"discovery:azure_{sub_id}.vnets[id={vnet.id}]"
+                f".subnets[id={subnet.id}].ip_configuration_count",
+            )
     metrics = sub.network_metrics
     if not metrics:
         return
@@ -734,6 +714,7 @@ def vnet_ip_exhaustion(
             yield Observation(
                 resource_id=vnet_id,
                 resource_type="Microsoft.Network/virtualNetworks",
+                title="VNet IP space utilization exceeds 85%",
                 fact=f"VNet {vnet_id} has {util}% of its address space allocated to subnets.",
                 evidence_ref=f"discovery:azure_{sub_id}.network_metrics",
             )
@@ -747,11 +728,11 @@ def vnet_ip_exhaustion(
     version=2,
     learn_url=_LEARN_UDR,
     frameworks=(
-        _WAF_NS1,
-        _asb("NS-4"),
-        _cisa(
+        fw.WAF_NS1,
+        fw.asb("NS-4"),
+        fw.cisa(
             "3.1",
-            _CISA_SEGMENTATION,
+            fw.CISA_SEGMENTATION,
             "Traffic bypassing the hub firewall violates segmentation policy",
         ),
     ),
@@ -808,17 +789,18 @@ def spoke_subnet_bypasses_hub_firewall(
     version=1,
     learn_url=_LEARN_FIREWALL_LOGS,
     frameworks=(
-        _waf("Security", "NS-3 — Deploy firewall at the edge of enterprise network"),
-        _nist(
+        fw.WAF_NS3,
+        fw.nist(
             "Detect", "DE.CM-1 — The network is monitored to detect potential cybersecurity events"
         ),
-        _cisa(
+        fw.cisa(
             "3.2",
-            _CISA_TRAFFIC,
+            fw.CISA_TRAFFIC,
             "Firewall logs are required to audit and verify traffic management policies",
         ),
     ),
     applies_to="live-only",
+    inputs=("observability",),
     evidence="observability.firewalls_with_diagnostics",
 )
 def firewall_without_diagnostics(
@@ -842,33 +824,46 @@ def firewall_without_diagnostics(
 
 @rule(
     id=R_AZ_TRAFFIC_ANALYTICS_MISSING,
-    title="NSG Flow Logs are enabled but Traffic Analytics is disabled",
+    title="Flow log is enabled but Traffic Analytics is disabled",
     severity=FindingSeverity.MEDIUM,
     category="Monitoring & Visibility",
-    version=1,
+    version=2,
     learn_url=_LEARN_TRAFFIC_ANALYTICS,
     frameworks=(
-        _WAF_NS2,
-        _cisa(
+        fw.WAF_NS2,
+        fw.cisa(
             "3.2",
-            _CISA_TRAFFIC,
+            fw.CISA_TRAFFIC,
             "Traffic Analytics provides flow-level visibility for zero trust verification",
         ),
     ),
-    applies_to="live-only",
-    evidence="observability.traffic_analytics_enabled",
+    applies_to="export",
+    evidence="flow_logs[].traffic_analytics_enabled (networkwatchers/flowlogs rows; unknown when an export "
+    "has none); observability.traffic_analytics_enabled when a live collector ran",
 )
 def traffic_analytics_missing(
     sub: AzureSubscriptionTopology, topology: AzureTopology
-) -> Iterator[Observation]:
+) -> Iterator[Observation | NotEvaluable]:
     sub_id = sub.subscription_id
-    obs = sub.observability
-    if not obs:
+    if _export_without_flow_logs(topology):
+        yield NotEvaluable(_NO_FLOW_LOG_ROWS)
         return
-    if obs.nsg_flow_logs_enabled > 0 and obs.traffic_analytics_enabled == 0:
+    for flow_log in sub.flow_logs:
+        if flow_log.enabled and not flow_log.traffic_analytics_enabled:
+            yield Observation(
+                resource_id=flow_log.id,
+                resource_type="Microsoft.Network/networkWatchers/flowLogs",
+                fact=f"Flow log {flow_log.name} targeting {flow_log.target_resource_id} is enabled "
+                f"with Traffic Analytics disabled.",
+                evidence_ref=f"discovery:azure_{sub_id}.flow_logs[id={flow_log.id}]"
+                f".traffic_analytics_enabled",
+            )
+    obs = sub.observability
+    if obs and obs.nsg_flow_logs_enabled > 0 and obs.traffic_analytics_enabled == 0:
         yield Observation(
             resource_id=sub_id,
             resource_type="Microsoft.Network/networkSecurityGroups",
+            title="NSG Flow Logs are enabled but Traffic Analytics is disabled",
             fact=f"Subscription has {obs.nsg_flow_logs_enabled} active flow logs, but "
             f"{obs.traffic_analytics_enabled} have Traffic Analytics enabled.",
             evidence_ref=f"discovery:azure_{sub_id}.observability",
@@ -883,13 +878,16 @@ def traffic_analytics_missing(
     version=1,
     learn_url=_LEARN_BASTION_LOGS,
     frameworks=(
-        _waf("Security", "PA-2 — Avoid standing access for user accounts and permissions"),
-        _nist("Detect", "DE.CM-3 — Personnel activity is monitored"),
-        _cisa(
-            "3.2", _CISA_TRAFFIC, "Session logging provides audit trail for privileged access paths"
+        fw.WAF_PA2,
+        fw.NIST_DE_CM_3,
+        fw.cisa(
+            "3.2",
+            fw.CISA_TRAFFIC,
+            "Session logging provides audit trail for privileged access paths",
         ),
     ),
     applies_to="live-only",
+    inputs=("observability",),
     evidence="observability.bastion_with_diagnostics",
 )
 def bastion_without_diagnostics(
@@ -919,13 +917,14 @@ def bastion_without_diagnostics(
     version=1,
     learn_url=_LEARN_ER_MONITOR,
     frameworks=(
-        _WAF_PE3,
-        _fedramp("Contingency Planning", "CP-8 — Telecommunications Services"),
-        _cisa(
-            "3.4", _CISA_RESILIENCE, "Circuit saturation degrades hybrid connectivity reliability"
+        fw.WAF_PE3,
+        fw.FEDRAMP_CP8,
+        fw.cisa(
+            "3.4", fw.CISA_RESILIENCE, "Circuit saturation degrades hybrid connectivity reliability"
         ),
     ),
     applies_to="live-only",
+    inputs=("network_metrics",),
     evidence="network_metrics.er_circuit_metrics[]",
 )
 def expressroute_saturation(
@@ -960,12 +959,15 @@ def expressroute_saturation(
     version=1,
     learn_url=_LEARN_DDOS,
     frameworks=(
-        _WAF_NS4,
-        _FEDRAMP_SC5,
-        _hipaa("(a)(2)(ii) — Contingency operations: protect ePHI availability during attack"),
-        _cisa("3.4", _CISA_RESILIENCE, "Active DDoS attack directly threatens network resilience"),
+        fw.WAF_NS4,
+        fw.FEDRAMP_SC5,
+        fw.hipaa("(a)(2)(ii) — Contingency operations: protect ePHI availability during attack"),
+        fw.cisa(
+            "3.4", fw.CISA_RESILIENCE, "Active DDoS attack directly threatens network resilience"
+        ),
     ),
     applies_to="live-only",
+    inputs=("network_metrics",),
     evidence="network_metrics.ddos_attack_events_24h",
 )
 def ddos_attack_detected(
@@ -995,11 +997,11 @@ def ddos_attack_detected(
     version=1,
     learn_url=_LEARN_FRONTDOOR_WAF,
     frameworks=(
-        _WAF_NS4,
-        _PCI_1_3,
-        _FEDRAMP_SC7,
-        _cisa("3.2", _CISA_TRAFFIC, "WAF in Detection mode does not block malicious traffic"),
-        _cisa(
+        fw.WAF_NS4,
+        fw.PCI_1_3,
+        fw.FEDRAMP_SC7,
+        fw.cisa("3.2", fw.CISA_TRAFFIC, "WAF in Detection mode does not block malicious traffic"),
+        fw.cisa(
             "4.0",
             "Application and Workload Protection",
             "Detection-only WAF does not enforce blocking for application-layer attacks",
@@ -1036,10 +1038,13 @@ def front_door_waf_detection_mode(
     version=1,
     learn_url=_LEARN_APPGW_METRICS,
     frameworks=(
-        _waf("Reliability", "RE-4 — Design for capacity"),
-        _cisa("3.4", _CISA_RESILIENCE, "App Gateway capacity degradation indicates resilience gap"),
+        fw.WAF_RE4_CAPACITY,
+        fw.cisa(
+            "3.4", fw.CISA_RESILIENCE, "App Gateway capacity degradation indicates resilience gap"
+        ),
     ),
     applies_to="live-only",
+    inputs=("network_metrics",),
     evidence="network_metrics.appgw_metrics[]",
 )
 def application_gateway_high_latency(
@@ -1094,11 +1099,13 @@ def application_gateway_high_latency(
     version=1,
     learn_url=_LEARN_NSG,
     frameworks=(
-        _WAF_NS1,
-        _cis("6.1 / 6.2 — RDP and SSH access restricted from the internet"),
-        _PCI_1_3,
-        _FEDRAMP_SC7,
-        _cisa("3.2", _CISA_TRAFFIC, "Management ports open to the internet bypass traffic control"),
+        fw.WAF_NS1,
+        fw.cis("6.1 / 6.2 — RDP and SSH access restricted from the internet"),
+        fw.PCI_1_3,
+        fw.FEDRAMP_SC7,
+        fw.cisa(
+            "3.2", fw.CISA_TRAFFIC, "Management ports open to the internet bypass traffic control"
+        ),
     ),
     applies_to="export",
     evidence="nsgs[].security_rules[] (Allow, Inbound, internet source, port 22 or 3389)",
@@ -1142,13 +1149,13 @@ def nsg_allows_remote_access_from_internet(
     version=1,
     learn_url=_LEARN_NSG,
     frameworks=(
-        _WAF_NS1,
-        _PCI_1_2,
-        _ISO_8_22,
-        _FEDRAMP_SC7,
-        _cisa(
+        fw.WAF_NS1,
+        fw.PCI_1_2,
+        fw.ISO_8_22,
+        fw.FEDRAMP_SC7,
+        fw.cisa(
             "3.1",
-            _CISA_SEGMENTATION,
+            fw.CISA_SEGMENTATION,
             "An allow-all rule removes the segmentation an NSG exists for",
         ),
     ),
@@ -1196,10 +1203,12 @@ def nsg_wildcard_allow_all(
     version=1,
     learn_url=_LEARN_UDR,
     frameworks=(
-        _WAF_NS1,
-        _asb("NS-4"),
-        _cisa(
-            "3.2", _CISA_TRAFFIC, "A direct default route sends egress around the inspection point"
+        fw.WAF_NS1,
+        fw.asb("NS-4"),
+        fw.cisa(
+            "3.2",
+            fw.CISA_TRAFFIC,
+            "A direct default route sends egress around the inspection point",
         ),
     ),
     applies_to="export",
@@ -1243,8 +1252,10 @@ def route_table_default_route_to_internet(
     version=1,
     learn_url=_LEARN_UDR,
     frameworks=(
-        _WAF_RE3,
-        _cisa("3.4", _CISA_RESILIENCE, "Static-only routing loses learned on-premises prefixes"),
+        fw.WAF_RE3,
+        fw.cisa(
+            "3.4", fw.CISA_RESILIENCE, "Static-only routing loses learned on-premises prefixes"
+        ),
     ),
     applies_to="export",
     evidence="route_tables[].disable_bgp_route_propagation",
@@ -1281,9 +1292,9 @@ def route_table_bgp_propagation_disabled(
     version=1,
     learn_url=_LEARN_VNET_DNS,
     frameworks=(
-        _WAF_RE3,
-        _cisa(
-            "3.2", _CISA_TRAFFIC, "Name resolution is on the path of every private-endpoint flow"
+        fw.WAF_RE3,
+        fw.cisa(
+            "3.2", fw.CISA_TRAFFIC, "Name resolution is on the path of every private-endpoint flow"
         ),
     ),
     applies_to="export",
@@ -1319,10 +1330,10 @@ def vnet_custom_dns_servers(
     version=1,
     learn_url=_LEARN_APPGW_WAF,
     frameworks=(
-        _WAF_NS4,
-        _PCI_1_3,
-        _cisa("3.2", _CISA_TRAFFIC, "WAF in Detection mode does not block malicious traffic"),
-        _cisa(
+        fw.WAF_NS4,
+        fw.PCI_1_3,
+        fw.cisa("3.2", fw.CISA_TRAFFIC, "WAF in Detection mode does not block malicious traffic"),
+        fw.cisa(
             "4.0",
             "Application and Workload Protection",
             "Detection-only WAF does not enforce blocking for application-layer attacks",
@@ -1363,8 +1374,10 @@ def application_gateway_waf_detection_mode(
     version=1,
     learn_url=_LEARN_LB_SKUS,
     frameworks=(
-        _WAF_RE3,
-        _cisa("3.4", _CISA_RESILIENCE, "Basic load balancers carry no SLA and no zone redundancy"),
+        fw.WAF_RE3,
+        fw.cisa(
+            "3.4", fw.CISA_RESILIENCE, "Basic load balancers carry no SLA and no zone redundancy"
+        ),
     ),
     applies_to="export",
     evidence="load_balancers[].sku_name",
@@ -1397,10 +1410,10 @@ def load_balancer_basic_sku(
     version=1,
     learn_url=_LEARN_PIP_SKUS,
     frameworks=(
-        _WAF_RE3,
-        _WAF_NS1,
-        _cisa(
-            "3.4", _CISA_RESILIENCE, "Basic public IPs are open by default and not zone-redundant"
+        fw.WAF_RE3,
+        fw.WAF_NS1,
+        fw.cisa(
+            "3.4", fw.CISA_RESILIENCE, "Basic public IPs are open by default and not zone-redundant"
         ),
     ),
     applies_to="export",
@@ -1436,10 +1449,12 @@ def public_ip_basic_sku(
     version=1,
     learn_url=_LEARN_VPN_GW_SKUS,
     frameworks=(
-        _WAF_RE3,
-        _fedramp("Contingency Planning", "CP-8 — Telecommunications Services (redundancy)"),
-        _cisa(
-            "3.4", _CISA_RESILIENCE, "A Basic VPN gateway has no SLA, no BGP and no zone redundancy"
+        fw.WAF_RE3,
+        fw.FEDRAMP_CP8_REDUNDANCY,
+        fw.cisa(
+            "3.4",
+            fw.CISA_RESILIENCE,
+            "A Basic VPN gateway has no SLA, no BGP and no zone redundancy",
         ),
     ),
     applies_to="export",
@@ -1476,8 +1491,8 @@ def vpn_gateway_basic_sku(
     version=1,
     learn_url=_LEARN_VPN_GW_SKUS,
     frameworks=(
-        _WAF_PE3,
-        _cisa("3.4", _CISA_RESILIENCE, "Generation 1 gateways cap hybrid throughput"),
+        fw.WAF_PE3,
+        fw.cisa("3.4", fw.CISA_RESILIENCE, "Generation 1 gateways cap hybrid throughput"),
     ),
     applies_to="export",
     evidence="virtual_network_gateways[].generation (gateway_type Vpn)",
@@ -1512,9 +1527,9 @@ def vpn_gateway_generation1(
     version=1,
     learn_url=_LEARN_VPN_GW_TROUBLESHOOT,
     frameworks=(
-        _WAF_RE3,
-        _fedramp("Contingency Planning", "CP-8 — Telecommunications Services"),
-        _cisa("3.4", _CISA_RESILIENCE, "A down tunnel removes a hybrid connectivity path"),
+        fw.WAF_RE3,
+        fw.FEDRAMP_CP8,
+        fw.cisa("3.4", fw.CISA_RESILIENCE, "A down tunnel removes a hybrid connectivity path"),
     ),
     applies_to="export",
     evidence="virtual_network_gateways[].connections[].connection_status",
@@ -1550,9 +1565,9 @@ def gateway_connection_not_connected(
     version=1,
     learn_url=_LEARN_PRIVATE_ENDPOINT,
     frameworks=(
-        _WAF_NS1,
-        _cisa(
-            "3.1", _CISA_SEGMENTATION, "An unapproved private link leaves the private path unused"
+        fw.WAF_NS1,
+        fw.cisa(
+            "3.1", fw.CISA_SEGMENTATION, "An unapproved private link leaves the private path unused"
         ),
     ),
     applies_to="export",
@@ -1592,12 +1607,12 @@ def private_endpoint_connection_pending(
     version=1,
     learn_url=_LEARN_FIREWALL,
     frameworks=(
-        _WAF_NS4,
-        _waf("Security", "NS-3 — Deploy firewall at the edge of enterprise network"),
-        _PCI_1_3,
-        _cisa(
+        fw.WAF_NS4,
+        fw.WAF_NS3,
+        fw.PCI_1_3,
+        fw.cisa(
             "3.2",
-            _CISA_TRAFFIC,
+            fw.CISA_TRAFFIC,
             "Without a central inspection point, traffic management is per NSG",
         ),
     ),
@@ -1636,11 +1651,12 @@ def no_firewall_with_vnets(
     version=1,
     learn_url=_LEARN_BASTION,
     frameworks=(
-        _waf("Security", "PA-2 — Avoid standing access for user accounts and permissions"),
-        _cisa("3.2", _CISA_TRAFFIC, "Bastion keeps management traffic off public endpoints"),
+        fw.WAF_PA2,
+        fw.cisa("3.2", fw.CISA_TRAFFIC, "Bastion keeps management traffic off public endpoints"),
     ),
     applies_to="export",
     evidence="bastion_hosts[]",
+    needs_properties=False,
 )
 def no_bastion_with_vnets(
     sub: AzureSubscriptionTopology, topology: AzureTopology

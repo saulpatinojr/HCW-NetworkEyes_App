@@ -130,7 +130,7 @@ def _cost_of(finding: Finding | dict) -> float:
         value = finding.est_monthly_cost_usd
     try:
         return float(value) if value is not None else 0.0
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 0.0
 
 

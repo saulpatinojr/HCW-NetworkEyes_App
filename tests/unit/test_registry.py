@@ -13,7 +13,10 @@ import hashlib
 
 import pytest
 
-from cna.ai_engine.azure_rules import (
+from cna.ai_engine.observed_state_enforcer import ObservedStateEnforcer, ObservedStateViolation
+from cna.core.findings_schema import FindingSeverity, FrameworkMapping
+from cna.core.topology.azure import AzureSubscriptionTopology, AzureTopology, VNet
+from cna_azure_network_engine.rules import (
     RULES,
     RULES_VERSION,
     DuplicateRuleError,
@@ -23,23 +26,24 @@ from cna.ai_engine.azure_rules import (
     rule_metadata,
     rules_digest,
 )
-from cna.ai_engine.azure_rules.registry import RULES as _registry_dict
-from cna.ai_engine.observed_state_enforcer import ObservedStateEnforcer, ObservedStateViolation
-from cna.core.findings_schema import FindingSeverity, FrameworkMapping
-from cna.core.topology.azure import AzureSubscriptionTopology, AzureTopology, VNet
+from cna_azure_network_engine.rules.registry import RULES as _registry_dict
 
 # Re-pin when a rule is added, removed or re-versioned — and bump RULES_VERSION with it.
 # The table is the digest's input, so rules_digest() is checked without a hex literal
 # (the secrets scanner's entropy plugin would flag one).
 PINNED_RULES_VERSION = "2026.10.0"
+# The downstream lab edition (HCW-NetworkEyes_AddOn) pins the same table; both move together.
 PINNED_VERSIONS = {
     **{f"AZ-NET-{n:03d}": 1 for n in range(1, 34)},
     **{f"AZ-BCDR-{n:03d}": 1 for n in range(1, 8)},
     **{f"AZ-COST-{n:03d}": 1 for n in range(1, 6)},
     "AZ-NET-002": 2,  # merged platform-subnet skip list
-    "AZ-NET-009": 2,  # hedge-free fact
+    "AZ-NET-003": 2,  # threat intelligence read through the linked firewall policy
+    "AZ-NET-006": 2,  # flow logs read from flow-log rows when the topology is an export
+    "AZ-NET-007": 2,  # WAF state read through the linked WAF policy
+    "AZ-NET-011": 2,  # subnet exhaustion derived from ipConfigurations
     "AZ-NET-012": 2,  # hedge-free facts and title
-    "AZ-COST-003": 2,  # hedge-free title
+    "AZ-NET-014": 2,  # Traffic Analytics read from flow-log rows
 }
 
 EXPECTED_IDS = sorted(PINNED_VERSIONS)
@@ -49,7 +53,7 @@ SUB = "00000000-0000-0000-0000-000000000001"
 @pytest.fixture
 def scratch_registry(monkeypatch):
     """An empty registry for registration-contract tests; the real one is restored after."""
-    monkeypatch.setattr("cna.ai_engine.azure_rules.registry.RULES", {})
+    monkeypatch.setattr("cna_azure_network_engine.rules.registry.RULES", {})
     return None
 
 
@@ -89,12 +93,14 @@ class TestIdSet:
         assert [m.id for m in rule_metadata()] == sorted(RULES)
 
     def test_live_only_rules_stay_registered(self):
+        """The lab edition's live-only set exactly: these surface in unknowns[] for an export."""
         live_only = {m.id for m in rule_metadata() if m.applies_to == "live-only"}
         assert live_only == {
-            "AZ-NET-008", "AZ-NET-009", "AZ-NET-010", "AZ-NET-011", "AZ-NET-013",
-            "AZ-NET-014", "AZ-NET-015", "AZ-NET-016", "AZ-NET-017", "AZ-NET-019",
+            "AZ-NET-008", "AZ-NET-009", "AZ-NET-010", "AZ-NET-013", "AZ-NET-015",
+            "AZ-NET-016", "AZ-NET-017", "AZ-NET-019",
             "AZ-COST-002", "AZ-COST-003", "AZ-COST-005",
         }  # fmt: skip
+        assert all(RULES[r][0].inputs for r in live_only)
 
 
 class TestEveryRuleMeta:
@@ -112,12 +118,15 @@ class TestEveryRuleMeta:
         assert self.enforcer.scan_text(meta.title) == []
         assert callable(fn)
 
-    def test_only_the_four_rewritten_rules_moved_past_version_1(self):
+    def test_versions_match_the_lab_editions_table(self):
         assert {rid for rid, v in PINNED_VERSIONS.items() if v > 1} == {
             "AZ-NET-002",
-            "AZ-NET-009",
+            "AZ-NET-003",
+            "AZ-NET-006",
+            "AZ-NET-007",
+            "AZ-NET-011",
             "AZ-NET-012",
-            "AZ-COST-003",
+            "AZ-NET-014",
         }
 
 
@@ -182,7 +191,7 @@ class TestEvaluate:
             assert f.category == meta.category
             assert f.framework_mappings == list(meta.frameworks)
             assert f.traffic_direction in ("east_west", "north_south", "management")
-            assert f.status is not None
+            assert f.rule_version == meta.version and f.learn_url == meta.learn_url
 
     def test_emitted_descriptions_and_facts_are_hedge_free(self):
         enforcer = ObservedStateEnforcer()
@@ -249,3 +258,66 @@ class TestEvaluate:
         sub = AzureSubscriptionTopology(subscription_id=SUB, tenant_id="t")
         with pytest.raises(ValueError, match="AZ-TEST-999"):
             evaluate(self._topology(sub))
+
+
+class TestUnknowns:
+    """Rules the topology cannot answer are reported, never dropped silently."""
+
+    def _topology(self, *subs, **kwargs) -> AzureTopology:
+        return AzureTopology(
+            engagement_id="hcw-sample", tenant_id="t", subscriptions=list(subs), **kwargs
+        )
+
+    def test_live_only_rules_are_unknown_without_their_inputs(self):
+        sub = AzureSubscriptionTopology(subscription_id=SUB, tenant_id="t", vnets=[_vnet(False)])
+        report = evaluate(self._topology(sub))
+        unknown_ids = {u.rule_id for u in report.unknowns}
+        assert {m.id for m in rule_metadata() if m.applies_to == "live-only"} <= unknown_ids
+        assert all(
+            u.reason.startswith("needs a live read")
+            for u in report.unknowns
+            if u.rule_id == "AZ-NET-008"
+        )
+
+    def test_live_only_rule_runs_when_its_input_is_present(self):
+        from cna_azure_network_engine.model.azure import GatewayMetric, NetworkMetrics
+
+        metrics = NetworkMetrics(
+            gateway_metrics=[
+                GatewayMetric(gateway_name="gw", gateway_type="Vpn", utilization_pct=95.0)
+            ]
+        )
+        sub = AzureSubscriptionTopology(subscription_id=SUB, tenant_id="t", network_metrics=metrics)
+        report = evaluate(self._topology(sub))
+        assert "AZ-NET-008" in {f.rule_id for f in report.findings}
+        assert "AZ-NET-008" not in {u.rule_id for u in report.unknowns}
+
+    def test_export_without_flow_logs_marks_006_and_014_unknown(self):
+        sub = AzureSubscriptionTopology(subscription_id=SUB, tenant_id="t", vnets=[_vnet(True)])
+        report = evaluate(self._topology(sub, source="export"))
+        unknown = {u.rule_id: u.reason for u in report.unknowns}
+        assert "AZ-NET-006" in unknown and "AZ-NET-014" in unknown
+        assert "flowlogs" in unknown["AZ-NET-006"]
+        # Live discovery fills vnet.flow_logs_enabled itself: no unknown there.
+        live = evaluate(self._topology(sub))
+        assert "AZ-NET-006" not in {u.rule_id for u in live.unknowns}
+
+    def test_export_without_properties_marks_property_rules_unknown(self):
+        sub = AzureSubscriptionTopology(subscription_id=SUB, tenant_id="t", vnets=[_vnet(True)])
+        report = evaluate(self._topology(sub, source="export", has_properties=False))
+        unknown = {u.rule_id for u in report.unknowns}
+        assert "AZ-NET-001" in unknown
+        # AZ-NET-033 reads resource existence only and still answers.
+        assert "AZ-NET-033" not in unknown
+        assert "AZ-NET-033" in {f.rule_id for f in report.findings}
+
+    def test_report_carries_versions_and_rule_metadata_on_findings(self):
+        sub = AzureSubscriptionTopology(subscription_id=SUB, tenant_id="t", vnets=[_vnet(False)])
+        report = evaluate(self._topology(sub))
+        assert report.rules_version == RULES_VERSION
+        assert report.model_version == "1.4.0"
+        for f in report.findings:
+            assert f.rule_version == RULES[f.rule_id][0].version
+            assert f.learn_url == RULES[f.rule_id][0].learn_url
+            assert f.id == f"{f.rule_id}:{f.resource_id}"
+            assert f.observed_state.state == "observed"

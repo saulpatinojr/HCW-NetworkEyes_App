@@ -1,7 +1,7 @@
 # CI pipeline — hardened
 # Changes from original:
 #   - All actions pinned to SHA digest (supply chain security)
-#   - Python matrix: 3.13 + 3.14 (current stable lines)
+#   - Python 3.14 (the engine package and the images require >=3.14; TODO.md T-721)
 #   - pip cache via actions/cache (60-80% faster installs)
 #   - Coverage XML generated in the Python 3.14 job
 #   - Secret scanning runs gitleaks directly to avoid Node.js action runtime warnings
@@ -163,7 +163,7 @@ jobs:
         run: npm test
 
   # ------------------------------------------------------------------
-  # 3. Unit tests — Python matrix 3.13 + 3.14
+  # 3. Unit tests — Python 3.14
   # ------------------------------------------------------------------
   test:
     name: Unit Tests (Python ${{ matrix.python-version }})
@@ -173,7 +173,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.13", "3.14"]
+        python-version: ["3.14"]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
@@ -189,14 +189,20 @@ jobs:
         # the Log Analytics paths by importing azure.monitor.query directly (T-408).
         # api installs fastapi/uvicorn/psycopg2-binary so the apps/cna-api
         # TestClient tests actually run in CI instead of skipping silently (TEST-001).
-        run: pip install -e .[dev,enrichment,api]
+        # The engine is a workspace member (packages/); pip cannot resolve it from an
+        # index, so it is installed from the tree first and the root's dependency on it
+        # is then already satisfied (REFACTOR_APP.md change set C).
+        run: |
+          pip install -e packages/cna-azure-network-engine
+          pip install -e .[dev,enrichment,api]
       - name: Run tests with coverage
         # --cov=apps counts the API/router code the TestClient tests now exercise
         # in the same gate as the cna package (TEST-001).
         run: |
-          pytest tests/unit/ -v --tb=short \
+          pytest tests/unit/ tests/packaging/ packages/cna-azure-network-engine/tests/ -v --tb=short \
             --cov=cna \
             --cov=apps \
+            --cov=cna_azure_network_engine \
             --cov-report=term-missing \
             --cov-report=xml:coverage.xml \
             --cov-fail-under=80
@@ -306,7 +312,9 @@ jobs:
           while IFS='|' read -r label flags; do
             echo "::group::${label}"
             # shellcheck disable=SC2086  # flags are a deliberate word list
-            uv export --locked --no-emit-project ${flags} -o "${RUNNER_TEMP}/${label}.txt"
+            # --no-emit-workspace: the engine (packages/) has no registry hash; the
+            # images install it from the tree, as the Dockerfiles do.
+            uv export --locked --no-emit-project --no-emit-workspace ${flags} -o "${RUNNER_TEMP}/${label}.txt"
             uv pip install --system --require-hashes --no-deps \
               --prefix "${RUNNER_TEMP}/prefix-${label}" -r "${RUNNER_TEMP}/${label}.txt"
             echo "::endgroup::"

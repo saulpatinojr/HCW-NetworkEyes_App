@@ -3,10 +3,10 @@
 Consumes AWSTopology and AzureTopology checkpoints from EngagementStore.
 Produces a versioned FindingsReport written back to EngagementStore.
 
-The AWS rules (AWS-NET-*) live here. The Azure rules moved to the typed registry in
-cna.ai_engine.azure_rules (AZ-NET-*, AZ-BCDR-*, AZ-COST-*); run() evaluates them through
-its pure evaluate(topology) and merges the result, so the CLI, the API and the downstream
-lab edition produce the same Azure findings from the same rule set.
+The AWS rules (AWS-NET-*) live here. The Azure rules live in the engine package
+(cna_azure_network_engine: AZ-NET-*, AZ-BCDR-*, AZ-COST-*); run() evaluates them through
+cna.modules.network.analysis.evaluate_azure and merges the result, so the CLI, the API and
+the downstream lab edition produce the same Azure findings from the same rule set.
 
 Design contracts (all enforced in code, not just docs):
   DD-002: Every finding MUST have observed_state. Hedge language blocks publication.
@@ -29,7 +29,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from cna.ai_engine.azure_rules import evaluate as evaluate_azure_rules
 from cna.ai_engine.observed_state_enforcer import ObservedStateEnforcer
 from cna.core.escalation_engine import CriticalFindingEscalationEngine
 from cna.core.findings_schema import (
@@ -40,10 +39,12 @@ from cna.core.findings_schema import (
     FindingStatus,
     FrameworkMapping,
     ObservedState,
+    Unknown,
 )
 from cna.core.persistence import EngagementStore
 from cna.core.topology.aws import AWSRegionTopology, AWSTopology
 from cna.core.topology.azure import AzureTopology
+from cna.modules.network.analysis.azure_findings import evaluate_azure
 
 logger = logging.getLogger("cna.analysis")
 
@@ -118,6 +119,7 @@ class AnalysisEngine:
         self._escalation = CriticalFindingEscalationEngine()
         self._seen: set[str] = set()  # deduplication register
         self._findings: list[Finding] = []
+        self._unknowns: list[Unknown] = []  # Azure rules the topology could not answer
 
     # ---------------------------------------------------------------- dedup
 
@@ -601,8 +603,9 @@ class AnalysisEngine:
             if progress:
                 progress("azure", index, total, sub_topo.subscription_id)
 
-        report = evaluate_azure_rules(azure_topology, progress=_report)
-        for finding in report.findings:
+        evaluation = evaluate_azure(azure_topology, progress=_report)
+        self._unknowns = list(evaluation.unknowns)
+        for finding in evaluation.findings:
             key = self._dedup_key(finding.rule_id, finding.resource_id)
             if key in self._seen:
                 continue
@@ -635,6 +638,7 @@ class AnalysisEngine:
             )
         self._findings = []
         self._seen = set()
+        self._unknowns = []
 
         progress = self.opts.progress_callback
 
@@ -646,7 +650,7 @@ class AnalysisEngine:
                     progress("aws", i + 1, total, f"{region_topo.account_id}/{region_topo.region}")
                 self._analyze_aws_region(region_topo)
 
-        # Azure — the typed rule registry (cna.ai_engine.azure_rules)
+        # Azure — the engine's typed rule registry (cna_azure_network_engine)
         if azure_topology and self.opts.load_azure:
             self._analyze_azure(azure_topology)
 
@@ -664,6 +668,7 @@ class AnalysisEngine:
             engagement_id=engagement_id,
             schema_version=FINDINGS_SCHEMA_VERSION,
             findings=self._findings,
+            unknowns=self._unknowns,
             total_count=len(self._findings),
             critical_count=len(
                 [f for f in self._findings if f.severity == FindingSeverity.CRITICAL]

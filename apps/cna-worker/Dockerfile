@@ -15,7 +15,7 @@ WORKDIR /build
 # the builder stage; see the root Dockerfile for the pattern.
 COPY --from=uv /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
-RUN uv export --locked --only-group worker --no-emit-project -o /tmp/requirements.txt \
+RUN uv export --locked --only-group worker --no-emit-project --no-emit-workspace -o /tmp/requirements.txt \
  && uv pip install --system --no-cache --require-hashes --no-deps --prefix=/install -r /tmp/requirements.txt \
  && rm -f /tmp/requirements.txt
 

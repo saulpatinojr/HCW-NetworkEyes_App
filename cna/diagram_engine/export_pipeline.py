@@ -115,7 +115,7 @@ class DiagramExporter:
             )
             paths[".png"] = png_path
             logger.info("Written: %s", png_path)
-        except (ImportError, OSError):
+        except ImportError, OSError:
             logger.warning("cairosvg not installed — skipping .png export.")
         except Exception as e:
             logger.error("PNG export failed: %s", e)
@@ -159,7 +159,7 @@ class DiagramExporter:
         """Wrap PNG in an HTML page and print to PDF via weasyprint."""
         try:
             from weasyprint import HTML
-        except (ImportError, OSError):
+        except ImportError, OSError:
             logger.warning("weasyprint not installed — skipping .pdf export.")
             return
 

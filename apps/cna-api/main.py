@@ -31,12 +31,12 @@ from pydantic import BaseModel
 # Ensure the repo root is on the path so `cna` package is importable.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from cna.ai_engine.azure_rules import RULES, RULES_VERSION, evaluate
 from cna.api_errors import sanitize_downstream_error
 from cna.api_status import Outcome, status_for
 from cna.core.finding_taxonomy import classify_traffic_direction
 from cna.core.logging_config import JSONFormatter
 from cna.core.persistence import EngagementStore
+from cna.modules.network.analysis.azure_findings import RULES, RULES_VERSION, evaluate_azure
 from cna.modules.network.discovery.azure_discovery import (
     AzureDiscovery,
     AzureDiscoveryOptions,
@@ -863,7 +863,7 @@ def _run_azure_discovery(request: DiscoveryStartRequest) -> None:
                     "→ discovery blocked; no rules evaluated"
                 )
 
-        # One typed rule set for every Azure finding (cna.ai_engine.azure_rules):
+        # One typed rule set for every Azure finding (the cna_azure_network_engine package):
         # pure evaluate(topology), rule ids on every finding, hedge check on every fact.
         _log(f"Evaluating {len(RULES)} Azure rules (rules {RULES_VERSION})…")
 
@@ -875,8 +875,13 @@ def _run_azure_discovery(request: DiscoveryStartRequest) -> None:
                 f"→ {len(sub_findings)} finding(s)"
             )
 
-        report = evaluate(topology, progress=_rule_progress)
-        all_findings: list[dict] = [finding_to_record(f) for f in report.findings]
+        evaluation = evaluate_azure(topology, progress=_rule_progress)
+        if evaluation.unknowns:
+            _log(
+                f"{len(evaluation.unknowns)} rule(s) could not be answered from this topology: "
+                + ", ".join(u.rule_id for u in evaluation.unknowns)
+            )
+        all_findings: list[dict] = [finding_to_record(f) for f in evaluation.findings]
 
         # Tag ALL findings (existing + new) with a traffic-direction plane
         for f in all_findings:

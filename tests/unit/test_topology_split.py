@@ -46,12 +46,15 @@ class TestOldPathResolvesToTheSameObjects:
 
 
 class TestSeparateVersions:
-    def test_both_versions_start_at_the_shared_value(self):
-        assert azure.AZURE_TOPOLOGY_VERSION == "1.3.0"
+    def test_each_model_carries_its_own_version(self):
+        # The Azure model moved to the engine package and gained the export fields (1.4.0);
+        # the AWS model stays in the monorepo at 1.3.0.
+        assert azure.AZURE_TOPOLOGY_VERSION == "1.4.0"
         assert aws.AWS_TOPOLOGY_VERSION == "1.3.0"
 
     def test_each_root_model_defaults_to_its_own_version(self):
         azure_topology = azure.AzureTopology(engagement_id="e", tenant_id="t")
+        assert azure_topology.source == "discovery"
         aws_topology = aws.AWSTopology(engagement_id="e")
         assert azure_topology.schema_version == azure.AZURE_TOPOLOGY_VERSION
         assert aws_topology.schema_version == aws.AWS_TOPOLOGY_VERSION
@@ -73,13 +76,15 @@ class TestModuleBoundaries:
         imported = self._imported_modules(TOPOLOGY_DIR / "azure.py")
         assert "cna.core.topology.aws" not in imported
         assert "cna.core.topology_schema" not in imported
-        assert "cna.core.topology.common" in imported
+        # The Azure model lives in the engine package; this module re-exports it.
+        assert "cna_azure_network_engine.model.azure" in imported
 
     def test_aws_module_imports_nothing_from_azure(self):
         imported = self._imported_modules(TOPOLOGY_DIR / "aws.py")
         assert "cna.core.topology.azure" not in imported
         assert "cna.core.topology_schema" not in imported
         assert "cna.core.topology.common" in imported
+        assert not any(m.startswith("cna_azure_network_engine") for m in imported)
 
     def test_importing_azure_does_not_load_aws(self):
         code = (

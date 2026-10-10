@@ -166,7 +166,7 @@ class AWSSecurityDiscovery:
         """Map GuardDuty's numeric severity (0.1-8.9) onto a normalized label."""
         try:
             score = float(value)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return "MEDIUM"
         if score >= 7.0:
             return "HIGH"

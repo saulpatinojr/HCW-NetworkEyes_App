@@ -1,25 +1,20 @@
 """Enums shared by the Azure and AWS topology models.
 
-Split out of ``cna.core.topology_schema`` so that ``cna.core.topology.azure`` and
-``cna.core.topology.aws`` depend on this module and never on each other.
+``SubnetType`` lives in the engine package (``cna_azure_network_engine.model.common``) and is
+re-exported here; ``AttachmentType`` and ``PeeringState`` are AWS-only and stay in the monorepo.
 """
 
 from __future__ import annotations
 
 from enum import StrEnum
 
+from cna_azure_network_engine.model.common import SubnetType
+
 __all__ = [
     "AttachmentType",
     "PeeringState",
     "SubnetType",
 ]
-
-
-class SubnetType(StrEnum):
-    PUBLIC = "public"
-    PRIVATE = "private"
-    ISOLATED = "isolated"
-    UNKNOWN = "unknown"
 
 
 class AttachmentType(StrEnum):
