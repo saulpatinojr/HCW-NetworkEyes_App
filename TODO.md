@@ -17,7 +17,7 @@ in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG
 | [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-419 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements + appliance migration | T-501 – T-509 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
-| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-726 |
+| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-729 |
 
 ---
 
@@ -2268,3 +2268,94 @@ old loop for one release (`CHANGELOG.md` `[Unreleased]`). Open:
 - Core ↔ appliance contract: both appliances may set `CNA_SCOPES` (space-separated scopes) and
   `CNA_DISCOVERY_BACKEND`; the Azure appliance's identity needs no `Microsoft.Compute` or
   `Microsoft.Security` SDK permissions beyond Reader for the Resource Graph tables.
+
+### T-727 — Lab boundary image: first CI build, and the API Dockerfile into the root file (change set I)
+`Dockerfile` builds `EDITION=appliance` (default) and the build-only `EDITION=lab`; `300-test-codebase.yml`
+`lab-image` proves the boundary; `cna_azure_network_engine.edition` is the proof (`CHANGELOG.md` `[Unreleased]`;
+`tests/security/test_lab_boundary.py`). Open:
+- `[VERIFY]` The `lab-image` job on the first run of `300-test-codebase.yml` from `main`: the session that wrote
+  the stages ran no Docker build. Expected: `docker build --build-arg EDITION=lab -t cna:lab .` succeeds,
+  `docker run --rm cna:lab` prints `lab edition: boundary holds` and exits 0, every `import azure|msal|boto3`
+  and `python -m pip` fails, `IDENTITY_ENDPOINT` refuses the start, `id -u` is 1001.
+- `apps/cna-api/Dockerfile` still stands alone; the plan folds its body into the root file as the
+  `final-appliance` stage body and deletes it. The two files share every convention already (uv stage, lock
+  export, pip removal, uid 1001, draw.io), so the fold is a move, not a rewrite; `200-build-images.yml`'s
+  matrix `file:` entries change with it.
+- `cna:lab` must never appear in a registry or a manifest: `test_lab_boundary.py` checks `200-build-images.yml`
+  and `latest-build.json` for it; keep that check when the image workflow changes.
+- The AddOn builds its deployable lab image from the published engine with the same pattern (its
+  `infrastructure/docker/Dockerfile`); once the engine is on PyPI (T-728) its `edition.py` can import
+  `cna_azure_network_engine.edition` instead of carrying its own copy.
+
+### T-728 — Engine release and OIDC registry login: the owner steps, and the appliances on digests (change set J)
+`320-release-engine.yml` publishes the engine wheel by trusted publishing on `engine-v*` tags; `200` and `310`
+log in to Docker Hub through its OIDC connection (`CHANGELOG.md` `[Unreleased]`; `tests/unit/test_build_manifest.py`).
+Nothing publishes until the owner flips the variables below. Open, in order:
+- `[REVIEW REQUIRED]` **PyPI trusted publisher.** In a browser, at
+  <https://pypi.org/manage/account/publishing/>, add a pending publisher with PyPI project name
+  `cna-azure-network-engine`, owner `saulpatinojr`, repository `HCW-NetworkEyes_App`, workflow
+  `320-release-engine.yml`, environment left blank. Then, PowerShell:
+
+  ```powershell
+  gh variable set PYPI_PUBLISH_ENABLED --body true --repo saulpatinojr/HCW-NetworkEyes_App
+  ```
+
+  Success looks like: `gh variable list --repo saulpatinojr/HCW-NetworkEyes_App` shows
+  `PYPI_PUBLISH_ENABLED  true`. Until then the `publish-pypi` job is skipped and the tag still builds,
+  tests and attaches the wheel to the GitHub Release.
+- `[REVIEW REQUIRED]` **Docker Hub OIDC connection.** In a browser at <https://app.docker.com/>, switch to
+  the **hybridcloudworks** organisation, open **Identity & auth** → **OIDC connections** → **Create OIDC
+  connection** (provider GitHub Actions), and add one ruleset with two subject-claim rules, read and write
+  on the `hybridcloudworks/cna` repository (the ids are GitHub's immutable owner and repository ids, so a
+  rename never breaks the rule):
+  `repo:saulpatinojr@34853639/HCW-NetworkEyes_App@1173847343:ref:refs/heads/main` (for `200-build-images.yml`)
+  and `repo:saulpatinojr@34853639/HCW-NetworkEyes_App@1173847343:ref:refs/tags/*` (for `310-release-version.yml`).
+  Copy the connection id it shows. Then, PowerShell, which reads the id from the prompt so nothing is
+  retyped into the command:
+
+  ```powershell
+  $conn = Read-Host "Docker Hub OIDC connection id"
+  gh variable set DOCKERHUB_NAMESPACE --body hybridcloudworks --repo saulpatinojr/HCW-NetworkEyes_App
+  gh variable set DOCKERHUB_CONNECTION --body $conn --repo saulpatinojr/HCW-NetworkEyes_App
+  gh variable set DOCKERHUB_ENABLED --body true --repo saulpatinojr/HCW-NetworkEyes_App
+  gh secret delete DOCKERHUB_TOKEN --repo saulpatinojr/HCW-NetworkEyes_App
+  ```
+
+  Success looks like: the next push to `main` that touches a Dockerfile runs `200-build-images.yml`
+  with the `Log in to Docker Hub` step green and no `password` input in its log; a failed exchange reads
+  `unable to exchange OIDC token` and means the connection id or its repository scope is wrong. Delete the
+  secret only after that first green run.
+- `[VERIFY]` `DOCKERHUB_OIDC_CONNECTIONID` / `DOCKERHUB_OIDC_EXPIREIN` and the minimum `docker/login-action`
+  release that reads them, against Docker's documentation at the time of enabling; `actionlint` over
+  `.github/workflows/` on the first pull request (not installed where this was written).
+- **First engine release.** Bump `packages/cna-azure-network-engine/pyproject.toml` `version`, then,
+  PowerShell: `git tag engine-v0.1.0; git push origin engine-v0.1.0`. `build-test` refuses a tag that does
+  not equal `engine-v<version>`. Success looks like: a GitHub Release named `engine-v0.1.0` carrying the
+  wheel and sdist, and — once enabled — `pip download cna-azure-network-engine --no-deps -d ./wheel`
+  succeeding. Then `HCW-NetworkEyes_AddOn` replaces its ported engine with the published wheel (its
+  `REFACTOR_APP.md` change set C) through its `core-update` workflow.
+- Core ↔ appliance contract: `Work-Cloud_Network_Azure_Appliance` and `Work-Cloud_Network_AWS_Appliance`
+  read `digests{}` from `.deployment-catalog/latest-build.json` (`name@sha256:…`, same keys as `images{}`)
+  in their `230-image-update` consumers and pin by digest; `images{}` stays for the transition. Their own
+  Docker Hub logins move to the same OIDC form.
+
+### T-729 — AWS extra: move the AWS modules under `cna/aws/` with shims, and the AWS appliance's install (change set K)
+`boto3` is the `[aws]` extra; the AWS paths are guarded by `cna.aws` (`CHANGELOG.md` `[Unreleased]`;
+`tests/packaging/test_azure_only_install.py`). Open:
+- The plan moves `cna/modules/network/discovery/{aws_discovery,aws_network}.py`,
+  `cna/modules/security/discovery/aws_security.py`, `cna/delivery_portal/s3_deployer.py`,
+  `cna/ai_engine/mcp_client/aws_mcp_client.py`, the Bedrock branch of `cna/ai_engine/chat_agent.py`,
+  `cna/diagram_engine/data/aws_shapes.json`, `cna/modules/network/diagrams/{vpc_topology,tgw_topology,
+  account_hierarchy}.py`, `CRITICAL_TRIGGERS_AWS` and the `_check_aws_*` rules of `analysis_engine.py` under
+  `cna/aws/` with re-export shims at the old paths for one release. This change gated them in place; do the
+  move as its own PR, together with the AWS rules leaving `AnalysisEngine` (T-725).
+- Core ↔ appliance contract: `Work-Cloud_Network_AWS_Appliance` deploys the same images, which carry the
+  extra, so nothing changes there; a future Azure-only image (`--extra api` without `--extra aws`) is the
+  moment the Azure appliance stops shipping boto3. `Work-Cloud_Network_Azure_Appliance` is unaffected.
+- `[VERIFY]` `cna/modules/network/module.aws.yaml` against the IAM actions the collectors call; the
+  AWS appliance's Terraform builds its read-only policy from it.
+- Keep `tests/conftest.py`'s skip in step with the marker: an `@pytest.mark.aws` test that runs green
+  without `boto3` is not testing the AWS path.
+- The change-set-A shims (`cna/core/topology_schema.py` and the five analysis shims, T-719) and the `arm`
+  discovery backend (T-726) are one-release deprecations the plan does not tie to this change; remove each
+  in the release its row names.

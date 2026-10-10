@@ -127,6 +127,12 @@ cp .env.example .env
 cna --help
 ```
 
+**AWS (optional).** The base install carries no `boto3`. `pip install -e ".[dev,aws]"` enables
+`cna discover aws`, Security Hub collection, the S3 delivery portal, Bedrock chat and the API's
+`/discovery/*-aws` routes (which answer `501 aws_not_installed` without it); every AWS module imports
+`boto3` behind `cna.aws.require_aws_extra()`. The AWS permission list is
+`cna/modules/network/module.aws.yaml`. The appliance images install the extra.
+
 Lint and test the Python package with `ruff check cna/`, `ruff format --check`, and `pytest`.
 
 The container images do not resolve dependencies at build time: they install the resolution

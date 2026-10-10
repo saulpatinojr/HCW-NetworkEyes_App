@@ -20,8 +20,13 @@ from __future__ import annotations
 
 import logging
 
-import boto3
-import botocore.exceptions
+from cna.aws import INSTALL_HINT
+
+try:
+    import boto3
+    import botocore.exceptions
+except ImportError as _missing:  # the [aws] extra is not installed (change set K)
+    raise ImportError(INSTALL_HINT) from _missing
 
 from cna.core.throttle import with_retry
 from cna.core.topology.aws import AWSSecurityFinding

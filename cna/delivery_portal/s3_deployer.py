@@ -69,14 +69,14 @@ class S3Deployer:
 
     @staticmethod
     def _make_client():
+        from cna.aws import INSTALL_HINT
+
         try:
             import boto3
 
             return boto3.client("s3")
         except ImportError as err:
-            raise ImportError(
-                "boto3 is required for S3 deployment. Install with: pip install boto3"
-            ) from err
+            raise ImportError(f"boto3 is required for S3 deployment; {INSTALL_HINT}") from err
 
     def _object_key(self, file_path: Path) -> str:
         return f"{self._prefix}/{file_path.name}" if self._prefix else file_path.name

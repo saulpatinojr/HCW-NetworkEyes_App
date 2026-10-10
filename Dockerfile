@@ -1,4 +1,14 @@
 # Multi-stage Dockerfile — hardened
+#
+# Two editions from one file (REFACTOR_APP.md change set I):
+#   EDITION=appliance (default)  the CLI image as before: the full cna package, the engine
+#                                with its [azure] extra, graphviz and draw.io.
+#   EDITION=lab                  build-only: the engine package without [azure], no apps/,
+#                                no server; its CMD is the boundary proof (exit 0 only when
+#                                azure is not importable). CI builds it with `--build-arg
+#                                EDITION=lab` and never pushes it. The deployable lab
+#                                edition is HCW-NetworkEyes_AddOn, built on the published
+#                                engine with this same pattern.
 # Changes from original single-stage:
 #   1. Pinned digest on base image (supply chain)
 #   2. Builder stage: installs deps only, not full source (smaller final layer)
@@ -13,6 +23,8 @@
 # uv, as a stage rather than an inline `COPY --from=<image>`: Dependabot's docker
 # updater only reads `FROM` lines, so this is the line its weekly bump moves.
 # Keep the version in step with the `uv==` pins in 300-test-codebase.yml.
+ARG EDITION=appliance
+
 FROM ghcr.io/astral-sh/uv:0.12.21@sha256:a7aed3216253ee804de3e2d8afa5073baa1a177335345d43845cd4165e43b711 AS uv
 
 FROM python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d AS builder
@@ -37,7 +49,9 @@ COPY pyproject.toml uv.lock ./
 # The engine package is a uv workspace member: its pyproject.toml must be present for
 # `uv export --locked` to resolve the workspace, before the source tree is copied.
 COPY packages/cna-azure-network-engine/pyproject.toml packages/cna-azure-network-engine/
-RUN uv export --locked --no-default-groups --no-emit-project --no-emit-workspace -o /tmp/requirements.txt \
+# The appliance edition serves both clouds, so the [aws] extra rides along here; the
+# package itself declares boto3 only under that extra (change set K).
+RUN uv export --locked --no-default-groups --no-emit-project --no-emit-workspace --extra aws -o /tmp/requirements.txt \
  && uv pip install --system --no-cache --require-hashes --no-deps --prefix=/install -r /tmp/requirements.txt \
  && uv export --locked --only-group build -o /tmp/build-requirements.txt \
  && uv pip install --system --no-cache --require-hashes --no-deps -r /tmp/build-requirements.txt
@@ -48,6 +62,29 @@ COPY cna/ cna/
 RUN uv pip install --system --no-cache --no-deps --no-build-isolation --prefix=/install ./packages/cna-azure-network-engine \
  && uv pip install --system --no-cache --no-deps --no-build-isolation --prefix=/install . \
  && rm -f /tmp/requirements.txt /tmp/build-requirements.txt
+
+# ---- lab builder stage (build-only; change set I) ----
+# The engine package alone, without the [azure] extra, into its own prefix. The
+# boundary is proved before the final stage exists: a resolvable azure, msal or
+# boto3 fails the build here, the same check the AddOn's image runs.
+FROM python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d AS builder-lab
+
+ARG EDITION
+RUN test "$EDITION" = "lab" || { echo "builder-lab is only built for EDITION=lab (got '$EDITION')" >&2; exit 1; }
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_CACHE_DIR=1 PYTHONDONTWRITEBYTECODE=1
+WORKDIR /build
+COPY --from=uv /uv /usr/local/bin/uv
+COPY pyproject.toml uv.lock ./
+COPY packages/cna-azure-network-engine/ packages/cna-azure-network-engine/
+# The engine's base dependencies from the lock (hash-checked), then the engine itself
+# from the tree with no extras: no cloud SDK is named anywhere in this stage.
+RUN uv export --locked --no-default-groups --no-emit-project --no-emit-workspace --package cna-azure-network-engine -o /tmp/lab-requirements.txt \
+ && uv pip install --system --no-cache --require-hashes --no-deps --prefix=/install-lab -r /tmp/lab-requirements.txt \
+ && uv export --locked --only-group build -o /tmp/build-requirements.txt \
+ && uv pip install --system --no-cache --require-hashes --no-deps -r /tmp/build-requirements.txt \
+ && uv pip install --system --no-cache --no-deps --no-build-isolation --prefix=/install-lab ./packages/cna-azure-network-engine \
+ && rm -f /tmp/lab-requirements.txt /tmp/build-requirements.txt \
+ && PYTHONPATH=/install-lab/lib/python3.14/site-packages python -m cna_azure_network_engine.edition
 
 # ---- drawio fetch stage ----
 # Pinned draw.io desktop release, verified by checksum before it can reach
@@ -65,14 +102,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
      "https://github.com/jgraph/drawio-desktop/releases/download/v${DRAWIO_VERSION}/drawio-amd64-${DRAWIO_VERSION}.deb" \
   && echo "${DRAWIO_SHA256}  /tmp/drawio.deb" | sha256sum -c -
 
-# ---- final stage ----
-FROM python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d
+# ---- final stage: lab (build-only) ----
+# No apps/, no server, no EXPOSE, no HEALTHCHECK: the image's only job is the proof.
+FROM python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d AS final-lab
+
+COPY --from=builder-lab /install-lab /usr/local
+RUN python -m pip uninstall -y pip \
+ && groupadd --gid 1001 cna \
+ && useradd --uid 1001 --gid cna --no-create-home --shell /usr/sbin/nologin cna
+USER cna
+ENV CNA_EDITION=lab
+# Exit 0 when azure is NOT importable and no identity variable is set; exit 1 otherwise.
+CMD ["python", "-m", "cna_azure_network_engine.edition"]
+
+# ---- final stage: appliance ----
+FROM python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d AS final-appliance
 
 ARG CNA_VERSION=dev
 LABEL org.opencontainers.image.title="CNA Platform" \
       org.opencontainers.image.description="Cloud Network Assessment CLI" \
       org.opencontainers.image.version="${CNA_VERSION}" \
-      org.opencontainers.image.source="https://github.com/saulpatinojr/Work-Cloud_Network_Core" \
+      org.opencontainers.image.source="https://github.com/saulpatinojr/HCW-NetworkEyes_App" \
       org.opencontainers.image.licenses="Proprietary"
 
 # System deps for diagram generation (runtime only). No `apt-get upgrade`:
@@ -119,9 +169,15 @@ ARG CNA_BUILD_SHA=
 ENV CNA_BUILD_SHA=${CNA_BUILD_SHA}
 
 USER cna
+ENV CNA_EDITION=appliance
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD cna --help > /dev/null 2>&1 || exit 1
 
 ENTRYPOINT ["cna"]
 CMD ["--help"]
+
+# ---- the edition that was asked for ----
+# `docker build .` is the appliance image exactly as before; `--build-arg EDITION=lab`
+# selects the build-only lab target. Any other value fails at builder-lab.
+FROM final-${EDITION}

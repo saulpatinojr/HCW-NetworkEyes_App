@@ -564,6 +564,9 @@ class GroundedChatAgent:
         if not model_id:
             raise ChatConfigError(self._unconfigured_message(ENGINE_BEDROCK))
 
+        from cna.aws import require_aws_extra
+
+        require_aws_extra()
         import boto3
 
         client = boto3.client("bedrock-runtime")
