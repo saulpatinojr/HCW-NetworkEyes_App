@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Executive Report — {{ engagement_id }}</title>
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #212121; margin: 3rem; }
+  h1 { font-size: 2rem; color: #1565C0; border-bottom: 3px solid #1565C0;
+       padding-bottom: 0.5rem; margin-bottom: 0.5rem; }
+  h2 { font-size: 1.3rem; color: #1565C0; margin-top: 2rem; margin-bottom: 0.75rem; }
+  h3 { font-size: 1rem; margin-top: 1.25rem; }
+  .meta { color: #757575; font-size: 0.85rem; margin-bottom: 2rem; }
+  .summary-table { border-collapse: collapse; width: 100%; margin-bottom: 2rem; }
+  .summary-table th { background: #1565C0; color: white; padding: 0.5rem 1rem;
+                      text-align: left; font-size: 0.85rem; }
+  .summary-table td { padding: 0.5rem 1rem; border-bottom: 1px solid #E0E0E0; }
+  .badge-CRITICAL { color: white; background: #D32F2F; padding: 0.15rem 0.5rem;
+                    border-radius: 4px; font-size: 0.75rem; font-weight: 700; }
+  .badge-HIGH     { color: white; background: #F57C00; padding: 0.15rem 0.5rem;
+                    border-radius: 4px; font-size: 0.75rem; font-weight: 700; }
+  .finding-block  { border-left: 4px solid #E0E0E0; padding-left: 1rem;
+                    margin-bottom: 1.5rem; }
+  .finding-block.CRITICAL { border-left-color: #D32F2F; }
+  .finding-block.HIGH     { border-left-color: #F57C00; }
+  .fact { background: #F5F5F5; padding: 0.5rem 0.75rem; border-radius: 4px;
+          font-style: italic; font-size: 0.9rem; margin: 0.5rem 0; }
+  .rec-list { margin: 0.5rem 0 0 1rem; font-size: 0.9rem; }
+  @page { size: A4; margin: 2cm; }
+  @media print { body { margin: 0; } }
+</style>
+</head>
+<body>
+<h1>Cloud Network Assessment — Executive Report</h1>
+<p class="meta">Engagement: {{ engagement_id }} &nbsp;|&nbsp; Generated: {{ generated_at }} &nbsp;|&nbsp; Schema: {{ schema_version }}</p>
+
+<h2>Executive Summary</h2>
+<table class="summary-table">
+  <tr><th>Severity</th><th>Count</th></tr>
+  <tr><td><span class="badge-CRITICAL">CRITICAL</span></td><td>{{ critical_count }}</td></tr>
+  <tr><td><span class="badge-HIGH">HIGH</span></td><td>{{ high_count }}</td></tr>
+  <tr><td>MEDIUM</td><td>{{ medium_count }}</td></tr>
+  <tr><td>LOW</td><td>{{ low_count }}</td></tr>
+  <tr><td><strong>TOTAL</strong></td><td><strong>{{ total_count }}</strong></td></tr>
+</table>
+
+{% if critical_findings %}
+<h2>Critical Findings</h2>
+{% for f in critical_findings %}
+<div class="finding-block CRITICAL">
+  <h3>[{{ f.rule_id }}] {{ f.title }}</h3>
+  <div class="fact">{{ f.observed_state.fact }}</div>
+  <strong>Resource:</strong> {{ f.resource_id }} ({{ f.resource_type }})<br>
+  <strong>Account/Sub:</strong> {{ f.account_id }} | <strong>Region:</strong> {{ f.region }}
+  {% if f.recommendations %}
+  <ul class="rec-list">
+    {% for r in f.recommendations %}
+    <li>{{ r.text }} <em>({{ r.source }})</em></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</div>
+{% endfor %}
+{% endif %}
+
+{% if high_findings %}
+<h2>High Findings</h2>
+{% for f in high_findings %}
+<div class="finding-block HIGH">
+  <h3>[{{ f.rule_id }}] {{ f.title }}</h3>
+  <div class="fact">{{ f.observed_state.fact }}</div>
+  <strong>Resource:</strong> {{ f.resource_id }} ({{ f.resource_type }})<br>
+  <strong>Account/Sub:</strong> {{ f.account_id }} | <strong>Region:</strong> {{ f.region }}
+</div>
+{% endfor %}
+{% endif %}
+
+<h2>Top Priority Recommendations</h2>
+{% for f in top_priority_findings %}
+<h3>{{ loop.index }}. {{ f.title }}</h3>
+{% if f.recommendations %}
+<ul class="rec-list">
+  {% for r in f.recommendations[:2] %}
+  <li>{{ r.text }}</li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endfor %}
+</body>
+</html>

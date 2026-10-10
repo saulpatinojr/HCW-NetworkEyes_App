@@ -1,0 +1,17 @@
+name: zerotrust
+version: 1.0.0
+display_name: Zero Trust Architecture Assessment
+status: installed
+description: >
+  Assesses Zero Trust maturity using NIST SP 800-207 and
+  CISA Zero Trust Maturity Model v2 across both platforms.
+depends_on: [network, security]
+required_permissions:
+  aws: []
+  azure: []
+ai_recommendations_enabled: true
+framework_mappings:
+  - name: NIST SP 800-207
+    version: "2020"
+  - name: CISA Zero Trust Maturity Model
+    version: v2

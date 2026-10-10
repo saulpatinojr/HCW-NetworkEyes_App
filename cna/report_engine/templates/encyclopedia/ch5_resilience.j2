@@ -1,0 +1,57 @@
+<div class="chapter" id="ch5">
+<p class="kicker">Chapter 5</p>
+<h1>Observability &amp; Resilience</h1>
+
+<p>
+  You cannot defend or recover what you cannot see. This chapter covers
+  observability gaps (flow logs, diagnostic settings, alerting) and
+  business-continuity / disaster-recovery exposure (zone redundancy,
+  single-path connectivity, single points of failure).
+  {{ management_findings | length }} observability finding(s) and
+  {{ bcdr_findings | length }} BC/DR finding(s) were identified.
+</p>
+
+{% if topology_tables.observability %}
+{% set obs = topology_tables.observability %}
+<h2>Telemetry coverage</h2>
+<div class="stat-row">
+  <span class="stat-card"><span class="value">{{ obs.nsg_flow_logs_enabled }}/{{ obs.nsg_flow_logs_total }}</span><br><span class="label">NSG flow logs</span></span>
+  <span class="stat-card"><span class="value">{{ obs.firewalls_with_diagnostics }}/{{ obs.firewalls_total }}</span><br><span class="label">Firewall diagnostics</span></span>
+  <span class="stat-card"><span class="value">{{ obs.gateways_with_diagnostics }}/{{ obs.gateways_total }}</span><br><span class="label">Gateway diagnostics</span></span>
+  <span class="stat-card"><span class="value">{{ obs.metric_alert_count }}</span><br><span class="label">Metric alerts</span></span>
+</div>
+<table>
+  <tr><th>Coverage area</th><th>Enabled</th><th>Total</th><th>Gap</th></tr>
+  <tr><td>NSG flow logs</td><td>{{ obs.nsg_flow_logs_enabled }}</td><td>{{ obs.nsg_flow_logs_total }}</td><td>{{ obs.nsg_flow_logs_total - obs.nsg_flow_logs_enabled }}</td></tr>
+  <tr><td>Traffic Analytics</td><td>{{ obs.traffic_analytics_enabled }}</td><td>{{ obs.nsg_flow_logs_total }}</td><td>{{ obs.nsg_flow_logs_total - obs.traffic_analytics_enabled }}</td></tr>
+  <tr><td>Gateway diagnostic settings</td><td>{{ obs.gateways_with_diagnostics }}</td><td>{{ obs.gateways_total }}</td><td>{{ obs.gateways_total - obs.gateways_with_diagnostics }}</td></tr>
+  <tr><td>Firewall diagnostic settings</td><td>{{ obs.firewalls_with_diagnostics }}</td><td>{{ obs.firewalls_total }}</td><td>{{ obs.firewalls_total - obs.firewalls_with_diagnostics }}</td></tr>
+  <tr><td>App Gateway diagnostic settings</td><td>{{ obs.appgw_with_diagnostics }}</td><td>{{ obs.appgw_total }}</td><td>{{ obs.appgw_total - obs.appgw_with_diagnostics }}</td></tr>
+  <tr><td>Load balancer diagnostic settings</td><td>{{ obs.lb_with_diagnostics }}</td><td>{{ obs.lb_total }}</td><td>{{ obs.lb_total - obs.lb_with_diagnostics }}</td></tr>
+  <tr><td>Metric alert rules</td><td>{{ obs.metric_alert_count }}</td><td>—</td><td>—</td></tr>
+  <tr><td>Activity log alert rules</td><td>{{ obs.activity_log_alert_count }}</td><td>—</td><td>—</td></tr>
+</table>
+{% endif %}
+
+<h2>Observability findings</h2>
+{% if management_findings %}
+  {% for f in management_findings if not is_condensed or f.severity in ["CRITICAL", "HIGH"] %}
+    {% include "encyclopedia/_domain_section.j2" %}
+  {% else %}
+    <p>No {{ "critical or high severity " if is_condensed else "" }}observability findings to report.</p>
+  {% endfor %}
+{% else %}
+<p>No observability findings were identified in this assessment.</p>
+{% endif %}
+
+<h2>BC/DR findings</h2>
+{% if bcdr_findings %}
+  {% for f in bcdr_findings if not is_condensed or f.severity in ["CRITICAL", "HIGH"] %}
+    {% include "encyclopedia/_domain_section.j2" %}
+  {% else %}
+    <p>No {{ "critical or high severity " if is_condensed else "" }}BC/DR findings to report.</p>
+  {% endfor %}
+{% else %}
+<p>No BC/DR (AZ-BCDR) findings were identified in this assessment.</p>
+{% endif %}
+</div>

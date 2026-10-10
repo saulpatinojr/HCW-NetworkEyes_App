@@ -1,0 +1,55 @@
+{% macro finding_card(f) %}
+<div class="finding-card sev-{{ f.severity.value | lower }}">
+  <div class="finding-header">
+    <span class="badge sev-badge-{{ f.severity.value | lower }}">{{ f.severity.value }}</span>
+    <span class="rule-id">{{ f.rule_id }}</span>
+    <span class="finding-title">{{ f.title }}</span>
+  </div>
+
+  <table class="detail-table">
+    <tr><th>Resource ID</th>    <td>{{ f.resource_id }}</td></tr>
+    <tr><th>Resource Type</th>  <td>{{ f.resource_type }}</td></tr>
+    <tr><th>Account / Sub</th>  <td>{{ f.account_id }}</td></tr>
+    <tr><th>Region</th>         <td>{{ f.region }}</td></tr>
+    <tr><th>Status</th>         <td>{{ f.status.value }}</td></tr>
+  </table>
+
+  <div class="observed-state">
+    <strong>Observed State</strong>
+    <p class="fact">{{ f.observed_state.fact }}</p>
+    <p class="evidence">Evidence ref: <code>{{ f.observed_state.evidence_ref }}</code></p>
+  </div>
+
+  <div class="framework-mappings">
+    <strong>Framework Mappings</strong>
+    <table class="fw-table">
+      <thead><tr><th>Framework</th><th>Pillar</th><th>Control</th></tr></thead>
+      <tbody>
+        {% for m in f.framework_mappings %}
+        <tr>
+          <td>{{ m.framework }}</td>
+          <td>{{ m.pillar }}</td>
+          <td>{{ m.control }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if f.recommendations %}
+  <div class="recommendations">
+    <strong>Recommendations</strong>
+    {% for r in f.recommendations %}
+    <div class="rec-item">
+      <p>{{ r.text }}</p>
+      <p class="rec-source">Source: {{ r.source }}
+        {% if r.reference_url %}&nbsp;—&nbsp;
+          <a href="{{ r.reference_url }}">Reference</a>
+        {% endif %}
+      </p>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endmacro %}

@@ -1,0 +1,630 @@
+name: "200 · Build Container Images"
+
+# Runs on GitHub-hosted runners (ubuntu-latest). Nothing here needs a private
+# network or cloud credentials: images build with buildx (GitHub Actions cache),
+# push to Docker Hub with the repository secret, and the manifest commit and
+# appliance dispatch use GitHub tokens. The self-hosted runner the original
+# repository used is retired; a fresh clone of this repository needs no runner.
+#
+# First build in a new repository (REVIEW.md R-013 step 4): GitHub registers a
+# workflow only once a push to main touches it, so the import merge alone did
+# not make this one dispatchable. The commit that adds this paragraph is that
+# push; its own run is the first build from this repository.
+#
+# Publish order (scan before tag). Every image is pushed to Docker Hub **by
+# digest only** (no tag), scanned by Docker Scout at that digest, and only when
+# all five images have passed does the `tag-images` job attach the immutable
+# `*-sha-<7>` and floating `*-latest` tags. A failed scan therefore never moves
+# a tag; the untagged digest it leaves behind is inert (nothing resolves to it)
+# and Docker Hub garbage-collects it. The tag names, the `latest-build.json`
+# fields and the `cna-image-published` payload are unchanged; the manifest
+# additionally records `digests{}` so the appliances can pin by digest.
+#
+# Signing (TODO.md T-703). Once an image has passed its gates, the build job
+# signs the digest with cosign — keyless, under this workflow's OIDC identity
+# (`id-token: write`, nothing stored in the repository) — and attaches BuildKit's
+# SLSA provenance as a cosign attestation (scripts/ci/sign_image.sh). The
+# appliances refuse to deploy a digest that does not verify against this
+# workflow's identity, so a tag re-pointed on Docker Hub, or an image pushed with
+# the registry credential from anywhere else, cannot be rolled out.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - apps/cna-api/**
+      - apps/cna-worker/**
+      - apps/cna-web/**
+      - cna/**
+      - scripts/drawio-headless.sh
+      - scripts/ci/sign_image.sh
+      - pyproject.toml
+      - uv.lock  # every Python image installs from it (TODO.md T-702)
+      - .github/workflows/200-build-images.yml
+  workflow_dispatch:
+
+# Never cancel an in-flight build. Tags are created all-or-nothing in the final
+# `tag-images` job, but a cancellation while that job is mid-loop would still
+# leave a partial tagged set on Docker Hub (e.g. `api-latest` moved,
+# `web-latest` not) that the appliances' `*-latest` fallbacks would deploy.
+# Queued runs for the same ref still collapse to the newest one, so a burst of
+# Dependabot merges costs at most one superseded full build, and runs finish in
+# push order (the queued run starts only after the in-flight one completes), so
+# `*-latest` can never move backwards.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # cosign release that signs every image; both appliances verify with the same
+  # release (COSIGN_VERSION in their 210/220). Bump the three together.
+  COSIGN_VERSION: v3.1.3
+
+# No workflow-wide grants: each job declares the least it needs below. The build
+# jobs run third-party actions and must not hold a write token. `id-token:
+# write` lets cosign request a certificate for this run's identity; it grants
+# nothing in this repository, but every action in those two jobs could mint an
+# OIDC token as this workflow — keep their list short and SHA-pinned.
+permissions: {}
+
+jobs:
+  # CLI, API, and Worker share an identical build shape (multi-stage image built
+  # from the repository root context, no extra validation) so they run as one
+  # matrix. Web is separate below because it adds npm audit, a second
+  # (migrator) target, and a smoke test.
+  #
+  # Each matrix leg publishes its digest and tag list under its own output key
+  # (`cli`, `api`, `worker`); a leg leaves the other keys unset, so the job-level
+  # outputs below carry one value per image. `tag-images` re-validates every
+  # digest before it touches a tag.
+  build-images:
+    runs-on: ubuntu-latest
+    if: vars.DOCKERHUB_ENABLED == 'true' # owner step: Docker Hub OIDC connection + variables (REFACTOR_APP.md change set J)
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
+    outputs:
+      digest_cli: ${{ steps.digest.outputs.cli }}
+      digest_api: ${{ steps.digest.outputs.api }}
+      digest_worker: ${{ steps.digest.outputs.worker }}
+      tags_cli: ${{ steps.digest.outputs.tags_cli }}
+      tags_api: ${{ steps.digest.outputs.tags_api }}
+      tags_worker: ${{ steps.digest.outputs.tags_worker }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: CLI
+            key: cli
+            file: Dockerfile
+            raw_tag: latest
+            sha_prefix: ""
+          - name: API
+            key: api
+            file: apps/cna-api/Dockerfile
+            raw_tag: api-latest
+            sha_prefix: api-sha-
+          - name: Worker
+            key: worker
+            file: apps/cna-worker/Dockerfile
+            raw_tag: worker-latest
+            sha_prefix: worker-sha-
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
+
+      - name: Validate Docker Hub namespace
+        run: |
+          if [ -z "$DOCKERHUB_NAMESPACE" ]; then
+            echo "::error::DOCKERHUB_NAMESPACE variable is required."
+            exit 1
+          fi
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
+        with:
+          registry: docker.io
+          username: ${{ vars.DOCKERHUB_NAMESPACE }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+
+      # The tag list computed here is NOT applied by the build step below; it is
+      # handed to `tag-images`, which applies it only after every image has
+      # passed its scan. The labels are baked into the image now.
+      - name: Extract metadata for ${{ matrix.name }}
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
+        with:
+          images: docker.io/${{ env.DOCKERHUB_NAMESPACE }}/cna
+          tags: |
+            type=raw,value=${{ matrix.raw_tag }}
+            type=sha,prefix=${{ matrix.sha_prefix }}
+
+      # Push by digest only (`push-by-digest=true`, no `tags:`): the image lands
+      # on Docker Hub addressable solely as `cna@sha256:…` until `tag-images`
+      # tags it. Provenance and SBOM attestations are attached to that digest.
+      - name: Build and push ${{ matrix.name }} image by digest
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          build-args: |
+            CNA_BUILD_SHA=${{ github.sha }}
+          outputs: type=image,name=docker.io/${{ env.DOCKERHUB_NAMESPACE }}/cna,push-by-digest=true,name-canonical=true,push=true
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: true
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Scout by digest, not by a mutable tag: no tag exists yet for this build,
+      # and buildx --push never loads the image into the runner's local Docker
+      # daemon, so docker/scout-action could otherwise silently fall back to a
+      # stale locally-cached image and scan the wrong content entirely.
+      - name: Docker Scout — fail on fixable critical/high CVEs
+        uses: docker/scout-action@2688993af7bafd6ba8c6a74ec652442be91dd82b  # v1.23.1
+        with:
+          command: cves
+          image: docker.io/${{ env.DOCKERHUB_NAMESPACE }}/cna@${{ steps.build.outputs.digest }}
+          only-severities: critical,high
+          only-fixed: true
+          exit-code: true
+
+      # Sign only what Scout accepted, and only by digest: the signature is what
+      # the appliances verify before a deploy (scripts/ci/sign_image.sh).
+      - name: Sign and attest ${{ matrix.name }} image
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: scripts/ci/sign_image.sh "docker.io/${DOCKERHUB_NAMESPACE}/cna@${DIGEST}"
+
+      - name: Record ${{ matrix.name }} digest and tag list for tag-images
+        id: digest
+        env:
+          KEY: ${{ matrix.key }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          META_JSON: ${{ steps.meta.outputs.json }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Build step returned no valid digest for ${KEY} (got '${DIGEST}')."
+            exit 1
+          fi
+          TAGS_JSON=$(jq -c '.tags' <<< "$META_JSON")
+          if [ "$(jq 'length' <<< "$TAGS_JSON")" -lt 1 ]; then
+            echo "::error::metadata-action produced no tags for ${KEY}."
+            exit 1
+          fi
+          echo "${KEY}=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "tags_${KEY}=${TAGS_JSON}" >> "$GITHUB_OUTPUT"
+          echo "${KEY}: ${DIGEST} -> ${TAGS_JSON}"
+
+  build-web:
+    runs-on: ubuntu-latest
+    if: vars.DOCKERHUB_ENABLED == 'true' # owner step: Docker Hub OIDC connection + variables (REFACTOR_APP.md change set J)
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
+    outputs:
+      digest_web: ${{ steps.digest.outputs.web }}
+      digest_migrator: ${{ steps.digest.outputs.migrator }}
+      tags_web: ${{ steps.digest.outputs.tags_web }}
+      tags_migrator: ${{ steps.digest.outputs.tags_migrator }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
+        with:
+          registry: docker.io
+          username: ${{ vars.DOCKERHUB_NAMESPACE }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Validate Docker Hub namespace
+        run: |
+          if [ -z "$DOCKERHUB_NAMESPACE" ]; then
+            echo "::error::DOCKERHUB_NAMESPACE variable is required."
+            exit 1
+          fi
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+
+      # Tag lists here are handed to `tag-images` and applied only after every
+      # image has passed its scan (see the CLI/API/Worker job above).
+      - name: Extract metadata for Web
+        id: meta_web
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
+        with:
+          images: docker.io/${{ env.DOCKERHUB_NAMESPACE }}/cna
+          tags: |
+            type=raw,value=web-latest
+            type=sha,prefix=web-sha-
+
+      - name: Extract metadata for Migrator
+        id: meta_migrator
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
+        with:
+          images: docker.io/${{ env.DOCKERHUB_NAMESPACE }}/cna
+          tags: |
+            type=raw,value=migrator-latest
+            type=sha,prefix=migrator-sha-
+
+      - name: npm audit — check for known vulnerabilities
+        # Fail on critical/high vulnerabilities before building the image.
+        # Audit-level=high: moderate issues are warned, not failing (acceptable for beta deps).
+        # Run from apps/cna-web since package-lock.json is scoped to that directory.
+        run: |
+          cd apps/cna-web
+          npm audit --audit-level=high --omit=dev 2>&1 || {
+            echo "::warning::npm audit found issues — review above output"
+            echo "::warning::Run 'npm audit fix' locally if issues are exploitable in production context"
+            # Fail only on critical issues (exit code 16 = critical)
+            npm audit --audit-level=critical --omit=dev
+          }
+
+      - name: Build and push Web image by digest
+        id: build_web
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
+        with:
+          context: apps/cna-web
+          file: apps/cna-web/Dockerfile
+          target: runner
+          build-args: |
+            CNA_BUILD_SHA=${{ github.sha }}
+          outputs: type=image,name=docker.io/${{ env.DOCKERHUB_NAMESPACE }}/cna,push-by-digest=true,name-canonical=true,push=true
+          labels: ${{ steps.meta_web.outputs.labels }}
+          provenance: true
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Scout by digest — see the comment on the CLI/API/Worker Scout step
+      # above: no tag exists yet, and a floating-tag reference could resolve
+      # against a stale locally-cached image instead of the one just pushed.
+      - name: Docker Scout — fail on fixable critical/high CVEs (Web)
+        uses: docker/scout-action@2688993af7bafd6ba8c6a74ec652442be91dd82b  # v1.23.1
+        with:
+          command: cves
+          image: docker.io/${{ env.DOCKERHUB_NAMESPACE }}/cna@${{ steps.build_web.outputs.digest }}
+          only-severities: critical,high
+          only-fixed: true
+          exit-code: true
+
+      - name: Build and push Migrator image by digest
+        id: build_migrator
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
+        with:
+          context: apps/cna-web
+          file: apps/cna-web/Dockerfile
+          target: migrator
+          build-args: |
+            CNA_BUILD_SHA=${{ github.sha }}
+          outputs: type=image,name=docker.io/${{ env.DOCKERHUB_NAMESPACE }}/cna,push-by-digest=true,name-canonical=true,push=true
+          labels: ${{ steps.meta_migrator.outputs.labels }}
+          provenance: true
+          sbom: true
+          cache-from: type=gha
+
+      - name: Docker Scout — fail on fixable critical/high CVEs (Migrator)
+        uses: docker/scout-action@2688993af7bafd6ba8c6a74ec652442be91dd82b  # v1.23.1
+        with:
+          command: cves
+          image: docker.io/${{ env.DOCKERHUB_NAMESPACE }}/cna@${{ steps.build_migrator.outputs.digest }}
+          only-severities: critical,high
+          only-fixed: true
+          exit-code: true
+
+      - name: Smoke test — /api/health returns 200
+        env:
+          WEB_DIGEST: ${{ steps.build_web.outputs.digest }}
+        run: |
+          # Run by digest: it is the only reference that exists for this build
+          # yet, and `docker run` would otherwise prefer a stale locally-cached
+          # image over pulling the one just pushed (same issue as the Docker
+          # Scout steps above), which would smoke-test the wrong image entirely.
+          docker run -d --name cna-web-smoke \
+            -e DATABASE_URL="postgresql://test:test@localhost:5432/test?sslmode=disable" \
+            -e NEXTAUTH_URL="http://localhost:3000" \
+            -e NEXTAUTH_SECRET="ci-smoke-secret-not-real" \
+            -e AZURE_AD_CLIENT_ID="00000000-0000-0000-0000-000000000000" \
+            -e AZURE_AD_CLIENT_SECRET="ci-placeholder" \
+            -e AZURE_AD_TENANT_ID="00000000-0000-0000-0000-000000000000" \
+            -p 3000:3000 \
+            "docker.io/${DOCKERHUB_NAMESPACE}/cna@${WEB_DIGEST}"
+          sleep 15
+          # Always dump logs so we can diagnose crashes even on failure
+          echo "--- container status ---"
+          docker ps -a --filter name=cna-web-smoke --format "table {{.Status}}\t{{.Ports}}"
+          echo "--- container logs ---"
+          docker logs cna-web-smoke || true
+          echo "--- end logs ---"
+          # Health check returns 503 without a real DB — verify the process started
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/api/health || true)
+          docker rm -f cna-web-smoke
+          # 200 = healthy DB, 503 = process started but DB unreachable (expected in CI)
+          if [ "$STATUS" != "200" ] && [ "$STATUS" != "503" ]; then
+            echo "Unexpected status: $STATUS — container may have failed to start"
+            exit 1
+          fi
+          echo "Smoke test passed (status=$STATUS)"
+
+      # Both digests have now passed Scout and web its smoke test; sign them by
+      # digest (scripts/ci/sign_image.sh) — same gate as the CLI/API/Worker job.
+      - name: Sign and attest Web and Migrator images
+        env:
+          DIGEST_WEB: ${{ steps.build_web.outputs.digest }}
+          DIGEST_MIGRATOR: ${{ steps.build_migrator.outputs.digest }}
+        run: |
+          set -euo pipefail
+          scripts/ci/sign_image.sh "docker.io/${DOCKERHUB_NAMESPACE}/cna@${DIGEST_WEB}"
+          scripts/ci/sign_image.sh "docker.io/${DOCKERHUB_NAMESPACE}/cna@${DIGEST_MIGRATOR}"
+
+      - name: Record Web and Migrator digests and tag lists for tag-images
+        id: digest
+        env:
+          DIGEST_WEB: ${{ steps.build_web.outputs.digest }}
+          DIGEST_MIGRATOR: ${{ steps.build_migrator.outputs.digest }}
+          META_WEB_JSON: ${{ steps.meta_web.outputs.json }}
+          META_MIGRATOR_JSON: ${{ steps.meta_migrator.outputs.json }}
+        run: |
+          set -euo pipefail
+          record() {
+            local key="$1" digest="$2" meta_json="$3" tags_json
+            if ! [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::Build step returned no valid digest for ${key} (got '${digest}')."
+              exit 1
+            fi
+            tags_json=$(jq -c '.tags' <<< "$meta_json")
+            if [ "$(jq 'length' <<< "$tags_json")" -lt 1 ]; then
+              echo "::error::metadata-action produced no tags for ${key}."
+              exit 1
+            fi
+            echo "${key}=${digest}" >> "$GITHUB_OUTPUT"
+            echo "tags_${key}=${tags_json}" >> "$GITHUB_OUTPUT"
+            echo "${key}: ${digest} -> ${tags_json}"
+          }
+          record web      "$DIGEST_WEB"      "$META_WEB_JSON"
+          record migrator "$DIGEST_MIGRATOR" "$META_MIGRATOR_JSON"
+
+  # The only place a tag is created. Runs only when every image has been built,
+  # scanned and (web) smoke-tested, then attaches each image's `*-sha-<7>` and
+  # `*-latest` tags to the digest that was scanned — the tag can never point at
+  # content Scout did not see. `imagetools create` re-tags the pushed index
+  # (with its attestations) without rebuilding or re-pushing layers.
+  tag-images:
+    runs-on: ubuntu-latest
+    if: vars.DOCKERHUB_ENABLED == 'true' # owner step: Docker Hub OIDC connection + variables (REFACTOR_APP.md change set J)
+    timeout-minutes: 10
+    needs: [build-images, build-web]
+    permissions:
+      contents: read
+    env:
+      DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
+
+      - name: Validate Docker Hub namespace
+        run: |
+          if [ -z "$DOCKERHUB_NAMESPACE" ]; then
+            echo "::error::DOCKERHUB_NAMESPACE variable is required."
+            exit 1
+          fi
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
+        with:
+          registry: docker.io
+          username: ${{ vars.DOCKERHUB_NAMESPACE }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Tag every scanned digest
+        env:
+          DIGEST_CLI: ${{ needs.build-images.outputs.digest_cli }}
+          DIGEST_API: ${{ needs.build-images.outputs.digest_api }}
+          DIGEST_WORKER: ${{ needs.build-images.outputs.digest_worker }}
+          DIGEST_WEB: ${{ needs.build-web.outputs.digest_web }}
+          DIGEST_MIGRATOR: ${{ needs.build-web.outputs.digest_migrator }}
+          TAGS_CLI: ${{ needs.build-images.outputs.tags_cli }}
+          TAGS_API: ${{ needs.build-images.outputs.tags_api }}
+          TAGS_WORKER: ${{ needs.build-images.outputs.tags_worker }}
+          TAGS_WEB: ${{ needs.build-web.outputs.tags_web }}
+          TAGS_MIGRATOR: ${{ needs.build-web.outputs.tags_migrator }}
+        run: |
+          set -euo pipefail
+          IMAGE="docker.io/${DOCKERHUB_NAMESPACE}/cna"
+          declare -A DIGESTS=(
+            [cli]="$DIGEST_CLI" [api]="$DIGEST_API" [worker]="$DIGEST_WORKER"
+            [web]="$DIGEST_WEB" [migrator]="$DIGEST_MIGRATOR"
+          )
+          declare -A TAGS=(
+            [cli]="$TAGS_CLI" [api]="$TAGS_API" [worker]="$TAGS_WORKER"
+            [web]="$TAGS_WEB" [migrator]="$TAGS_MIGRATOR"
+          )
+          COMPONENTS="cli api worker web migrator"
+
+          # Validate everything first so a missing output fails before any tag moves.
+          for c in $COMPONENTS; do
+            if ! [[ "${DIGESTS[$c]}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::No valid digest for '${c}' (got '${DIGESTS[$c]}'); refusing to tag anything."
+              exit 1
+            fi
+            if [ -z "${TAGS[$c]}" ] || [ "$(jq 'length' <<< "${TAGS[$c]}")" -lt 1 ]; then
+              echo "::error::No tag list for '${c}'; refusing to tag anything."
+              exit 1
+            fi
+          done
+
+          for c in $COMPONENTS; do
+            ARGS=()
+            while IFS= read -r t; do
+              [ -n "$t" ] && ARGS+=(-t "$t")
+            done < <(jq -r '.[]' <<< "${TAGS[$c]}")
+            echo "Tagging ${c}: ${IMAGE}@${DIGESTS[$c]} ->" "${ARGS[@]}"
+            docker buildx imagetools create "${ARGS[@]}" "${IMAGE}@${DIGESTS[$c]}"
+          done
+
+  publish-build-manifest:
+    runs-on: ubuntu-latest
+    if: vars.DOCKERHUB_ENABLED == 'true' # owner step: Docker Hub OIDC connection + variables (REFACTOR_APP.md change set J)
+    timeout-minutes: 10
+    # tag-images gates this job; build-images / build-web are listed as direct
+    # dependencies only so their digest outputs are reachable via `needs`.
+    needs: [build-images, build-web, tag-images]
+    permissions:
+      contents: write
+    env:
+      DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
+      DIGEST_CLI: ${{ needs.build-images.outputs.digest_cli }}
+      DIGEST_API: ${{ needs.build-images.outputs.digest_api }}
+      DIGEST_WORKER: ${{ needs.build-images.outputs.digest_worker }}
+      DIGEST_WEB: ${{ needs.build-web.outputs.digest_web }}
+      DIGEST_MIGRATOR: ${{ needs.build-web.outputs.digest_migrator }}
+    # The manifest is handed to notify-appliances as a job output so that job
+    # does not have to re-checkout main and race the push below.
+    outputs:
+      manifest: ${{ steps.manifest.outputs.json }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          # Need write access to push the manifest commit back to main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # `images{}` keeps the tag form the appliances already read. `digests{}`
+      # is additive (same keys, `name@sha256:…` form) so an appliance can pin
+      # exactly what was scanned instead of trusting a mutable Docker Hub tag.
+      - name: Write build manifest
+        id: manifest
+        run: |
+          set -euo pipefail
+          if [ -z "$DOCKERHUB_NAMESPACE" ]; then
+            echo "::error::DOCKERHUB_NAMESPACE variable is required."
+            exit 1
+          fi
+          for v in DIGEST_CLI DIGEST_API DIGEST_WORKER DIGEST_WEB DIGEST_MIGRATOR; do
+            if ! [[ "${!v}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::${v} is not a valid image digest (got '${!v}'); refusing to write the manifest."
+              exit 1
+            fi
+          done
+          SHA_TAG="sha-$(echo '${{ github.sha }}' | cut -c1-7)"
+          IMAGE="docker.io/${DOCKERHUB_NAMESPACE}/cna"
+          mkdir -p .deployment-catalog
+          cat > .deployment-catalog/latest-build.json <<EOF
+          {
+            "sha_tag": "${SHA_TAG}",
+            "commit": "${{ github.sha }}",
+            "built_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "run_id": "${{ github.run_id }}",
+            "images": {
+              "cli":      "${IMAGE}:${SHA_TAG}",
+              "api":      "${IMAGE}:api-${SHA_TAG}",
+              "worker":   "${IMAGE}:worker-${SHA_TAG}",
+              "web":      "${IMAGE}:web-${SHA_TAG}",
+              "migrator": "${IMAGE}:migrator-${SHA_TAG}"
+            },
+            "digests": {
+              "cli":      "${IMAGE}@${DIGEST_CLI}",
+              "api":      "${IMAGE}@${DIGEST_API}",
+              "worker":   "${IMAGE}@${DIGEST_WORKER}",
+              "web":      "${IMAGE}@${DIGEST_WEB}",
+              "migrator": "${IMAGE}@${DIGEST_MIGRATOR}"
+            }
+          }
+          EOF
+          echo "Manifest written:"
+          cat .deployment-catalog/latest-build.json
+          echo "json=$(jq -c . .deployment-catalog/latest-build.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and push manifest
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .deployment-catalog/latest-build.json
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "chore(build): update latest-build manifest to sha-$(echo '${{ github.sha }}' | cut -c1-7) [skip ci]"
+          # Pull rebase in case main moved while builds were running (common in parallel jobs).
+          # -X theirs: during conflicts, prefer our new manifest over whatever is on remote.
+          git pull --rebase --autostash -X theirs origin main
+          git push
+
+  # Tell each appliance repository that a new image set exists so it can
+  # auto-update dev and open the prod update request (its 230-image-update
+  # workflow). This is the push-based fast path; the appliances also poll the
+  # committed manifest, so a failed dispatch is a warning, never a failed build.
+  #
+  # APPLIANCE_REPOS is a comma-separated list of repository names under this
+  # owner (e.g. "Work-Cloud_Network_Azure_Appliance,Work-Cloud_Network_AWS_Appliance").
+  # The GitHub App must be installed on each of them; the token is scoped to
+  # exactly those repositories.
+  notify-appliances:
+    runs-on: ubuntu-latest
+    needs: publish-build-manifest
+    if: vars.APPLIANCE_REPOS != ''
+    # Nothing here uses GITHUB_TOKEN: the App token is minted from the App's
+    # private key and the dispatch calls use that token.
+    permissions: {}
+    steps:
+      - name: Generate GitHub App token (appliance repositories only)
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ vars.APPLIANCE_REPOS }}
+
+      - name: Send cna-image-published to each appliance
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          OWNER: ${{ github.repository_owner }}
+          APPLIANCE_REPOS: ${{ vars.APPLIANCE_REPOS }}
+          MANIFEST_JSON: ${{ needs.publish-build-manifest.outputs.manifest }}
+        run: |
+          set -u
+          if [ -z "$MANIFEST_JSON" ]; then
+            echo "::warning::No build manifest output; appliances will pick the images up on their next poll."
+            exit 0
+          fi
+          PAYLOAD=$(jq -cn --argjson m "$MANIFEST_JSON" '{event_type: "cna-image-published", client_payload: $m}')
+          IFS=',' read -ra REPOS <<< "$APPLIANCE_REPOS"
+          for RAW in "${REPOS[@]}"; do
+            REPO=$(echo "$RAW" | xargs)
+            [ -n "$REPO" ] || continue
+            STATUS=$(curl -sS -o /tmp/dispatch.out -w '%{http_code}' -X POST \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${OWNER}/${REPO}/dispatches" \
+              -d "$PAYLOAD" || echo "000")
+            if [ "$STATUS" = "204" ]; then
+              echo "Notified ${OWNER}/${REPO} (cna-image-published $(jq -r .sha_tag <<< "$MANIFEST_JSON"))"
+            else
+              echo "::warning::Could not notify ${OWNER}/${REPO} (HTTP ${STATUS}); it will pick the images up on its next scheduled poll."
+              cat /tmp/dispatch.out 2>/dev/null || true
+            fi
+          done

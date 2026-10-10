@@ -1,0 +1,10 @@
+name: iam
+version: 1.0.0-stub
+display_name: Identity & Access Management Assessment
+status: available_not_installed
+description: >
+  Assesses IAM roles, policies, privilege escalation paths,
+  service account sprawl, and workload identity configurations.
+  Complements the network module for full Zero Trust coverage.
+install_command: cna module install iam
+depends_on: [network, security]

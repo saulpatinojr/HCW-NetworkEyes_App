@@ -1,0 +1,64 @@
+<div class="chapter" id="ch2">
+<p class="kicker">Chapter 2</p>
+<h1>East-West Traffic Deep Dive</h1>
+
+<p>
+  East-west traffic moves laterally between virtual networks, subnets, and
+  workloads. Weak segmentation here turns a single compromised workload into
+  tenant-wide lateral movement. This chapter reviews VNet peering, routing,
+  and segmentation controls
+  {% if classification %} for the discovered
+  <strong>{{ classification.pattern | replace("_", "-") }}</strong> topology
+  ({{ classification.hub_vnet_ids | length }} hub VNet(s),
+  {{ classification.spoke_vnet_ids | length }} spoke VNet(s)){% endif %}.
+  {{ east_west_findings | length }} east-west finding(s) were identified.
+</p>
+
+{% if current_diagram_svg %}
+<h2>Current-state topology</h2>
+<div class="diagram">
+  {{ current_diagram_svg | safe }}
+  <div class="caption">Figure 2.1 — Discovered current-state network topology.</div>
+</div>
+{% endif %}
+
+{% if topology_tables.peerings %}
+<h2>VNet peering inventory</h2>
+{% set pivot_title = none %}
+<table>
+  <tr><th>VNet</th><th>Remote VNet</th><th>State</th><th>Gateway transit</th><th>Use remote GW</th><th>Forwarded traffic</th></tr>
+  {% for p in topology_tables.peerings %}
+  <tr>
+    <td>{{ p.vnet }}</td><td>{{ p.remote }}</td><td>{{ p.state }}</td>
+    <td>{{ "yes" if p.gateway_transit else "no" }}</td>
+    <td>{{ "yes" if p.use_remote_gateways else "no" }}</td>
+    <td>{{ "yes" if p.forwarded_traffic else "no" }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+{% if not is_condensed and topology_tables.route_tables %}
+<h2>Route table inventory</h2>
+<table>
+  <tr><th>Route table</th><th>VNet</th><th>Routes</th><th>Associated subnets</th><th>BGP propagation disabled</th></tr>
+  {% for rt in topology_tables.route_tables %}
+  <tr>
+    <td>{{ rt.name }}</td><td>{{ rt.vnet }}</td><td>{{ rt.routes }}</td>
+    <td>{{ rt.subnets }}</td><td>{{ "yes" if rt.bgp_propagation_disabled else "no" }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<h2>East-west findings</h2>
+{% if east_west_findings %}
+  {% for f in east_west_findings if not is_condensed or f.severity in ["CRITICAL", "HIGH"] %}
+    {% include "encyclopedia/_domain_section.j2" %}
+  {% else %}
+    <p>No {{ "critical or high severity " if is_condensed else "" }}east-west findings to report.</p>
+  {% endfor %}
+{% else %}
+<p>No east-west findings were identified in this assessment.</p>
+{% endif %}
+</div>

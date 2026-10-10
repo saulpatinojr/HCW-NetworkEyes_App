@@ -1,0 +1,9 @@
+name: hybrid
+version: 1.0.0-stub
+display_name: Hybrid & On-Premises Connectivity Assessment
+status: available_not_installed
+description: >
+  Extends network assessment to cover on-premises perimeter,
+  Direct Connect / ExpressRoute circuit assessment, and SD-WAN.
+install_command: cna module install hybrid
+depends_on: [network]

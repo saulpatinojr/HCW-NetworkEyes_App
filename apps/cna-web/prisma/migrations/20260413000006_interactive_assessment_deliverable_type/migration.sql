@@ -1,0 +1,2 @@
+-- Add INTERACTIVE_ASSESSMENT to DeliverableType enum
+ALTER TYPE "DeliverableType" ADD VALUE 'INTERACTIVE_ASSESSMENT';

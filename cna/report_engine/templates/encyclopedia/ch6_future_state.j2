@@ -1,0 +1,82 @@
+<div class="chapter" id="ch6">
+<p class="kicker">Chapter 6</p>
+<h1>Future State &amp; Roadmap</h1>
+
+{% if classification %}
+<h2>Current topology classification</h2>
+<p>
+  The discovered network was classified as
+  <strong>{{ classification.pattern | replace("_", "-") }}</strong>.
+  {{ classification.rationale }}
+</p>
+{% endif %}
+
+{% if future_state %}
+<p>
+  The recommended target pattern is
+  <strong>{{ future_state.target_pattern | replace("_", "-") }}</strong>, with
+  {{ future_state.changes | length }} recommended change(s).
+  Net-new resources are rendered dashed in the future-state diagram and
+  labeled "(recommended)".
+</p>
+
+{% if future_diagram_svg %}
+<h2>Future-state topology</h2>
+<div class="diagram">
+  {{ future_diagram_svg | safe }}
+  <div class="caption">Figure 6.1 — Recommended future-state network topology.</div>
+</div>
+{% endif %}
+
+<h2>Migration roadmap</h2>
+<table>
+  <tr><th>#</th><th>Change</th><th>Type</th><th>Affected resources</th></tr>
+  {% for c in future_state.changes %}
+  <tr>
+    <td>{{ loop.index }}</td>
+    <td>{{ c.title }}</td>
+    <td>{{ c.change_type | replace("_", " ") }}</td>
+    <td>{{ c.affected_resources | length }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+{% if is_condensed %}
+{% for c in future_state.changes %}
+<h3>{{ loop.index }}. {{ c.title }}</h3>
+<p>{{ c.description }}</p>
+{% endfor %}
+{% else %}
+<h2>Recommended changes — detail</h2>
+{% for c in future_state.changes %}
+<div class="domain-section">
+  <h3>{{ loop.index }}. {{ c.title }}</h3>
+  <p>{{ c.description }}</p>
+  {% if c.prerequisites %}
+  <h3>Prerequisite steps</h3>
+  <ol class="steps">
+    {% for p in c.prerequisites %}
+    <li>{{ p }}</li>
+    {% endfor %}
+  </ol>
+  {% endif %}
+  {% if c.affected_resources %}
+  <p class="resource-line"><strong>Affected resources:</strong></p>
+  <ul class="fw-list">
+    {% for r in c.affected_resources[:15] %}
+    <li>{{ r }}</li>
+    {% endfor %}
+    {% if c.affected_resources | length > 15 %}
+    <li class="muted">… and {{ c.affected_resources | length - 15 }} more</li>
+    {% endif %}
+  </ul>
+  {% endif %}
+</div>
+{% endfor %}
+{% endif %}
+
+{% else %}
+<p>No topology checkpoint was available for this engagement — run discovery
+to enable future-state modeling and the migration roadmap.</p>
+{% endif %}
+</div>

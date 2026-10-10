@@ -1,0 +1,34 @@
+{# Per-finding domain section. Expects `f` (normalized finding dict) in the
+   enclosing context. Condensed edition omits remediation detail. #}
+<div class="domain-section sev-{{ f.severity }}">
+  <h3><span class="badge badge-{{ f.severity }}">{{ f.severity }}</span>
+    {% if f.rule_id %}[{{ f.rule_id }}]{% endif %} {{ f.title }}</h3>
+  {% if f.description %}<p>{{ f.description }}</p>{% endif %}
+  <div class="fact">
+    <strong>Observed state:</strong> {{ f.fact }}
+    {% if f.evidence %}<br><span class="muted">Evidence: {{ f.evidence }}</span>{% endif %}
+  </div>
+  <p class="resource-line">
+    {% if f.resource_id %}<strong>Resource:</strong> {{ f.resource_id }}{% if f.resource_type %} ({{ f.resource_type }}){% endif %}<br>{% endif %}
+    {% if f.account_id %}<strong>Subscription/Account:</strong> {{ f.account_id }}{% endif %}
+    {% if f.region %} | <strong>Region:</strong> {{ f.region }}{% endif %}
+    {% if f.est_monthly_cost_usd %}<br><strong>Est. monthly cost impact:</strong> ${{ "%.2f" | format(f.est_monthly_cost_usd) }} <span class="verify">[VERIFY]</span>{% endif %}
+  </p>
+  {% if not is_condensed %}
+    {% if f.frameworks %}
+    <ul class="fw-list">
+      {% for m in f.frameworks %}
+      <li>{{ m.framework }}{% if m.control_id %} — {{ m.control_id }}{% endif %}{% if m.control_name %}: {{ m.control_name }}{% endif %}{% if m.alignment %} ({{ m.alignment }}){% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if f.recommendations %}
+    <h3>Remediation steps</h3>
+    <ol class="steps">
+      {% for r in f.recommendations %}
+      <li>{{ r.text }} <em class="muted">({{ r.source }})</em></li>
+      {% endfor %}
+    </ol>
+    {% endif %}
+  {% endif %}
+</div>

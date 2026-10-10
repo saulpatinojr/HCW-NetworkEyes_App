@@ -1,0 +1,60 @@
+# Vendored agent configuration (.claude/, .agents/, .codex/, .kiro/) lives here, out of version control (TODO T-411).
+local/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+credentials/
+output/raw/
+output/discovery/
+engagements/*/raw/
+engagements/*/discovery/
+output/reports/
+output/diagrams/
+.reports/
+.vscode/
+.idea/
+.DS_Store
+node_modules/
+.pytest_cache/
+htmlcov/
+.coverage
+*.drawio.bak
+
+# Next.js
+.next/
+out/
+apps/cna-web/.env.local
+apps/cna-web/.env*.local
+
+# Build artifacts — should not be committed
+cna.egg-info/
+*.egg-info/
+# setuptools build output (a local `pip install --no-build-isolation .` leaves it behind)
+build/
+dist/
+apps/cna-web/tsconfig.tsbuildinfo
+
+# Operational logs and payloads — contain runtime data, not source
+*.log
+payload*.json
+
+# Terraform plan files — contain sensitive variable values
+*.tfplan
+tfplan
+
+# Terraform security scan output — generated artifact, not source
+checkov_results.txt
+
+# Local pip junk from broken system Python (used as local test env)
+/Lib/
+apps/cna-web/lib/site-packages/
+apps/cna-web/scripts/*.exe
+scripts/*.exe
+PACS/

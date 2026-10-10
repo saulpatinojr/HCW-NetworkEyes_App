@@ -1,0 +1,231 @@
+[build-system]
+requires = ["setuptools>=83.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cna"
+version = "0.8.0b0"
+description = "Cloud Network Assessment Platform CLI"
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.4.2",
+    "rich>=15.0.0",
+    "boto3>=1.43.40",
+    "azure-identity>=1.25.3",
+    # Pinned to 1.x deliberately (TODO.md T-413). FoundryAgentClient drives
+    # agents.threads / .messages / .runs, which is the 1.x surface; 2.x replaced
+    # it entirely and every one of those calls raises AttributeError against it.
+    # In 1.x, AIProjectClient.agents returns an AgentsClient from the separate
+    # azure-ai-agents package, so that must be declared too — it is what actually
+    # provides the operations.
+    "azure-ai-projects>=1.0.0,<2",       # Foundry Agent Service: recommendation enrichment
+    "azure-ai-agents>=1.1.0,<2",         # provides AIProjectClient.agents in 1.x
+    "azure-mgmt-network>=31.0.1",
+    "azure-mgmt-resource>=26.0.0",
+    "azure-mgmt-subscription>=3.1.1",
+    "azure-storage-blob>=12.30.0",       # Phase F: Azure Blob Storage deployer
+    "openai>=2.45.0",
+    "anthropic>=1.5.0",                  # bring-your-own Claude engine (CNA_AI_MODE=byo-api)
+    # Reads the AES-256-GCM credential blobs the web tier writes (BYO AI keys).
+    # Was only ever a transitive dependency of azure-identity; declared so a
+    # future azure-identity bump cannot silently drop it.
+    "cryptography>=42.0.0",
+    "diagrams>=0.25.1",
+    "n2g>=0.3.3",
+    "matplotlib>=3.10.9",
+    "python-docx>=1.2.0",
+    "python-pptx>=1.0.2",
+    "jinja2>=3.1.6",
+    "weasyprint>=62.0",                # Phase E: PDF generation
+    "markdown>=3.10.2",
+    # merge_diagrams() parses diagram XML that arrives from the database
+    # via the API; defusedxml is the hardened stdlib drop-in for that.
+    "defusedxml>=0.7.1",
+    "pandas>=3.0.3",
+    "pydantic>=2.13.4",
+    "python-dotenv>=1.2.2",
+    "pyyaml>=6.0.3",
+    "tenacity>=9.1.4",
+    "httpx>=0.28.1",
+]
+
+[project.scripts]
+cna = "cna.cli.main:cli"
+
+[project.optional-dependencies]
+# Optional enrichment dependencies (TODO.md T-414).
+#
+# Every one is imported lazily inside `try: ... except ImportError:` and each
+# handler degrades gracefully, so they are genuinely optional — the assessment
+# still runs without them, just thinner. They were previously imported but
+# declared nowhere, so a clean install could never activate the features and
+# nothing in the packaging said so.
+#
+#   pip install -e .[enrichment]
+#
+# Bounds are VERIFIED against the code, not just "latest that installs". Three
+# of these have shipped a major release that renames or removes the API this
+# code calls, so an unbounded `>=` would install a version that cannot work:
+#   * managementgroups 2.x renamed ManagementGroupsAPI -> ManagementGroupsMgmtClient
+#   * monitor 7.x dropped MonitorManagementClient.diagnostic_settings
+#   * costmanagement 5.x changed QueryComparisonExpression's signature
+# Upper bounds are set on all ten for the same reason — see T-413 for the same
+# failure already present in a declared dependency.
+enrichment = [
+    "azure-mgmt-managementgroups>=1.0.0,<2",  # management-group hierarchy
+    "azure-mgmt-monitor>=6.0.2,<7",           # alert counts, diagnostic settings
+    "azure-mgmt-costmanagement>=4.0.1,<5",    # FinOps cost queries
+    "azure-monitor-query>=2.0.0,<3",          # network traffic analytics
+    "azure-mgmt-compute>=38.2.0,<39",         # NVA discovery
+    "azure-mgmt-security>=7.0.0,<8",          # Defender for Cloud posture
+    "azure-mgmt-privatedns>=2.0.0,<3",        # private DNS zone discovery
+    "azure-mgmt-loganalytics>=14.0.0,<15",    # Log Analytics workspace lookup
+    "cairosvg>=2.9.0,<3",                     # SVG -> PNG for diagram export
+    "mcp>=2.0.0,<3",                          # Azure/AWS MCP recommendation clients
+]
+
+# The cna-api image's runtime dependencies. These are NOT core library deps
+# (the CLI never imports FastAPI), so they live in their own extra rather than
+# in `dependencies`. The API Dockerfile installs `.[api]`, which also pulls the
+# core deps, so the image no longer drifts from a hand-written pip list (PY-021).
+# The three azure-mgmt-* packages are the enrichment paths the API actually
+# exercises at discovery time and must be present in the image; the rest of the
+# enrichment extra remains optional.
+api = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "psycopg2-binary>=2.9",
+    "azure-mgmt-monitor>=6.0.2,<7",
+    "azure-mgmt-loganalytics>=14.0.0,<15",
+    "azure-mgmt-compute>=38.2.0,<39",
+]
+
+dev = [
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",               # coverage plugin (was missing from dev deps)
+    "hypothesis>=6.140.3",             # property-based tests (production-readiness review invariants)
+    "ruff>=0.15.21",
+    "ty>=0.0.72",                       # type checker (TODO.md T-402)
+    "pre-commit>=4.6.0",               # pre-commit itself as a dev dep
+    "detect-secrets>=1.5",           # used by pre-commit hook
+]
+
+# PEP 735 dependency groups — locked in uv.lock next to the project's own
+# dependencies and extras (TODO.md T-702). Groups are never installed by
+# `pip install .`; the Dockerfiles export them from the lock explicitly.
+[dependency-groups]
+# The build backend the three Python Dockerfiles install into the *builder*
+# stage before building the `cna` wheel with `--no-build-isolation`, so the
+# backend itself is pinned and hash-checked instead of fetched unpinned by pip's
+# isolated build environment. Mirrors [build-system].requires — keep both in
+# step. setuptools never reaches the final image (it ships CVE-carrying vendored
+# copies; see the `pip uninstall` in every Dockerfile).
+build = [
+    "setuptools>=83.0.0",
+    "wheel",
+]
+# apps/cna-worker/main.py imports exactly these two SDKs and does not install
+# the cna package, so its image resolves them from the same lock as the CLI and
+# API images (same versions everywhere) instead of an unpinned `pip install`.
+worker = [
+    "azure-identity>=1.25.3",
+    "azure-storage-blob>=12.30.0",
+]
+
+# uv.lock is the single resolution every Python image installs from
+# (`uv export --locked` → `uv pip install --require-hashes`); 300-test-codebase
+# fails when it drifts from this file (`uv lock --check`). Regenerate with
+# `uv lock` after editing any dependency above. The uv version is pinned where
+# it runs — the `FROM ghcr.io/astral-sh/uv:<version>@sha256:…` stage in each
+# Python Dockerfile and the `uv==<version>` steps in 300-test-codebase.yml —
+# not here: a `[tool.uv] required-version` floor would break Dependabot's uv
+# updater, which runs its own bundled uv (older than the one pinned here).
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q"
+
+# Type checking (TODO.md T-402). Matches the ruff posture: py311, project
+# source only, no widened ignore lists. `ty check cna/` is NOT yet green — see
+# TODO.md T-410 for the remaining findings, which are to be fixed rather than
+# silenced. Nothing here suppresses a rule.
+[tool.ty.environment]
+python-version = "3.11"
+
+[tool.ty.src]
+include = ["cna"]
+exclude = ["local"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+# .claude, .agents, .codex, and .kiro are vendored agent/skill/tooling
+# configuration (Kiro's spec workspace included), not this repo's own source — they aren't held to project lint
+# standards. Kept in sync with EXCLUDED_DIRS in
+# scripts/validate_documentation_model.py and the README "Repository
+# conventions" section (TODO.md T-607). Markdown is excluded because ruff
+# 0.16 formats Python fenced blocks inside it, and the snippets in TODO.md
+# are prose, not source.
+extend-exclude = ["local", "*.md"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "S",   # flake8-bandit (security)
+    "N",   # pep8-naming
+]
+ignore = [
+    "E501",   # line too long (ruff format handles this)
+    "S101",   # use of assert (acceptable in tests)
+    "S603",   # subprocess call (needed for diagram export)
+    "S607",   # partial executable path (needed for diagram export)
+    "N818",   # exception name without Error suffix — intentional (CNAPartialResult, ObservedStateViolation, etc.)
+    "S108",   # /tmp usage — acceptable in containerised CLI/worker images
+    "S311",   # pseudo-random — used for jitter/throttle, not cryptography
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S", "N"]   # relax security + naming rules in tests
+"cna/diagram_engine/diagrams_generator.py" = ["N811"]  # VPC imported as SubnetNode is a deliberate alias
+
+[tool.coverage.run]
+source = ["cna"]
+omit = [
+    # CLI entry points — covered by integration tests, not unit tests
+    "cna/cli/*",
+    "*/__init__.py",
+    "*/migrations/*",
+
+    # Both discovery orchestrators used to be omitted here, on the stated premise
+    # that they "require live AWS/Azure API calls against real tenants". That was
+    # never true — their tests are fully mocked — and it kept the highest-risk
+    # code in the package out of the fail_under gate. Both are measured now
+    # (TODO.md T-408). Do not add them back.
+
+    # Diagram generation — require graphviz binary + drawio runtime
+    # (Round 3: add `apt-get install graphviz` to CI and remove these)
+    "cna/diagram_engine/diagrams_generator.py",
+    "cna/modules/network/diagrams/*",
+    "cna/modules/landingzone/diagrams/*",
+
+    # Modules registry (pure config, no logic)
+    "cna/modules/registry.py",
+]
+
+[tool.coverage.report]
+fail_under = 80
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "@overload",
+]
+
+[tool.setuptools.packages.find]
+include = ["cna*"]

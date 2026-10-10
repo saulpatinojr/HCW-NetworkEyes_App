@@ -1,0 +1,2 @@
+Audit Azure NSGs from CNA discovery data.
+Observed state only. Flag deviations from Azure Security Benchmark v3.

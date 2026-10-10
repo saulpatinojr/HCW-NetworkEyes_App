@@ -1,0 +1,21 @@
+# Qlty Cloud / CLI analysis configuration.
+#
+# Vendored agent configuration (local/agent-config/, gitignored; formerly .claude/, .agents/, .codex/, .kiro/) is not
+# project source: CLAUDE.md excludes it from lint and from the documentation
+# model, and it holds ~95% of the files in this repository. Analysing it made
+# Qlty Cloud's full first-run analysis of this repository time out at its
+# 15-minute limit (inconclusive status U11), so it is excluded here too.
+# Generated build artefacts and dependency trees are excluded for the same
+# reason. Patterns use Qlty's glob syntax; the list is the only key in this
+# file so the CLI's defaults apply to everything else.
+config_version = "0"
+
+exclude_patterns = [
+  "local/**",
+  "**/node_modules/**",
+  "**/.next/**",
+  "**/.venv/**",
+  "**/__pycache__/**",
+  "apps/cna-web/lib/drawio-mcp/shape-index.json",
+  "apps/cna-web/package-lock.json",
+]
