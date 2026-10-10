@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/crypto";
 import { sanitizeBackendDetail } from "@/lib/summarize-error";
-import { apiHeaders } from "@/lib/api-client";
+import { internalApiHeaders } from "@/lib/api-client";
 import { revalidatePath } from "next/cache";
 
 // ─── Add credential ───────────────────────────────────────────────────────────
@@ -177,7 +177,7 @@ export async function testAzureAccess(params: {
   try {
     const res = await fetch(`${apiUrl}/discovery/test-access`, {
       method: "POST",
-      headers: apiHeaders({ "Content-Type": "application/json" }),
+      headers: await internalApiHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ tenant_id: tenantId, subscription_ids: subscriptionIds }),
     });
 
@@ -303,7 +303,7 @@ export async function testAwsConnection(params: {
   try {
     const res = await fetch(`${apiUrl}/discovery/test-connection-aws`, {
       method: "POST",
-      headers: apiHeaders({ "Content-Type": "application/json" }),
+      headers: await internalApiHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         role_arn: roleArn,
         external_id: externalId || null,

@@ -17,6 +17,7 @@ from cna.api_errors import (
     DownstreamCategory,
     SanitizedError,
     classify_downstream_error,
+    redact_exception,
     sanitize_downstream_error,
 )
 from cna.api_status import Outcome, OutcomeClass, class_for
@@ -149,3 +150,38 @@ def test_context_is_never_returned_to_client():
         context="test-connection for tenant super-secret-tenant-id",
     )
     assert "super-secret-tenant-id" not in sanitized.client_message
+
+
+# ── redact_exception (change set H) ──────────────────────────────────────────
+
+
+class _HttpLike(Exception):
+    def __init__(self, message: str, status_code: int | None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        RuntimeError("Forbidden for https://management.azure.com/subscriptions/0000"),
+        ValueError("host db.internal.example:5432 refused"),
+        _HttpLike("x-ms-request-id 1234 at vault.example", 403),
+        _HttpLike("Service Unavailable", None),
+        _HttpLike("", 0),
+    ],
+)
+def test_redaction_never_includes_the_message(exc: BaseException):
+    text = redact_exception(exc)
+    message = str(exc)
+    assert text.startswith(type(exc).__name__)
+    if message:
+        assert message not in text
+    for fragment in ("https://", "db.internal", "vault.example", "x-ms-request-id"):
+        assert fragment not in text
+
+
+def test_redaction_keeps_the_http_status():
+    assert redact_exception(_HttpLike("secret detail", 403)) == "_HttpLike (HTTP 403)"
+    assert redact_exception(_HttpLike("secret detail", None)) == "_HttpLike"
+    assert redact_exception(_HttpLike("secret detail", 0)) == "_HttpLike"

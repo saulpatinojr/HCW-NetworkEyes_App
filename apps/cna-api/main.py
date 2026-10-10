@@ -23,7 +23,7 @@ from typing import Any
 
 import psycopg2
 import psycopg2.extras
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -74,6 +74,13 @@ logger = logging.getLogger("cna-api")
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from auth import BearerTokenMiddleware  # noqa: E402, I001
+from entra import (  # noqa: E402, I001
+    AuthError,
+    EntraConfig,
+    configure as configure_entra,
+    refuse_profile_in_appliance,
+    require_bearer,
+)
 from finding_records import finding_to_record  # noqa: E402, I001
 import db  # noqa: E402, I001
 from routers.chat import router as chat_router  # noqa: E402, I001
@@ -152,23 +159,30 @@ def _validate_startup_config(env: Mapping[str, str]) -> None:
     appliance = bool(env.get("CNA_APPLIANCE_CLOUD"))
     token = env.get("CNA_API_TOKEN", "")
     database_url = env.get("DATABASE_URL", "")
+    # An appliance build never honours the test profile (change set H); checked
+    # before anything else so the exit names the one thing that is wrong.
+    refuse_profile_in_appliance(env)
     if appliance:
         # No secret-shaped credential variable may reach an appliance process: the
         # identity is the user-assigned managed identity (change set G).
         refuse_forbidden_credential_env(env)
+    # Entra is validated here so a half-configured tenant/audience pair exits at
+    # start-up rather than at the first request.
+    entra = EntraConfig.from_env(env)
 
     if appliance and not database_url:
         raise SystemExit(
             "DATABASE_URL is not set but CNA_APPLIANCE_CLOUD is — refusing to start. "
             "The appliance Terraform must inject DATABASE_URL as a container secret."
         )
-    if appliance and not token:
+    if appliance and not token and entra is None:
         raise SystemExit(
-            "CNA_API_TOKEN is not set but CNA_APPLIANCE_CLOUD is — refusing to start. "
-            "The appliance Terraform must inject CNA_API_TOKEN as a container secret "
-            "on both the api and the web containers."
+            "Neither CNA_API_TOKEN nor CNA_ENTRA_TENANT_ID/CNA_ENTRA_AUDIENCE is set but "
+            "CNA_APPLIANCE_CLOUD is — refusing to start. The appliance Terraform must "
+            "inject CNA_API_TOKEN as a container secret on both the api and the web "
+            "containers, or configure Entra bearer validation for the web identity."
         )
-    if not token and not appliance:
+    if not token and entra is None and not appliance:
         logger.warning(
             "CNA_API_TOKEN is not set and CNA_APPLIANCE_CLOUD is unset (local dev) — "
             "the API will accept UNAUTHENTICATED requests. Never run this way in production."
@@ -176,6 +190,14 @@ def _validate_startup_config(env: Mapping[str, str]) -> None:
 
 
 _validate_startup_config(os.environ)
+# The process-wide Entra validator (None when Entra is not configured).
+ENTRA = configure_entra(EntraConfig.from_env(os.environ))
+
+# The internal routes carry the Entra dependency on this router and nowhere else:
+# a public route can never inherit it by accident, and a route that must be
+# protected is registered here by name (tests/unit/test_cna_api_auth.py holds the
+# list). The shared-token middleware below still fronts every non-probe path.
+internal = APIRouter(dependencies=[Depends(require_bearer)])
 
 
 @asynccontextmanager
@@ -204,6 +226,16 @@ app.include_router(metrics_router)
 app.include_router(chat_router)
 app.include_router(reports_router)
 app.include_router(diagrams_router)
+
+
+@app.exception_handler(AuthError)
+async def _handle_auth_error(_request, exc: AuthError) -> JSONResponse:
+    """``401 {"error": {"code": "unauthenticated"}}`` / ``403 {"error": {"code":
+    "insufficient_role"}}`` from the internal router's Entra dependency."""
+    headers = {"WWW-Authenticate": "Bearer"} if exc.status_code == 401 else None
+    return JSONResponse(
+        status_code=exc.status_code, content={"error": {"code": exc.code}}, headers=headers
+    )
 
 
 @app.exception_handler(db.PoolTimeout)
@@ -236,11 +268,12 @@ async def _handle_validation_error(_request, exc: RequestValidationError) -> JSO
     )
 
 
-# Enforce the shared bearer secret when it is configured. In local dev
-# (CNA_API_TOKEN unset) no middleware is added — see _validate_startup_config,
-# which already refused to start if that happens in appliance mode.
-if CNA_API_TOKEN:
-    app.add_middleware(BearerTokenMiddleware, token=CNA_API_TOKEN)
+# Enforce the bearer when either form is configured. In local dev (neither
+# CNA_API_TOKEN nor CNA_ENTRA_* set) no middleware is added — see
+# _validate_startup_config, which already refused to start if that happens in
+# appliance mode. There is no variable that disables it.
+if CNA_API_TOKEN or ENTRA is not None:
+    app.add_middleware(BearerTokenMiddleware, token=CNA_API_TOKEN, entra=ENTRA)
 
 
 # ─── DB helpers ───────────────────────────────────────────────────────────────
@@ -430,7 +463,7 @@ def ready() -> JSONResponse:
 # can never regress to a fabricated 2xx: NOT_IMPLEMENTED maps to 501 (a 5xx),
 # which honestly reflects that the intake phase does not run yet (Requirement
 # 2.1).
-@app.post("/intake", status_code=status_for(Outcome.NOT_IMPLEMENTED))
+@internal.post("/intake", status_code=status_for(Outcome.NOT_IMPLEMENTED))
 def intake(body: dict) -> dict:
     raise HTTPException(
         status_code=status_for(Outcome.NOT_IMPLEMENTED),
@@ -505,7 +538,7 @@ def _record_publication(engagement_id: str, record: dict) -> None:
         conn.commit()
 
 
-@app.post("/publish")
+@internal.post("/publish")
 def publish(request: PublishRequest) -> dict:
     """Publish the engagement's published deliverables to a client portal.
 
@@ -674,7 +707,7 @@ class TestAccessRequest(BaseModel):
     subscription_ids: list[str] = []
 
 
-@app.post("/discovery/test-access")
+@internal.post("/discovery/test-access")
 async def test_access(request: TestAccessRequest) -> dict:
     """Prove the process identity can read the requested subscriptions.
 
@@ -722,7 +755,7 @@ class AwsTestConnectionRequest(BaseModel):
     secret_access_key: str  # plaintext — decrypted by web layer
 
 
-@app.post("/discovery/test-connection-aws")
+@internal.post("/discovery/test-connection-aws")
 async def test_connection_aws(request: AwsTestConnectionRequest) -> dict:
     """Validate AWS keys and prove the CNA read-only role can be assumed."""
     try:
@@ -775,7 +808,7 @@ class DiscoveryStartRequest(BaseModel):
     aws_secret_access_key: str | None = None  # plaintext — decrypted by web layer
 
 
-@app.post("/discovery/start")
+@internal.post("/discovery/start")
 async def start_discovery(
     request: DiscoveryStartRequest, background_tasks: BackgroundTasks
 ) -> dict:
@@ -804,7 +837,7 @@ async def start_discovery(
     return {"job_id": request.job_id, "status": "RUNNING"}
 
 
-@app.get("/discovery/jobs/{job_id}")
+@internal.get("/discovery/jobs/{job_id}")
 def get_job_status(job_id: str) -> dict:
     if not DATABASE_URL:
         raise HTTPException(
@@ -829,6 +862,10 @@ def get_job_status(job_id: str) -> dict:
 
 
 # ─── Background discovery task ────────────────────────────────────────────────
+
+
+# Every internal route above is registered; mount them once.
+app.include_router(internal)
 
 
 def _run_azure_discovery(request: DiscoveryStartRequest) -> None:

@@ -723,7 +723,9 @@ class TestDiscoverSubscription:
             topo = discovery._discover_subscription("sub-0001", "Prod")
 
         assert topo.discovery_blocked is True
-        assert "403 on ARM" in topo.block_reason
+        # Persisted error text is the class name, never the message (change set H).
+        assert topo.block_reason == "RuntimeError"
+        assert "403 on ARM" not in topo.block_reason
 
     def test_one_failing_collector_does_not_block_the_others(self, discovery):
         """A missing permission on one resource type must not lose the subscription."""
@@ -750,6 +752,7 @@ class TestDiscoverSubscription:
             topo = discovery._discover_subscription("sub-0001", "Prod")
 
         assert "HTTP 403" in topo.block_reason
+        assert "Forbidden" not in topo.block_reason
 
     def test_every_collector_failing_marks_the_subscription_blocked(self, discovery):
         raises = {method: RuntimeError("403") for _a, method in _PHASE1_COLLECTORS}
@@ -2003,7 +2006,8 @@ class TestFirewallMetrics:
             "sub-1", [_Arm(id="fw-1", name="afw-1")], monitor, "ts", metrics
         )
 
-        assert "no Microsoft.Insights read" in metrics.firewall_metrics[0].collection_error
+        # Redacted to the class name (change set H): never the SDK message.
+        assert metrics.firewall_metrics[0].collection_error == "RuntimeError"
 
 
 class TestLoadBalancerMetrics:
@@ -2229,7 +2233,7 @@ class TestAppgwMetrics:
             "sub-1", [_Arm(id="a", name="agw-1")], monitor, "ts", metrics
         )
 
-        assert "throttled" in metrics.appgw_metrics[0].collection_error
+        assert metrics.appgw_metrics[0].collection_error == "RuntimeError"
 
 
 class TestCollectNetworkMetrics:
@@ -2257,7 +2261,7 @@ class TestCollectNetworkMetrics:
         with patch("azure.mgmt.monitor.MonitorManagementClient", side_effect=RuntimeError("403")):
             metrics = discovery._collect_network_metrics(ctx)
 
-        assert metrics.collection_error == "403"
+        assert metrics.collection_error == "RuntimeError"
         assert metrics.vnet_utilization["vnet-1"] == 0.4
 
 

@@ -17,7 +17,7 @@ in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG
 | [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-419 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements + appliance migration | T-501 – T-509 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
-| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-723 |
+| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-724 |
 
 ---
 
@@ -2208,3 +2208,25 @@ Prisma's `spClientId`/`spSecretEnc` and `AZURE_CLIENT_SECRET` are gone (`CHANGEL
   acceptable inside the appliance image, or exclude them there too behind `CNA_APPLIANCE_CLOUD`.
 - The web tier's `@azure/identity` (Blob, AI) is unchanged and already uses `DefaultAzureCredential`
   without exclusions; align it with the factory's exclusions when the web tier is next touched.
+
+### T-724 — Entra bearer on the internal routes: app registration, role and web identity in both appliances (change set H)
+`apps/cna-api/entra.py` validates Entra tokens for `CNA_ENTRA_AUDIENCE` and the `internal` router requires
+the `Discovery.Run` role; the shared token `CNA_API_TOKEN` stays accepted so a deployment can move one
+container at a time (`CHANGELOG.md` `[Unreleased]`; `tests/unit/test_cna_api_auth.py`,
+`tests/security/test_profile_refused.py`). Open:
+- Core ↔ appliance contract: `Work-Cloud_Network_Azure_Appliance` creates the api's app registration with
+  `identifier_uris = ["api://<name>"]` and an app role `Discovery.Run`, assigns that role to the web
+  container's user-assigned identity, and sets `CNA_ENTRA_TENANT_ID` and `CNA_ENTRA_AUDIENCE` on the api
+  and `CNA_ENTRA_AUDIENCE` on the web container; once both are in place it may drop `CNA_API_TOKEN` from
+  both containers (the api refuses to start with neither). `Work-Cloud_Network_AWS_Appliance` has no Entra
+  tenant and keeps the shared token.
+- `[VERIFY]` The accepted issuers (`https://login.microsoftonline.com/<tenant>/v2.0` and
+  `https://sts.windows.net/<tenant>/`) against a real token for the `api://` audience; the app
+  registration's `accessTokenAcceptedVersion` decides which one arrives.
+- `[REVIEW REQUIRED]` Keeping the shared token as a second accepted bearer while Entra is configured, and
+  the role name `Discovery.Run`; the plan's end state is Entra only.
+- The plan's public read routes (`/api/health`, `/api/rules`, `/api/assessments/current/*`, section 8) do
+  not exist in the Core yet; when change set D adds them they are registered on `app` (or a `public`
+  router), never on `internal`, and `tests/unit/test_cna_api_auth.py` keeps the protected list.
+- The web tier's `lib/blob.ts` and `lib/ai-engine.ts` still build `DefaultAzureCredential` without the
+  exclusions `cna.core.auth.build_azure_credential` applies (T-723).

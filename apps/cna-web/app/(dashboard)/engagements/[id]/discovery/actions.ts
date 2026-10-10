@@ -6,7 +6,7 @@ import { decrypt } from "@/lib/crypto";
 import { revalidatePath } from "next/cache";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { dedupeDiscoveryFindings } from "@/lib/dedupe-findings";
-import { apiHeaders } from "@/lib/api-client";
+import { internalApiHeaders } from "@/lib/api-client";
 import { sanitizeBackendDetail } from "@/lib/summarize-error";
 import type { CloudCredential } from "@prisma/client";
 
@@ -80,7 +80,7 @@ export async function startAllDiscovery(
       const job = jobs[i];
       const res = await fetch(`${apiUrl}/discovery/start`, {
         method: "POST",
-        headers: apiHeaders({ "Content-Type": "application/json" }),
+        headers: await internalApiHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(buildStartPayload(cred, job.id, engagementId)),
       });
       if (!res.ok) {
@@ -166,7 +166,7 @@ export async function startDiscovery(
   try {
     const res = await fetch(`${apiUrl}/discovery/start`, {
       method: "POST",
-      headers: apiHeaders({ "Content-Type": "application/json" }),
+      headers: await internalApiHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(buildStartPayload(cred, job.id, engagementId)),
     });
 
