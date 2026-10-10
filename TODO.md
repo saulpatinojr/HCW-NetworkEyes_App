@@ -17,7 +17,7 @@ in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG
 | [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-419 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements + appliance migration | T-501 – T-509 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
-| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-724 |
+| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-725 |
 
 ---
 
@@ -2230,3 +2230,15 @@ container at a time (`CHANGELOG.md` `[Unreleased]`; `tests/unit/test_cna_api_aut
   router), never on `internal`, and `tests/unit/test_cna_api_auth.py` keeps the protected list.
 - The web tier's `lib/blob.ts` and `lib/ai-engine.ts` still build `DefaultAzureCredential` without the
   exclusions `cna.core.auth.build_azure_credential` applies (T-723).
+
+### T-725 — Engine independence: keep the no-I/O proof green as discovery and AWS move (change set E)
+`tests/unit/test_engine_has_no_io.py` holds the import boundary of `cna_azure_network_engine`
+(`CHANGELOG.md` `[Unreleased]`). Open:
+- Change set D adds `discovery/` modules that import the Azure SDK; they are the one allowed place, and the
+  test's `CLOUD_ROOTS` check keeps them there. Nothing under `discovery/` may import `cna.*` either.
+- Change set K moves the AWS rules out of `cna/ai_engine/analysis_engine.py`; until then the wrapper is the
+  only caller of `evaluate()` that also writes to the store (`EngagementStore.write_findings_report`), and
+  `cna analyze` passes the loaded topologies in rather than having `run()` load them (deviation from the
+  plan's sketch, recorded in the CHANGELOG entry).
+- The dynamic check runs `python -I` against the workspace-installed package; a wheel built by
+  `tests/packaging/test_engine_wheel.py` is the stronger proof and already imports in a clean venv.
