@@ -239,6 +239,12 @@ class _FakeToken:
 
 
 class _FakeCredential:
+    """Stands in for ``DefaultAzureCredential``; accepts the factory's exclusion kwargs."""
+
+    def __init__(self, **kwargs):
+        assert kwargs.get("exclude_environment_credential") is True
+        assert kwargs.get("exclude_interactive_browser_credential") is True
+
     def get_token(self, *_scopes):
         return _FakeToken()
 

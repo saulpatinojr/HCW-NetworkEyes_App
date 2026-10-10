@@ -199,7 +199,7 @@ jobs:
         # --cov=apps counts the API/router code the TestClient tests now exercise
         # in the same gate as the cna package (TEST-001).
         run: |
-          pytest tests/unit/ tests/packaging/ packages/cna-azure-network-engine/tests/ -v --tb=short \
+          pytest tests/unit/ tests/security/ tests/packaging/ packages/cna-azure-network-engine/tests/ -v --tb=short \
             --cov=cna \
             --cov=apps \
             --cov=cna_azure_network_engine \

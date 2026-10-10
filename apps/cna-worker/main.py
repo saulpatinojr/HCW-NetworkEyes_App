@@ -2,8 +2,9 @@ import os
 from pathlib import Path
 from shutil import copyfile
 
-from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient, ContentSettings
+
+from cna.core.auth import build_azure_credential
 
 
 def bootstrap_workspace(base: Path) -> dict:
@@ -57,7 +58,7 @@ def upload_to_blob(local_path: Path, container: str, blob_target: str) -> dict:
             "local_path": str(local_path),
         }
 
-    credential = DefaultAzureCredential()
+    credential = build_azure_credential()
     account_url = f"https://{account_name}.blob.core.windows.net"
     blob_service_client = BlobServiceClient(account_url=account_url, credential=credential)
     blob_client = blob_service_client.get_blob_client(container=container, blob=blob_target)

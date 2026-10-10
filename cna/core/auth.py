@@ -9,7 +9,8 @@ Credential workflow for each operator persona:
      Docker mounts .env via --env-file.
      AWS: env vars AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
        OR ~/.aws/credentials mount.
-     Azure: env vars AZURE_CLIENT_ID / AZURE_CLIENT_SECRET / AZURE_TENANT_ID.
+     Azure: `az login` (the CLI credential) or a managed identity; AZURE_TENANT_ID and
+       AZURE_CLIENT_ID name the tenant and identity. No client secret, ever.
 
   2. CI/CD PIPELINE (GitHub Actions):
      AWS: OIDC federation — no long-lived keys.
@@ -24,7 +25,7 @@ Credential workflow for each operator persona:
 
   4. CREDENTIAL ROTATION:
      AWS: Role assumption is short-lived (1h default). Rotation is automatic.
-     Azure SP: Secret rotation managed in Key Vault with expiry alerts.
+     Azure: the appliance's user-assigned managed identity has no secret to rotate.
      No long-lived static keys should ever be used for discovery.
 """
 
@@ -32,6 +33,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Mapping
 
 logger = logging.getLogger("cna.core.auth")
 
@@ -72,47 +74,105 @@ class AWSCredentials:
         return cls(role_arn=role_arn, external_id=external_id)
 
 
-class AzureCredentials:
-    """Azure credentials for Service Principal authentication.
+# Credential variables the appliance refuses to start with (REFACTOR_APP.md change set G).
+# DefaultAzureCredential's environment credential would turn any of them into a
+# long-lived secret path; the appliance authenticates with its user-assigned managed
+# identity only, and the build below excludes that credential everywhere.
+FORBIDDEN_CREDENTIAL_ENV: tuple[str, ...] = (
+    "AZURE_CLIENT_SECRET",
+    "AZURE_CLIENT_CERTIFICATE_PATH",
+    "AZURE_USERNAME",
+    "AZURE_PASSWORD",
+    "AZURE_FEDERATED_TOKEN_FILE",
+    "AZURE_AUTHORITY_HOST",
+)
+APPLIANCE_ENV = "CNA_APPLIANCE_CLOUD"
 
-    Uses azure-identity DefaultAzureCredential chain in production.
-    Falls back to explicit SP client secret for contractor workflow.
-    Credentials are in-memory only — never persisted to disk.
+
+def forbidden_credential_env(env: Mapping[str, str] | None = None) -> list[str]:
+    """The forbidden credential variables present (non-empty) in ``env``."""
+    source = os.environ if env is None else env
+    return [name for name in FORBIDDEN_CREDENTIAL_ENV if source.get(name)]
+
+
+def refuse_forbidden_credential_env(env: Mapping[str, str] | None = None) -> None:
+    """Exit before any credential object exists when a forbidden variable is set.
+
+    Raises ``SystemExit`` naming the variables (never their values).
+    """
+    present = forbidden_credential_env(env)
+    if present:
+        raise SystemExit(
+            "appliance edition: refusing to start, forbidden credential variables set: "
+            f"{present}. The appliance authenticates with its user-assigned managed identity "
+            "(AZURE_CLIENT_ID) and accepts no client secret, certificate, password or "
+            "federated token file."
+        )
+
+
+def is_appliance(env: Mapping[str, str] | None = None) -> bool:
+    source = os.environ if env is None else env
+    return bool(source.get(APPLIANCE_ENV))
+
+
+def build_azure_credential(env: Mapping[str, str] | None = None):
+    """The one Azure credential the platform uses: ``DefaultAzureCredential`` without the
+    environment and interactive credentials.
+
+    What stays in the chain: workload identity (its federated token file is forbidden in
+    the appliance, so it is inert there), managed identity (``AZURE_CLIENT_ID`` selects the
+    user-assigned identity), the Azure CLI, Azure PowerShell and the Azure Developer CLI —
+    the developer paths behind ``az login``. What is excluded: the environment credential
+    (client secrets, certificates, username/password), the interactive browser, the shared
+    token cache and Visual Studio Code. In the appliance (``CNA_APPLIANCE_CLOUD`` set) a
+    forbidden variable exits the process before the credential is built.
+    """
+    source = os.environ if env is None else env
+    if is_appliance(source):
+        refuse_forbidden_credential_env(source)
+    from azure.identity import DefaultAzureCredential
+
+    return DefaultAzureCredential(
+        exclude_environment_credential=True,
+        exclude_interactive_browser_credential=True,
+        exclude_shared_token_cache_credential=True,
+        exclude_visual_studio_code_credential=True,
+        managed_identity_client_id=source.get("AZURE_CLIENT_ID") or None,
+    )
+
+
+class AzureCredentials:
+    """The Azure identity the platform runs as: a tenant and the identity's client id.
+
+    There is no client secret: ``get_credential`` returns :func:`build_azure_credential`,
+    which resolves to the managed identity in the appliance and to ``az login`` on a
+    developer machine. Nothing here is ever persisted.
     """
 
-    def __init__(
-        self,
-        tenant_id: str,
-        client_id: str,
-        client_secret: str | None = None,
-    ):
+    def __init__(self, tenant_id: str, client_id: str | None = None):
         self.tenant_id = tenant_id
         self.client_id = client_id
-        self._client_secret = client_secret  # never logged, never serialized
 
     def get_credential(self):
-        """Return an azure-identity credential object.
-
-        Phase C implementation.
-        Uses ClientSecretCredential if secret provided,
-        DefaultAzureCredential otherwise (supports managed identity, OIDC).
-        Raises CNAAuthError on failure.
-        """
-        # TODO: Phase C — implement azure-identity credential
-        raise NotImplementedError("Phase C")
+        """Return the platform's azure-identity credential (see ``build_azure_credential``)."""
+        env = dict(os.environ)
+        if self.client_id:
+            env["AZURE_CLIENT_ID"] = self.client_id
+        return build_azure_credential(env)
 
     @classmethod
     def from_env(cls) -> AzureCredentials:
-        """Construct from environment variables."""
+        """Construct from environment variables; a forbidden credential variable refuses."""
         tenant_id = os.environ.get("AZURE_TENANT_ID", "")
         client_id = os.environ.get("AZURE_CLIENT_ID", "")
-        client_secret = os.environ.get("AZURE_CLIENT_SECRET", "")
-        if not tenant_id or not client_id:
+        if not tenant_id:
             raise OSError(
-                "AZURE_TENANT_ID and AZURE_CLIENT_ID must be set. "
-                "Set them in .env or pass --sp-id and --tenant to `cna discover azure`."
+                "AZURE_TENANT_ID must be set. Set it in .env or pass --tenant-id to "
+                "`cna discover azure`."
             )
-        return cls(tenant_id=tenant_id, client_id=client_id, client_secret=client_secret or None)
+        if forbidden_credential_env():
+            refuse_forbidden_credential_env()
+        return cls(tenant_id=tenant_id, client_id=client_id or None)
 
 
 class KeyVaultCredentialProvider:

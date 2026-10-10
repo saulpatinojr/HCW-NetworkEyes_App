@@ -37,6 +37,7 @@ from cna.api_status import Outcome
 __all__ = [
     "DownstreamCategory",
     "SanitizedError",
+    "redact_exception",
     "sanitize_downstream_error",
 ]
 
@@ -154,3 +155,17 @@ def sanitize_downstream_error(
         client_message=_CLIENT_MESSAGE[category],
         outcome=Outcome.DOWNSTREAM_ERROR,
     )
+
+
+def redact_exception(exc: BaseException) -> str:
+    """The persistable form of a caught exception: its class name and, when the
+    exception carries one, the HTTP status — never its message (change set H).
+
+    ``str(exc)`` from an SDK routinely embeds hostnames, resource ids, request ids
+    and connection strings; a value that is stored (``block_reason``,
+    ``collection_error``, ``errorMessage``) or shown to a caller must not. The full
+    text belongs in a debug-level log line at the catch site.
+    """
+    status = getattr(exc, "status_code", None)
+    suffix = f" (HTTP {status})" if isinstance(status, int) and status > 0 else ""
+    return type(exc).__name__ + suffix

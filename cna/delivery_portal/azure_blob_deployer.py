@@ -4,7 +4,7 @@ Uploads all engagement deliverables to Azure Blob Storage and generates
 SAS tokens with configurable TTL.
 
 Design contracts:
-  - Uses DefaultAzureCredential — consistent with Phase C auth pattern (auth.py)
+  - Uses ``cna.core.auth.build_azure_credential`` — the platform's one credential factory
   - Content-type headers set per file extension (Gap #14)
   - SAS token TTL configurable with hard cap of 7 days (Gap #11)
   - Upload progress reported via callback (Gap #15)
@@ -50,10 +50,11 @@ class AzureBlobDeployer:
 
     def _make_client(self):
         try:
-            from azure.identity import DefaultAzureCredential
             from azure.storage.blob import BlobServiceClient
 
-            credential = DefaultAzureCredential()
+            from cna.core.auth import build_azure_credential
+
+            credential = build_azure_credential()
             account_url = f"https://{self._account}.blob.core.windows.net"
             return BlobServiceClient(account_url=account_url, credential=credential)
         except ImportError as err:

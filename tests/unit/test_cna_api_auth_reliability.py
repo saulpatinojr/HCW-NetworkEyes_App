@@ -238,8 +238,8 @@ def test_validation_error_does_not_echo_request_body(plain_client):
         "/discovery/start",
         json={
             "engagement_id": "e-1",
-            "platform": "AZURE",
-            "sp_client_secret": _LEAK_CANARY,
+            "platform": "AWS",
+            "aws_secret_access_key": _LEAK_CANARY,
         },
     )
     assert resp.status_code == 422

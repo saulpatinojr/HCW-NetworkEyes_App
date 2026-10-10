@@ -64,8 +64,7 @@ class TestAzureDiscoveryOptions:
         assert opts.subscription_ids == []
         assert opts.resume is False
         assert opts.use_resource_graph is True
-        assert opts.client_id is None
-        assert opts.client_secret is None
+        assert not hasattr(opts, "client_secret")
 
 
 class TestCollectVNets:
@@ -457,41 +456,40 @@ class TestCredentialGuards:
 
 
 class TestInitCredentials:
-    def test_uses_service_principal_when_both_id_and_secret_are_set(self, store):
-        opts = AzureDiscoveryOptions(
-            tenant_id="tenant-1", client_id="app-1", client_secret="placeholder-not-real"
-        )
-        d = AzureDiscovery(store=store, options=opts)
-        csc, dac, subclient = MagicMock(), MagicMock(), MagicMock()
+    """The only credential path is the platform factory: no service principal, ever."""
 
-        with patch.dict(
-            "sys.modules",
-            {
-                "azure.identity": MagicMock(ClientSecretCredential=csc, DefaultAzureCredential=dac),
-                "azure.mgmt.subscription": MagicMock(SubscriptionClient=subclient),
-            },
+    def test_uses_the_platform_credential_factory(self, discovery):
+        subclient = MagicMock()
+        credential = object()
+        with (
+            patch.dict(
+                "sys.modules", {"azure.mgmt.subscription": MagicMock(SubscriptionClient=subclient)}
+            ),
+            patch("cna.core.auth.build_azure_credential", return_value=credential) as factory,
         ):
-            d._init_credentials()
+            discovery._init_credentials()
+        factory.assert_called_once_with()
+        subclient.assert_called_once_with(credential)
+        assert discovery._sub_client is subclient.return_value
 
-        csc.assert_called_once()
-        dac.assert_not_called()
-        assert csc.call_args.kwargs["tenant_id"] == "tenant-1"
-
-    def test_falls_back_to_the_default_credential_chain(self, discovery):
-        csc, dac, subclient = MagicMock(), MagicMock(), MagicMock()
-
+    def test_options_carry_no_secret_and_the_factory_excludes_the_environment_credential(
+        self, discovery, monkeypatch
+    ):
+        dac = MagicMock()
+        monkeypatch.delenv("CNA_APPLIANCE_CLOUD", raising=False)
         with patch.dict(
             "sys.modules",
             {
-                "azure.identity": MagicMock(ClientSecretCredential=csc, DefaultAzureCredential=dac),
-                "azure.mgmt.subscription": MagicMock(SubscriptionClient=subclient),
+                "azure.identity": MagicMock(DefaultAzureCredential=dac),
+                "azure.mgmt.subscription": MagicMock(SubscriptionClient=MagicMock()),
             },
         ):
             discovery._init_credentials()
-
         dac.assert_called_once()
-        csc.assert_not_called()
-        assert discovery._sub_client is subclient.return_value
+        kwargs = dac.call_args.kwargs
+        assert kwargs["exclude_environment_credential"] is True
+        assert kwargs["exclude_interactive_browser_credential"] is True
+        assert "ClientSecretCredential" not in str(dac.mock_calls)
 
     def test_missing_sdk_raises_a_named_auth_error_naming_the_install(self, discovery):
         with (
@@ -725,7 +723,9 @@ class TestDiscoverSubscription:
             topo = discovery._discover_subscription("sub-0001", "Prod")
 
         assert topo.discovery_blocked is True
-        assert "403 on ARM" in topo.block_reason
+        # Persisted error text is the class name, never the message (change set H).
+        assert topo.block_reason == "RuntimeError"
+        assert "403 on ARM" not in topo.block_reason
 
     def test_one_failing_collector_does_not_block_the_others(self, discovery):
         """A missing permission on one resource type must not lose the subscription."""
@@ -752,6 +752,7 @@ class TestDiscoverSubscription:
             topo = discovery._discover_subscription("sub-0001", "Prod")
 
         assert "HTTP 403" in topo.block_reason
+        assert "Forbidden" not in topo.block_reason
 
     def test_every_collector_failing_marks_the_subscription_blocked(self, discovery):
         raises = {method: RuntimeError("403") for _a, method in _PHASE1_COLLECTORS}
@@ -2005,7 +2006,8 @@ class TestFirewallMetrics:
             "sub-1", [_Arm(id="fw-1", name="afw-1")], monitor, "ts", metrics
         )
 
-        assert "no Microsoft.Insights read" in metrics.firewall_metrics[0].collection_error
+        # Redacted to the class name (change set H): never the SDK message.
+        assert metrics.firewall_metrics[0].collection_error == "RuntimeError"
 
 
 class TestLoadBalancerMetrics:
@@ -2231,7 +2233,7 @@ class TestAppgwMetrics:
             "sub-1", [_Arm(id="a", name="agw-1")], monitor, "ts", metrics
         )
 
-        assert "throttled" in metrics.appgw_metrics[0].collection_error
+        assert metrics.appgw_metrics[0].collection_error == "RuntimeError"
 
 
 class TestCollectNetworkMetrics:
@@ -2259,7 +2261,7 @@ class TestCollectNetworkMetrics:
         with patch("azure.mgmt.monitor.MonitorManagementClient", side_effect=RuntimeError("403")):
             metrics = discovery._collect_network_metrics(ctx)
 
-        assert metrics.collection_error == "403"
+        assert metrics.collection_error == "RuntimeError"
         assert metrics.vnet_utilization["vnet-1"] == 0.4
 
 

@@ -5,7 +5,7 @@ import {
   addAwsCredential,
   addBulkCredentials,
   testAwsConnection,
-  testAzureConnection,
+  testAzureAccess,
 } from "./actions";
 import { SpHelpModal } from "@/components/ui/sp-help-modal";
 
@@ -87,8 +87,6 @@ export function CredentialForm({ engagementId }: { engagementId: string }) {
   const [platform, setPlatform] = useState<Platform>("AZURE");
 
   const [tenantId, setTenantId] = useState("");
-  const [spClientId, setSpClientId] = useState("");
-  const [spClientSecret, setSpClientSecret] = useState("");
 
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [manualName, setManualName] = useState("");
@@ -99,6 +97,7 @@ export function CredentialForm({ engagementId }: { engagementId: string }) {
   const [testResult, setTestResult] = useState<{
     ok: boolean;
     subscriptions?: string[];
+    missing?: string[];
     error?: string;
   } | null>(null);
   const [saveResult, setSaveResult] = useState<{
@@ -178,7 +177,10 @@ export function CredentialForm({ engagementId }: { engagementId: string }) {
   function handleTest() {
     setTestResult(null);
     startTest(async () => {
-      const result = await testAzureConnection({ tenantId, spClientId, spClientSecret });
+      const result = await testAzureAccess({
+        tenantId,
+        subscriptionIds: subscriptions.map((s) => s.subscriptionId),
+      });
       setTestResult(result);
     });
   }
@@ -189,8 +191,6 @@ export function CredentialForm({ engagementId }: { engagementId: string }) {
       const result = await addBulkCredentials({
         engagementId,
         tenantId,
-        spClientId,
-        spClientSecret,
         subscriptions,
       });
       setSaveResult(result);
@@ -204,7 +204,7 @@ export function CredentialForm({ engagementId }: { engagementId: string }) {
     });
   }
 
-  const canTest = !!tenantId && !!spClientId && !!spClientSecret;
+  const canTest = !!tenantId;
   const canSave = canTest && subscriptions.length > 0 && !isSaving;
 
   function handleAwsTest() {
@@ -276,7 +276,7 @@ export function CredentialForm({ engagementId }: { engagementId: string }) {
               <p className="label-caps text-navy-400">Authentication</p>
               <SpHelpModal />
             </div>
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="block text-sm font-medium text-navy-400 dark:text-navy-300" htmlFor="cred-azure-tenant-id">Tenant ID</label>
                 <input
@@ -288,28 +288,11 @@ export function CredentialForm({ engagementId }: { engagementId: string }) {
                   className={INPUT_CLS}
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-navy-400 dark:text-navy-300" htmlFor="cred-azure-sp-client-id">SP Client ID</label>
-                <input
-                  type="text"
-                  id="cred-azure-sp-client-id" value={spClientId}
-                  onChange={(e) => setSpClientId(e.target.value)}
-                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                  autoComplete="off"
-                  className={INPUT_CLS}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-navy-400 dark:text-navy-300" htmlFor="cred-azure-sp-client-secret">SP Client Secret</label>
-                <input
-                  type="password"
-                  id="cred-azure-sp-client-secret" value={spClientSecret}
-                  onChange={(e) => setSpClientSecret(e.target.value)}
-                  placeholder="••••••••••••••••"
-                  autoComplete="new-password"
-                  className={INPUT_CLS}
-                />
-              </div>
+              <p className="self-end text-xs text-navy-500">
+                Discovery runs as the appliance&apos;s managed identity. Nothing secret is
+                entered or stored here: grant that identity Reader on each subscription and
+                use &quot;Test access&quot; to confirm it can read them.
+              </p>
             </div>
           </div>
 
@@ -414,7 +397,7 @@ export function CredentialForm({ engagementId }: { engagementId: string }) {
             <div className={`rounded-lg px-3 py-2 text-sm ${testResult.ok ? "border border-teal-800/40 bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-300" : "border border-red-800/40 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400"}`}>
               {testResult.ok ? (
                 <>
-                  <p className="font-medium">Connection successful</p>
+                  <p className="font-medium">The appliance identity can read these subscriptions</p>
                   {testResult.subscriptions && testResult.subscriptions.length > 0 && (
                     <ul className="mt-1 list-disc pl-4 text-xs">
                       {testResult.subscriptions.slice(0, 10).map((s) => <li key={s}>{s}</li>)}
@@ -445,7 +428,7 @@ export function CredentialForm({ engagementId }: { engagementId: string }) {
               disabled={isTesting || !canTest}
               className="inline-flex items-center rounded-lg border border-navy-600/50 bg-navy-100/60 dark:bg-navy-700/40 px-4 py-2 text-sm font-medium text-navy-500 dark:text-navy-200 hover:bg-navy-100/60 dark:hover:bg-navy-700/60 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isTesting ? "Testing…" : "Test connection"}
+              {isTesting ? "Testing…" : "Test access"}
             </button>
             <button
               type="button"

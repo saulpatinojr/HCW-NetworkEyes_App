@@ -200,13 +200,13 @@ def test_get_job_status_unconfigured_is_503(client, api_main, monkeypatch):
 def _install_fake_azure_sdk(monkeypatch, raw_detail: str) -> None:
     """Replace the Azure SDK modules the handler imports so a call raises.
 
-    ``/discovery/test-connection`` lazily imports ``ClientSecretCredential``
-    from ``azure.identity`` and ``SubscriptionClient`` from
-    ``azure.mgmt.subscription`` *inside* the handler. We fake both so the
-    credential constructs cleanly and listing subscriptions raises a real,
-    ``azure``-rooted exception through the handler's genuine catch site — which
-    is what exercises the sanitizer's Azure classification (not the generic
-    fallback).
+    ``/discovery/test-access`` builds the platform credential (which lazily
+    imports ``DefaultAzureCredential`` from ``azure.identity``) and
+    ``SubscriptionClient`` from ``azure.mgmt.subscription`` *inside* the handler.
+    We fake both so the credential constructs cleanly and listing subscriptions
+    raises a real, ``azure``-rooted exception through the handler's genuine catch
+    site — which is what exercises the sanitizer's Azure classification (not the
+    generic fallback).
     """
 
     class _FakeAzureError(Exception):
@@ -223,7 +223,7 @@ def _install_fake_azure_sdk(monkeypatch, raw_detail: str) -> None:
         def __init__(self, *_args, **_kwargs) -> None:
             pass
 
-    fake_identity.ClientSecretCredential = _FakeCredential  # type: ignore[attr-defined]
+    fake_identity.DefaultAzureCredential = _FakeCredential  # type: ignore[attr-defined]
 
     fake_mgmt = types.ModuleType("azure.mgmt")
     fake_mgmt.__path__ = []  # type: ignore[attr-defined]
@@ -241,15 +241,14 @@ def _install_fake_azure_sdk(monkeypatch, raw_detail: str) -> None:
     monkeypatch.setitem(sys.modules, "azure.mgmt.subscription", fake_subscription)
 
 
-def test_test_connection_sanitizes_downstream_azure_error(client, monkeypatch):
+def test_test_access_sanitizes_downstream_azure_error(client, monkeypatch):
     """2.3: a raw Azure SDK exception never reaches the client response."""
     _install_fake_azure_sdk(monkeypatch, _RAW_DETAIL)
     resp = client.post(
-        "/discovery/test-connection",
+        "/discovery/test-access",
         json={
             "tenant_id": "tenant-abc",
-            "sp_client_id": "sp-1234",
-            "sp_client_secret": "shh-secret",
+            "subscription_ids": ["00000000-0000-0000-0000-000000000001"],
         },
     )
     # A downstream failure is a 5xx, never a fabricated 200.
@@ -298,14 +297,7 @@ def test_test_connection_aws_sanitizes_downstream_error(client, monkeypatch):
 def test_sanitized_error_body_has_no_traceback(client, monkeypatch):
     """2.3: the client body carries no traceback/exception-repr leakage."""
     _install_fake_azure_sdk(monkeypatch, _RAW_DETAIL)
-    resp = client.post(
-        "/discovery/test-connection",
-        json={
-            "tenant_id": "t",
-            "sp_client_id": "c",
-            "sp_client_secret": "s",
-        },
-    )
+    resp = client.post("/discovery/test-access", json={"tenant_id": "t"})
     text = resp.text
     for leak in ("Traceback", 'File "', "line ", "Error:", _RAW_DETAIL):
         assert leak not in text

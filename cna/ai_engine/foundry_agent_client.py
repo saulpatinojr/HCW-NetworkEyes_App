@@ -14,7 +14,7 @@ Config (env):
   FOUNDRY_PROJECT_ENDPOINT        — the Foundry project endpoint
   FOUNDRY_RECOMMENDATION_AGENT_ID — the portal-created agent id
 
-Auth: ``DefaultAzureCredential`` (managed identity in Azure — the same identity the rest
+Auth: ``cna.core.auth.build_azure_credential`` (managed identity in Azure — the same identity the rest
 of the AI path uses). The identity needs the **Cognitive Services User** role on the
 Foundry account (Microsoft documents "Azure AI User" for the agents API, but that role
 does not exist in this tenant; Cognitive Services User's Microsoft.CognitiveServices/*
@@ -32,6 +32,7 @@ import logging
 import os
 import re
 
+from cna.core.auth import build_azure_credential
 from cna.core.findings_schema import FindingRecommendation
 
 logger = logging.getLogger("cna.foundry_agent")
@@ -122,14 +123,13 @@ class FoundryAgentClient:
         """
         try:
             from azure.ai.projects import AIProjectClient
-            from azure.identity import DefaultAzureCredential
         except ImportError as e:  # SDK not installed in this image
             raise FoundryAgentError(f"azure-ai-projects not available: {e}") from e
 
         project = None
         thread_id = None
         try:
-            project = AIProjectClient(endpoint=self._endpoint, credential=DefaultAzureCredential())
+            project = AIProjectClient(endpoint=self._endpoint, credential=build_azure_credential())
             agents = project.agents
             thread = agents.threads.create()
             thread_id = thread.id

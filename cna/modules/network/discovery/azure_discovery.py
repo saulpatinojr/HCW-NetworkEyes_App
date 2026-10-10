@@ -1,7 +1,7 @@
 """Azure Network Discovery — Phase C core.
 
 Discovers all network topology resources across every subscription in an
-Azure tenant using DefaultAzureCredential (or service principal).
+Azure tenant as the platform's identity (cna.core.auth.build_azure_credential).
 
 Design principles:
   - ARM REST API + Azure Resource Graph for efficient cross-subscription queries.
@@ -34,6 +34,7 @@ from dataclasses import dataclass, field
 
 from azure.core.exceptions import HttpResponseError
 
+from cna.api_errors import redact_exception
 from cna.core.exceptions import CNAAuthError
 from cna.core.persistence import EngagementStore
 from cna.core.throttle import with_retry
@@ -94,8 +95,6 @@ class AzureDiscoveryOptions:
     subscription_ids: list[str] = field(default_factory=list)  # empty = all
     resume: bool = False
     use_resource_graph: bool = True  # faster cross-sub queries
-    client_id: str | None = None  # for service principal auth
-    client_secret: str | None = None  # never logged, in-memory only
 
 
 _RG_PARTS_INDEX = 4  # fallback index for resource group in a split ARM resource ID
@@ -237,22 +236,19 @@ class AzureDiscovery:
     # ------------------------------------------------------------------ auth
 
     def _init_credentials(self) -> None:
-        """Initialize Azure credentials using DefaultAzureCredential chain."""
+        """Initialize the platform's Azure credential (managed identity or ``az login``).
+
+        There is no service-principal path: ``build_azure_credential`` excludes the
+        environment and interactive credentials, and the appliance refuses to start with
+        a secret-shaped variable set (REFACTOR_APP.md change set G).
+        """
         try:
-            from azure.identity import ClientSecretCredential, DefaultAzureCredential
             from azure.mgmt.subscription import SubscriptionClient
 
-            if self.opts.client_id and self.opts.client_secret:
-                logger.info("Using service principal credentials")
-                self._credential = ClientSecretCredential(
-                    tenant_id=self.opts.tenant_id,
-                    client_id=self.opts.client_id,
-                    client_secret=self.opts.client_secret,
-                )
-            else:
-                logger.info("Using DefaultAzureCredential chain")
-                self._credential = DefaultAzureCredential()
+            from cna.core.auth import build_azure_credential
 
+            logger.info("Using the platform identity (managed identity / az login)")
+            self._credential = build_azure_credential()
             self._sub_client = SubscriptionClient(self._credential)
         except ImportError as e:
             raise CNAAuthError(
@@ -270,12 +266,15 @@ class AzureDiscovery:
         self._init_credentials()
 
         # 1. Verify the SP can obtain an ARM token.
-        self._progress("Pre-check: verifying SP token…")
+        self._progress("Pre-check: verifying the identity's token…")
         try:
             token = self._cred.get_token("https://management.azure.com/.default")
             self._progress(f"Pre-check: token OK (expires ~{token.expires_on})")
         except Exception as e:
-            raise CNAAuthError(f"SP authentication failed — cannot obtain ARM token: {e}") from e
+            logger.debug("ARM token acquisition failed: %s", e)
+            raise CNAAuthError(
+                f"Authentication failed — cannot obtain ARM token: {redact_exception(e)}"
+            ) from e
 
         # 2. For each requested subscription, call subscriptions.get() directly.
         #    This tells us: is the sub accessible? What state is it in?
@@ -295,9 +294,10 @@ class AzureDiscovery:
                         f"Expected: Enabled, Warned, or PastDue."
                     )
             except Exception as e:
+                logger.debug("pre-check: subscription %s not accessible: %s", sub_id, e)
                 self._progress(
-                    f"Pre-check: subscription {sub_id} NOT accessible — {e}. "
-                    f"Verify SP has Reader role on this subscription."
+                    f"Pre-check: subscription {sub_id} NOT accessible — {redact_exception(e)}. "
+                    f"Verify the identity has the Reader role on this subscription."
                 )
 
     # ------------------------------------------------------------------ subscriptions
@@ -425,12 +425,15 @@ class AzureDiscovery:
             try:
                 setattr(topo, attr, collector(*args))
             except HttpResponseError as e:
-                msg = f"{attr}: HTTP {e.status_code} — {e.message}"
+                logger.debug("[%s] %s failed: %s", sub_id, attr, e.message)
+                msg = f"{attr}: {redact_exception(e)}"
                 logger.warning("[%s] %s", sub_id, msg)
                 self._progress(f"[{sub_name}] WARNING — {msg}")
                 errors.append(msg)
             except Exception as e:
-                msg = f"{attr}: {e}"
+                # Stored and shown redacted; the full text is a debug line only.
+                logger.debug("[%s] %s failed: %s", sub_id, attr, e)
+                msg = f"{attr}: {redact_exception(e)}"
                 logger.warning("[%s] %s", sub_id, msg)
                 self._progress(f"[{sub_name}] WARNING — {msg}")
                 errors.append(msg)
@@ -440,8 +443,9 @@ class AzureDiscovery:
             rmc = ResourceManagementClient(self._cred, sub_id)
             rg_names = [rg.name for rg in _safe_list(rmc.resource_groups.list()) if rg.name]
         except Exception as e:
+            logger.debug("[%s] subscription client setup failed: %s", sub_id, e)
             topo.discovery_blocked = True
-            topo.block_reason = str(e)
+            topo.block_reason = redact_exception(e)
             return topo
 
         # Order matters: collect flat resources first so VNets can ref them
@@ -509,14 +513,16 @@ class AzureDiscovery:
             else:
                 self._progress(f"[{sub_name}] No NVAs / NGFWs detected")
         except Exception as e:
-            self._progress(f"[{sub_name}] NVA scan skipped: {e}")
+            logger.debug("[%s] nva scan skipped: %s", sub_id, e)
+            self._progress(f"[{sub_name}] NVA scan skipped: {redact_exception(e)}")
 
     def _run_bgp_scan(self, topo, net, sub_id: str, sub_name: str) -> None:
         self._progress(f"[{sub_name}] Querying BGP peer status…")
         try:
             topo.bgp_data = self._collect_bgp_data(net, sub_id, topo.virtual_network_gateways)
         except Exception as e:
-            self._progress(f"[{sub_name}] BGP data skipped: {e}")
+            logger.debug("[%s] bgp data skipped: %s", sub_id, e)
+            self._progress(f"[{sub_name}] BGP data skipped: {redact_exception(e)}")
 
     def _run_observability_scan(self, topo, net, sub_id: str, sub_name: str) -> None:
         self._progress(f"[{sub_name}] Collecting observability data…")
@@ -541,7 +547,8 @@ class AzureDiscovery:
                 f"{obs.nsg_flow_logs_total} NSG flow logs enabled"
             )
         except Exception as e:
-            self._progress(f"[{sub_name}] Observability data skipped: {e}")
+            logger.debug("[%s] observability data skipped: %s", sub_id, e)
+            self._progress(f"[{sub_name}] Observability data skipped: {redact_exception(e)}")
 
     def _run_metrics_scan(self, topo, sub_id: str, sub_name: str) -> None:
         self._progress(f"[{sub_name}] Collecting network metrics (last 24 h)…")
@@ -573,7 +580,8 @@ class AzureDiscovery:
                     f"{lb_ct} LB(s), {vnet_ct} VNet(s) utilized"
                 )
         except Exception as e:
-            self._progress(f"[{sub_name}] Metrics skipped: {e}")
+            logger.debug("[%s] metrics skipped: %s", sub_id, e)
+            self._progress(f"[{sub_name}] Metrics skipped: {redact_exception(e)}")
 
     def _run_waf_scan(self, topo, sub_id: str, sub_name: str) -> None:
         self._progress(f"[{sub_name}] Scanning Front Door WAF policies…")
@@ -584,7 +592,8 @@ class AzureDiscovery:
                     f"[{sub_name}] Front Door WAF: {len(topo.front_door_waf_policies)} policy(s)"
                 )
         except Exception as e:
-            self._progress(f"[{sub_name}] Front Door WAF scan skipped: {e}")
+            logger.debug("[%s] front door waf scan skipped: %s", sub_id, e)
+            self._progress(f"[{sub_name}] Front Door WAF scan skipped: {redact_exception(e)}")
 
         self._progress(f"[{sub_name}] Querying Defender for Cloud network assessments…")
         try:
@@ -594,7 +603,8 @@ class AzureDiscovery:
                     f"[{sub_name}] Defender: {len(topo.defender_assessments)} network finding(s)"
                 )
         except Exception as e:
-            self._progress(f"[{sub_name}] Defender for Cloud skipped: {e}")
+            logger.debug("[%s] defender for cloud skipped: %s", sub_id, e)
+            self._progress(f"[{sub_name}] Defender for Cloud skipped: {redact_exception(e)}")
 
     # ------------------------------------------------------------------ VNets
 
@@ -1739,7 +1749,8 @@ class AzureDiscovery:
                         )
                     )
             except Exception as e:
-                item.collection_error = f"BGP peers: {e}"
+                logger.debug("BGP peers unavailable: %s", e)
+                item.collection_error = f"BGP peers: {redact_exception(e)}"
 
             # Learned routes
             try:
@@ -1750,7 +1761,8 @@ class AzureDiscovery:
                 item.learned_routes_count = len(all_routes)
                 item.learned_routes = [r.network for r in all_routes[:50] if r.network]
             except Exception as e:
-                err = f"Learned routes: {e}"
+                logger.debug("learned routes unavailable: %s", e)
+                err = f"Learned routes: {redact_exception(e)}"
                 item.collection_error = (
                     f"{item.collection_error}; {err}" if item.collection_error else err
                 )
@@ -1949,7 +1961,8 @@ class AzureDiscovery:
             self._collect_er_metrics(ctx.sub_id, ctx.er_circuits, monitor, timespan, metrics)
             self._collect_ddos_metrics(ctx.sub_id, ctx.public_ips, monitor, timespan, metrics)
         except Exception as e:
-            metrics.collection_error = str(e)
+            logger.debug("[%s] metrics collection failed: %s", ctx.sub_id, e)
+            metrics.collection_error = redact_exception(e)
 
         self._compute_vnet_utilization(ctx.vnets, metrics)
         self._collect_nta_metrics(ctx.sub_id, ctx.la_workspaces, metrics)
@@ -2044,7 +2057,8 @@ class AzureDiscovery:
                     elif mn == "NatRuleHit":
                         fm.nat_rule_hits_24h = int(total)
             except Exception as e:
-                fm.collection_error = str(e)
+                logger.debug("metrics collection failed: %s", e)
+                fm.collection_error = redact_exception(e)
                 logger.debug("[%s] Firewall metrics for %s failed: %s", sub_id, fw.name, e)
             metrics.firewall_metrics.append(fm)
 
@@ -2076,7 +2090,8 @@ class AzureDiscovery:
                         (lm.used_snat_ports / lm.allocated_snat_ports) * 100, 1
                     )
             except Exception as e:
-                lm.collection_error = str(e)
+                logger.debug("metrics collection failed: %s", e)
+                lm.collection_error = redact_exception(e)
                 logger.debug("[%s] LB SNAT metrics for %s failed: %s", sub_id, lb.name, e)
             metrics.lb_metrics.append(lm)
 
@@ -2113,7 +2128,8 @@ class AzureDiscovery:
                                 (avg_bps / 1_000_000 / em.bandwidth_mbps_provisioned) * 100, 1
                             )
             except Exception as e:
-                em.collection_error = str(e)
+                logger.debug("metrics collection failed: %s", e)
+                em.collection_error = redact_exception(e)
                 logger.debug("[%s] ER metrics for %s failed: %s", sub_id, erc.name, e)
             metrics.er_circuit_metrics.append(em)
 
@@ -2296,7 +2312,8 @@ class AzureDiscovery:
                 for metric in result.value or []:
                     self._apply_appgw_metric(metric, agm)
             except Exception as e:
-                agm.collection_error = str(e)
+                logger.debug("metrics collection failed: %s", e)
+                agm.collection_error = redact_exception(e)
                 logger.debug("[%s] App GW metrics for %s failed: %s", sub_id, ag.name, e)
             metrics.appgw_metrics.append(agm)
 

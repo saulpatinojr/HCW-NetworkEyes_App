@@ -8,7 +8,7 @@ import type { DeliverableContext } from "@/lib/openai";
 import { generateComprehensiveReport, type ProgressUpdate } from "@/lib/report-orchestrator";
 import { deleteBlob, uploadDeliverable } from "@/lib/blob";
 import { sanitizeBackendDetail } from "@/lib/summarize-error";
-import { apiHeaders } from "@/lib/api-client";
+import { internalApiHeaders } from "@/lib/api-client";
 
 // ─── Multi-subscription topology merge (same pattern as deliverables/actions.ts) ─
 async function getMergedTopologyJson(engagementId: string): Promise<string | null> {
@@ -288,7 +288,7 @@ export async function publishClientPortal(
   try {
     const res = await fetch(`${apiUrl}/publish`, {
       method: "POST",
-      headers: apiHeaders({ "Content-Type": "application/json" }),
+      headers: await internalApiHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ engagement_id: engagementId, ttl_hours: ttlHours }),
     });
 
