@@ -400,5 +400,5 @@ jobs:
           # editable path pip-audit's internal pip cannot resolve); its own dependency is
           # pydantic, already in the resolution. Same flag as the lockfile job.
           uv export --locked --no-emit-project --no-emit-workspace --no-default-groups \
-            --extra api --extra enrichment --extra dev -o /tmp/locked.txt
+            --extra api --extra enrichment --extra dev --extra aws -o /tmp/locked.txt
           pip-audit --strict --require-hashes -r /tmp/locked.txt
