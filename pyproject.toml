@@ -20,7 +20,7 @@ dependencies = [
     # In 1.x, AIProjectClient.agents returns an AgentsClient from the separate
     # azure-ai-agents package, so that must be declared too — it is what actually
     # provides the operations.
-    "azure-ai-projects>=1.0.0,<2",       # Foundry Agent Service: recommendation enrichment
+    "azure-ai-projects>=2.8.0,<3",       # Foundry Agent Service: recommendation enrichment
     "azure-ai-agents>=1.1.0,<2",         # provides AIProjectClient.agents in 1.x
     "azure-mgmt-network>=31.0.1",
     "azure-mgmt-resource>=26.0.0",
