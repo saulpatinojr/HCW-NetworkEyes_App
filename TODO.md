@@ -17,7 +17,7 @@ in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG
 | [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-419 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements + appliance migration | T-501 – T-509 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
-| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-726 |
+| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-727 |
 
 ---
 
@@ -2268,3 +2268,21 @@ old loop for one release (`CHANGELOG.md` `[Unreleased]`). Open:
 - Core ↔ appliance contract: both appliances may set `CNA_SCOPES` (space-separated scopes) and
   `CNA_DISCOVERY_BACKEND`; the Azure appliance's identity needs no `Microsoft.Compute` or
   `Microsoft.Security` SDK permissions beyond Reader for the Resource Graph tables.
+
+### T-727 — Lab boundary image: first CI build, and the API Dockerfile into the root file (change set I)
+`Dockerfile` builds `EDITION=appliance` (default) and the build-only `EDITION=lab`; `300-test-codebase.yml`
+`lab-image` proves the boundary; `cna_azure_network_engine.edition` is the proof (`CHANGELOG.md` `[Unreleased]`;
+`tests/security/test_lab_boundary.py`). Open:
+- `[VERIFY]` The `lab-image` job on the first run of `300-test-codebase.yml` from `main`: the session that wrote
+  the stages ran no Docker build. Expected: `docker build --build-arg EDITION=lab -t cna:lab .` succeeds,
+  `docker run --rm cna:lab` prints `lab edition: boundary holds` and exits 0, every `import azure|msal|boto3`
+  and `python -m pip` fails, `IDENTITY_ENDPOINT` refuses the start, `id -u` is 1001.
+- `apps/cna-api/Dockerfile` still stands alone; the plan folds its body into the root file as the
+  `final-appliance` stage body and deletes it. The two files share every convention already (uv stage, lock
+  export, pip removal, uid 1001, draw.io), so the fold is a move, not a rewrite; `200-build-images.yml`'s
+  matrix `file:` entries change with it.
+- `cna:lab` must never appear in a registry or a manifest: `test_lab_boundary.py` checks `200-build-images.yml`
+  and `latest-build.json` for it; keep that check when the image workflow changes.
+- The AddOn builds its deployable lab image from the published engine with the same pattern (its
+  `infrastructure/docker/Dockerfile`); once the engine is on PyPI (T-728) its `edition.py` can import
+  `cna_azure_network_engine.edition` instead of carrying its own copy.

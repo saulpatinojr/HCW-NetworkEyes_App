@@ -274,6 +274,49 @@ jobs:
           echo "OK: running as $USER"
 
   # ------------------------------------------------------------------
+  # 5b. Lab boundary image (REFACTOR_APP.md change set I; build-only)
+  # ------------------------------------------------------------------
+  # The same Dockerfile with EDITION=lab installs the engine without [azure].
+  # The image is never pushed and never tagged for a registry: its CMD is the
+  # boundary proof, and this job is where it runs. `import azure` must fail.
+  lab-image:
+    name: Lab Boundary Image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [test]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: Build the lab target
+        run: docker build --build-arg EDITION=lab -t cna:lab .
+      - name: Boundary proof — the image's CMD exits 0
+        run: docker run --rm cna:lab
+      - name: Boundary proof — import azure fails inside the image
+        run: |
+          if docker run --rm cna:lab python -c "import azure"; then
+            echo "::error::azure is importable in the lab image"
+            exit 1
+          fi
+          if docker run --rm cna:lab python -c "import msal"; then
+            echo "::error::msal is importable in the lab image"
+            exit 1
+          fi
+          if docker run --rm cna:lab python -c "import boto3"; then
+            echo "::error::boto3 is importable in the lab image"
+            exit 1
+          fi
+      - name: Boundary proof — an identity endpoint refuses to start, pip is gone, non-root
+        run: |
+          if docker run --rm -e IDENTITY_ENDPOINT=http://169.254.169.254 cna:lab; then
+            echo "::error::the lab image started under an identity endpoint"
+            exit 1
+          fi
+          if docker run --rm cna:lab python -m pip --version; then
+            echo "::error::pip is present in the lab image"
+            exit 1
+          fi
+          test "$(docker run --rm cna:lab id -u)" = "1001"
+
+  # ------------------------------------------------------------------
   # 6. Python lockfile consistency (TODO.md T-702)
   # ------------------------------------------------------------------
   # Every Python image installs from uv.lock, so a pyproject.toml edit that is
