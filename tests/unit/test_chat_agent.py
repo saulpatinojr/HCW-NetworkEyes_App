@@ -405,6 +405,7 @@ def test_answer_via_mocked_openai(monkeypatch):
     assert captured["max_completion_tokens"] == 1200
 
 
+@pytest.mark.aws
 def test_answer_via_mocked_bedrock(monkeypatch):
     import boto3
 
@@ -439,6 +440,7 @@ def test_answer_via_mocked_bedrock(monkeypatch):
     assert result.text == "AZ-NET-002 needs an NSG."
 
 
+@pytest.mark.aws
 def test_transient_classification():
     from botocore.exceptions import ClientError
 

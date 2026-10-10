@@ -33,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from cna.api_errors import sanitize_downstream_error
 from cna.api_status import Outcome, status_for
+from cna.aws import AWS_NOT_INSTALLED, aws_extra_installed
 from cna.core.auth import refuse_forbidden_credential_env
 from cna.core.finding_taxonomy import classify_traffic_direction
 from cna.core.logging_config import JSONFormatter
@@ -755,9 +756,20 @@ class AwsTestConnectionRequest(BaseModel):
     secret_access_key: str  # plaintext — decrypted by web layer
 
 
+def _require_aws_installed() -> None:
+    """``501 {"error": {"code": "aws_not_installed"}}`` when the ``[aws]`` extra is absent
+    (change set K): the route exists, the deployment cannot serve it."""
+    if not aws_extra_installed():
+        raise HTTPException(
+            status_code=status_for(Outcome.NOT_IMPLEMENTED),
+            detail={"error": {"code": AWS_NOT_INSTALLED}},
+        )
+
+
 @internal.post("/discovery/test-connection-aws")
 async def test_connection_aws(request: AwsTestConnectionRequest) -> dict:
     """Validate AWS keys and prove the CNA read-only role can be assumed."""
+    _require_aws_installed()
     try:
         import boto3  # lazy: keeps Azure-only deployments importable without boto3
 
@@ -813,6 +825,7 @@ async def start_discovery(
     request: DiscoveryStartRequest, background_tasks: BackgroundTasks
 ) -> dict:
     if request.platform.upper() == "AWS":
+        _require_aws_installed()
         if not request.aws_role_arn:
             raise HTTPException(
                 status_code=status_for(Outcome.INVALID_REQUEST),

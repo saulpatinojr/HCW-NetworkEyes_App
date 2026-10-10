@@ -194,7 +194,7 @@ jobs:
         # is then already satisfied (REFACTOR_APP.md change set C).
         run: |
           pip install -e packages/cna-azure-network-engine
-          pip install -e .[dev,enrichment,api]
+          pip install -e .[dev,enrichment,api,aws]
       - name: Run tests with coverage
         # --cov=apps counts the API/router code the TestClient tests now exercise
         # in the same gate as the cna package (TEST-001).

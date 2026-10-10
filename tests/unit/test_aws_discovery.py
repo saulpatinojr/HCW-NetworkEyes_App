@@ -19,13 +19,20 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
-import botocore.exceptions
 import pytest
 
-from cna.core.exceptions import CNAAuthError, CNARateLimitError
-from cna.core.topology.aws import AWSAccount, AWSRegionTopology, AWSTopology
-from cna.core.topology.common import AttachmentType, PeeringState
-from cna.modules.network.discovery.aws_discovery import AWSDiscovery, DiscoveryOptions
+pytest.importorskip("botocore", reason="needs the [aws] extra")
+import botocore.exceptions  # noqa: E402
+
+from cna.core.exceptions import CNAAuthError, CNARateLimitError  # noqa: E402
+from cna.core.topology.aws import AWSAccount, AWSRegionTopology, AWSTopology  # noqa: E402
+from cna.core.topology.common import AttachmentType, PeeringState  # noqa: E402
+from cna.modules.network.discovery.aws_discovery import (  # noqa: E402
+    AWSDiscovery,
+    DiscoveryOptions,
+)
+
+pytestmark = pytest.mark.aws
 
 MODULE = "cna.modules.network.discovery.aws_discovery"
 

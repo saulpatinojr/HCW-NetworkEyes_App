@@ -11,13 +11,16 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
-from botocore.exceptions import ClientError
 
-from cna.core.topology.aws import AWSSecurityFinding
-from cna.modules.security.discovery.aws_security import (
+ClientError = pytest.importorskip("botocore.exceptions", reason="needs the [aws] extra").ClientError
+
+from cna.core.topology.aws import AWSSecurityFinding  # noqa: E402
+from cna.modules.security.discovery.aws_security import (  # noqa: E402
     AWSSecurityDiscovery,
     collect_security_findings,
 )
+
+pytestmark = pytest.mark.aws
 
 
 def _paginator(pages):

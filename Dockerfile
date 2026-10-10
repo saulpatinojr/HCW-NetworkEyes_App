@@ -49,7 +49,9 @@ COPY pyproject.toml uv.lock ./
 # The engine package is a uv workspace member: its pyproject.toml must be present for
 # `uv export --locked` to resolve the workspace, before the source tree is copied.
 COPY packages/cna-azure-network-engine/pyproject.toml packages/cna-azure-network-engine/
-RUN uv export --locked --no-default-groups --no-emit-project --no-emit-workspace -o /tmp/requirements.txt \
+# The appliance edition serves both clouds, so the [aws] extra rides along here; the
+# package itself declares boto3 only under that extra (change set K).
+RUN uv export --locked --no-default-groups --no-emit-project --no-emit-workspace --extra aws -o /tmp/requirements.txt \
  && uv pip install --system --no-cache --require-hashes --no-deps --prefix=/install -r /tmp/requirements.txt \
  && uv export --locked --only-group build -o /tmp/build-requirements.txt \
  && uv pip install --system --no-cache --require-hashes --no-deps -r /tmp/build-requirements.txt

@@ -23,8 +23,13 @@ import json
 import logging
 from dataclasses import dataclass, field
 
-import boto3
-import botocore.exceptions
+from cna.aws import INSTALL_HINT
+
+try:
+    import boto3
+    import botocore.exceptions
+except ImportError as _missing:  # the [aws] extra is not installed (change set K)
+    raise ImportError(INSTALL_HINT) from _missing
 
 from cna.core.exceptions import CNAAuthError
 from cna.core.persistence import EngagementStore

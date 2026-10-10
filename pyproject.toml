@@ -13,7 +13,6 @@ dependencies = [
     "cna-azure-network-engine",
     "click>=8.4.2",
     "rich>=15.0.0",
-    "boto3>=1.43.40",
     "azure-identity>=1.25.3",
     # Pinned to 1.x deliberately (TODO.md T-413). FoundryAgentClient drives
     # agents.threads / .messages / .runs, which is the 1.x surface; 2.x replaced
@@ -57,6 +56,13 @@ dependencies = [
 cna = "cna.cli.main:cli"
 
 [project.optional-dependencies]
+# AWS is optional (REFACTOR_APP.md change set K): `pip install cna` installs no boto3;
+# `pip install "cna[aws]"` enables discovery, Security Hub, the S3 delivery portal,
+# Bedrock chat and the /discovery/*-aws routes. Every AWS module calls
+# cna.aws.require_aws_extra() before importing boto3.
+aws = [
+    "boto3>=1.43.40",
+]
 # Optional enrichment dependencies (TODO.md T-414).
 #
 # Every one is imported lazily inside `try: ... except ImportError:` and each
@@ -151,6 +157,9 @@ worker = [
 [tool.pytest.ini_options]
 testpaths = ["tests", "packages/cna-azure-network-engine/tests"]
 addopts = "-ra -q"
+markers = [
+    "aws: needs the [aws] extra (boto3); skipped without it (tests/conftest.py)",
+]
 
 # Type checking (TODO.md T-402). Matches the ruff posture: py314, project
 # source only, no widened ignore lists. `ty check cna/` is NOT yet green — see

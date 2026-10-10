@@ -17,7 +17,7 @@ in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG
 | [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-419 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements + appliance migration | T-501 – T-509 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
-| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-728 |
+| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-729 |
 
 ---
 
@@ -2333,3 +2333,24 @@ Nothing publishes until the owner flips the variables below. Open, in order:
   read `digests{}` from `.deployment-catalog/latest-build.json` (`name@sha256:…`, same keys as `images{}`)
   in their `230-image-update` consumers and pin by digest; `images{}` stays for the transition. Their own
   Docker Hub logins move to the same OIDC form.
+
+### T-729 — AWS extra: move the AWS modules under `cna/aws/` with shims, and the AWS appliance's install (change set K)
+`boto3` is the `[aws]` extra; the AWS paths are guarded by `cna.aws` (`CHANGELOG.md` `[Unreleased]`;
+`tests/packaging/test_azure_only_install.py`). Open:
+- The plan moves `cna/modules/network/discovery/{aws_discovery,aws_network}.py`,
+  `cna/modules/security/discovery/aws_security.py`, `cna/delivery_portal/s3_deployer.py`,
+  `cna/ai_engine/mcp_client/aws_mcp_client.py`, the Bedrock branch of `cna/ai_engine/chat_agent.py`,
+  `cna/diagram_engine/data/aws_shapes.json`, `cna/modules/network/diagrams/{vpc_topology,tgw_topology,
+  account_hierarchy}.py`, `CRITICAL_TRIGGERS_AWS` and the `_check_aws_*` rules of `analysis_engine.py` under
+  `cna/aws/` with re-export shims at the old paths for one release. This change gated them in place; do the
+  move as its own PR, together with the AWS rules leaving `AnalysisEngine` (T-725).
+- Core ↔ appliance contract: `Work-Cloud_Network_AWS_Appliance` deploys the same images, which carry the
+  extra, so nothing changes there; a future Azure-only image (`--extra api` without `--extra aws`) is the
+  moment the Azure appliance stops shipping boto3. `Work-Cloud_Network_Azure_Appliance` is unaffected.
+- `[VERIFY]` `cna/modules/network/module.aws.yaml` against the IAM actions the collectors call; the
+  AWS appliance's Terraform builds its read-only policy from it.
+- Keep `tests/conftest.py`'s skip in step with the marker: an `@pytest.mark.aws` test that runs green
+  without `boto3` is not testing the AWS path.
+- The change-set-A shims (`cna/core/topology_schema.py` and the five analysis shims, T-719) and the `arm`
+  discovery backend (T-726) are one-release deprecations the plan does not tie to this change; remove each
+  in the release its row names.
