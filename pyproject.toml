@@ -11,7 +11,7 @@ dependencies = [
     "click>=8.4.2",
     "rich>=15.0.0",
     "boto3>=1.43.40",
-    "azure-identity>=1.25.3",
+    "azure-identity>=1.26.0",
     # Pinned to 1.x deliberately (TODO.md T-413). FoundryAgentClient drives
     # agents.threads / .messages / .runs, which is the 1.x surface; 2.x replaced
     # it entirely and every one of those calls raises AttributeError against it.
@@ -23,13 +23,13 @@ dependencies = [
     "azure-mgmt-network>=31.0.1",
     "azure-mgmt-resource>=26.0.0",
     "azure-mgmt-subscription>=3.1.1",
-    "azure-storage-blob>=12.30.0",       # Phase F: Azure Blob Storage deployer
-    "openai>=2.45.0",
-    "anthropic>=1.5.0",                  # bring-your-own Claude engine (CNA_AI_MODE=byo-api)
+    "azure-storage-blob>=12.31.0",       # Phase F: Azure Blob Storage deployer
+    "openai>=3.26.0",
+    "anthropic>=1.12.0",                  # bring-your-own Claude engine (CNA_AI_MODE=byo-api)
     # Reads the AES-256-GCM credential blobs the web tier writes (BYO AI keys).
     # Was only ever a transitive dependency of azure-identity; declared so a
     # future azure-identity bump cannot silently drop it.
-    "cryptography>=42.0.0",
+    "cryptography>=50.0.2",
     "diagrams>=0.25.1",
     "n2g>=0.3.3",
     "matplotlib>=3.10.9",
@@ -43,9 +43,9 @@ dependencies = [
     "defusedxml>=0.7.1",
     "pandas>=3.0.3",
     "pydantic>=2.13.4",
-    "python-dotenv>=1.2.2",
+    "python-dotenv>=1.2.4",
     "pyyaml>=6.0.3",
-    "tenacity>=9.1.4",
+    "tenacity>=9.2.1",
     "httpx>=0.28.1",
 ]
 
@@ -81,7 +81,7 @@ enrichment = [
     "azure-mgmt-privatedns>=2.0.0,<3",        # private DNS zone discovery
     "azure-mgmt-loganalytics>=14.0.0,<15",    # Log Analytics workspace lookup
     "cairosvg>=2.9.0,<3",                     # SVG -> PNG for diagram export
-    "mcp>=2.0.0,<3",                          # Azure/AWS MCP recommendation clients
+    "mcp>=2.3.0,<3",                          # Azure/AWS MCP recommendation clients
 ]
 
 # The cna-api image's runtime dependencies. These are NOT core library deps
@@ -92,7 +92,7 @@ enrichment = [
 # exercises at discovery time and must be present in the image; the rest of the
 # enrichment extra remains optional.
 api = [
-    "fastapi>=0.115",
+    "fastapi>=0.142.4",
     "uvicorn[standard]>=0.30",
     "psycopg2-binary>=2.9",
     "azure-mgmt-monitor>=6.0.2,<7",
@@ -103,9 +103,9 @@ api = [
 dev = [
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",               # coverage plugin (was missing from dev deps)
-    "hypothesis>=6.140.3",             # property-based tests (production-readiness review invariants)
+    "hypothesis>=6.168.5",             # property-based tests (production-readiness review invariants)
     "ruff>=0.15.21",
-    "ty>=0.0.72",                       # type checker (TODO.md T-402)
+    "ty>=0.0.85",                       # type checker (TODO.md T-402)
     "pre-commit>=4.6.0",               # pre-commit itself as a dev dep
     "detect-secrets>=1.5",           # used by pre-commit hook
 ]
@@ -128,8 +128,8 @@ build = [
 # the cna package, so its image resolves them from the same lock as the CLI and
 # API images (same versions everywhere) instead of an unpinned `pip install`.
 worker = [
-    "azure-identity>=1.25.3",
-    "azure-storage-blob>=12.30.0",
+    "azure-identity>=1.26.0",
+    "azure-storage-blob>=12.31.0",
 ]
 
 # uv.lock is the single resolution every Python image installs from
