@@ -744,7 +744,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.16.10" },
     { name = "tenacity", specifier = ">=9.2.1" },
     { name = "ty", marker = "extra == 'dev'", specifier = ">=0.0.85" },
-    { name = "uvicorn", extras = ["standard"], marker = "extra == 'api'", specifier = ">=0.30" },
+    { name = "uvicorn", extras = ["standard"], marker = "extra == 'api'", specifier = ">=0.54.0" },
     { name = "weasyprint", specifier = ">=62.0" },
 ]
 provides-extras = ["aws", "enrichment", "api", "dev"]
