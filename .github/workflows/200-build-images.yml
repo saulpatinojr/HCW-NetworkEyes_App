@@ -117,10 +117,10 @@ jobs:
             sha_prefix: worker-sha-
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
       - name: Validate Docker Hub namespace
         run: |
@@ -130,7 +130,7 @@ jobs:
           fi
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
         with:
           registry: docker.io
           username: ${{ vars.DOCKERHUB_NAMESPACE }}
@@ -158,7 +158,7 @@ jobs:
       # tags it. Provenance and SBOM attestations are attached to that digest.
       - name: Build and push ${{ matrix.name }} image by digest
         id: build
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
         with:
           context: .
           file: ${{ matrix.file }}
@@ -176,7 +176,7 @@ jobs:
       # daemon, so docker/scout-action could otherwise silently fall back to a
       # stale locally-cached image and scan the wrong content entirely.
       - name: Docker Scout — fail on fixable critical/high CVEs
-        uses: docker/scout-action@2688993af7bafd6ba8c6a74ec652442be91dd82b  # v1.23.1
+        uses: docker/scout-action@221e7f4860634eeb1579e3bd7ca232e577bd1864  # v1.26.0
         with:
           command: cves
           image: docker.io/${{ env.DOCKERHUB_NAMESPACE }}/cna@${{ steps.build.outputs.digest }}
@@ -228,13 +228,13 @@ jobs:
       tags_migrator: ${{ steps.digest.outputs.tags_migrator }}
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
         with:
           registry: docker.io
           username: ${{ vars.DOCKERHUB_NAMESPACE }}
@@ -287,7 +287,7 @@ jobs:
 
       - name: Build and push Web image by digest
         id: build_web
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
         with:
           context: apps/cna-web
           file: apps/cna-web/Dockerfile
@@ -305,7 +305,7 @@ jobs:
       # above: no tag exists yet, and a floating-tag reference could resolve
       # against a stale locally-cached image instead of the one just pushed.
       - name: Docker Scout — fail on fixable critical/high CVEs (Web)
-        uses: docker/scout-action@2688993af7bafd6ba8c6a74ec652442be91dd82b  # v1.23.1
+        uses: docker/scout-action@221e7f4860634eeb1579e3bd7ca232e577bd1864  # v1.26.0
         with:
           command: cves
           image: docker.io/${{ env.DOCKERHUB_NAMESPACE }}/cna@${{ steps.build_web.outputs.digest }}
@@ -315,7 +315,7 @@ jobs:
 
       - name: Build and push Migrator image by digest
         id: build_migrator
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
         with:
           context: apps/cna-web
           file: apps/cna-web/Dockerfile
@@ -329,7 +329,7 @@ jobs:
           cache-from: type=gha
 
       - name: Docker Scout — fail on fixable critical/high CVEs (Migrator)
-        uses: docker/scout-action@2688993af7bafd6ba8c6a74ec652442be91dd82b  # v1.23.1
+        uses: docker/scout-action@221e7f4860634eeb1579e3bd7ca232e577bd1864  # v1.26.0
         with:
           command: cves
           image: docker.io/${{ env.DOCKERHUB_NAMESPACE }}/cna@${{ steps.build_migrator.outputs.digest }}
@@ -425,7 +425,7 @@ jobs:
       DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
     steps:
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
       - name: Validate Docker Hub namespace
         run: |
@@ -435,7 +435,7 @@ jobs:
           fi
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
         with:
           registry: docker.io
           username: ${{ vars.DOCKERHUB_NAMESPACE }}
@@ -509,7 +509,7 @@ jobs:
       manifest: ${{ steps.manifest.outputs.json }}
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           # Need write access to push the manifest commit back to main
           token: ${{ secrets.GITHUB_TOKEN }}
