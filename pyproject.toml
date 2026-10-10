@@ -103,7 +103,7 @@ enrichment = [
 # enrichment extra remains optional.
 api = [
     "fastapi>=0.142.4",
-    "uvicorn[standard]>=0.30",
+    "uvicorn[standard]>=0.54.0",
     "psycopg2-binary>=2.9",
     # Entra bearer validation on the internal routes (change set H): signature via
     # the tenant's JWKS, issuer, audience and expiry. `issuer` as a list needs 2.10.
