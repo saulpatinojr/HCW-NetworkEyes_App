@@ -353,6 +353,9 @@ jobs:
         # look up instead of skipping it.
         run: |
           set -euo pipefail
-          uv export --locked --no-emit-project --no-default-groups \
+          # --no-emit-workspace: the engine package is a first-party workspace member (an
+          # editable path pip-audit's internal pip cannot resolve); its own dependency is
+          # pydantic, already in the resolution. Same flag as the lockfile job.
+          uv export --locked --no-emit-project --no-emit-workspace --no-default-groups \
             --extra api --extra enrichment --extra dev -o /tmp/locked.txt
           pip-audit --strict --require-hashes -r /tmp/locked.txt
