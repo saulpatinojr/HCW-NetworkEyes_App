@@ -21,7 +21,7 @@ dependencies = [
 # whose majors renamed or removed the APIs used. Every bound is [VERIFY] until the
 # acceptance run against a Reader-only identity (TODO.md T-726).
 azure = [
-    "azure-identity>=1.25.3",                 # [VERIFY] credential chain
+    "azure-identity>=1.26.0",                 # [VERIFY] credential chain
     "azure-mgmt-resourcegraph>=8.0.0,<9",     # [VERIFY] QueryRequest/QueryRequestOptions, skip_token
     "azure-mgmt-network>=31.0.1",             # [VERIFY] BGP begin_get_* actions (live only)
     "azure-mgmt-monitor>=6.0.2,<7",           # [VERIFY] diagnostic settings, alert counts
