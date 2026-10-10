@@ -50,7 +50,7 @@ apps/
 cna/                  Python package, installed as the `cna` CLI
 ├── core/             topology/{common,azure,aws} · findings_schema · stat_masters · engagement
 ├── modules/          AWS + Azure discovery, FinOps signals, BC/DR signals, topology classifier
-├── ai_engine/        Analysis engine, recommendation engine, chat agent
+├── ai_engine/        Azure rule registry (azure_rules), AWS analysis engine, recommendation engine, chat agent
 ├── report_engine/    Encyclopedia renderer, WeasyPrint PDF, radar chart SVG
 ├── diagram_engine/   Draw.io generator, future-state model
 ├── delivery_portal/  Client deliverable delivery

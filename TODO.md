@@ -17,7 +17,7 @@ in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG
 | [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-419 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements + appliance migration | T-501 – T-509 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
-| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-719 |
+| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-720 |
 
 ---
 
@@ -2116,3 +2116,28 @@ first release carrying the split): delete `cna/core/topology_schema.py`, delete
 `tests/unit/test_topology_split.py`, and run the unit job with `-W error::DeprecationWarning` scoped to
 `cna.*` so no shim can be imported silently again. `apps/cna-web/lib/finops/inventory.ts` mirrors the
 Azure field shapes and already names `cna/core/topology/azure.py`.
+
+### T-720 — Azure rule registry follow-ups (change set B)
+`cna/ai_engine/azure_rules` replaced the API's Engine B and Engine A's Azure rules (`CHANGELOG.md`
+`[Unreleased]`; change set B of the `REFACTOR_APP.md` plan held in `HCW-NetworkEyes_App`). Left open, in
+the order the plan takes them:
+- Engine B checks dropped without a typed equivalent — return them as `applies_to="live-only"` rules once
+  change set D's collectors feed the model: NVA inventory and the per-NVA checks (fewer than two NICs, NIC
+  without NSG, IP forwarding without a known NVA publisher), BGP disabled on a gateway with connections,
+  BGP peer not Connected, connected peers with zero learned routes, the BGP route summary, Network Watcher
+  missing per region, no Log Analytics workspace, workspace retention under 90 days, the NSGs-missing-flow-
+  logs count and the gateway metrics summary. Reserve ids from `AZ-NET-034` and `AZ-BCDR-008` onward; the
+  downstream lab edition (`HCW-NetworkEyes_AddOn`) adopts the same ids and severities through its
+  `core-update` PR and must never see one renumbered.
+- The "discovery blocked" finding Engine B emitted for a subscription the identity cannot read is gone (the
+  registry skips blocked subscriptions, as Engine A always did); the runner's progress log names it. Change
+  set C's `FindingsReport.unknowns[]` is where that signal belongs.
+- Engine A's metric rules `AZ-NET-008`, `009`, `010`, `016` and `017` key their finding on the subscription
+  id rather than the resource, so a second saturated gateway deduplicates into the first. Kept as they were
+  so the move stayed verifiable by a differential run; fix each with a version bump.
+- Every `learn_url` in the three rule modules is `[VERIFY]` and every framework control reference is a
+  `[REVIEW REQUIRED]` compliance claim (plan section 22, item 5); confirm them before the appliance's public
+  surface exposes them.
+- `RULES_VERSION` and the rule id:version table are pinned together in `tests/unit/test_registry.py`, and
+  the lab edition pins `rules_digest()` over the same table: bump both, never one.
+- Plan change sets C–K are still not folded into this backlog (see T-719).
