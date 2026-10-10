@@ -29,26 +29,28 @@ from cna.core.findings_schema import (
     FrameworkMapping,
     ObservedState,
 )
-from cna.core.topology_schema import (
+from cna.core.topology.aws import (
     VPC,
-    ApplicationGateway,
     AWSRegionTopology,
     AWSTopology,
     AWSWAFWebACL,
+    DirectConnectConnection,
+    SecurityGroup,
+    SecurityGroupRule,
+    TransitGateway,
+)
+from cna.core.topology.azure import (
+    ApplicationGateway,
     AzureFirewall,
     AzureSubnet,
     AzureSubscriptionTopology,
     AzureTopology,
     AzureVirtualNetworkGateway,
-    DirectConnectConnection,
     FrontDoorWAFPolicy,
-    PeeringState,
-    SecurityGroup,
-    SecurityGroupRule,
-    TransitGateway,
     VNet,
     VNetPeering,
 )
+from cna.core.topology.common import PeeringState
 
 
 @pytest.fixture

@@ -148,7 +148,7 @@ def build_stat_masters(
     """Aggregate findings into one StatMasterRecord per unique dimension tuple.
 
     Pure and deterministic. `topology` is an optional AzureTopology
-    (cna/core/topology_schema.py) used only for bundle metadata — pass
+    (cna/core/topology/azure.py) used only for bundle metadata — pass
     None when no topology checkpoint is available.
 
     Measures per group:

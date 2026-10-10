@@ -26,7 +26,7 @@ from cna.core.findings_schema import (
     FrameworkMapping,
     ObservedState,
 )
-from cna.core.topology_schema import AzureSubscriptionTopology, AzureTopology
+from cna.core.topology.azure import AzureSubscriptionTopology, AzureTopology
 
 _MIN_REDUNDANCY_ZONES = 2
 _SINGLE_GATEWAY = 1

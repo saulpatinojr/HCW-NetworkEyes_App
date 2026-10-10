@@ -48,7 +48,7 @@ apps/
 ├── cna-api/          FastAPI — metrics, chat, reports, discovery routers
 └── cna-worker/       Python background worker — discovery + report generation
 cna/                  Python package, installed as the `cna` CLI
-├── core/             topology_schema · findings_schema · stat_masters · engagement
+├── core/             topology/{common,azure,aws} · findings_schema · stat_masters · engagement
 ├── modules/          AWS + Azure discovery, FinOps signals, BC/DR signals, topology classifier
 ├── ai_engine/        Analysis engine, recommendation engine, chat agent
 ├── report_engine/    Encyclopedia renderer, WeasyPrint PDF, radar chart SVG

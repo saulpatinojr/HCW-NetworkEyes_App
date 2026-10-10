@@ -151,7 +151,7 @@ class TestRealDrawioExport:
     """
 
     def test_export_produces_real_svg(self, tmp_output):
-        from cna.core.topology_schema import AzureSubnet, AzureSubscriptionTopology, VNet
+        from cna.core.topology.azure import AzureSubnet, AzureSubscriptionTopology, VNet
         from cna.diagram_engine.drawio_generator import generate_vnet_topology
 
         sub = AzureSubscriptionTopology(
@@ -181,7 +181,7 @@ class TestRealDrawioExport:
         assert "<svg" in svg and len(svg) > 1000
 
     def test_encyclopedia_diagram_svgs_render(self):
-        from cna.core.topology_schema import (
+        from cna.core.topology.azure import (
             AzureSubnet,
             AzureSubscriptionTopology,
             AzureTopology,

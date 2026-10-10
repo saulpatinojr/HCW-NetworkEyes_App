@@ -17,7 +17,7 @@ in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG
 | [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-419 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements + appliance migration | T-501 – T-509 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
-| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-717 |
+| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-719 |
 
 ---
 
@@ -2103,3 +2103,16 @@ an image tag (`cosign clean --type all` on the digest, or deleting its `sha256-<
 when that is how Docker Hub stores them — confirm on the first signed build which form Docker Hub
 uses), behind the same `dry_run` input.
 
+### T-719 — Remove the `cna.core.topology_schema` deprecation shim
+`cna.core.topology_schema` became a shim when its classes moved verbatim to
+`cna.core.topology.{common,azure,aws}` (`CHANGELOG.md` `[Unreleased]`; change set A of the refactoring
+plan `REFACTOR_APP.md` held in `HCW-NetworkEyes_App`, whose remaining change sets B–K are not yet
+folded into this backlog). The shim re-exports every name, aliases `TOPOLOGY_SCHEMA_VERSION` to
+`AZURE_TOPOLOGY_VERSION` and warns `DeprecationWarning` on import, so an unconverted importer keeps
+working for one release; nothing in `cna/`, `apps/` or `tests/` imports it any more. One release after
+the split ships (the plan pairs the removal with its AWS gating, change set K; never earlier than the
+first release carrying the split): delete `cna/core/topology_schema.py`, delete
+`tests/unit/test_topology_shim_warns.py` and the `shim` fixture tests in
+`tests/unit/test_topology_split.py`, and run the unit job with `-W error::DeprecationWarning` scoped to
+`cna.*` so no shim can be imported silently again. `apps/cna-web/lib/finops/inventory.ts` mirrors the
+Azure field shapes and already names `cna/core/topology/azure.py`.

@@ -26,7 +26,7 @@ from cna.core.findings_schema import (
     FrameworkMapping,
     ObservedState,
 )
-from cna.core.topology_schema import AzureSubscriptionTopology, AzureTopology
+from cna.core.topology.azure import AzureSubscriptionTopology, AzureTopology
 
 R_AZ_COST_ORPHANED_PIP = "AZ-COST-001"
 R_AZ_COST_IDLE_GATEWAY = "AZ-COST-002"

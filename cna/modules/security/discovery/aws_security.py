@@ -24,7 +24,7 @@ import boto3
 import botocore.exceptions
 
 from cna.core.throttle import with_retry
-from cna.core.topology_schema import AWSSecurityFinding
+from cna.core.topology.aws import AWSSecurityFinding
 
 logger = logging.getLogger("cna.discovery.aws.security")
 

@@ -13,7 +13,7 @@ from unittest.mock import MagicMock
 import pytest
 from botocore.exceptions import ClientError
 
-from cna.core.topology_schema import AWSSecurityFinding
+from cna.core.topology.aws import AWSSecurityFinding
 from cna.modules.security.discovery.aws_security import (
     AWSSecurityDiscovery,
     collect_security_findings,

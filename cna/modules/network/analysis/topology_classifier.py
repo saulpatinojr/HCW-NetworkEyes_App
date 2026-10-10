@@ -1,7 +1,7 @@
 """Topology classifier — derive the tenant network pattern from discovery data.
 
 Pure post-processing over an existing AzureTopology checkpoint
-(cna/core/topology_schema.py). No client environment access (DD-008),
+(cna/core/topology/azure.py). No client environment access (DD-008),
 no assumptions beyond what the peering flags and resource placement state.
 
 Patterns:
@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from cna.core.topology_schema import AzureTopology, VNet
+from cna.core.topology.azure import AzureTopology, VNet
 
 # Subnets whose presence marks a VNet as a connectivity hub
 _HUB_SUBNET_NAMES = frozenset({"gatewaysubnet", "azurefirewallsubnet"})

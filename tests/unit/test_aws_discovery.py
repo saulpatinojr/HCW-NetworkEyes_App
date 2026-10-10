@@ -23,13 +23,8 @@ import botocore.exceptions
 import pytest
 
 from cna.core.exceptions import CNAAuthError, CNARateLimitError
-from cna.core.topology_schema import (
-    AttachmentType,
-    AWSAccount,
-    AWSRegionTopology,
-    AWSTopology,
-    PeeringState,
-)
+from cna.core.topology.aws import AWSAccount, AWSRegionTopology, AWSTopology
+from cna.core.topology.common import AttachmentType, PeeringState
 from cna.modules.network.discovery.aws_discovery import AWSDiscovery, DiscoveryOptions
 
 MODULE = "cna.modules.network.discovery.aws_discovery"

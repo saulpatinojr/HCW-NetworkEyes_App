@@ -37,7 +37,7 @@ from azure.core.exceptions import HttpResponseError
 from cna.core.exceptions import CNAAuthError
 from cna.core.persistence import EngagementStore
 from cna.core.throttle import with_retry
-from cna.core.topology_schema import (
+from cna.core.topology.azure import (
     AppGatewayMetric,
     ApplicationGateway,
     AzureBastionHost,
@@ -80,10 +80,10 @@ from cna.core.topology_schema import (
     NSGSecurityRule,
     ObservabilityData,
     PrivateDnsZone,
-    SubnetType,
     VNet,
     VNetPeering,
 )
+from cna.core.topology.common import SubnetType
 
 logger = logging.getLogger("cna.discovery.azure")
 

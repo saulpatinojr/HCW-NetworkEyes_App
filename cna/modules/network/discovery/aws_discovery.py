@@ -29,10 +29,9 @@ import botocore.exceptions
 from cna.core.exceptions import CNAAuthError
 from cna.core.persistence import EngagementStore
 from cna.core.throttle import PaginationCursor, with_retry
-from cna.core.topology_schema import (
+from cna.core.topology.aws import (
     NACL,
     VPC,
-    AttachmentType,
     AWSAccount,
     AWSNetworkFirewall,
     AWSRegionTopology,
@@ -42,18 +41,17 @@ from cna.core.topology_schema import (
     InternetGateway,
     NACLEntry,
     NatGateway,
-    PeeringState,
     RouteEntry,
     RouteTable,
     SecurityGroup,
     SecurityGroupRule,
     Subnet,
-    SubnetType,
     TGWAttachment,
     TransitGateway,
     VpcPeeringConnection,
     VpnGateway,
 )
+from cna.core.topology.common import AttachmentType, PeeringState, SubnetType
 
 logger = logging.getLogger("cna.discovery.aws")
 

@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from cna.core.topology_schema import (
+from cna.core.topology.azure import (
     AzureFirewall,
     AzureRouteServer,
     AzureTopology,

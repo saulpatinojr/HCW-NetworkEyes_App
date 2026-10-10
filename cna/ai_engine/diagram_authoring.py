@@ -1,6 +1,6 @@
 """Diagram authoring orchestrator — produces a C4-layered draw.io bundle.
 
-Inputs: discovered topologies (from cna.core.topology_schema).
+Inputs: discovered topologies (from cna.core.topology.azure and cna.core.topology.aws).
 Outputs: list of `C4Diagram` payloads — one context diagram plus one container
 diagram per discovered scope.
 
@@ -21,7 +21,8 @@ from __future__ import annotations
 import logging
 
 from cna.ai_engine.mcp_client.drawio_mcp_client import DrawioMCPClient
-from cna.core.topology_schema import AWSRegionTopology, AzureSubscriptionTopology
+from cna.core.topology.aws import AWSRegionTopology
+from cna.core.topology.azure import AzureSubscriptionTopology
 from cna.diagram_engine.c4_layering import C4Diagram, C4Layer, build_context_xml
 from cna.diagram_engine.drawio_generator import (
     generate_vnet_topology,

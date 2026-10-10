@@ -7,25 +7,27 @@ No draw.io CLI required.
 
 import pytest
 
-from cna.core.topology_schema import (
+from cna.core.topology.aws import (
     VPC,
     AWSNetworkFirewall,
     AWSRegionTopology,
     AWSTopology,
     AWSWAFWebACL,
+    DirectConnectConnection,
+    Subnet,
+    TransitGateway,
+    VpnGateway,
+)
+from cna.core.topology.azure import (
     AzureSubnet,
     AzureSubscriptionTopology,
     AzureTopology,
     AzureVHub,
     AzureVWan,
-    DirectConnectConnection,
     ManagementGroup,
-    Subnet,
-    SubnetType,
-    TransitGateway,
     VNet,
-    VpnGateway,
 )
+from cna.core.topology.common import SubnetType
 from cna.diagram_engine.drawio_generator import (
     generate_tgw_topology,
     generate_vnet_topology,
@@ -268,7 +270,7 @@ class TestVwanTopology:
 
 class TestMermaidGenerators:
     def test_aws_hierarchy_starts_with_flowchart(self):
-        from cna.core.topology_schema import AWSAccount
+        from cna.core.topology.aws import AWSAccount
 
         topology = AWSTopology(
             engagement_id="eng-001",
@@ -339,7 +341,7 @@ class TestMermaidGenerators:
 
 
 def _sub_with_services() -> AzureSubscriptionTopology:
-    from cna.core.topology_schema import AzureBastionHost, AzureFirewall
+    from cna.core.topology.azure import AzureBastionHost, AzureFirewall
 
     return AzureSubscriptionTopology(
         subscription_id="sub-1",
@@ -421,7 +423,7 @@ def test_labels_use_escaped_line_breaks():
 
 
 def test_service_band_summarises_overflow_instead_of_drawing_every_icon():
-    from cna.core.topology_schema import AzurePrivateEndpoint
+    from cna.core.topology.azure import AzurePrivateEndpoint
     from cna.diagram_engine.drawio_generator import MAX_ICONS_PER_TYPE
 
     sub = _sub_with_services()

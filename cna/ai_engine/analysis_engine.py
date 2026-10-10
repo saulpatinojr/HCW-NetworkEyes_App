@@ -36,12 +36,8 @@ from cna.core.findings_schema import (
     ObservedState,
 )
 from cna.core.persistence import EngagementStore
-from cna.core.topology_schema import (
-    AWSRegionTopology,
-    AWSTopology,
-    AzureSubscriptionTopology,
-    AzureTopology,
-)
+from cna.core.topology.aws import AWSRegionTopology, AWSTopology
+from cna.core.topology.azure import AzureSubscriptionTopology, AzureTopology
 
 logger = logging.getLogger("cna.analysis")
 
