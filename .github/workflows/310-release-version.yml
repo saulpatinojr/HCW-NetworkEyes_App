@@ -1,0 +1,102 @@
+# Release workflow
+# Triggered when a version tag v*.*.* is pushed.
+# Builds the Docker image, pushes to Docker Hub, creates a GitHub Release
+# with auto-generated changelog from PRs merged since last tag.
+#
+# Required repository secrets:
+#   DOCKERHUB_NAMESPACE / DOCKERHUB_TOKEN — Docker Hub image push
+#
+# Required repository settings:
+#   Actions > General > Workflow permissions: Read and write
+name: "310 · Release CLI Tool"
+
+# Runs on GitHub-hosted runners (ubuntu-latest): the release builds and pushes
+# with the repository secrets and creates the GitHub Release with GITHUB_TOKEN;
+# no private network or cloud credentials are involved. The self-hosted runner
+# the original repository used is retired.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write    # create GitHub Release
+  id-token: write    # OIDC (future Cosign signing)
+
+# One release run per tag — don't let a re-pushed tag race a still-running
+# release; serialize rather than cancel so a partial GitHub Release isn't left.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+
+  release:
+    name: Build, Push, Release
+    runs-on: ubuntu-latest
+    if: vars.DOCKERHUB_ENABLED == 'true' # owner step: Docker Hub OIDC connection + variables (REFACTOR_APP.md change set J)
+    timeout-minutes: 30
+    env:
+      REGISTRY: docker.io
+      DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
+      IMAGE_REPOSITORY: cna
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          fetch-depth: 0
+
+      # Extract version from tag
+      - name: Extract version
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Validate Docker Hub namespace
+        run: |
+          if [ -z "$DOCKERHUB_NAMESPACE" ]; then
+            echo "::error::DOCKERHUB_NAMESPACE variable is required."
+            exit 1
+          fi
+
+      # Log in to Docker Hub
+      - name: Log in to Docker Hub
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ vars.DOCKERHUB_NAMESPACE }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Docker Buildx for multi-platform + cache
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
+
+      # Build & push image: latest + version tag
+      - name: Build and push
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}:latest
+            ${{ env.REGISTRY }}/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}:${{ steps.version.outputs.VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            CNA_VERSION=${{ steps.version.outputs.VERSION }}
+
+      # GitHub Release with auto-generated changelog
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
+        with:
+          generate_release_notes: true
+          body: |
+            ## CNA Platform ${{ github.ref_name }}
+
+            Docker image: `${{ env.REGISTRY }}/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}:${{ steps.version.outputs.VERSION }}`
+
+            ```bash
+            docker pull ${{ env.REGISTRY }}/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}:${{ steps.version.outputs.VERSION }}
+            docker run --rm ${{ env.REGISTRY }}/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}:${{ steps.version.outputs.VERSION }} --help
+            ```

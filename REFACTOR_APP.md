@@ -4,12 +4,12 @@
 |---|---|
 | Date | 2026-10-10 |
 | Program | HCW App-to-AddOn initiative (Pair 3, NetworkEyes) |
-| This repository | `saulpatinojr/HCW-NetworkEyes_App`, **archived** on 2026-09-18 (see `README.md` in the working tree) |
-| Implementation target | `saulpatinojr/Work-Cloud_Network_Core` |
+| This repository | `saulpatinojr/HCW-NetworkEyes_App` — retired on 2026-09-18, **restored on 2026-10-10** by the owner's decision (the `Work-Cloud_Network_Core` lineage merged back here) |
+| Implementation target | **this repository** (owner decision 2026-10-10; written for `saulpatinojr/Work-Cloud_Network_Core`, whose paths are identical here) |
 | Evidence commit | `5d3b914` (last `main` commit before retirement, read with `git show` and `git ls-tree` only) |
 | Downstream consumer | `saulpatinojr/HCW-NetworkEyes_AddOn` (lab edition, id `network-assessment`) |
 
-> **This repository is archived and nothing in it is to be changed except this file.** The implementation target for every instruction below is `saulpatinojr/Work-Cloud_Network_Core`, which the retirement `README.md` says was created by merging this repository's `main` at `5d3b914` with its complete history ("every commit, `git blame` line and changelog reference resolves there. Nothing was rewritten"). Every `path:line` citation below is as it exists at `5d3b914` and is expected to be unchanged in the Core `[VERIFY]` with `git grep` for the named symbol before editing, because line numbers drift and symbol names do not. This file lives here rather than in the Core because the Core is outside the program's repository scope (owner decision 2026-10-09, `PLAN.md` owner decision 1).
+> **Owner decision 2026-10-10:** this repository is the implementation target. The paragraph that stood here said the repository was archived and the target was `Work-Cloud_Network_Core`; the Core lineage has since been merged back here, so every path below applies to this tree unchanged.
 
 **Repository policy exception.** This file is the single, owner-approved exception to this repository's `CLAUDE.md` rule "Do not make changes here" (owner decision 2026-10-09: the plan is written here, from history, because the Core is outside the program's repository scope). `CLAUDE.md`'s rule stands for everything else: no other file is edited, no history is rewritten, no issue or pull request other than the one carrying this file is opened here, and application work still belongs in the Core and deployment work in the appliances. The recommended follow-up, once the owner grants the program access to `Work-Cloud_Network_Core`, is to move this file there as `docs/REFACTOR_APP.md` (or fold its change sets into the Core's `TODO.md` and `REVIEW.md` model, which is how that repository tracks work) and then delete it here, leaving this repository exactly as its retirement left it.
 

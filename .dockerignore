@@ -1,0 +1,61 @@
+# .dockerignore — keep image lean and prevent secrets leaking into build context
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# setuptools build output — would otherwise be shipped by the root Dockerfile's `COPY . .`
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Secrets and credentials — NEVER in image
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+credentials/
+
+# Engagement data — never baked into image
+engagements/
+output/
+
+# Development and editor
+.vscode/
+.idea/
+.DS_Store
+
+# Git
+.git/
+.gitignore
+
+# CI/CD
+.github/
+
+# IaC (not needed in container)
+infrastructure/
+*.tf
+*.tfvars
+!*.tfvars.example
+
+# Docs
+documentation/
+*.md
+!README.md
+
+# Test files
+tests/
+
+# Vendored agent configuration, kept out of version control and out of every image
+local/

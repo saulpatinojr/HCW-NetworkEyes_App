@@ -1,0 +1,6 @@
+# Force LF line endings for shell scripts and CI configs — prevents shellcheck
+# "literal carriage return" errors when checked out on Windows with autocrlf=true.
+*.sh        text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+Makefile    text eol=lf

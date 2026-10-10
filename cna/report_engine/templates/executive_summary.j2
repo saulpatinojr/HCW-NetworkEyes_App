@@ -1,0 +1,111 @@
+{# Executive Summary Report Template
+   Closes TODO_PhaseA: No Engagement Templates / DD-014 auto-PPTX critique.
+
+   This Jinja2 template produces the HTML executive summary that:
+     - Is the source for the PPTX deck (one slide per section below)
+     - Has a defined, reviewed structure — not 'AI generates 20 slides'
+     - Executive reviewer sees this structure in every engagement
+
+   Template variables (all required, validated by report_engine before render):
+     engagement: EngagementConfig
+     client_name: str
+     engagement_date: str  (YYYY-MM-DD)
+     delivery_lead: str
+     critical_count: int
+     high_count: int
+     medium_count: int
+     low_count: int
+     top_findings: list[dict]  (max 5, severity DESC)
+     diagram_paths: dict[str, str]  (diagram type -> relative path)
+     framework_summary: dict[str, list]  (framework name -> finding list)
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ client_name }} — Cloud Network Assessment — Executive Summary</title>
+  <style>
+    body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a1a; margin: 40px; }
+    h1 { color: #0078D4; border-bottom: 3px solid #0078D4; padding-bottom: 8px; }
+    h2 { color: #333; margin-top: 40px; }
+    .severity-critical { color: #d32f2f; font-weight: bold; }
+    .severity-high { color: #f57c00; font-weight: bold; }
+    .severity-medium { color: #f9a825; }
+    .severity-low { color: #388e3c; }
+    .finding { border-left: 4px solid #0078D4; padding: 12px 16px; margin: 12px 0; background: #f5f9ff; }
+    .metadata { color: #666; font-size: 0.9em; }
+    table { border-collapse: collapse; width: 100%; }
+    th { background: #0078D4; color: white; padding: 8px 12px; text-align: left; }
+    td { border-bottom: 1px solid #ddd; padding: 8px 12px; }
+    .disclaimer { background: #fff8e1; border: 1px solid #fbc02d; padding: 12px; margin-top: 40px; font-size: 0.85em; }
+  </style>
+</head>
+<body>
+
+{# SLIDE 1: Cover #}
+<h1>Cloud Network Assessment</h1>
+<p class="metadata">
+  <strong>Client:</strong> {{ client_name }}<br>
+  <strong>Date:</strong> {{ engagement_date }}<br>
+  <strong>Delivery Lead:</strong> {{ delivery_lead }}<br>
+  <strong>Engagement ID:</strong> {{ engagement.engagement_id }}
+</p>
+
+{# SLIDE 2: Findings Summary #}
+<h2>Findings Summary</h2>
+<table>
+  <tr><th>Severity</th><th>Count</th></tr>
+  <tr><td class="severity-critical">Critical</td><td>{{ critical_count }}</td></tr>
+  <tr><td class="severity-high">High</td><td>{{ high_count }}</td></tr>
+  <tr><td class="severity-medium">Medium</td><td>{{ medium_count }}</td></tr>
+  <tr><td class="severity-low">Low</td><td>{{ low_count }}</td></tr>
+</table>
+
+{# SLIDES 3-7: Top Findings (max 5 — not 'AI generates 20 slides') #}
+<h2>Top Findings</h2>
+{% for finding in top_findings[:5] %}
+<div class="finding">
+  <strong class="severity-{{ finding.severity | lower }}">{{ finding.severity }}</strong>
+  &mdash; {{ finding.title }}<br>
+  <p>{{ finding.observed_state }}</p>
+  {% if finding.framework_mappings %}
+  <p class="metadata">Frameworks: {{ finding.framework_mappings | join(', ') }}</p>
+  {% endif %}
+</div>
+{% endfor %}
+
+{# SLIDE 8: Architecture Diagrams (links, not embedded — PPT slides use PNGs) #}
+<h2>Architecture Diagrams</h2>
+<ul>
+{% for diagram_type, path in diagram_paths.items() %}
+  <li><strong>{{ diagram_type }}:</strong> {{ path }}</li>
+{% endfor %}
+</ul>
+
+{# SLIDE 9: Framework Alignment #}
+{% if framework_summary %}
+<h2>Framework Alignment</h2>
+{% for framework, items in framework_summary.items() %}
+<h3>{{ framework }}</h3>
+<ul>
+{% for item in items %}
+  <li>{{ item }}</li>
+{% endfor %}
+</ul>
+{% endfor %}
+{% endif %}
+
+{# SLIDE 10: Scope & Data Handling Notice #}
+<div class="disclaimer">
+  <strong>Scope Notice:</strong> This assessment documents the observed state of
+  {{ client_name }}’s cloud network environment as discovered during the engagement period.
+  All findings are based on data collected directly from cloud APIs during discovery.
+  No assumptions have been made. Recommendations are generated against current
+  AWS and Azure best practice documentation via MCP-connected advisory services.<br><br>
+  <strong>Data Handling:</strong> Collected configuration data is retained for 90 days
+  post-delivery and then permanently deleted. No client data is used for model training.
+  See the signed Data Handling Agreement for full terms.
+</div>
+
+</body>
+</html>

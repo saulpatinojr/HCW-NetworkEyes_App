@@ -1,0 +1,104 @@
+# Pre-commit hooks — run on every git commit
+# Install: pre-commit install
+# Run manually: pre-commit run --all-files
+#
+# All hooks are pinned to SHA (supply chain security, consistent with CI workflow pins)
+
+repos:
+  # --- Secret detection ---
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+        name: gitleaks (secret detection)
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        name: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        # Vendored agent configuration only, now kept out of version control under
+        # `local/agent-config/` (gitignored). `.claude/` and `.agents/` were
+        # third-party security documentation packs full of example tokens, and
+        # they contributed 413 of the 446 findings on the first readable scan —
+        # noise that made the baseline untriageable and the hook unusable.
+        # `.deployment-catalog/` holds build manifests whose image digests trip
+        # the hex-entropy detector. These are the same directories
+        # `pyproject.toml` excludes from ruff and
+        # `scripts/validate_documentation_model.py` excludes from the
+        # documentation model, on the same grounds: vendored configuration, not
+        # project source (TODO.md T-411).
+        #
+        # `.env.example` used to be excluded here and deliberately is not any
+        # more. Excluding it meant a real credential pasted into the template
+        # would never be caught; its three placeholder findings are recorded in
+        # the baseline instead, which still catches anything new.
+        #
+        # `uv.lock` is the Python resolution (TODO.md T-702): thousands of
+        # sha256 wheel hashes that are public PyPI data, not secrets, and every
+        # one trips the hex-entropy detector. Excluded on the same grounds as
+        # `.deployment-catalog/` above.
+        exclude: ^(local|\.deployment-catalog)/|^uv\.lock$
+
+  # --- Python linting ---
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.10
+    hooks:
+      - id: ruff
+        name: ruff lint
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+        name: ruff format
+
+  # --- General hygiene ---
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+        # uv.lock is ~800 KB of generated resolution data and grows with the
+        # dependency tree; it is the one file allowed past the limit.
+        exclude: ^uv\.lock$
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: no-commit-to-branch
+        args: [--branch, main]
+        name: no direct commit to main
+
+  # --- Type checking (TODO.md T-402) ---
+  # `repo: local` / `language: system` so this runs the exact `ty` version
+  # pinned in pyproject.toml's `dev` group — no second place to bump, and no
+  # third-party rev to pin.
+  #
+  # NOT gating yet: `ty check` reports 2 diagnostics, down from 96. T-402 is
+  # explicit that ignore lists must not be widened to force a green first run,
+  # so the backlog was tracked in TODO.md T-410 and fixed instead — no
+  # suppressions were used to get here.
+  #
+  # The last 2 are both `AIProjectClient.agents` in foundry_agent_client.py.
+  # That attribute exists and works (verified at runtime); the azure-ai-projects
+  # 1.x stub annotates it `-> AgentsClient  # type: ignore[name-defined]`
+  # because the companion class is imported lazily, so the checker cannot
+  # resolve it. See TODO.md T-413. Run the hook with:
+  #
+  #     pre-commit run ty --hook-stage manual --all-files
+  #
+  # When the count reaches 0, delete the `stages:` line so it gates like the
+  # rest, and drop this paragraph.
+  - repo: local
+    hooks:
+      - id: ty
+        name: ty (type check — not yet gating, see TODO.md T-410)
+        entry: ty check
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]

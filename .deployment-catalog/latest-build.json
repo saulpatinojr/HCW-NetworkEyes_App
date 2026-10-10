@@ -1,0 +1,13 @@
+{
+  "sha_tag": "sha-11eaa7e",
+  "commit": "11eaa7e0a4c7ae78bacabaea610e6e485b8d43ee",
+  "built_at": "2026-08-28T06:32:37Z",
+  "run_id": "33147299312",
+  "images": {
+    "cli":      "docker.io/hybridcloudworks/cna:sha-11eaa7e",
+    "api":      "docker.io/hybridcloudworks/cna:api-sha-11eaa7e",
+    "worker":   "docker.io/hybridcloudworks/cna:worker-sha-11eaa7e",
+    "web":      "docker.io/hybridcloudworks/cna:web-sha-11eaa7e",
+    "migrator": "docker.io/hybridcloudworks/cna:migrator-sha-11eaa7e"
+  }
+}

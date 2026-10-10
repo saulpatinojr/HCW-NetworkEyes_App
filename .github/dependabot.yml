@@ -1,0 +1,141 @@
+# Dependabot — automated dependency updates
+# Covers: Python packages (uv — pyproject.toml + uv.lock), GitHub Actions,
+# Docker base images (every `FROM` in all four Dockerfiles, including the
+# `FROM ghcr.io/astral-sh/uv:… AS uv` stage the Python images copy uv from —
+# Dependabot does not read `COPY --from=<image>`), npm (cna-web). Minor/patch
+# updates are grouped per ecosystem.
+#
+# PR strategy:
+#   - Python: weekly, grouped by ecosystem, auto-assign to saulpatinojr
+#   - Actions: weekly, grouped — keeps CI action SHAs current
+#   - Docker: weekly — keeps base image digests current in /, apps/cna-api,
+#     apps/cna-worker, apps/cna-web
+
+version: 2
+updates:
+
+  # Python dependencies — the `uv` ecosystem, not `pip`: the resolution lives in
+  # uv.lock (TODO.md T-702) and every Python image installs from it, so an
+  # update must move pyproject.toml and uv.lock together or 300-test-codebase's
+  # `uv lock --check` fails the PR.
+  - package-ecosystem: uv
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Chicago
+    assignees:
+      - saulpatinojr
+    reviewers:
+      - saulpatinojr
+    labels:
+      - dependencies
+      - python
+    groups:
+      azure-sdk:
+        patterns:
+          - "azure-*"
+      aws-sdk:
+        patterns:
+          - "boto3"
+          - "botocore"
+      testing:
+        patterns:
+          - "pytest*"
+          - "ruff"
+          - "coverage"
+      python-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Chicago
+    assignees:
+      - saulpatinojr
+    labels:
+      - dependencies
+      - github-actions
+    groups:
+      all-actions:
+        patterns:
+          - "*"
+
+  # Docker — every Dockerfile, not only the root one. Dependabot's docker
+  # updater scans the listed directories only, so the api/worker/web images
+  # were previously unwatched and their pinned base digests went stale.
+  - package-ecosystem: docker
+    directories:
+      - "/"
+      - "/apps/cna-api"
+      - "/apps/cna-worker"
+      - "/apps/cna-web"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Chicago
+    assignees:
+      - saulpatinojr
+    labels:
+      - dependencies
+      - docker
+    groups:
+      docker-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  # npm — cna-web (Next.js 15, next-auth, Prisma, Azure SDKs)
+  # Previously uncovered — next-auth beta and all Node.js dependencies
+  # were not receiving automated update PRs.
+  - package-ecosystem: npm
+    directory: "/apps/cna-web"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Chicago
+    assignees:
+      - saulpatinojr
+    reviewers:
+      - saulpatinojr
+    labels:
+      - dependencies
+      - npm
+    ignore:
+      # Prisma 7 requires the new prisma.config.ts datasource model. Keep Prisma
+      # major upgrades manual until the schema/runtime migration is implemented.
+      - dependency-name: "prisma"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "@prisma/*"
+        update-types:
+          - "version-update:semver-major"
+    groups:
+      azure-sdk:
+        patterns:
+          - "@azure/*"
+      next-ecosystem:
+        patterns:
+          - "next"
+          - "next-auth"
+          - "react"
+          - "react-dom"
+          - "@types/react*"
+      prisma:
+        patterns:
+          - "prisma"
+          - "@prisma/*"
+          - "@auth/prisma-adapter"
+      npm-minor-patch:
+        update-types:
+          - minor
+          - patch

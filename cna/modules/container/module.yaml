@@ -1,0 +1,9 @@
+name: container
+version: 1.0.0-stub
+display_name: Container & Serverless Network Assessment
+status: available_not_installed
+description: >
+  Assesses EKS/AKS pod network policies, Lambda/Functions
+  VPC configurations, service mesh, and API Gateway exposure.
+install_command: cna module install container
+depends_on: [network, security]

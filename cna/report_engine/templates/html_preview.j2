@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CNA Report Preview — {{ engagement_id }}</title>
+<style>
+  :root {
+    --critical: #D32F2F; --high: #F57C00; --medium: #F9A825; --low: #43A047;
+    --bg: #F5F5F5; --card: #FFFFFF; --text: #212121; --muted: #757575;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg);
+         color: var(--text); padding: 2rem; }
+  h1 { font-size: 1.8rem; font-weight: 700; margin-bottom: 0.25rem; }
+  .meta { color: var(--muted); font-size: 0.85rem; margin-bottom: 2rem; }
+  .review-banner { background: #FFF3E0; border-left: 4px solid var(--high);
+    padding: 0.75rem 1rem; margin-bottom: 1.5rem; border-radius: 4px; }
+  .reviewed-banner { background: #E8F5E9; border-left: 4px solid var(--low);
+    padding: 0.75rem 1rem; margin-bottom: 1.5rem; border-radius: 4px; }
+  .summary-grid { display: grid; grid-template-columns: repeat(4,1fr);
+                  gap: 1rem; margin-bottom: 2rem; }
+  .sev-card { padding: 1rem; border-radius: 8px; text-align: center;
+              color: white; font-weight: 600; }
+  .sev-card.critical { background: var(--critical); }
+  .sev-card.high     { background: var(--high); }
+  .sev-card.medium   { background: var(--medium); color: var(--text); }
+  .sev-card.low      { background: var(--low); }
+  .sev-card .count   { font-size: 2.5rem; line-height: 1; }
+  .sev-card .label   { font-size: 0.75rem; text-transform: uppercase;
+                       letter-spacing: 0.05em; margin-top: 0.25rem; }
+  .finding { background: var(--card); border-radius: 8px; padding: 1.25rem;
+             margin-bottom: 1rem; border-left: 5px solid var(--muted);
+             box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .finding.CRITICAL { border-left-color: var(--critical); }
+  .finding.HIGH     { border-left-color: var(--high); }
+  .finding.MEDIUM   { border-left-color: var(--medium); }
+  .finding.LOW      { border-left-color: var(--low); }
+  .finding-header   { display: flex; align-items: center; gap: 0.75rem;
+                      margin-bottom: 0.75rem; }
+  .badge { padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.7rem;
+           font-weight: 700; text-transform: uppercase; color: white; }
+  .badge.CRITICAL { background: var(--critical); }
+  .badge.HIGH     { background: var(--high); }
+  .badge.MEDIUM   { background: var(--medium); color: var(--text); }
+  .badge.LOW      { background: var(--low); }
+  .finding-title  { font-weight: 600; font-size: 1rem; }
+  .finding-meta   { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.5rem; }
+  .finding-fact   { font-size: 0.9rem; margin-bottom: 0.75rem;
+                    background: #F5F5F5; padding: 0.5rem 0.75rem;
+                    border-radius: 4px; font-style: italic; }
+  .fw-tags { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; }
+  .fw-tag  { background: #E3F2FD; color: #1565C0; padding: 0.15rem 0.5rem;
+             border-radius: 4px; font-size: 0.75rem; }
+  .recs    { margin-top: 0.5rem; }
+  .rec     { font-size: 0.85rem; padding: 0.4rem 0; border-top: 1px solid #EEE; }
+  .rec-src { font-size: 0.75rem; color: var(--muted); }
+  .section-header { font-size: 1.2rem; font-weight: 600; margin: 2rem 0 1rem; }
+  @media print {
+    body { padding: 0; background: white; }
+    .finding { box-shadow: none; break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<h1>Cloud Network Assessment</h1>
+<p class="meta">Engagement: {{ engagement_id }} &nbsp;|&nbsp; Generated: {{ generated_at }}&nbsp;|&nbsp; Schema: {{ schema_version }}</p>
+
+{% if not review_complete %}
+<div class="review-banner">
+  ⚠ <strong>Pre-review preview.</strong> Findings have not been reviewed.
+  Run <code>cna review complete --engagement-id {{ engagement_id }}</code> before generating final reports.
+</div>
+{% else %}
+<div class="reviewed-banner">
+  ✅ <strong>Reviewed.</strong> This report has been signed off. Run <code>cna report generate</code> for final PDF output.
+</div>
+{% endif %}
+
+<div class="summary-grid">
+  <div class="sev-card critical"><div class="count">{{ critical_count }}</div><div class="label">Critical</div></div>
+  <div class="sev-card high">   <div class="count">{{ high_count }}</div>    <div class="label">High</div></div>
+  <div class="sev-card medium"> <div class="count">{{ medium_count }}</div>  <div class="label">Medium</div></div>
+  <div class="sev-card low">    <div class="count">{{ low_count }}</div>     <div class="label">Low</div></div>
+</div>
+
+<div class="section-header">All Findings ({{ total_count }}) — sorted by severity</div>
+
+{% for f in findings %}
+<div class="finding {{ f.severity.value|upper }}">
+  <div class="finding-header">
+    <span class="badge {{ f.severity.value|upper }}">{{ f.severity.value|upper }}</span>
+    <span class="finding-title">{{ f.title }}</span>
+  </div>
+  <div class="finding-meta">
+    {{ f.rule_id }} &nbsp;|&nbsp;
+    {{ f.resource_type }} &nbsp;|&nbsp;
+    {{ f.resource_id }} &nbsp;|&nbsp;
+    {{ f.account_id }} / {{ f.region }}
+  </div>
+  <div class="finding-fact">{{ f.observed_state.fact }}</div>
+  <div class="fw-tags">
+    {% for m in f.framework_mappings %}
+    <span class="fw-tag">{{ m.framework }}: {{ m.control }}</span>
+    {% endfor %}
+  </div>
+  {% if f.recommendations %}
+  <div class="recs">
+    {% for r in f.recommendations %}
+    <div class="rec">
+      <div>{{ r.text }}</div>
+      <div class="rec-src">Source: {{ r.source }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+</body>
+</html>

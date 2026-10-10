@@ -1,0 +1,350 @@
+# CI pipeline — hardened
+# Changes from original:
+#   - All actions pinned to SHA digest (supply chain security)
+#   - Python matrix: 3.13 + 3.14 (current stable lines)
+#   - pip cache via actions/cache (60-80% faster installs)
+#   - Coverage XML generated in the Python 3.14 job
+#   - Secret scanning runs gitleaks directly to avoid Node.js action runtime warnings
+#   - ruff jobs split: check + format are separate steps with annotations
+#   - module-dependency-check now also runs on PRs (was push-only)
+#   - Job timeout-minutes set on every job (prevent runaway billing)
+#   - uv.lock consistency gate + pip-audit of the locked resolution (T-702)
+#   - Explicit permissions block (principle of least privilege)
+name: "300 · Test Codebase"
+
+# Runs on GitHub-hosted runners (ubuntu-latest): every job is self-contained
+# (setup-python, pip cache, docker) and needs no private network or cloud
+# credentials, so pull requests are checked from day one without registering a
+# runner. The self-hosted runner the original repository used is retired.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:  # allow manual trigger for testing
+
+# A newer push to the same branch/PR makes the previous run's result moot —
+# cancel it instead of letting it finish and burn runner time. Group by PR
+# number when present so concurrent PRs don't cancel each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+
+  # ------------------------------------------------------------------
+  # 1. Secret scanning — full history, SARIF to Security tab
+  # ------------------------------------------------------------------
+  secret-scan:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true  # gitleaks requires paid license on private repos — non-blocking
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          fetch-depth: 0
+      - name: Run gitleaks
+        continue-on-error: true
+        run: |
+          docker run --rm \
+            -v "$PWD:/repo" \
+            zricethezav/gitleaks:v8.30.1 \
+            detect --source=/repo --no-banner --redact --report-format sarif --report-path /repo/gitleaks-results.sarif
+      - name: Secret scanning summary
+        if: always()
+        run: |
+          echo "## Secret Scanning summary" >> "$GITHUB_STEP_SUMMARY"
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          from pathlib import Path
+          import json
+
+          sarif = Path("gitleaks-results.sarif")
+          if not sarif.exists():
+              print("gitleaks-results.sarif was not generated.")
+              raise SystemExit(1)
+
+          data = json.loads(sarif.read_text())
+          results = data.get("runs", [{}])[0].get("results", [])
+          if results:
+              print(f"{len(results)} potential secret finding(s) detected. Review gitleaks-results.sarif locally.")
+          else:
+              print("No leaks detected ✅")
+          PY
+
+  # ------------------------------------------------------------------
+  # 1b. Secret scanning — detect-secrets, gating (TODO.md T-411)
+  # ------------------------------------------------------------------
+  # The gitleaks job above is `continue-on-error: true` because gitleaks needs a
+  # paid licence on private repos. That left the repository with no secret scan
+  # that could fail a build — a control that reads as present in the config and
+  # is not. detect-secrets needs no licence, so this job gates.
+  #
+  # It runs the hook through pre-commit rather than invoking detect-secrets
+  # directly, so the file exclusions live in exactly one place
+  # (.pre-commit-config.yaml) instead of being restated here and drifting.
+  detect-secrets:
+    name: Secret Scanning (detect-secrets, gating)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Cache pip
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ~/.cache/pip
+          key: detect-secrets-${{ hashFiles('.pre-commit-config.yaml') }}
+      - run: pip install pre-commit
+      - name: Run detect-secrets against the audited baseline
+        run: pre-commit run detect-secrets --all-files --show-diff-on-failure
+
+  # ------------------------------------------------------------------
+  # 2. Lint & format
+  # ------------------------------------------------------------------
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Cache pip
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ~/.cache/pip
+          key: lint-${{ hashFiles('pyproject.toml') }}
+      - run: pip install "ruff>=0.15.10"
+      - name: ruff check (lint)
+        run: ruff check . --output-format=github
+      - name: ruff format check
+        run: ruff format --check .
+
+  # ------------------------------------------------------------------
+  # 2b. Web tier — lint, type-check, unit tests (TODO.md T-419)
+  # ------------------------------------------------------------------
+  # The same fast checks the Python package gets, for apps/cna-web. Runs on
+  # the runner's own Node (ubuntu-latest ships a current LTS; the image build
+  # in 200 is the authoritative Node 24 run) — actions/setup-node is not used
+  # because every action here is SHA-pinned and none of the three repositories
+  # carries an audited digest for it yet.
+  web:
+    name: Web lint, typecheck & tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/cna-web
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: Cache npm
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ~/.npm
+          key: web-npm-${{ hashFiles('apps/cna-web/package-lock.json') }}
+      - name: Install
+        run: |
+          node --version
+          npm ci --no-audit --no-fund
+      - name: Lint (eslint, flat config)
+        run: npm run lint
+      - name: Type-check (tsc --noEmit)
+        run: npm run typecheck
+      - name: Unit tests (vitest)
+        run: npm test
+
+  # ------------------------------------------------------------------
+  # 3. Unit tests — Python matrix 3.13 + 3.14
+  # ------------------------------------------------------------------
+  test:
+    name: Unit Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [lint]  # secret-scan is non-blocking (continue-on-error)
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Cache pip
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ~/.cache/pip
+          key: test-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
+      - name: Install dependencies
+        # enrichment is required since tests/unit/test_azure_discovery.py exercises
+        # the Log Analytics paths by importing azure.monitor.query directly (T-408).
+        # api installs fastapi/uvicorn/psycopg2-binary so the apps/cna-api
+        # TestClient tests actually run in CI instead of skipping silently (TEST-001).
+        run: pip install -e .[dev,enrichment,api]
+      - name: Run tests with coverage
+        # --cov=apps counts the API/router code the TestClient tests now exercise
+        # in the same gate as the cna package (TEST-001).
+        run: |
+          pytest tests/unit/ -v --tb=short \
+            --cov=cna \
+            --cov=apps \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --cov-fail-under=80
+      - name: Upload coverage report
+        if: matrix.python-version == '3.14'
+        run: |
+          echo "## Coverage report" >> "$GITHUB_STEP_SUMMARY"
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          coverage = Path("coverage.xml")
+          if not coverage.exists():
+              print("coverage.xml was not generated.")
+              raise SystemExit(1)
+
+          root = ET.parse(coverage).getroot()
+          line_rate = float(root.attrib.get("line-rate", "0")) * 100
+          print(f"Line coverage: {line_rate:.2f}%")
+          PY
+
+  # ------------------------------------------------------------------
+  # 4. Repository guardrails
+  # ------------------------------------------------------------------
+  repository-guardrails:
+    name: Repository Guardrails
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [test]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Cache pip
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ~/.cache/pip
+          key: guardrails-${{ hashFiles('pyproject.toml') }}
+      - run: pip install pyyaml
+      - name: Validate module.yaml dependency graph
+        run: python3 scripts/validate_module_deps.py
+      - name: Validate draw.io shape catalog
+        run: python3 scripts/validate_shape_catalog.py
+      - name: Validate documentation model
+        run: python3 scripts/validate_documentation_model.py
+
+  # ------------------------------------------------------------------
+  # 5. Docker build smoke test
+  # ------------------------------------------------------------------
+  docker-build:
+    name: Docker Build Smoke Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [test]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: Build image
+        run: docker build -t cna:ci-test .
+      - name: Smoke test — cna --help
+        run: docker run --rm cna:ci-test --help
+      - name: Verify non-root user
+        run: |
+          USER=$(docker run --rm --entrypoint whoami cna:ci-test)
+          if [ "$USER" = "root" ]; then
+            echo "FAIL: container is running as root"
+            exit 1
+          fi
+          echo "OK: running as $USER"
+
+  # ------------------------------------------------------------------
+  # 6. Python lockfile consistency (TODO.md T-702)
+  # ------------------------------------------------------------------
+  # Every Python image installs from uv.lock, so a pyproject.toml edit that is
+  # not followed by `uv lock` would fail the image builds on main. Catch it
+  # here, on the PR, and prove the install sets the Dockerfiles export still
+  # install as hash-checked wheels for the image interpreter (cp314 linux) — the
+  # same `uv export` / `uv pip install --require-hashes` commands the
+  # Dockerfiles run, into a throwaway prefix. A real install, not `--dry-run`:
+  # dry-run only proves a hash is *present*; the hash is verified, and a
+  # missing cp314 wheel is noticed, only when the file is fetched. uv is
+  # version-pinned to the release the Dockerfiles' `uv` stage copies in
+  # (`ghcr.io/astral-sh/uv:0.12.21`), so the check and the build read the lock
+  # identically.
+  lockfile:
+    name: Python Lockfile Consistency
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Cache uv wheels
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ~/.cache/uv
+          key: lockfile-uv-${{ hashFiles('uv.lock') }}
+      - name: Install uv
+        run: pip install "uv==0.12.21"
+      - name: uv.lock matches pyproject.toml
+        run: uv lock --check
+      - name: Every image install set installs from the lock with verified hashes
+        run: |
+          set -euo pipefail
+          # (label, export flags) — one line per Python Dockerfile plus the build group.
+          while IFS='|' read -r label flags; do
+            echo "::group::${label}"
+            # shellcheck disable=SC2086  # flags are a deliberate word list
+            uv export --locked --no-emit-project ${flags} -o "${RUNNER_TEMP}/${label}.txt"
+            uv pip install --system --require-hashes --no-deps \
+              --prefix "${RUNNER_TEMP}/prefix-${label}" -r "${RUNNER_TEMP}/${label}.txt"
+            echo "::endgroup::"
+          done <<'SETS'
+          cli|--no-default-groups
+          api|--no-default-groups --extra api
+          worker|--only-group worker
+          build|--only-group build
+          SETS
+
+  # ------------------------------------------------------------------
+  # 7. Python dependency vulnerability audit
+  # ------------------------------------------------------------------
+  pip-audit:
+    name: Python Dependency Audit (pip-audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Cache pip
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ~/.cache/pip
+          key: pip-audit-${{ hashFiles('pyproject.toml', 'uv.lock') }}
+      - name: Install pip-audit and uv
+        run: pip install pip-audit "uv==0.12.21"
+      - name: Audit the locked resolution
+        # Audits exactly what the images ship (TODO.md T-702): the lock exported
+        # with every extra, so the api/enrichment/dev sets are covered in one
+        # pass, hash-pinned so pip-audit audits the locked versions rather than
+        # re-resolving the floors. `--strict` fails on any dependency it cannot
+        # look up instead of skipping it.
+        run: |
+          set -euo pipefail
+          uv export --locked --no-emit-project --no-default-groups \
+            --extra api --extra enrichment --extra dev -o /tmp/locked.txt
+          pip-audit --strict --require-hashes -r /tmp/locked.txt

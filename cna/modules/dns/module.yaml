@@ -1,0 +1,9 @@
+name: dns
+version: 1.0.0-stub
+display_name: DNS Architecture Assessment
+status: available_not_installed
+description: >
+  Maps DNS trust boundaries, Route 53 Resolver rules, private
+  hosted zone scope, and DNS exfiltration risk indicators.
+install_command: cna module install dns
+depends_on: [network]
