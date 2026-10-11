@@ -167,16 +167,16 @@ wheels = [
 
 [[package]]
 name = "azure-mgmt-costmanagement"
-version = "4.0.1"
+version = "5.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "azure-common" },
     { name = "azure-mgmt-core" },
     { name = "isodate" },
+    { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/45/0f/fca8cc1228c4d8acb7462b8cb7fb2bd68d7fa7dec3b13f1aaf6f612a9e89/azure-mgmt-costmanagement-4.0.1.zip", hash = "sha256:a95734102450b6f01aaa938d78c00285b90fc52b866caae17efb5521ae986db7", size = 194223, upload-time = "2023-07-19T07:53:35.036Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ea/2b/9a5502ab00fe239966177051fc031d8484e80cd14e077acd62dcbddb3b51/azure_mgmt_costmanagement-5.0.0.tar.gz", hash = "sha256:ca0a9c1394052b1ec07afc3826f0f3d84fe7419b65c7ebfe9ae9de4e3ab62696", size = 199072, upload-time = "2026-07-08T09:42:43.382Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3e/ff/bafa7f1f205922d871616f19bd8d3b49020d61286015b87c13379b26a8e7/azure_mgmt_costmanagement-4.0.1-py3-none-any.whl", hash = "sha256:23e77373427555e880ce938d468f87c6a8d66a5b237d7b2b0270bb192d61586f", size = 180916, upload-time = "2023-07-19T07:53:36.551Z" },
+    { url = "https://files.pythonhosted.org/packages/f7/18/87471994cd2cd5972ea8c3fcb58c0544d65cf6f88639f971b757d7d1f44b/azure_mgmt_costmanagement-5.0.0-py3-none-any.whl", hash = "sha256:c4a6d25ebead9b68f8c05b3aed8630416acf9a9752e6c49c982bd4ca62400d69", size = 181428, upload-time = "2026-07-08T09:42:44.822Z" },
 ]
 
 [[package]]
@@ -698,7 +698,7 @@ requires-dist = [
     { name = "azure-identity", specifier = ">=1.26.0" },
     { name = "azure-mgmt-compute", marker = "extra == 'api'", specifier = ">=38.2.0,<39" },
     { name = "azure-mgmt-compute", marker = "extra == 'enrichment'", specifier = ">=38.2.0,<39" },
-    { name = "azure-mgmt-costmanagement", marker = "extra == 'enrichment'", specifier = ">=4.0.1,<5" },
+    { name = "azure-mgmt-costmanagement", marker = "extra == 'enrichment'", specifier = ">=5.0.0,<6" },
     { name = "azure-mgmt-loganalytics", marker = "extra == 'api'", specifier = ">=14.0.0,<15" },
     { name = "azure-mgmt-loganalytics", marker = "extra == 'enrichment'", specifier = ">=14.0.0,<15" },
     { name = "azure-mgmt-managementgroups", marker = "extra == 'enrichment'", specifier = ">=1.0.0,<2" },
@@ -781,7 +781,7 @@ azure = [
 [package.metadata]
 requires-dist = [
     { name = "azure-identity", marker = "extra == 'azure'", specifier = ">=1.26.0" },
-    { name = "azure-mgmt-costmanagement", marker = "extra == 'azure'", specifier = ">=4.0.1,<5" },
+    { name = "azure-mgmt-costmanagement", marker = "extra == 'azure'", specifier = ">=5.0.0,<6" },
     { name = "azure-mgmt-loganalytics", marker = "extra == 'azure'", specifier = ">=14.0.0,<15" },
     { name = "azure-mgmt-monitor", marker = "extra == 'azure'", specifier = ">=6.0.2,<7" },
     { name = "azure-mgmt-network", marker = "extra == 'azure'", specifier = ">=31.0.1" },
