@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- README: a "new here?" opener in plain words, with badges for the image build, the engine release, Python, the licence and the lab edition.
 - uv 0.13.0 in the three Python image stages and the two `uv==` workflow pins, moved together as `CLAUDE.md` requires (Dependabot #183 could only bump the Dockerfiles). Dependabot now skips major updates of `azure-ai-projects` (the Foundry client targets the 1.x `AIProjectClient.agents` surface; #193) and of the `node` image (odd majors never reach LTS; #185); both move by hand.
 - **The Core is reference only** (owner decision 2026-10-11): nothing for this repository is written to `Work-Cloud_Network_Core`. `REVIEW.md` R-013 now brings *this* repository live (Docker Hub OIDC variables, GitHub App, `CORE_REPO` → `HCW-NetworkEyes_App` in both appliances), R-014 is superseded (this repository, the renamed original, is not deleted), R-023 is decided (the wiki pages move here; command in the row); the Dependabot alerts link in `TODO.md` points here; `CLAUDE.md` states the rule.
 
