@@ -32,6 +32,11 @@ updates:
     labels:
       - dependencies
       - python
+    ignore:
+      # The Foundry client targets the azure-ai-projects 1.x surface (AIProjectClient.agents, pinned "<2" in
+      # pyproject.toml); 2.x moved agents to azure-ai-agents. Majors are adopted by hand with that migration (#193).
+      - dependency-name: "azure-ai-projects"
+        update-types: ["version-update:semver-major"]
     groups:
       azure-sdk:
         patterns:
@@ -87,6 +92,10 @@ updates:
     labels:
       - dependencies
       - docker
+    ignore:
+      # Odd Node majors never reach LTS; the web image moves to the next even major by hand (#185).
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
     groups:
       docker-minor-patch:
         update-types:

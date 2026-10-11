@@ -345,7 +345,7 @@ jobs:
           path: ~/.cache/uv
           key: lockfile-uv-${{ hashFiles('uv.lock') }}
       - name: Install uv
-        run: pip install "uv==0.12.21"
+        run: pip install "uv==0.13.0"
       - name: uv.lock matches pyproject.toml
         run: uv lock --check
       - name: Every image install set installs from the lock with verified hashes
@@ -387,7 +387,7 @@ jobs:
           path: ~/.cache/pip
           key: pip-audit-${{ hashFiles('pyproject.toml', 'uv.lock') }}
       - name: Install pip-audit and uv
-        run: pip install pip-audit "uv==0.12.21"
+        run: pip install pip-audit "uv==0.13.0"
       - name: Audit the locked resolution
         # Audits exactly what the images ship (TODO.md T-702): the lock exported
         # with every extra, so the api/enrichment/dev sets are covered in one
