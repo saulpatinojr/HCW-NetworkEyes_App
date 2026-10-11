@@ -228,7 +228,7 @@ Each one actively misleads an engineer or a workflow run.
   (`apps/cna-web/package.json`).
 - **Dependencies:** None.
 - **Recommended action:** Open
-  [this repository's Dependabot alerts page](https://github.com/saulpatinojr/Work-Cloud_Network_Core/security/dependabot)
+  [this repository's Dependabot alerts page](https://github.com/saulpatinojr/HCW-NetworkEyes_App/security/dependabot)
   (the original repository's page is gone with that repository — `REVIEW.md` → R-014),
   triage each of the 8 alerts, and record the outcome here — patch, pin, or an explicit accepted-risk
   note with a reason. Prioritise anything reachable from the web platform's request path. Check

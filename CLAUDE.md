@@ -15,7 +15,8 @@ Customers consume an appliance, not this repository. History: this repository wa
 original `Work-Cloud_Network_Assessment`; on 2026-09-18 it was retired in favour of
 `Work-Cloud_Network_Core`, and on 2026-10-10 the owner reversed that: the Core lineage was merged
 back here and this repository is the implementation target of `REFACTOR_APP.md` (the HCW
-App-to-AddOn plan; its lab edition is `saulpatinojr/HCW-NetworkEyes_AddOn`). Issue and
+App-to-AddOn plan; its lab edition is `saulpatinojr/HCW-NetworkEyes_AddOn`). **The Core is reference only: nothing
+for this repository is written there (owner, 2026-10-11)**; its wiki pages move here (`REVIEW.md` → R-023). Issue and
 pull-request numbers in the documents older than that date name threads of the original
 repository or of the Core.
 
