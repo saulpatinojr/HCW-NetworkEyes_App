@@ -2,6 +2,18 @@
 
 [![CI](https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/workflows/300-test-codebase.yml/badge.svg)](https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/workflows/300-test-codebase.yml)
 [![Release](https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/workflows/310-release-version.yml/badge.svg)](https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/workflows/310-release-version.yml)
+[![Images](https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/workflows/200-build-images.yml/badge.svg)](https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/workflows/200-build-images.yml)
+[![Engine release](https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/workflows/320-release-engine.yml/badge.svg)](https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/workflows/320-release-engine.yml)
+[![python](https://img.shields.io/badge/python-3.14-3776AB?logo=python&logoColor=white)](pyproject.toml)
+[![license](https://img.shields.io/github/license/saulpatinojr/HCW-NetworkEyes_App)](LICENSE)
+[![lab edition](https://img.shields.io/badge/lab%20edition-HCW--NetworkEyes__AddOn-6f42c1?logo=github)](https://github.com/saulpatinojr/HCW-NetworkEyes_AddOn)
+
+**New here?** Point it at an Azure or AWS environment and it maps the network, checks what it finds against
+security, resilience and migration-readiness rules, and writes a report a client can read. Nothing is assumed: every
+finding names the fact it came from. A free, upload-only version that needs no cloud access is the lab edition,
+[HCW-NetworkEyes_AddOn](https://github.com/saulpatinojr/HCW-NetworkEyes_AddOn), which will appear at
+[hybridcloudworks.com/tools/network-assessment](https://hybridcloudworks.com/tools/network-assessment) once its first
+image is published.
 
 This repository is the **product** of the Cloud Network Assessment platform: the single home
 of the application code and of the pipeline that builds and publishes its container images. It
