@@ -22,8 +22,8 @@ Anything an engineer can solve without external input belongs in [`TODO.md`](TOD
 | [R-010](#r-010--the-dev-environment-has-no-protection-against-out-of-band-deletion) | Dev environment deleted out of band; no protection against a repeat | Azure subscription owner | Open — tracked in the Azure appliance's `REVIEW.md` (R-004); transferred 2026-09-15 |
 | [R-011](#r-011--security-review-of-the-bring-your-own-ai-key-path-and-provider-egress) | Security review: bring-your-own AI key handling + firewall egress to Anthropic/OpenAI | Security | Open — before the first `byo-api` deploy |
 | [R-012](#r-012--token-for-a-shared-project-board-across-three-repositories) | Token type for a shared project board (PAT vs GitHub App / organization) | Repository owner | Open — not blocking |
-| [R-013](#r-013--bring-the-core-repository-live-and-cut-the-appliances-over-to-it) | Bring `Work-Cloud_Network_Core` live: secrets, variables, GitHub App, `CORE_REPO` flip | Repository owner | Open — blocks the first image build from this repository |
-| [R-014](#r-014--move-the-wiki-and-delete-the-original-repository) | Move the Wiki, then delete `Work-Cloud_Network_Assessment` | Repository owner | Open — pre-deletion checklist; engineering checks done 2026-09-24 |
+| [R-013](#r-013--bring-this-repository-live-and-cut-the-appliances-over-to-it) | Bring this repository live: Docker Hub OIDC variables, GitHub App, `CORE_REPO` → `HCW-NetworkEyes_App` in both appliances | Repository owner | Open — blocks the first image publish from this repository (T-728) |
+| [R-014](#r-014--move-the-wiki-and-delete-the-original-repository) | Move the Wiki, then delete `Work-Cloud_Network_Assessment` | Repository owner | Superseded 2026-10-11 — this repository (the renamed original) is the product and is not deleted; the Wiki moves here (R-023) |
 | [R-015](#r-015--decide-the-customer-facing-appliance-repository-names) | Decide the customer-facing appliance repository names (`*_Appliance` vs `*_Assessment`) | Repository owner | Open — not blocking |
 | [R-016](#r-016--retire-appscna-worker-and-its-image-service-and-catalog-slot) | Retire `apps/cna-worker` — placeholder deployed as an always-on service in both appliances | Repository owner | Open — v1.0 review finding IMG-003 / ARCH-101 |
 | [R-017](#r-017--stop-publishing-the-cli-image-on-every-push) | Stop building/publishing the CLI image `cna:sha-<7>` (no appliance consumes it) | Repository owner | Open — not blocking |
@@ -559,56 +559,57 @@ aggregated. Nothing else depends on this.
 
 ---
 
-## R-013 — Bring the core repository live and cut the appliances over to it
+## R-013 — Bring this repository live and cut the appliances over to it
 
 **Problem**
-`TODO.md` → T-509 moved the core into `Work-Cloud_Network_Core`. A new repository has none of the
-configuration the four workflows read: no secrets, no variables, no GitHub App installation. Until it does, `200-build-images` cannot publish, `310-release-version` cannot
-release, and the appliances' `230-image-update` keeps polling the original repository's frozen
-manifest because their `CORE_REPO` variable still says `Work-Cloud_Network_Assessment`.
+`TODO.md` → T-509 moved the core into `Work-Cloud_Network_Core` on 2026-09-18; on 2026-10-10 the owner merged
+that lineage back here and decided (2026-10-11) that **this repository is the product and the Core is reference
+only: nothing for this repository is written there.** The configuration the publishing workflows read therefore
+belongs to this repository, and the appliances' `230-image-update` must poll this repository's manifest instead of
+the frozen one their `CORE_REPO` variable still names.
 
 **Why it needs an owner**
-Repository secrets, variables, App installations and branch protection are settings only the
+Repository variables, App installations, branch protection and the appliances' variables are settings only the
 repository owner can write; none of them can be committed.
 
 **Required owner**
 Repository owner.
 
 **Required action** — in this order, so the appliances never lose their image source:
-1. On `Work-Cloud_Network_Core` → *Settings*: create the secrets `DOCKERHUB_TOKEN`, `DOCKERHUB_PERSONAL_TOKEN`,
-   `GH_APP_ID`, `GH_APP_PRIVATE_KEY` and the variables `DOCKERHUB_NAMESPACE`,
-   `DOCKERHUB_PERSONAL_USERNAME`, `APPLIANCE_REPOS`
-   (`Work-Cloud_Network_Azure_Appliance,Work-Cloud_Network_AWS_Appliance`) with the values the
-   original repository uses. Set *Actions → General → Workflow permissions* to *Read and write*
-   (`310` and the manifest commit in `200` need it).
-2. No runner to register: every workflow here — and every workflow in both appliances — runs on
-   GitHub-hosted runners (`ubuntu-latest`). The self-hosted runner the original repository used is
-   retired; remove its registration under R-014.
-3. Install the GitHub App that backs the cross-repository dispatch on `Work-Cloud_Network_Core` as
-   well: `200` uses it to notify the appliances, and each appliance's `230` uses it to read this
-   repository's manifest.
-4. Merge the import pull request here, then run `200 · Build Container Images` once from *Run
-   workflow* so `.deployment-catalog/latest-build.json` on `main` is written by this repository.
-5. In **both** appliances set the variable `CORE_REPO` to `Work-Cloud_Network_Core` and merge their
-   repoint pull requests. From that moment `230` polls this repository.
-6. Apply the same branch protection to `main` here as the original repository had (required check
-   `300 · Test Codebase`, review requirements).
-7. Only now proceed to R-014 — the original repository must keep serving its manifest until step 5
-   is done.
+1. On **this repository** → *Settings*: the Docker Hub OIDC connection and the variables `DOCKERHUB_NAMESPACE`,
+   `DOCKERHUB_CONNECTION` and `DOCKERHUB_ENABLED` (`TODO.md` → T-728 carries the page, the subject-claim rules and the
+   `gh variable set` lines; no registry token is created), the variable `APPLIANCE_REPOS`
+   (`Work-Cloud_Network_Azure_Appliance,Work-Cloud_Network_AWS_Appliance`), and the secrets `GH_APP_ID`,
+   `GH_APP_PRIVATE_KEY` for the cross-repository dispatch. Set *Actions → General → Workflow permissions* to
+   *Read and write* (`310` and the manifest commit in `200` need it).
+2. No runner to register: every workflow here and in both appliances runs on GitHub-hosted runners.
+3. Install the GitHub App that backs the cross-repository dispatch on this repository: `200` uses it to notify the
+   appliances, and each appliance's `230` uses it to read this repository's manifest.
+4. Run `200 · Build Container Images` once from *Run workflow* (or push to `main` touching a Dockerfile) so
+   `.deployment-catalog/latest-build.json` on `main` is written by this repository through the OIDC login.
+5. In **both** appliances set the variable `CORE_REPO` to `HCW-NetworkEyes_App` and merge their repoint pull
+   requests. From that moment `230` polls this repository. The Core receives no variable, secret, App or push.
+6. Keep the branch protection on `main` here (required check `300 · Test Codebase`, review requirements).
 
 **Impact if unresolved**
-Two repositories claim to be the core; images keep being built from a repository the documents say
-is retired, and the appliances never see a build from the new one.
+Two repositories claim to be the core; images keep being built from a repository the documents say is reference
+only, and the appliances never see a build from this one.
 
 **References**
-- [`TODO.md`](TODO.md) → T-509
+- [`TODO.md`](TODO.md) → T-509 (history), T-728 (the owner steps with commands)
 - `.github/workflows/200-build-images.yml`, `310-release-version.yml`, `370-registry-cleanup.yml`
-  (the secrets and variables each reads are in its header and `vars.*` / `secrets.*` references)
+  (the variables each reads are in its header and `vars.*` references)
 - Appliances: `README.md` → *Configuration* (`CORE_REPO`), `230-image-update.yml`
 
 ---
 
 ## R-014 — Move the Wiki and delete the original repository
+
+> **Superseded 2026-10-11.** The original repository is this one, renamed `HCW-NetworkEyes_App`; on 2026-10-10 the owner merged the
+> Core lineage back here and on 2026-10-11 decided that this repository is the product and `Work-Cloud_Network_Core` is
+> reference only. Nothing here is deleted. Of the steps below only the Wiki move survives, reversed in direction: the pages
+> on the Core's wiki come back to this repository's wiki (R-023); `CORE_REPO` in both appliances points at
+> `HCW-NetworkEyes_App` (R-013 step 5). The text below is kept as the record of the earlier plan.
 
 **Problem**
 The original repository, `Work-Cloud_Network_Assessment`, is retired: its tree has been a pointer
@@ -868,13 +869,18 @@ A customer cannot tell what "1.0" they run; a new `[1.0.0]` heading would collid
 
 ## R-023 — Wiki content after the restore
 
-- **Decision needed:** the GitHub Wiki linked from `README.md` now points at this repository's wiki
-  (<https://github.com/saulpatinojr/HCW-NetworkEyes_App/wiki>), but the pages (architecture, ADRs,
-  runbooks, workflow reference) still live on `Work-Cloud_Network_Core`'s wiki. Move them (clone the
-  Core wiki repository and push it to this repository's wiki), or keep the Core wiki as the home and
-  point the links back.
+- **Decision (owner, 2026-10-11):** this repository's wiki (<https://github.com/saulpatinojr/HCW-NetworkEyes_App/wiki>)
+  is the home; the Core is reference only and receives nothing. The pages (architecture, ADRs, runbooks, workflow
+  reference) still live on `Work-Cloud_Network_Core`'s wiki until the owner moves them. PowerShell, any folder (create
+  one page in this repository's wiki first so its wiki repository exists):
+
+  ```powershell
+  git clone -q https://github.com/saulpatinojr/Work-Cloud_Network_Core.wiki.git $env:TEMP\hcw-ne-wiki; git -C $env:TEMP\hcw-ne-wiki remote add app https://github.com/saulpatinojr/HCW-NetworkEyes_App.wiki.git; git -C $env:TEMP\hcw-ne-wiki -c user.email=34853639+saulpatinojr@users.noreply.github.com -c user.name=saulpatinojr push app master --force
+  ```
+
+  Success looks like: the page count at the App wiki equals the Core wiki's. The Core wiki is left as is.
 - **Raised:** 2026-10-10, with the restore of the Core lineage into this repository.
-- **Status:** Open
+- **Status:** Decided; the move is an owner step
 
 ## R-024 — Image signing identity after the restore
 
