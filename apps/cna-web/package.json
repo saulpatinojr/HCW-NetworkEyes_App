@@ -31,7 +31,7 @@
     "baseline-browser-mapping": "^2.11.0"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.132.0",
+    "@anthropic-ai/sdk": "0.132.1",
     "@auth/prisma-adapter": "^2.11.2",
     "@aws-sdk/client-bedrock-runtime": "3.1147.0",
     "@azure/identity": "^4.13.3",
