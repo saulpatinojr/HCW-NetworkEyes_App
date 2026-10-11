@@ -2273,10 +2273,11 @@ old loop for one release (`CHANGELOG.md` `[Unreleased]`). Open:
 `Dockerfile` builds `EDITION=appliance` (default) and the build-only `EDITION=lab`; `300-test-codebase.yml`
 `lab-image` proves the boundary; `cna_azure_network_engine.edition` is the proof (`CHANGELOG.md` `[Unreleased]`;
 `tests/security/test_lab_boundary.py`). Open:
-- `[VERIFY]` The `lab-image` job on the first run of `300-test-codebase.yml` from `main`: the session that wrote
-  the stages ran no Docker build. Expected: `docker build --build-arg EDITION=lab -t cna:lab .` succeeds,
-  `docker run --rm cna:lab` prints `lab edition: boundary holds` and exits 0, every `import azure|msal|boto3`
-  and `python -m pip` fails, `IDENTITY_ENDPOINT` refuses the start, `id -u` is 1001.
+- Verified 2026-10-11: the `lab-image` job ran green on the change-set PR (#198, head 71e6157) and on the first
+  `300-test-codebase.yml` run from `main` after the merge (ba0c983): the build succeeds, the `CMD` proof prints
+  `lab edition: boundary holds` and exits 0, every `import azure|msal|boto3` and `python -m pip` fails,
+  `IDENTITY_ENDPOINT` refuses the start, `id -u` is 1001. The stages were written without a Docker daemon; CI is
+  the only place they have run.
 - `apps/cna-api/Dockerfile` still stands alone; the plan folds its body into the root file as the
   `final-appliance` stage body and deletes it. The two files share every convention already (uv stage, lock
   export, pip removal, uid 1001, draw.io), so the fold is a move, not a rewrite; `200-build-images.yml`'s
@@ -2284,7 +2285,7 @@ old loop for one release (`CHANGELOG.md` `[Unreleased]`). Open:
 - `cna:lab` must never appear in a registry or a manifest: `test_lab_boundary.py` checks `200-build-images.yml`
   and `latest-build.json` for it; keep that check when the image workflow changes.
 - The AddOn builds its deployable lab image from the published engine with the same pattern (its
-  `infrastructure/docker/Dockerfile`); once the engine is on PyPI (T-728) its `edition.py` can import
+  `infrastructure/docker/Dockerfile`); once the engine wheel is released (T-728; the AddOn pins the GitHub Release asset by URL and sha256) its `edition.py` can import
   `cna_azure_network_engine.edition` instead of carrying its own copy.
 
 ### T-728 — Engine release and OIDC registry login: the owner steps, and the appliances on digests (change set J)
