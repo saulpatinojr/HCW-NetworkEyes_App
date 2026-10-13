@@ -27,7 +27,7 @@ ARG EDITION=appliance
 
 FROM ghcr.io/astral-sh/uv:0.13.0@sha256:cdc6093146eb3ff6a40107b38f008b789e050e77ad87865e381d9917da55a168 AS uv
 
-FROM python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d AS builder
+FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS builder
 
 ARG CNA_VERSION=dev
 WORKDIR /build
@@ -67,7 +67,7 @@ RUN uv pip install --system --no-cache --no-deps --no-build-isolation --prefix=/
 # The engine package alone, without the [azure] extra, into its own prefix. The
 # boundary is proved before the final stage exists: a resolvable azure, msal or
 # boto3 fails the build here, the same check the AddOn's image runs.
-FROM python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d AS builder-lab
+FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS builder-lab
 
 ARG EDITION
 RUN test "$EDITION" = "lab" || { echo "builder-lab is only built for EDITION=lab (got '$EDITION')" >&2; exit 1; }
@@ -91,7 +91,7 @@ RUN uv export --locked --no-default-groups --no-emit-project --no-emit-workspace
 # the final image. The export pipeline (cna/diagram_engine/export_pipeline.py)
 # degrades to XML-only output without it — its own warning promises the CLI
 # is available "inside the Docker container", which is made true here.
-FROM python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d AS drawio-fetch
+FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS drawio-fetch
 
 ARG DRAWIO_VERSION=31.3.2
 ARG DRAWIO_SHA256=725453f32ef7f2f63f8b50b374857a5c312e2aaabcf221cb0600332741ae1094
@@ -104,7 +104,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
 
 # ---- final stage: lab (build-only) ----
 # No apps/, no server, no EXPOSE, no HEALTHCHECK: the image's only job is the proof.
-FROM python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d AS final-lab
+FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS final-lab
 
 COPY --from=builder-lab /install-lab /usr/local
 RUN python -m pip uninstall -y pip \
@@ -116,7 +116,7 @@ ENV CNA_EDITION=lab
 CMD ["python", "-m", "cna_azure_network_engine.edition"]
 
 # ---- final stage: appliance ----
-FROM python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d AS final-appliance
+FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS final-appliance
 
 ARG CNA_VERSION=dev
 LABEL org.opencontainers.image.title="CNA Platform" \
