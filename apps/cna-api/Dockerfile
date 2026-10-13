@@ -4,7 +4,7 @@
 # Keep the version in step with the `uv==` pins in 300-test-codebase.yml.
 FROM ghcr.io/astral-sh/uv:0.13.0@sha256:cdc6093146eb3ff6a40107b38f008b789e050e77ad87865e381d9917da55a168 AS uv
 
-FROM python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d AS builder
+FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS builder
 
 WORKDIR /build
 
@@ -42,7 +42,7 @@ RUN uv pip install --system --no-cache --no-deps --no-build-isolation --prefix=/
 # Pinned draw.io desktop release, verified by checksum before it can reach
 # the final image. Used headlessly (see scripts/drawio-headless.sh) so the
 # encyclopedia report's diagram SVGs render instead of silently degrading.
-FROM python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d AS drawio-fetch
+FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS drawio-fetch
 
 ARG DRAWIO_VERSION=31.3.2
 ARG DRAWIO_SHA256=725453f32ef7f2f63f8b50b374857a5c312e2aaabcf221cb0600332741ae1094
@@ -54,7 +54,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
   && echo "${DRAWIO_SHA256}  /tmp/drawio.deb" | sha256sum -c -
 
 # ---- final stage ----
-FROM python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d
+FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170
 
 # Non-root user — uid/gid 1001 (matches root Dockerfile's cna user).
 RUN groupadd --gid 1001 cna \
