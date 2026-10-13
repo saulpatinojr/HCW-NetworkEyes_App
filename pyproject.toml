@@ -27,8 +27,8 @@ dependencies = [
     "azure-mgmt-resourcegraph>=8.0.0,<9",  # Resource Graph discovery (change set D) [VERIFY] bound
     "azure-mgmt-subscription>=3.1.1",
     "azure-storage-blob>=12.31.0",       # Phase F: Azure Blob Storage deployer
-    "openai>=3.26.0",
-    "anthropic>=1.12.0",                  # bring-your-own Claude engine (CNA_AI_MODE=byo-api)
+    "openai>=3.28.0",
+    "anthropic>=1.13.0",                  # bring-your-own Claude engine (CNA_AI_MODE=byo-api)
     # Reads the AES-256-GCM credential blobs the web tier writes (BYO AI keys).
     # Was only ever a transitive dependency of azure-identity; declared so a
     # future azure-identity bump cannot silently drop it.
@@ -45,7 +45,7 @@ dependencies = [
     # via the API; defusedxml is the hardened stdlib drop-in for that.
     "defusedxml>=0.7.1",
     "pandas>=3.0.3",
-    "pydantic>=2.13.4",
+    "pydantic>=2.14.0",
     "python-dotenv>=1.2.4",
     "pyyaml>=6.0.3",
     "tenacity>=9.2.1",
@@ -61,7 +61,7 @@ cna = "cna.cli.main:cli"
 # Bedrock chat and the /discovery/*-aws routes. Every AWS module calls
 # cna.aws.require_aws_extra() before importing boto3.
 aws = [
-    "boto3>=1.43.109",
+    "boto3>=1.43.111",
 ]
 # Optional enrichment dependencies (TODO.md T-414).
 #
@@ -102,7 +102,7 @@ enrichment = [
 # exercises at discovery time and must be present in the image; the rest of the
 # enrichment extra remains optional.
 api = [
-    "fastapi>=0.142.4",
+    "fastapi>=0.143.0",
     "uvicorn[standard]>=0.54.0",
     "psycopg2-binary>=2.9",
     # Entra bearer validation on the internal routes (change set H): signature via
@@ -117,8 +117,8 @@ dev = [
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",               # coverage plugin (was missing from dev deps)
     "hypothesis>=6.168.5",             # property-based tests (production-readiness review invariants)
-    "ruff>=0.16.10",
-    "ty>=0.0.85",                       # type checker (TODO.md T-402)
+    "ruff>=0.17.0",
+    "ty>=0.0.86",                       # type checker (TODO.md T-402)
     "pre-commit>=4.6.0",               # pre-commit itself as a dev dep
     "detect-secrets>=1.5",           # used by pre-commit hook
 ]

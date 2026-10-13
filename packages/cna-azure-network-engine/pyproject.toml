@@ -11,7 +11,7 @@ requires-python = ">=3.14"
 # prove it cannot reach Azure (tests/security/test_edition_boundary.py there). Discovery
 # lives behind the [azure] extra (change set D of REFACTOR_APP.md).
 dependencies = [
-    "pydantic>=2.13,<3",
+    "pydantic>=2.14.0,<3",
 ]
 # [REVIEW REQUIRED] licence and copyright holder: REFACTOR_APP.md section 22, item 1.
 
