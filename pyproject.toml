@@ -82,7 +82,7 @@ aws = [
 # Upper bounds are set on all ten for the same reason — see T-413 for the same
 # failure already present in a declared dependency.
 enrichment = [
-    "azure-mgmt-managementgroups>=1.0.0,<2",  # management-group hierarchy
+    "azure-mgmt-managementgroups>=2.0.0,<3",  # management-group hierarchy
     "azure-mgmt-monitor>=6.0.2,<7",           # alert counts, diagnostic settings
     "azure-mgmt-costmanagement>=4.0.1,<5",    # FinOps cost queries
     "azure-monitor-query>=2.0.0,<3",          # network traffic analytics

@@ -196,16 +196,16 @@ wheels = [
 
 [[package]]
 name = "azure-mgmt-managementgroups"
-version = "1.1.0"
+version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "azure-mgmt-core" },
     { name = "isodate" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fd/73/ac5e064ed7343e1b3172f32f09be3efca906087218d3046b5038f2f394ed/azure_mgmt_managementgroups-1.1.0.tar.gz", hash = "sha256:e6199baf118890ba2bda35dda83a88861c0b1bbef126311b20ec12eed9681951", size = 60101, upload-time = "2026-02-13T03:45:45.439Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/09/12/c80cc24e4a05d5617a8896d87093beffc1db6149b57c062d908f20f129dc/azure_mgmt_managementgroups-2.0.0.tar.gz", hash = "sha256:02d008fadfd7610b1c7059e3c3a8a33dedaef4b654749b81978b437baf264f1d", size = 81734, upload-time = "2026-06-29T02:45:19.161Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/92/bc/993158de03cc0a49f2cf8192615ffedbc508c417cb3522e88f6652b714cc/azure_mgmt_managementgroups-1.1.0-py3-none-any.whl", hash = "sha256:140934589559ef6afcac6f1d24f995588a1965aaa89d47851c1cc639fafb1942", size = 83586, upload-time = "2026-02-13T03:45:46.836Z" },
+    { url = "https://files.pythonhosted.org/packages/59/51/22dc53ecbe65f341536b291cfd419573489eb419e82b292e325b3f86334f/azure_mgmt_managementgroups-2.0.0-py3-none-any.whl", hash = "sha256:d8461e05c4da0010adb6bfc935f1364ad04c20bdbaafc80ef5a9756b9ac2bdc4", size = 84339, upload-time = "2026-06-29T02:45:20.26Z" },
 ]
 
 [[package]]
@@ -702,7 +702,7 @@ requires-dist = [
     { name = "azure-mgmt-costmanagement", marker = "extra == 'enrichment'", specifier = ">=4.0.1,<5" },
     { name = "azure-mgmt-loganalytics", marker = "extra == 'api'", specifier = ">=14.0.0,<15" },
     { name = "azure-mgmt-loganalytics", marker = "extra == 'enrichment'", specifier = ">=14.0.0,<15" },
-    { name = "azure-mgmt-managementgroups", marker = "extra == 'enrichment'", specifier = ">=1.0.0,<2" },
+    { name = "azure-mgmt-managementgroups", marker = "extra == 'enrichment'", specifier = ">=2.0.0,<3" },
     { name = "azure-mgmt-monitor", marker = "extra == 'api'", specifier = ">=6.0.2,<7" },
     { name = "azure-mgmt-monitor", marker = "extra == 'enrichment'", specifier = ">=6.0.2,<7" },
     { name = "azure-mgmt-network", specifier = ">=31.0.1" },
