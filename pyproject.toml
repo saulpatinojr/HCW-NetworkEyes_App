@@ -22,7 +22,7 @@ dependencies = [
     # provides the operations.
     "azure-ai-projects>=1.0.0,<2",       # Foundry Agent Service: recommendation enrichment
     "azure-ai-agents>=1.1.0,<2",         # provides AIProjectClient.agents in 1.x
-    "azure-mgmt-network>=31.0.1",
+    "azure-mgmt-network>=33.1.0",
     "azure-mgmt-resource>=26.0.0",
     "azure-mgmt-resourcegraph>=8.0.0,<9",  # Resource Graph discovery (change set D) [VERIFY] bound
     "azure-mgmt-subscription>=3.1.1",
@@ -40,7 +40,7 @@ dependencies = [
     "python-pptx>=1.0.2",
     "jinja2>=3.1.6",
     "weasyprint>=62.0",                # Phase E: PDF generation
-    "markdown>=3.10.2",
+    "markdown>=3.11.1",
     # merge_diagrams() parses diagram XML that arrives from the database
     # via the API; defusedxml is the hardened stdlib drop-in for that.
     "defusedxml>=0.7.1",
@@ -116,10 +116,10 @@ api = [
 dev = [
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",               # coverage plugin (was missing from dev deps)
-    "hypothesis>=6.168.5",             # property-based tests (production-readiness review invariants)
+    "hypothesis>=6.170.0",             # property-based tests (production-readiness review invariants)
     "ruff>=0.17.0",
     "ty>=0.0.86",                       # type checker (TODO.md T-402)
-    "pre-commit>=4.6.0",               # pre-commit itself as a dev dep
+    "pre-commit>=4.7.0",               # pre-commit itself as a dev dep
     "detect-secrets>=1.5",           # used by pre-commit hook
 ]
 
