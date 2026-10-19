@@ -26,7 +26,7 @@ azure = [
     "azure-mgmt-network>=31.0.1",             # [VERIFY] BGP begin_get_* actions (live only)
     "azure-mgmt-monitor>=6.0.2,<7",           # [VERIFY] diagnostic settings, alert counts
     "azure-monitor-query>=2.0.0,<3",          # [VERIFY] metrics, Traffic Analytics
-    "azure-mgmt-costmanagement>=4.0.1,<5",    # [VERIFY] AZ-COST live reads
+    "azure-mgmt-costmanagement>=5.0.0,<6",    # [VERIFY] AZ-COST live reads
     "azure-mgmt-loganalytics>=14.0.0,<15",    # [VERIFY] workspace lookup
 ]
 # Not needed any more: Defender assessments and NVAs come from Resource Graph
