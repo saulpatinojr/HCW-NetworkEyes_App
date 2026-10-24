@@ -131,3 +131,22 @@ or record a `TODO.md` item naming them — never leave one side implied.
   sets have shipped.
 - Start with `TODO.md` when picking up work; check `REVIEW.md` when blocked on a
   human decision.
+
+## How to communicate with the owner
+
+The owner is not a specialist in every tool used here. Write for a junior administrator with limited experience and no
+memory of earlier sessions.
+
+- **Be conversational and human.** Plain, friendly sentences. Say what happened and why it matters before the detail.
+- **Assume little context.** Do not rely on repository history, ticket numbers or earlier chat. Restate what a thing is
+  the first time it appears.
+- **Avoid jargon.** When a technical term is unavoidable, explain it in a few words the first time, for example
+  "a lockfile (the file that records the exact versions installed)".
+- **When the owner must act, give numbered steps.** One action per step, short, saying where to click or what to run and
+  which shell (bash or PowerShell). Say what they should see when it worked.
+- **Include links.** Point to the exact settings page, the issue or pull request, and the official documentation
+  (Microsoft Learn, GitHub Docs and similar) whenever one exists.
+- **Be honest about status.** Separate what was checked, what is assumed, and what is blocked. Never present a guess as a result.
+
+This applies to chat replies, pull request and issue text, and documentation. It does not apply to code comments or
+machine-readable files, which keep following the surrounding style.
