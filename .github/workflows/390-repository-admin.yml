@@ -236,12 +236,12 @@ jobs:
           OWNER = os.environ["BOARD_OWNER"]
           NUMBER = int(os.environ["BOARD_NUMBER"])
           APPLY = os.environ["APPLY"] == "true"
-          REPOS = ["HCW-NetworkEyes_App", "HCW-CloudCrawler_App", "HCW-CloudAssessor_App", "HCW-AzMigrateOrchestrator_App"]
+          REPOS = ["HCW-NetworkEyes_App", "HCW-CloudCrawler_App", "HCW-CloudAssessor_App", "HCW-MigrateOrchestrator_App"]
           PRODUCT = {
               "HCW-NetworkEyes_App": "HCW NetworkEyes",
               "HCW-CloudCrawler_App": "Cloud Crawler",
               "HCW-CloudAssessor_App": "Cloud Assessor",
-              "HCW-AzMigrateOrchestrator_App": "Azure Migration Orchestrator",
+              "HCW-MigrateOrchestrator_App": "Azure Migration Orchestrator",
           }
           PRIORITY = {"P0": "P0 Critical", "P1": "P1 High", "P2": "P2 Medium", "P3": "P3 Low"}
           SEVERITY = {"critical": "Critical", "high": "High", "medium": "Medium", "low": "Low"}
