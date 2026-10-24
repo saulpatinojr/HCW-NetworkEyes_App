@@ -175,6 +175,8 @@ jobs:
         working-directory: apps/cna-web
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
       - name: Cache npm
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
@@ -187,6 +189,9 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
+          # Create both report files first so the Report step still has something to read if npx cannot fetch the compiler.
+          echo "unavailable (the compiler could not be fetched)" > "$RUNNER_TEMP/tsc-version.txt"
+          echo "No compiler output: the compiler could not be fetched." > "$RUNNER_TEMP/tsc-canary.txt"
           npx --yes -p typescript@beta tsc --version | tee "$RUNNER_TEMP/tsc-version.txt"
           npx --yes -p typescript@beta tsc --noEmit 2>&1 | tee "$RUNNER_TEMP/tsc-canary.txt"
       - name: Report
