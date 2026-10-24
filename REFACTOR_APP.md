@@ -687,7 +687,7 @@ Order: **A -> C -> (B, E) -> D -> F -> G -> H -> I -> J -> K.** F, G and H are i
 |---|---|---|---|
 | 0 | F, G, H (any order) | `v0.9.0` | Security fixes; no engine change; the Prisma migration ships with the `migrator` image |
 | 1 | A | `v0.9.1` | Shim in place; nothing else changes |
-| 2 | C, E | `engine-v0.1.0` (wheel) + `v0.10.0` | First wheel; the AddOn adopts it and deletes its port |
+| 2 | C, E | `engine-v0.1.0` (wheel) + `v0.10.0` | First wheel; the AddOn adopts it and deletes its port. **Status 2026-10-24:** `engine-v0.1.0` is published (2026-10-12); the AddOn has not adopted it yet; no `v0.10.0` tag exists (tags: `v0.1.0`, `v0.8.0`, `engine-v0.1.0`) |
 | 3 | B | `engine-v0.2.0` + `v0.10.1` | `RULES_VERSION` bump; web findings gain ids |
 | 4 | D | `v0.11.0` | `CNA_DISCOVERY_BACKEND` defaults to `resource-graph`; `arm` kept one release |
 | 5 | I | `v0.11.1` | Build-only lab boundary target; boundary test in CI; the AddOn ships the deployable lab edition |

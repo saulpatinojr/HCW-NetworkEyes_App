@@ -9,8 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Owner-approved repository-admin workflow, `390-repository-admin.yml`** (#258; the one allowed exception to "the core keeps only 200, 300, 310, 320, 370", recorded in `CLAUDE.md` and the workflow-list test by #259). Manual, dry-run by default, run from the protected environment `admin-ops` (the `main` branch only) with the "HCW Portfolio Admin" GitHub App's installation token. Tasks: `show-plan`, `protect-main`, `protect-release-tags`, `delete-merged-branches`, `board-fields` and `board-fill` (#260 makes the board tasks use the board token first and fail when a field cannot be created; #261 adds `board-fill`). It deploys nothing and holds no product code. Run history: nine runs on 2026-10-24, the one failure (run 6) was the board token, fixed by #260.
+- **Branch and tag protection, applied through that workflow.** The ruleset "Protect main" (no deletion or force-push, a pull request for every change, the repository's key checks must pass; an administrator can still bypass through a pull request) and the ruleset "Protect release tags" for `refs/tags/v*` (no deletion, no moving). **`engine-v*` tags are not matched by that pattern**; see `TODO.md` T-730.
+
 ### Changed
 
+- **Dependencies**: the eight Dependabot `uv` pull requests that cleared the 55 `pip-audit` advisories (#231 pillow 13.0.0, #232 virtualenv 21.14.13, #233 setuptools 84.1.0, #234 opentelemetry-api 1.45.1, #235 certifi 2026.10.19, #236 brotlicffi 1.2.1.0, #237 brotli 1.2.1, #238 filelock 4.2.1); web `zod` 4.6.7 in the lockfile (#263, advisory GHSA-mrhx-c7xc-m3w5). See the **Security** entry below for #264.
+- **CI hygiene** (#262, ticket #252): the gitleaks image is pinned to a digest, `ruff` to 0.17.1 and `pre-commit` to 4.7.0; `$GITHUB_OUTPUT` is quoted in `310-release-version.yml`; a stale comment about `id-token: write` now says what it is for (the Docker Hub login). The registry token in `370-registry-cleanup.yml` is unchanged and waits for an owner decision.
+- **`CLAUDE.md`**: a "How to communicate with the owner" section (#239 and the commit before it: plain language for a junior administrator, numbered steps, answerable questions with options and a recommendation, every non-secret form value with a description, links, honest status, no secrets in chat or documents), the workflow list now includes `320-release-engine`, and a rule to keep the lab edition's `docs/whats-new-upstream.md` current.
+- README and `CLAUDE.md`: the workflow lists now name `320` (engine release) and the `390` exception.
 - Python minor/patch group (openai 3.28, anthropic 1.13, pydantic 2.14, boto3 1.43.111, fastapi 0.143, ruff 0.17, ty 0.0.89) carried by hand: Dependabot #220 also raised the engine wheel's `pydantic` floor to 2.14, which `tests/packaging/test_engine_wheel.py` pins at `>=2.13` as the published contract; the floor stays, the lock moves.
 - README: a "new here?" opener in plain words, with badges for the image build, the engine release, Python, the licence and the lab edition.
 - uv 0.13.0 in the three Python image stages and the two `uv==` workflow pins, moved together as `CLAUDE.md` requires (Dependabot #183 could only bump the Dockerfiles). Dependabot now skips major updates of `azure-ai-projects` (the Foundry client targets the 1.x `AIProjectClient.agents` surface; #193) and of the `node` image (odd majors never reach LTS; #185); both move by hand.

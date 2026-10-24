@@ -7,7 +7,7 @@ can pick up work without rediscovering the findings.
 Items requiring external input — an approval, an account, a credential, an access grant — belong
 in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG.md`](CHANGELOG.md).
 
-**Last reviewed:** 2026-09-23
+**Last reviewed:** 2026-09-23 (full pass). Rows checked since: T-728 and T-730 on 2026-10-24.
 
 | Phase | Theme | Items |
 |---|---|---|
@@ -17,7 +17,7 @@ in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG
 | [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-419 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements + appliance migration | T-501 – T-509 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
-| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-729 |
+| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-730 |
 
 ---
 
@@ -2329,12 +2329,15 @@ Nothing publishes until the owner flips the variables below. Open, in order:
 - `[VERIFY]` `DOCKERHUB_OIDC_CONNECTIONID` / `DOCKERHUB_OIDC_EXPIREIN` and the minimum `docker/login-action`
   release that reads them, against Docker's documentation at the time of enabling; `actionlint` over
   `.github/workflows/` on the first pull request (not installed where this was written).
-- **First engine release.** Bump `packages/cna-azure-network-engine/pyproject.toml` `version`, then,
-  PowerShell: `git tag engine-v0.1.0; git push origin engine-v0.1.0`. `build-test` refuses a tag that does
-  not equal `engine-v<version>`. Success looks like: a GitHub Release named `engine-v0.1.0` carrying the
-  wheel and sdist, and — once enabled — `pip download cna-azure-network-engine --no-deps -d ./wheel`
-  succeeding. Then `HCW-NetworkEyes_AddOn` replaces its ported engine with the published wheel (its
-  `REFACTOR_APP.md` change set C) through its `core-update` workflow.
+- **First engine release: done (checked 2026-10-24).** `engine-v0.1.0` was published on 2026-10-12 by
+  `320-release-engine.yml` (run 38205653284, success). The GitHub Release carries
+  `cna_azure_network_engine-0.1.0-py3-none-any.whl` (sha256 `a609b80059fca7b22057b464a0c41895b324e21dc3e28d569a6e0894e94bd1ba`)
+  and `cna_azure_network_engine-0.1.0.tar.gz`. The PyPI step stays off until `PYPI_PUBLISH_ENABLED` is
+  `true` (first bullet), so `pip download cna-azure-network-engine` does not work yet. **Still open:**
+  `HCW-NetworkEyes_AddOn` has not adopted the wheel. Its `pyproject.toml` has no `ENGINE_REF` line, so its
+  `core-update.yml` finds nothing to do and the lab still runs the ported copy under
+  `src/network_assessment` (its `PROVENANCE.md`). That adoption belongs in the AddOn (its
+  `REFACTOR_APP.md` change set C) and is tracked in its `docs/whats-new-upstream.md`.
 - Core ↔ appliance contract: `Work-Cloud_Network_Azure_Appliance` and `Work-Cloud_Network_AWS_Appliance`
   read `digests{}` from `.deployment-catalog/latest-build.json` (`name@sha256:…`, same keys as `images{}`)
   in their `230-image-update` consumers and pin by digest; `images{}` stays for the transition. Their own
@@ -2360,3 +2363,11 @@ Nothing publishes until the owner flips the variables below. Open, in order:
 - The change-set-A shims (`cna/core/topology_schema.py` and the five analysis shims, T-719) and the `arm`
   discovery backend (T-726) are one-release deprecations the plan does not tie to this change; remove each
   in the release its row names.
+
+### T-730 — Protect `engine-v*` tags the way `v*` tags are protected
+The ruleset "Protect release tags" that `390-repository-admin.yml` applies matches `refs/tags/v*` only (the
+`include` list in the `protect-release-tags` task), and `engine-v0.1.0` does not start with `v`. A moved or
+deleted `engine-v*` tag would break the URL and sha256 that `HCW-NetworkEyes_AddOn` pins for the engine wheel.
+Open: add `refs/tags/engine-v*` to that `include` list, run `protect-release-tags` once with `apply` ticked
+(Actions → repository-admin → Run workflow; the dry run prints the ruleset first), and check that
+Settings → Rules shows both patterns. Workflow-only change; the pull request needs the usual `390` review.
