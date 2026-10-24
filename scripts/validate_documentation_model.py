@@ -4,17 +4,18 @@ Closes TODO.md T-603: nothing prevented documentation sprawl from returning.
 Hardened by T-605 – T-608. Runs in CI (repository-guardrails job) and can be
 run locally.
 
-The model (README.md → "Repository conventions"): the repository keeps exactly
-four documents — README.md, CHANGELOG.md, REVIEW.md, TODO.md — and long-form
-documentation lives in the GitHub Wiki. CLAUDE.md, the agent-instruction file
-that states the rules an AI coding agent must not infer wrongly (the core ↔
-appliance contract above all), is allowed alongside them but not required, so
-a repository without agent instructions still conforms. Vendored agent
-configuration (.claude/, .agents/, .codex/, .kiro/) is excluded. Platform-required
-documents under .github/ are permitted.
+The model (README.md → "Repository conventions"): the repository keeps four
+required documents — README.md, CHANGELOG.md, REVIEW.md, TODO.md — and long-form
+documentation lives in the GitHub Wiki. Three more root documents are allowed
+but not required: CLAUDE.md, the agent-instruction file that states the rules an
+AI coding agent must not infer wrongly (the core ↔ appliance contract above
+all), and two temporary working documents with a planned retirement,
+CNA-0.90-updates.md and REFACTOR_APP.md. That makes seven root documents at
+most. Vendored agent configuration (.claude/, .agents/, .codex/, .kiro/) is
+excluded. Platform-required documents under .github/ are permitted.
 
-"Exactly four" is enforced in both directions: a missing required document is a
-violation, not just an extra one (T-605).
+The required four are enforced in both directions: a missing required document
+is a violation, not just an extra one (T-605).
 
 Candidates come from `git ls-files`, not a filesystem walk, because the rule is
 about what the *repository* contains. Untracked scratch — .pytest_cache/README.md
@@ -23,7 +24,7 @@ and friends — is not the repository and must not fail the guard (T-608).
 Documents are matched on a case-folded suffix set rather than a `*.md` glob, so
 ROADMAP.MD, NOTES.markdown, and PLAN.rst cannot slip through (T-606).
 
-Exit 0: the four documents are present and nothing else is documentation.
+Exit 0: the four required documents are present and nothing outside the allow-list is documentation.
 Exit 1: a required document is missing, or a file violates the model — blocks merge.
 """
 
@@ -172,20 +173,27 @@ def validate() -> bool:
             print(f"  {name}", file=sys.stderr)
         print(file=sys.stderr)
         print(
-            "The repository keeps exactly four markdown documents. Restore the",
+            "The repository requires four markdown documents (README.md, CHANGELOG.md,",
             file=sys.stderr,
         )
-        print("missing file(s) rather than deleting the model.", file=sys.stderr)
+        print(
+            "REVIEW.md, TODO.md). Restore the missing file(s) rather than deleting the model.",
+            file=sys.stderr,
+        )
 
     if violations:
         if missing:
             print(file=sys.stderr)
         print(
-            "Documentation model violation — the repository keeps exactly four",
+            "Documentation model violation — the repository allows seven root documents",
             file=sys.stderr,
         )
         print(
-            "markdown documents (README.md, CHANGELOG.md, REVIEW.md, TODO.md), plus CLAUDE.md.",
+            "at most: README.md, CHANGELOG.md, REVIEW.md and TODO.md (required), CLAUDE.md, and the",
+            file=sys.stderr,
+        )
+        print(
+            "temporary CNA-0.90-updates.md and REFACTOR_APP.md (optional).",
             file=sys.stderr,
         )
         print("Long-form documentation belongs in the GitHub Wiki.", file=sys.stderr)
@@ -194,7 +202,7 @@ def validate() -> bool:
             print(f"  {violation}", file=sys.stderr)
         print(file=sys.stderr)
         print(
-            "Move the content to one of the four documents or the Wiki",
+            "Move the content to one of the allowed documents or the Wiki",
             file=sys.stderr,
         )
         print("(content determines destination), then delete the file.", file=sys.stderr)
