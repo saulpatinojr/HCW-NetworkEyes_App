@@ -38,6 +38,12 @@ updates:
       - dependency-name: "azure-ai-projects"
         update-types: ["version-update:semver-major"]
     groups:
+      # pydantic pins pydantic-core to one exact version, so the two must move in one pull request; a pydantic-core
+      # bump on its own cannot resolve against the pinned pydantic.
+      pydantic:
+        patterns:
+          - "pydantic"
+          - "pydantic-core"
       azure-sdk:
         patterns:
           - "azure-*"

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
 
@@ -35,6 +35,19 @@ describe("TypeScript 6 API and TypeScript 7 compiler side by side", () => {
       'package.json "@typescript/native" must be "npm:typescript@^7.x"; it provides the `tsc` that `npm run typecheck` runs',
     ).toMatch(/^npm:typescript@\^?7\./);
     expect(installedVersion("@typescript/native")).toMatch(/^7\./);
+  });
+
+  it("links node_modules/.bin/tsc to the TypeScript 7 compiler", () => {
+    // Both compatibility packages declare a `tsc` bin, and npm can link `.bin/tsc` to the TypeScript 6 one even
+    // when the 7 compiler is installed (npm/cli#9868). `npm run typecheck` runs `.bin/tsc`, so check the link itself.
+    const link = new URL("../node_modules/.bin/tsc", import.meta.url);
+    const target = realpathSync(link);
+    // On Windows the entry is a shim script that names its target instead of a symlink.
+    const names = target.includes("@typescript") ? target : readFileSync(target, "utf8");
+    expect(
+      names,
+      "node_modules/.bin/tsc must come from @typescript/native; run `npm ci` again or call the native compiler by its package path in the typecheck script",
+    ).toContain("@typescript/native");
   });
 
   it("lets typescript-eslint load against the installed compiler API", () => {
