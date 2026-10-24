@@ -144,6 +144,9 @@ memory of earlier sessions.
   "a lockfile (the file that records the exact versions installed)".
 - **When the owner must act, give numbered steps.** One action per step, short, saying where to click or what to run and
   which shell (bash or PowerShell). Say what they should see when it worked.
+- **When you ask the owner a question, make it answerable.** Say what is being decided and why it matters, list the
+  options in plain words with what each one means, give a recommendation, and say exactly how to answer (a word to reply
+  with, or the steps and the link for where to click). Never ask a bare "A, B or C?" or "OK to proceed?".
 - **Include links.** Point to the exact settings page, the issue or pull request, and the official documentation
   (Microsoft Learn, GitHub Docs and similar) whenever one exists.
 - **Be honest about status.** Separate what was checked, what is assumed, and what is blocked. Never present a guess as a result.
