@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=84.1.0", "wheel"]
+requires = ["setuptools>=84.2.1", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -28,7 +28,7 @@ dependencies = [
     "azure-mgmt-subscription>=3.1.1",
     "azure-storage-blob>=12.31.0",       # Phase F: Azure Blob Storage deployer
     "openai>=3.28.0",
-    "anthropic>=1.13.0",                  # bring-your-own Claude engine (CNA_AI_MODE=byo-api)
+    "anthropic>=1.17.0",                  # bring-your-own Claude engine (CNA_AI_MODE=byo-api)
     # Reads the AES-256-GCM credential blobs the web tier writes (BYO AI keys).
     # Was only ever a transitive dependency of azure-identity; declared so a
     # future azure-identity bump cannot silently drop it.
@@ -40,7 +40,7 @@ dependencies = [
     "python-pptx>=1.0.2",
     "jinja2>=3.1.6",
     "weasyprint>=62.0",                # Phase E: PDF generation
-    "markdown>=3.11.1",
+    "markdown>=3.11.2",
     # merge_diagrams() parses diagram XML that arrives from the database
     # via the API; defusedxml is the hardened stdlib drop-in for that.
     "defusedxml>=0.7.1",
@@ -102,7 +102,7 @@ enrichment = [
 # exercises at discovery time and must be present in the image; the rest of the
 # enrichment extra remains optional.
 api = [
-    "fastapi>=0.143.0",
+    "fastapi>=0.156.8",
     "uvicorn[standard]>=0.54.0",
     "psycopg2-binary>=2.9",
     # Entra bearer validation on the internal routes (change set H): signature via
@@ -116,9 +116,9 @@ api = [
 dev = [
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",               # coverage plugin (was missing from dev deps)
-    "hypothesis>=6.170.0",             # property-based tests (production-readiness review invariants)
+    "hypothesis>=6.170.5",             # property-based tests (production-readiness review invariants)
     "ruff>=0.17.0",
-    "ty>=0.0.86",                       # type checker (TODO.md T-402)
+    "ty>=0.0.90",                       # type checker (TODO.md T-402)
     "pre-commit>=4.7.0",               # pre-commit itself as a dev dep
     "detect-secrets>=1.5",           # used by pre-commit hook
 ]
@@ -134,7 +134,7 @@ dev = [
 # step. setuptools never reaches the final image (it ships CVE-carrying vendored
 # copies; see the `pip uninstall` in every Dockerfile).
 build = [
-    "setuptools>=84.1.0",
+    "setuptools>=84.2.1",
     "wheel",
 ]
 # apps/cna-worker/main.py imports exactly these two SDKs and does not install
