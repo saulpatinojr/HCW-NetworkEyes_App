@@ -54,7 +54,7 @@ jobs:
         run: |
           docker run --rm \
             -v "$PWD:/repo" \
-            zricethezav/gitleaks:v8.30.1 \
+            zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
             detect --source=/repo --no-banner --redact --report-format sarif --report-path /repo/gitleaks-results.sarif
       - name: Secret scanning summary
         if: always()
@@ -102,7 +102,7 @@ jobs:
         with:
           path: ~/.cache/pip
           key: detect-secrets-${{ hashFiles('.pre-commit-config.yaml') }}
-      - run: pip install pre-commit
+      - run: pip install "pre-commit==4.7.0"  # same version as uv.lock; move both together
       - name: Run detect-secrets against the audited baseline
         run: pre-commit run detect-secrets --all-files --show-diff-on-failure
 
@@ -123,7 +123,7 @@ jobs:
         with:
           path: ~/.cache/pip
           key: lint-${{ hashFiles('pyproject.toml') }}
-      - run: pip install "ruff>=0.15.10"
+      - run: pip install "ruff==0.17.1"  # same version as uv.lock; move both together
       - name: ruff check (lint)
         run: ruff check . --output-format=github
       - name: ruff format check
