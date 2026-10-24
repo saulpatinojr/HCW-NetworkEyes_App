@@ -12,6 +12,11 @@ Connection:
   - HTTP+JSON contract — no MCP SDK required. The cna-web route exposes the
     same `search_shapes` / `create_diagram` tool shapes as the upstream
     draw.io MCP App Server.
+  - The route is internal only (ticket #245): every request carries
+    ``Authorization: Bearer <CNA_API_TOKEN>``, the shared secret the web and api
+    containers already hold. It is read when the request is made and never
+    logged. With no token configured nothing is sent, the route answers 401, and
+    the client degrades like any other failure.
   - Timeouts fail fast (5s); on any error the client returns an empty list
     or None so the diagram pipeline keeps moving with its built-in fallbacks.
 """
@@ -36,6 +41,12 @@ _DEFAULT_URL = os.getenv("CNA_DRAWIO_MCP_URL", "http://localhost:3000/api/drawio
 _DEFAULT_TIMEOUT = float(os.getenv("CNA_DRAWIO_MCP_TIMEOUT", "5"))
 
 _STYLE_PREFIX_RE = re.compile(r"shape=mxgraph\.([a-z0-9]+)\.", re.IGNORECASE)
+
+
+def _auth_headers() -> dict[str, str]:
+    """The bearer header for the internal route; empty when no token is configured."""
+    token = os.getenv("CNA_API_TOKEN", "")
+    return {"Authorization": f"Bearer {token}"} if token else {}
 
 
 def _lib_of(style: str) -> str | None:
@@ -120,7 +131,9 @@ class DrawioMCPClient:
 
     def health(self) -> bool:
         try:
-            r = httpx.get(f"{self._base_url}/health", timeout=self._timeout)
+            r = httpx.get(
+                f"{self._base_url}/health", headers=_auth_headers(), timeout=self._timeout
+            )
             r.raise_for_status()
             return bool(r.json().get("status") == "ok")
         except Exception as e:  # noqa: BLE001 — graceful degradation
@@ -130,7 +143,7 @@ class DrawioMCPClient:
     def _post(self, tool: str, payload: dict[str, object]) -> dict | None:
         url = f"{self._base_url}/{tool}"
         try:
-            r = httpx.post(url, json=payload, timeout=self._timeout)
+            r = httpx.post(url, json=payload, headers=_auth_headers(), timeout=self._timeout)
             r.raise_for_status()
             return r.json()
         except Exception as e:  # noqa: BLE001 — graceful degradation
