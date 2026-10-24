@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=83.0.0", "wheel"]
+requires = ["setuptools>=84.1.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -134,7 +134,7 @@ dev = [
 # step. setuptools never reaches the final image (it ships CVE-carrying vendored
 # copies; see the `pip uninstall` in every Dockerfile).
 build = [
-    "setuptools>=83.0.0",
+    "setuptools>=84.1.0",
     "wheel",
 ]
 # apps/cna-worker/main.py imports exactly these two SDKs and does not install
