@@ -17,7 +17,7 @@ in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG
 | [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-419 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements + appliance migration | T-501 – T-509 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
-| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-732 |
+| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-735 |
 
 ---
 
@@ -2387,3 +2387,11 @@ reports nine errors: `getCoreRowModel` and `useReactTable` are no longer exporte
 arguments. `.github/dependabot.yml` ignores the major until then. Open: migrate the component,
 remove the ignore, and check the grid in the browser (sorting, grouping, scrolling) because the type check does not
 cover behaviour.
+
+### T-735 — Confirm both appliances can reach the now-protected draw.io route
+Since ticket #245 the route `/api/drawio-mcp/*` on the web container answers `401` without `Authorization: Bearer <CNA_API_TOKEN>`, and the
+Python draw.io client sends that header from its own `CNA_API_TOKEN`. No new setting exists, so nothing in the appliances has to change
+unless they point `CNA_DRAWIO_MCP_URL` at the web tier. Open, in both `saulpatinojr/Work-Cloud_Network_Azure_Appliance` and
+`saulpatinojr/Work-Cloud_Network_AWS_Appliance`: check whether `CNA_DRAWIO_MCP_URL` is set for the api container and, if it is, that the
+same container receives `CNA_API_TOKEN` (the api already refuses to start without it in appliance mode) and that the web container's
+`CNA_API_TOKEN` is the same value. Record the result here; no change to those repositories is made from this repository.

@@ -32,6 +32,7 @@ Anything an engineer can solve without external input belongs in [`TODO.md`](TOD
 | [R-020](#r-020--aeonik-font-licence-and-oci-licence-label) | Aeonik typeface licence coverage; OCI label `Proprietary` vs Apache-2.0 `LICENSE` | Legal / brand | Open — [VERIFY] |
 | [R-021](#r-021--byo-api-mode-scope-for-10) | Ship 1.0 `saas`-only or complete R-011 first | Product owner / Security | Open |
 | [R-022](#r-022--version-100-release-identity) | Version 1.0.0 identity: withdrawn `[1.0.0]` heading, version strings, first tag | Repository owner | Open — before the first `v*` tag |
+| [R-025](#r-025--the-drawio-mcp-route-is-internal-only) | Is `/api/drawio-mcp` public or internal only? | Repository owner | Decided 2026-10-24 — internal only; implemented (ticket #245) |
 
 ---
 
@@ -892,3 +893,16 @@ A customer cannot tell what "1.0" they run; a new `[1.0.0]` heading would collid
   or every deploy fails verification. Until then the appliances keep consuming the Core's images.
 - **Raised:** 2026-10-10.
 - **Status:** Open
+
+## R-025 — The draw.io MCP route is internal only
+
+- **Decision (owner, 2026-10-24, ticket #245):** `internal-only`. The web route `/api/drawio-mcp/*` in `apps/cna-web`
+  (it searches a built-in icon list and echoes posted draw.io XML; no database) used to answer anyone who could reach
+  the web app, because the middleware excludes `/api` and the handler had no check. Its one caller is the Python client
+  `cna/ai_engine/mcp_client/drawio_mcp_client.py`, which sends no cookie, so a sign-in check would have broken it.
+- **What now applies:** the route answers `401` unless the request carries `Authorization: Bearer <CNA_API_TOKEN>`, the
+  shared secret the api and web containers already hold (compared in constant time, never logged, never echoed). With no
+  token configured on the web container every request is refused. The Python client sends the same header from the same
+  setting. This adds no new setting. Not chosen: `public-exempt` (an intentional open route).
+- **Raised:** 2026-10-24, ticket #245.
+- **Status:** Decided and implemented in the pull request linked from the ticket; the appliance follow-up check is `TODO.md` T-735

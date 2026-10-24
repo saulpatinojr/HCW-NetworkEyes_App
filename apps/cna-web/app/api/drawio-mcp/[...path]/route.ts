@@ -5,6 +5,7 @@ import {
   searchShapes,
 } from "@/lib/drawio-mcp/server";
 import { isAllowedStyle } from "@/lib/drawio-mcp/allow-list";
+import { hasValidInternalBearer } from "@/lib/internal-bearer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,7 +18,17 @@ function json(body: unknown, status = 200): NextResponse {
   return NextResponse.json(body, { status });
 }
 
-export async function GET(_req: Request, ctx: RouteCtx): Promise<NextResponse> {
+// Internal only (ticket #245): the Python engine is the one caller and it sends
+// the shared CNA_API_TOKEN as a bearer. Anything else is refused before any work.
+function unauthorized(): NextResponse {
+  return NextResponse.json(
+    { error: "unauthorized" },
+    { status: 401, headers: { "WWW-Authenticate": "Bearer" } },
+  );
+}
+
+export async function GET(req: Request, ctx: RouteCtx): Promise<NextResponse> {
+  if (!hasValidInternalBearer(req)) return unauthorized();
   const { path } = await ctx.params;
   const tool = path?.[0] ?? "";
 
@@ -31,6 +42,7 @@ export async function GET(_req: Request, ctx: RouteCtx): Promise<NextResponse> {
 }
 
 export async function POST(req: Request, ctx: RouteCtx): Promise<NextResponse> {
+  if (!hasValidInternalBearer(req)) return unauthorized();
   const { path } = await ctx.params;
   const tool = path?.[0] ?? "";
 

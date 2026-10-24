@@ -98,3 +98,28 @@ def test_health_handles_failure_gracefully():
         m.side_effect = RuntimeError("boom")
         client = DrawioMCPClient(base_url="http://test/api/drawio-mcp")
         assert client.health() is False
+
+
+def test_requests_carry_the_shared_bearer(monkeypatch):
+    """Ticket #245: the route is internal only, so every call sends CNA_API_TOKEN."""
+    monkeypatch.setenv("CNA_API_TOKEN", "test-shared-token-not-a-secret")
+    expected = {"Authorization": "Bearer test-shared-token-not-a-secret"}
+    client = DrawioMCPClient(base_url="http://test/api/drawio-mcp")
+    with patch("cna.ai_engine.mcp_client.drawio_mcp_client.httpx.post") as post:
+        post.return_value = _fake_response({"hits": []})
+        client.search_shapes("vnet")
+        assert post.call_args.kwargs["headers"] == expected
+    with patch("cna.ai_engine.mcp_client.drawio_mcp_client.httpx.get") as get:
+        get.return_value = _fake_response({"status": "ok"})
+        assert client.health() is True
+        assert get.call_args.kwargs["headers"] == expected
+
+
+def test_no_token_sends_no_header_and_still_degrades_gracefully(monkeypatch):
+    monkeypatch.delenv("CNA_API_TOKEN", raising=False)
+    client = DrawioMCPClient(base_url="http://test/api/drawio-mcp")
+    with patch("cna.ai_engine.mcp_client.drawio_mcp_client.httpx.post") as post:
+        post.side_effect = RuntimeError("401 Unauthorized")
+        assert client.search_shapes("vnet") == []
+        assert post.call_args.kwargs["headers"] == {}
+        assert post.call_args.kwargs["timeout"] == client._timeout
