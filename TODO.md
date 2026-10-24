@@ -17,7 +17,7 @@ in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG
 | [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-419 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements + appliance migration | T-501 – T-509 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
-| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-730 |
+| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-732 |
 
 ---
 
@@ -2371,3 +2371,19 @@ deleted `engine-v*` tag would break the URL and sha256 that `HCW-NetworkEyes_Add
 Open: add `refs/tags/engine-v*` to that `include` list, run `protect-release-tags` once with `apply` ticked
 (Actions → repository-admin → Run workflow; the dry run prints the ruleset first), and check that
 Settings → Rules shows both patterns. Workflow-only change; the pull request needs the usual `390` review.
+
+### T-731 — Move `typescript` off the TypeScript 6 compatibility package once typescript-eslint supports the 7.1 API
+`apps/cna-web` keeps `typescript` as `npm:@typescript/typescript6` because typescript-eslint (inside `eslint-config-next`)
+refuses to load against TypeScript 7, which has no programmatic API until 7.1 (typescript-eslint issue 10940 tracks it).
+`@typescript/native` supplies `tsc` 7. Open: when a typescript-eslint release lists TypeScript 7.1 or later in its
+`typescript` peer range, change `typescript` to the same 7.x as `@typescript/native`, remove `@typescript/native`, the
+Dependabot `typescript` ignore in `.github/dependabot.yml`, and `lib/typescript-toolchain.test.ts`, and run `npm run lint`,
+`npm run typecheck`, `npm test` and `npm run build`. The `typescript-canary` job in `300-test-codebase.yml` shows how the
+newest TypeScript behaves in the meantime.
+
+### T-732 — Migrate the pivot grid to TanStack Table 9
+`components/pivot/pivot-grid.tsx` uses the TanStack Table 8 API. Under version 9 (Dependabot #226) the type check
+reports nine errors: `getCoreRowModel` and `useReactTable` are no longer exported and a generic now needs two type
+arguments. `.github/dependabot.yml` ignores the major until then. Open: migrate the component,
+remove the ignore, and check the grid in the browser (sorting, grouping, scrolling) because the type check does not
+cover behaviour.

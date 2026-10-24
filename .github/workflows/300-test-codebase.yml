@@ -162,6 +162,53 @@ jobs:
       - name: Unit tests (vitest)
         run: npm test
 
+  # TypeScript canary: type-checks cna-web with the newest published TypeScript (the beta while one is out), so a
+  # compiler change shows up as a warning here instead of as a red Dependabot pull request. It never blocks a merge:
+  # the step is continue-on-error, the job is not a required check, and a failure becomes an annotation plus a
+  # summary. The required `web` job above type-checks with the pinned tsc 7 (package.json "@typescript/native").
+  typescript-canary:
+    name: TypeScript canary (does not block)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/cna-web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Cache npm
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ~/.npm
+          key: web-npm-${{ hashFiles('apps/cna-web/package-lock.json') }}
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Type-check with the newest TypeScript
+        id: canary
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          npx --yes -p typescript@beta tsc --version | tee "$RUNNER_TEMP/tsc-version.txt"
+          npx --yes -p typescript@beta tsc --noEmit 2>&1 | tee "$RUNNER_TEMP/tsc-canary.txt"
+      - name: Report
+        run: |
+          {
+            echo "### TypeScript canary"
+            echo
+            echo "Compiler: $(head -n 1 "$RUNNER_TEMP/tsc-version.txt")"
+            if [ "${{ steps.canary.outcome }}" = "success" ]; then
+              echo "Result: the web app type-checks cleanly."
+            else
+              echo "Result: type errors under the newest TypeScript. This does not block the pull request."
+              echo
+              echo '```'
+              head -n 40 "$RUNNER_TEMP/tsc-canary.txt"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.canary.outcome }}" != "success" ]; then
+            echo "::warning title=TypeScript canary::The web app does not type-check under the newest TypeScript. See the job summary."
+          fi
+
   # ------------------------------------------------------------------
   # 3. Unit tests — Python 3.14
   # ------------------------------------------------------------------
