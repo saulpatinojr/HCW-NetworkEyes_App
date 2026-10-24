@@ -1,0 +1,211 @@
+name: repository-admin
+
+# Owner-approved repository chores: branch and tag rules, and cleanup of merged branches, plus the board fields.
+# Every run needs the owner's approval (environment admin-ops) and does nothing unless "apply" is ticked.
+# It uses a short-lived GitHub App token (HCW Portfolio Admin), limited to this repository.
+# The default token below stays read-only. No secrets are stored in this file.
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "What to do. Start with show-plan, then run the same task again with apply ticked."
+        type: choice
+        required: true
+        options:
+          - show-plan
+          - protect-main
+          - protect-release-tags
+          - delete-merged-branches
+          - board-fields
+      apply:
+        description: "Tick to really make the change. Leave unticked for a dry run that only prints what would change."
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repository-admin
+  cancel-in-progress: false
+
+jobs:
+  admin:
+    name: repository-admin
+    runs-on: ubuntu-latest
+    environment: admin-ops
+    timeout-minutes: 10
+    steps:
+      - name: Get a short-lived token for this repository only
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-administration: write
+          permission-contents: write
+          permission-metadata: read
+
+      - name: Run the chosen task
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          TASK: ${{ inputs.task }}
+          APPLY: ${{ inputs.apply }}
+          REQUIRED_CHECKS: '["Lint & Format","Unit Tests (Python 3.14)","Web lint, typecheck & tests","Python Lockfile Consistency","Python Dependency Audit (pip-audit)","Secret Scanning (detect-secrets, gating)","Repository Guardrails"]'
+          KEEP_REGEX: '^(main|master|develop|gh-pages|release/.*)$'
+        run: |
+          set -euo pipefail
+          api() { gh api -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "$@"; }
+          say() { echo "$*" | tee -a "$GITHUB_STEP_SUMMARY"; }
+          mode="DRY RUN, nothing is changed"
+          if [ "$APPLY" = "true" ]; then mode="APPLY, changes are made"; fi
+          say "## $TASK on $REPO ($mode)"
+
+          # Create the ruleset if it does not exist, otherwise update it in place.
+          upsert_ruleset() {
+            local name="$1" payload="$2" id
+            say "Ruleset payload for '$name':"
+            say '```json'
+            say "$payload"
+            say '```'
+            id=$(api "repos/$REPO/rulesets" | jq -r --arg n "$name" '.[] | select(.name == $n) | .id' | head -n1)
+            if [ "$APPLY" != "true" ]; then
+              if [ -n "$id" ]; then say "Would UPDATE the existing ruleset (id $id)."; else say "Would CREATE this ruleset."; fi
+              return 0
+            fi
+            if [ -n "$id" ]; then
+              api -X PUT "repos/$REPO/rulesets/$id" --input - <<<"$payload" > /dev/null
+              say "Updated ruleset '$name' (id $id)."
+            else
+              api -X POST "repos/$REPO/rulesets" --input - <<<"$payload" > /dev/null
+              say "Created ruleset '$name'."
+            fi
+          }
+
+          case "$TASK" in
+            show-plan)
+              say "Existing rulesets:"
+              api "repos/$REPO/rulesets" --jq '.[] | "- \(.name) (\(.target), \(.enforcement))"' | tee -a "$GITHUB_STEP_SUMMARY"
+              say "Branches:"
+              api --paginate "repos/$REPO/branches" --jq '.[] | "- \(.name)"' | tee -a "$GITHUB_STEP_SUMMARY"
+              say "Required checks that protect-main would use: $REQUIRED_CHECKS"
+              ;;
+            protect-main)
+              payload=$(jq -n --argjson checks "$REQUIRED_CHECKS" '{
+                name: "Protect main",
+                target: "branch",
+                enforcement: "active",
+                conditions: { ref_name: { include: ["~DEFAULT_BRANCH"], exclude: [] } },
+                bypass_actors: [ { actor_id: 5, actor_type: "RepositoryRole", bypass_mode: "pull_request" } ],
+                rules: [
+                  { type: "deletion" },
+                  { type: "non_fast_forward" },
+                  { type: "pull_request", parameters: {
+                      required_approving_review_count: 0,
+                      dismiss_stale_reviews_on_push: false,
+                      require_code_owner_review: false,
+                      require_last_push_approval: false,
+                      required_review_thread_resolution: false } },
+                  { type: "required_status_checks", parameters: {
+                      strict_required_status_checks_policy: false,
+                      required_status_checks: ($checks | map({ context: . })) } }
+                ] }')
+              upsert_ruleset "Protect main" "$payload"
+              ;;
+            protect-release-tags)
+              payload=$(jq -n '{
+                name: "Protect release tags",
+                target: "tag",
+                enforcement: "active",
+                conditions: { ref_name: { include: ["refs/tags/v*"], exclude: [] } },
+                bypass_actors: [],
+                rules: [ { type: "deletion" }, { type: "non_fast_forward" }, { type: "update" } ] }')
+              upsert_ruleset "Protect release tags" "$payload"
+              ;;
+            delete-merged-branches)
+              owner="${REPO%%/*}"
+              api --paginate "repos/$REPO/branches" --jq '.[].name' | while read -r b; do
+                if [ "$b" = "$DEFAULT_BRANCH" ]; then continue; fi
+                if echo "$b" | grep -Eq "$KEEP_REGEX"; then say "keep   $b (protected name)"; continue; fi
+                open_prs=$(api "repos/$REPO/pulls?state=open&head=$owner:$b" --jq 'length')
+                if [ "$open_prs" != "0" ]; then say "keep   $b (has an open pull request)"; continue; fi
+                ahead=$(api "repos/$REPO/compare/$DEFAULT_BRANCH...$b" --jq '.ahead_by')
+                if [ "$ahead" != "0" ]; then say "keep   $b ($ahead commit(s) not on $DEFAULT_BRANCH)"; continue; fi
+                if [ "$APPLY" = "true" ]; then
+                  api -X DELETE "repos/$REPO/git/refs/heads/$b" > /dev/null
+                  say "DELETED $b (every commit is already on $DEFAULT_BRANCH)"
+                else
+                  say "would delete $b (every commit is already on $DEFAULT_BRANCH)"
+                fi
+              done
+              ;;
+            board-fields)
+              say "The board task has its own step below; nothing to do here."
+              ;;
+            *)
+              say "Unknown task: $TASK"
+              exit 1
+              ;;
+          esac
+
+      - name: Create the board fields (tries the App first, then the board token)
+        if: ${{ inputs.task == 'board-fields' }}
+        env:
+          APP_TOKEN: ${{ steps.app.outputs.token }}
+          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          APPLY: ${{ inputs.apply }}
+          BOARD_OWNER: saulpatinojr
+          BOARD_NUMBER: "7"
+        run: |
+          set -euo pipefail
+          say() { echo "$*" | tee -a "$GITHUB_STEP_SUMMARY"; }
+          gql() { curl -sS -X POST https://api.github.com/graphql -H "Authorization: Bearer $1" -H "Content-Type: application/json" -d "$2"; }
+          say "## board-fields on $BOARD_OWNER project $BOARD_NUMBER ($([ "$APPLY" = "true" ] && echo APPLY || echo DRY RUN))"
+
+          query='query($login:String!,$n:Int!){ user(login:$login){ projectV2(number:$n){ id title fields(first:100){ nodes{ ... on ProjectV2FieldCommon { name } } } } } }'
+          body=$(jq -n --arg q "$query" --arg l "$BOARD_OWNER" --argjson n "$BOARD_NUMBER" '{query:$q,variables:{login:$l,n:$n}}')
+
+          token=""; resp=""
+          for which in APP_TOKEN PROJECT_TOKEN; do
+            candidate="${!which:-}"
+            if [ -z "$candidate" ]; then say "Skipping $which (not set)."; continue; fi
+            resp=$(gql "$candidate" "$body" || true)
+            if echo "$resp" | jq -e '.data.user.projectV2.id' > /dev/null 2>&1; then
+              token="$candidate"; say "The board is reachable with $which."; break
+            fi
+            say "$which cannot see the board: $(echo "$resp" | jq -r '.errors[0].message // "no access"' 2>/dev/null || echo unknown)"
+          done
+          if [ -z "$token" ]; then
+            say "Neither token can reach the board. Add a classic token with only the 'project' permission as the secret PROJECT_TOKEN in the admin-ops environment, then run this again."
+            exit 1
+          fi
+
+          project_id=$(echo "$resp" | jq -r '.data.user.projectV2.id')
+          existing=$(echo "$resp" | jq -r '.data.user.projectV2.fields.nodes[].name')
+          fields='[
+            {"name":"Product","type":"SINGLE_SELECT","options":["HCW NetworkEyes","Cloud Crawler","Cloud Assessor","Azure Migration Orchestrator","Portfolio"]},
+            {"name":"Workstream","type":"SINGLE_SELECT","options":["Presentation and Documentation","Security and Dependencies","Pull Requests and CI","Testing and Validation","GitHub Pages","Governance","Release"]},
+            {"name":"Priority","type":"SINGLE_SELECT","options":["P0 Critical","P1 High","P2 Medium","P3 Low"]},
+            {"name":"Severity","type":"SINGLE_SELECT","options":["Critical","High","Medium","Low"]},
+            {"name":"Effort","type":"SINGLE_SELECT","options":["XS","S","M","L","XL"]},
+            {"name":"Validation Environment","type":"SINGLE_SELECT","options":["Local","CI","Staging","Production","Not applicable"]},
+            {"name":"Owner","type":"TEXT"},
+            {"name":"Blocking Reason","type":"TEXT"},
+            {"name":"Evidence","type":"TEXT"},
+            {"name":"Target Release","type":"TEXT"},
+            {"name":"Last Reviewed","type":"DATE"}
+          ]'
+          mutation='mutation($input: CreateProjectV2FieldInput!){ createProjectV2Field(input:$input){ projectV2Field{ ... on ProjectV2SingleSelectField { id name } ... on ProjectV2Field { id name } } } }'
+          echo "$fields" | jq -c '.[]' | while read -r f; do
+            name=$(echo "$f" | jq -r .name)
+            if echo "$existing" | grep -Fxq "$name"; then say "exists  $name"; continue; fi
+            if [ "$APPLY" != "true" ]; then say "would create $name ($(echo "$f" | jq -r .type))"; continue; fi
+            input=$(echo "$f" | jq --arg p "$project_id" '{projectId:$p, name:.name, dataType:.type}
+              + (if .type == "SINGLE_SELECT" then {singleSelectOptions:(.options | map({name:., color:"GRAY", description:""}))} else {} end)')
+            out=$(gql "$token" "$(jq -n --arg q "$mutation" --argjson i "$input" '{query:$q,variables:{input:$i}}')")
+            if echo "$out" | jq -e '.data.createProjectV2Field.projectV2Field.id' > /dev/null 2>&1; then say "created $name"; else say "FAILED  $name: $(echo "$out" | jq -r '.errors[0].message // "unknown error"')"; fi
+          done
+          say "Not handled here (do these by hand, see the board setup ticket): the Status options, the eight views, and filling values from labels."
