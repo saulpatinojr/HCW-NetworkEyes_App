@@ -2388,15 +2388,6 @@ arguments. `.github/dependabot.yml` ignores the major until then. Open: migrate 
 remove the ignore, and check the grid in the browser (sorting, grouping, scrolling) because the type check does not
 cover behaviour.
 
-### T-733 — A test that keeps `.env.example` complete
-Ticket #246 asked for a check that fails when the code reads a setting the file does not list. Today nothing does:
-the file was completed by hand on 2026-10-24 (see `CHANGELOG.md`). Open: add `tests/unit/test_env_example_inventory.py`
-that collects every name read through `os.environ` / `os.getenv` (Python) and `process.env.` (TypeScript) under `cna/`,
-`apps/` and `packages/`, subtracts a short, commented allow-list of names the platform sets (for example `NODE_ENV`,
-`PATH`), and fails with the missing names unless `.env.example` or `apps/cna-web/.env.example` mentions them (a
-commented-out line counts, so secrets such as `CREDENTIAL_ENCRYPTION_KEY` stay value-free). Also assert that no secret-named
-variable (`*_SECRET`, `*_TOKEN`, `*_KEY`) has a value in the file other than the documented placeholders. Test-only change.
-
 ### T-734 — Make the documentation-model validator say what it enforces
 `scripts/validate_documentation_model.py` allows seven root documents (the four required ones, `CLAUDE.md`, and the optional
 `CNA-0.90-updates.md` and `REFACTOR_APP.md`), but its docstring and its failure messages still say "exactly four", and
