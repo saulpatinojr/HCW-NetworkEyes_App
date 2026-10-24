@@ -192,8 +192,21 @@ jobs:
           # Create both report files first so the Report step still has something to read if npx cannot fetch the compiler.
           echo "unavailable (the compiler could not be fetched)" > "$RUNNER_TEMP/tsc-version.txt"
           echo "No compiler output: the compiler could not be fetched." > "$RUNNER_TEMP/tsc-canary.txt"
-          npx --yes -p typescript@beta tsc --version | tee "$RUNNER_TEMP/tsc-version.txt"
-          npx --yes -p typescript@beta tsc --noEmit 2>&1 | tee "$RUNNER_TEMP/tsc-canary.txt"
+          # tee truncates its file as soon as it starts, so each command writes to a .new file. The version file replaces
+          # its placeholder only when the compiler printed a version; the type-check output (which is empty on a clean run)
+          # replaces its placeholder only when that happened. The first failure's exit status is kept for the step.
+          status=0
+          fetched=0
+          npx --yes -p typescript@beta tsc --version | tee "$RUNNER_TEMP/tsc-version.new" || status=$?
+          if [ -s "$RUNNER_TEMP/tsc-version.new" ]; then
+            mv "$RUNNER_TEMP/tsc-version.new" "$RUNNER_TEMP/tsc-version.txt"
+            fetched=1
+          fi
+          npx --yes -p typescript@beta tsc --noEmit 2>&1 | tee "$RUNNER_TEMP/tsc-canary.new" || status=$?
+          if [ "$fetched" = 1 ]; then
+            mv "$RUNNER_TEMP/tsc-canary.new" "$RUNNER_TEMP/tsc-canary.txt"
+          fi
+          exit "$status"
       - name: Report
         run: |
           {
