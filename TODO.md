@@ -17,7 +17,7 @@ in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG
 | [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-419 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements + appliance migration | T-501 – T-509 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
-| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-732 |
+| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-734 |
 
 ---
 
@@ -2387,3 +2387,19 @@ reports nine errors: `getCoreRowModel` and `useReactTable` are no longer exporte
 arguments. `.github/dependabot.yml` ignores the major until then. Open: migrate the component,
 remove the ignore, and check the grid in the browser (sorting, grouping, scrolling) because the type check does not
 cover behaviour.
+
+### T-733 — A test that keeps `.env.example` complete
+Ticket #246 asked for a check that fails when the code reads a setting the file does not list. Today nothing does:
+the file was completed by hand on 2026-10-24 (see `CHANGELOG.md`). Open: add `tests/unit/test_env_example_inventory.py`
+that collects every name read through `os.environ` / `os.getenv` (Python) and `process.env.` (TypeScript) under `cna/`,
+`apps/` and `packages/`, subtracts a short, commented allow-list of names the platform sets (for example `NODE_ENV`,
+`PATH`), and fails with the missing names unless `.env.example` or `apps/cna-web/.env.example` mentions them (a
+commented-out line counts, so secrets such as `CREDENTIAL_ENCRYPTION_KEY` stay value-free). Also assert that no secret-named
+variable (`*_SECRET`, `*_TOKEN`, `*_KEY`) has a value in the file other than the documented placeholders. Test-only change.
+
+### T-734 — Make the documentation-model validator say what it enforces
+`scripts/validate_documentation_model.py` allows seven root documents (the four required ones, `CLAUDE.md`, and the optional
+`CNA-0.90-updates.md` and `REFACTOR_APP.md`), but its docstring and its failure messages still say "exactly four", and
+`TODO.md` T-603 – T-608 and the README/CLAUDE.md wording were written for that older rule (README and CLAUDE.md were aligned on
+2026-10-24, ticket #250). Open: reword the docstring and messages, keep the checks themselves unchanged, and run
+`tests/unit/test_documentation_model*.py` if present. Script-only change, so it waits for a round that allows code.

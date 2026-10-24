@@ -137,8 +137,8 @@ or record a `TODO.md` item naming them — never leave one side implied.
   version control under `local/agent-config/` (gitignored, TODO T-411); it is not project
   source and must never contain project-specific facts.
 - **`REFACTOR_APP.md`** at the root is the owner-approved refactoring plan this repository
-  executes; the documentation model allows it beside the four documents until its change
-  sets have shipped.
+  executes; the documentation model allows it (and the temporary `CNA-0.90-updates.md`) beside the four
+  documents and this file, seven root documents at most, until their work has shipped.
 - **Tell the lab edition what changed.** `saulpatinojr/HCW-NetworkEyes_AddOn` keeps a "what's new"
   file, `docs/whats-new-upstream.md`, that its agents read before changing anything. When a change lands
   here that reaches it (the engine package `packages/cna-azure-network-engine`, the rules, an
