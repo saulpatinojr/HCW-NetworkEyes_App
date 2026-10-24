@@ -30,7 +30,7 @@ The appliances contain only their cloud's Terraform and deploy/update workflows.
 They are structurally identical to each other; a feature lands **once, here**, in
 the images, and both appliances pick it up. There is no Terraform and no deploy
 workflow in this repository; it keeps only `200-build-images`,
-`300-test-codebase`, `310-release-version` and `370-registry-cleanup`, plus one
+`300-test-codebase`, `310-release-version`, `320-release-engine` and `370-registry-cleanup`, plus one
 owner-approved exception, `390-repository-admin` (manual, dry-run by default,
 approved per run; it deploys nothing and holds no product code). A
 deployment fix belongs in the appliance (and its sibling), never here.
@@ -119,7 +119,7 @@ or record a `TODO.md` item naming them — never leave one side implied.
 - **Workflows are numbered in bands** (`000` bootstrap, `100` validation, `200`
   build/deploy, `300` test/release/ops). Numbers are stable across core and
   both appliances; never renumber, reference by filename. The core owns `200`,
-  `300`, `310`, `370` and the one exception `390`; every other number belongs to
+  `300`, `310`, `320`, `370` and the one exception `390`; every other number belongs to
   the appliances.
 - **Every GitHub Action is pinned to a SHA digest.** `detect-secrets` fails the
   build on any finding not in `.secrets.baseline`; `gitleaks` is advisory.
@@ -132,6 +132,11 @@ or record a `TODO.md` item naming them — never leave one side implied.
 - **`REFACTOR_APP.md`** at the root is the owner-approved refactoring plan this repository
   executes; the documentation model allows it beside the four documents until its change
   sets have shipped.
+- **Tell the lab edition what changed.** `saulpatinojr/HCW-NetworkEyes_AddOn` keeps a "what's new"
+  file, `docs/whats-new-upstream.md`, that its agents read before changing anything. When a change lands
+  here that reaches it (the engine package `packages/cna-azure-network-engine`, the rules, an
+  `engine-v*` release, or anything it ports or pins), add an entry to that file in the same change set,
+  or say in the pull request why none is needed.
 - Start with `TODO.md` when picking up work; check `REVIEW.md` when blocked on a
   human decision.
 

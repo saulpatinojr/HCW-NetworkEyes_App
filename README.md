@@ -72,7 +72,7 @@ cna/                  Python package, installed as the `cna` CLI
 scripts/              Repository guards (documentation model, module graph, shape catalog)
                       and the headless draw.io wrapper the images use
 tests/                unit/ and integration/
-.github/workflows/    200 build images · 300 test · 310 release · 370 registry cleanup
+.github/workflows/    200 build images · 300 test · 310 release · 320 engine release · 370 registry cleanup · 390 repository admin
 .deployment-catalog/  latest-build.json — the build manifest the appliances consume
 local/agent-config/   Vendored agent configuration — gitignored, not project source
 ```
@@ -194,7 +194,8 @@ Reference** explains each value in full.
   change set — see [`CLAUDE.md`](CLAUDE.md).
 - **Numbered workflows.** Workflows use numeric bands shared by the core and both appliances:
   `000` bootstrap, `100` validation, `200` build and deploy, `300` test, release, and operations.
-  The core keeps `200`, `300`, `310` and `370`; the appliances keep the rest. Within a band, the
+  The core keeps `200`, `300`, `310`, `320` (the engine release) and `370`, plus the one owner-approved
+  exception `390` (repository admin; manual, dry-run by default); the appliances keep the rest. Within a band, the
   number is stable — reference workflows by filename, not by position, and never renumber.
 - **Never hardcode a value at a call site.** Regions, endpoints, account IDs, and every other
   environment-specific value is *declared* — as a `DiscoveryOptions` field, a named module-level
