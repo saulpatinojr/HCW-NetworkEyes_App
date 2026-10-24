@@ -1,6 +1,6 @@
 name: repository-admin
 
-# Owner-approved repository chores: branch and tag rules, and cleanup of merged branches, plus the board fields.
+# Owner-approved repository chores: branch and tag rules, and cleanup of merged branches, plus the board fields and filling them in.
 # Every run is a dry run unless "apply" is ticked. The admin-ops environment holds the credentials (main branch only).
 # It uses a short-lived GitHub App token (HCW Portfolio Admin), limited to this repository.
 # The default token below stays read-only. No secrets are stored in this file.
@@ -18,6 +18,7 @@ on:
           - protect-release-tags
           - delete-merged-branches
           - board-fields
+          - board-fill
       apply:
         description: "Tick to really make the change. Leave unticked for a dry run that only prints what would change."
         type: boolean
@@ -142,7 +143,7 @@ jobs:
                 fi
               done
               ;;
-            board-fields)
+            board-fields|board-fill)
               say "The board task has its own step below; nothing to do here."
               ;;
             *)
@@ -214,3 +215,202 @@ jobs:
             echo "One or more fields could not be created. See the lines above."
             exit 1
           fi
+
+      - name: Add the tickets to the board and fill in Product, Priority, Severity and Workstream from their labels
+        if: ${{ inputs.task == 'board-fill' }}
+        env:
+          APP_TOKEN: ${{ steps.app.outputs.token }}
+          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          APPLY: ${{ inputs.apply }}
+          BOARD_OWNER: saulpatinojr
+          BOARD_NUMBER: "7"
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.request
+
+          OWNER = os.environ["BOARD_OWNER"]
+          NUMBER = int(os.environ["BOARD_NUMBER"])
+          APPLY = os.environ["APPLY"] == "true"
+          REPOS = ["HCW-NetworkEyes_App", "HCW-CloudCrawler_App", "HCW-CloudAssessor_App", "HCW-AzMigrateOrchestrator_App"]
+          PRODUCT = {
+              "HCW-NetworkEyes_App": "HCW NetworkEyes",
+              "HCW-CloudCrawler_App": "Cloud Crawler",
+              "HCW-CloudAssessor_App": "Cloud Assessor",
+              "HCW-AzMigrateOrchestrator_App": "Azure Migration Orchestrator",
+          }
+          PRIORITY = {"P0": "P0 Critical", "P1": "P1 High", "P2": "P2 Medium", "P3": "P3 Low"}
+          SEVERITY = {"critical": "Critical", "high": "High", "medium": "Medium", "low": "Low"}
+          WORKSTREAM = {
+              "security": "Security and Dependencies",
+              "dependencies": "Security and Dependencies",
+              "ci": "Pull Requests and CI",
+              "docs": "Presentation and Documentation",
+              "governance": "Governance",
+              "release": "Release",
+              "testing": "Testing and Validation",
+              "pages": "GitHub Pages",
+          }
+
+
+          def http(url, token, body=None):
+              data = json.dumps(body).encode() if body is not None else None
+              req = urllib.request.Request(url, data=data, headers={
+                  "Authorization": "Bearer " + token,
+                  "Content-Type": "application/json",
+                  "Accept": "application/vnd.github+json",
+                  "X-GitHub-Api-Version": "2022-11-28",
+              })
+              try:
+                  with urllib.request.urlopen(req) as response:
+                      return json.load(response)
+              except urllib.error.HTTPError as error:
+                  return {"errors": [{"message": "HTTP %s: %s" % (error.code, error.read().decode()[:200])}]}
+
+
+          def gql(token, query, variables=None):
+              return http("https://api.github.com/graphql", token, {"query": query, "variables": variables or {}})
+
+
+          def first_error(response):
+              return ((response.get("errors") or [{"message": "unknown error"}])[0]).get("message", "unknown error")
+
+
+          PROJECT_QUERY = (
+              "query($login:String!,$n:Int!){ user(login:$login){ projectV2(number:$n){ id title "
+              "fields(first:100){ nodes{ ... on ProjectV2FieldCommon { id name } "
+              "... on ProjectV2SingleSelectField { id name options { id name } } } } } } }"
+          )
+          token = None
+          project = None
+          for name in ("PROJECT_TOKEN", "APP_TOKEN"):
+              candidate = os.environ.get(name, "")
+              if not candidate:
+                  print("Skipping %s (not set)." % name)
+                  continue
+              result = gql(candidate, PROJECT_QUERY, {"login": OWNER, "n": NUMBER})
+              found = ((result.get("data") or {}).get("user") or {}).get("projectV2")
+              if found:
+                  token, project = candidate, found
+                  print("The board is reachable with %s." % name)
+                  break
+              print("%s cannot see the board: %s" % (name, first_error(result)))
+          if not project:
+              print("Neither token can reach the board.")
+              sys.exit(1)
+
+          fields = {f["name"]: f for f in project["fields"]["nodes"] if f and f.get("name")}
+
+
+          def option_id(field, option):
+              for o in fields.get(field, {}).get("options", []):
+                  if o["name"] == option:
+                      return o["id"]
+              return None
+
+
+          ITEMS_QUERY = (
+              "query($id:ID!,$after:String){ node(id:$id){ ... on ProjectV2{ items(first:100, after:$after){ "
+              "pageInfo{ hasNextPage endCursor } nodes{ id content{ ... on Issue { id } ... on PullRequest { id } } } } } } }"
+          )
+          on_board = {}
+          after = None
+          while True:
+              result = gql(token, ITEMS_QUERY, {"id": project["id"], "after": after})
+              items = (((result.get("data") or {}).get("node") or {}).get("items"))
+              if not items:
+                  print("Could not read the board items: %s" % first_error(result))
+                  sys.exit(1)
+              for node in items["nodes"]:
+                  content = node.get("content") or {}
+                  if content.get("id"):
+                      on_board[content["id"]] = node["id"]
+              if not items["pageInfo"]["hasNextPage"]:
+                  break
+              after = items["pageInfo"]["endCursor"]
+
+          issues = []
+          for repo in REPOS:
+              page = 1
+              while True:
+                  listing = http("https://api.github.com/repos/%s/%s/issues?state=all&per_page=100&page=%d" % (OWNER, repo, page), token)
+                  if not isinstance(listing, list):
+                      print("Could not list the issues of %s: %s" % (repo, first_error(listing)))
+                      sys.exit(1)
+                  issues += [(repo, i) for i in listing if "pull_request" not in i]
+                  if len(listing) < 100:
+                      break
+                  page += 1
+          print("Board items now: %d. Issues found in the four repositories: %d." % (len(on_board), len(issues)))
+
+
+          def wanted(repo, issue):
+              labels = [label["name"] for label in issue["labels"]]
+              want = {"Product": PRODUCT[repo]}
+              if "product:portfolio" in labels:
+                  want["Product"] = "Portfolio"
+              for label in labels:
+                  if label in PRIORITY:
+                      want["Priority"] = PRIORITY[label]
+                  if label.startswith("severity:") and label[9:] in SEVERITY:
+                      want["Severity"] = SEVERITY[label[9:]]
+                  if label.startswith("workstream:") and label[11:] in WORKSTREAM:
+                      want["Workstream"] = WORKSTREAM[label[11:]]
+              return want
+
+
+          ADD = "mutation($p:ID!,$c:ID!){ addProjectV2ItemById(input:{projectId:$p, contentId:$c}){ item{ id } } }"
+          added = 0
+          updated = 0
+          problems = 0
+          for repo, issue in issues:
+              label = "%s#%d" % (repo, issue["number"])
+              want = wanted(repo, issue)
+              item = on_board.get(issue["node_id"])
+              if not APPLY:
+                  print("would %s %s -> %s" % ("set fields on" if item else "add and set fields on", label, want))
+                  continue
+              if not item:
+                  result = gql(token, ADD, {"p": project["id"], "c": issue["node_id"]})
+                  item = (((result.get("data") or {}).get("addProjectV2ItemById") or {}).get("item") or {}).get("id")
+                  if not item:
+                      print("FAILED  add %s: %s" % (label, first_error(result)))
+                      problems += 1
+                      continue
+                  added += 1
+              variables = {"p": project["id"], "i": item}
+              parts = []
+              declarations = ["$p:ID!", "$i:ID!"]
+              for k, (field_name, option_name) in enumerate(want.items()):
+                  field_id = fields.get(field_name, {}).get("id")
+                  opt_id = option_id(field_name, option_name)
+                  if not field_id or not opt_id:
+                      print("FAILED  %s: no option '%s' in field '%s'" % (label, option_name, field_name))
+                      problems += 1
+                      continue
+                  variables["f%d" % k] = field_id
+                  variables["o%d" % k] = opt_id
+                  declarations += ["$f%d:ID!" % k, "$o%d:String!" % k]
+                  parts.append(
+                      "m%d: updateProjectV2ItemFieldValue(input:{projectId:$p, itemId:$i, fieldId:$f%d, "
+                      "value:{singleSelectOptionId:$o%d}}){ clientMutationId }" % (k, k, k)
+                  )
+              if parts:
+                  result = gql(token, "mutation(%s){ %s }" % (",".join(declarations), " ".join(parts)), variables)
+                  if result.get("errors"):
+                      print("FAILED  set fields on %s: %s" % (label, first_error(result)))
+                      problems += 1
+                  else:
+                      updated += 1
+          if APPLY:
+              print("Added %d issues to the board and set fields on %d. Problems: %d." % (added, updated, problems))
+          else:
+              print("Dry run only: nothing was changed.")
+          print("Not handled here (by hand): the Status options and the eight views.")
+          if problems:
+              sys.exit(1)
+          PY
