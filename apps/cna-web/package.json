@@ -34,7 +34,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "0.137.0",
     "@auth/prisma-adapter": "^2.11.2",
-    "@aws-sdk/client-bedrock-runtime": "3.1154.0",
+    "@aws-sdk/client-bedrock-runtime": "3.1155.0",
     "@azure/identity": "^4.14.0",
     "@azure/storage-blob": "^12.34.0",
     "@prisma/client": "^6.3.1",
@@ -42,7 +42,7 @@
     "marked": "^18.1.1",
     "next": "16.4.2",
     "next-auth": "^5.0.0-beta.32",
-    "openai": "^7.40.0",
+    "openai": "^7.42.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-markdown": "^10.1.0",
