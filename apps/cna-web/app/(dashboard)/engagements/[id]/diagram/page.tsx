@@ -53,15 +53,8 @@ export default async function DiagramPage({ params }: PageProps) {
           <span className="rounded-lg bg-teal-50 dark:bg-teal-900/30 px-3 py-2 text-xs font-semibold text-teal-700 dark:text-teal-300">
             Current state
           </span>
-          <a
-            href="https://app.diagrams.net/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-lg border border-teal-700/50 bg-teal-50 dark:bg-teal-900/20 px-3 py-2 text-sm font-semibold text-teal-700 dark:text-teal-300 transition-colors hover:bg-teal-50 dark:hover:bg-teal-900/40"
-          >
-            Launch draw.io
-            <span className="sr-only"> (opens in new tab)</span>
-          </a>
+          {/* No "Launch draw.io" link to the public draw.io site: the editor below is served by this deployment,
+              and a link out invites pasting customer topology into a third-party site (REVIEW.md R-019). */}
         </div>
         <p className="mb-4 text-sm text-navy-400">
           Generate a diagram from the topology discovery already found, then adjust it here —

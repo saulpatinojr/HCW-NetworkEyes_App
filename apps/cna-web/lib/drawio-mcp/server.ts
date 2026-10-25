@@ -1,3 +1,4 @@
+import { DRAWIO_EMBED_SRC } from "../drawio-embed";
 import { ALLOWED_LIBS, isAllowedStyle, type AllowedLib } from "./allow-list";
 import rawIndex from "./shape-index.json";
 
@@ -60,7 +61,7 @@ export interface CreateDiagramResult {
   xml: string;
   /** Suggested filename stem (no extension). */
   name: string;
-  /** Embed URL that loads the XML into the public viewer.diagrams.net iframe. */
+  /** Same-origin URL of the self-hosted editor (a path on this deployment, never a diagrams.net host). */
   embedUrl: string;
 }
 
@@ -74,12 +75,10 @@ export function createDiagram(xml: string, name = "diagram"): CreateDiagramResul
     throw new Error("create_diagram: payload does not look like draw.io XML");
   }
   const safeName = name.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 80) || "diagram";
-  // viewer.diagrams.net accepts XML via the URL fragment for short payloads,
-  // but for large topologies we rely on the iframe postMessage protocol —
-  // the URL below opens an empty viewer that the React component then feeds.
-  const embedUrl =
-    "https://viewer.diagrams.net/?embed=1&proto=json&spin=1&libraries=1";
-  return { xml, name: safeName, embedUrl };
+  // Large topologies do not fit a URL, so the XML travels over the iframe postMessage protocol: the URL below
+  // opens an empty editor that the React component then feeds. It is served by this deployment, so the
+  // topology stays inside it (REVIEW.md R-019).
+  return { xml, name: safeName, embedUrl: DRAWIO_EMBED_SRC };
 }
 
 export function listIconLibs(): readonly AllowedLib[] {
