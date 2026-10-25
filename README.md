@@ -19,8 +19,9 @@ This repository is the **product** of the Cloud Network Assessment platform: the
 of the application code and of the pipeline that builds and publishes its container images. It
 is the NetworkEyes App of the HCW App-to-AddOn initiative: `REFACTOR_APP.md` is its refactoring
 plan and [`HCW-NetworkEyes_AddOn`](https://github.com/saulpatinojr/HCW-NetworkEyes_AddOn) is
-its lab edition. Customers consume one of the two **appliance** repositories —
-[Azure](https://github.com/saulpatinojr/Work-Cloud_Network_Azure_Appliance) or [AWS](https://github.com/saulpatinojr/Work-Cloud_Network_AWS_Appliance) — which deploy the images published here.
+its lab edition. It stands alone: it builds, signs and publishes its own container images to Docker Hub
+(`docker.io/hybridcloudworks/img-ne-appliance-app`), deploys nothing and notifies no one; see
+[Publishing the images](#publishing-the-images).
 
 A CNA-branded, multi-user web platform for cloud network assessments across AWS and Azure.
 Analysts run network discoveries, AI-powered analysis, and generate presentation-ready
@@ -46,9 +47,9 @@ enforces the list. The community files GitHub reads (`SECURITY.md`, `CONTRIBUTIN
 | [`REVIEW.md`](REVIEW.md) | Blockers that require a human decision, approval, or access grant |
 | [`TODO.md`](TODO.md) | The engineering work queue — every actionable item, phased |
 | [`REFACTOR_APP.md`](REFACTOR_APP.md) | The owner-approved refactoring plan this repository executes (HCW App-to-AddOn initiative, 2026-10): change sets A–K, acceptance criteria, validation commands |
-| [`CLAUDE.md`](CLAUDE.md) | Rules for AI coding agents: what this repository is (the core), the contract with the two appliance repositories, and the conventions agents get wrong |
+| [`CLAUDE.md`](CLAUDE.md) | Rules for AI coding agents: what this repository is, the image contract, and the conventions agents get wrong |
 | [`CNA-0.90-updates.md`](CNA-0.90-updates.md) | *Optional, temporary* — the one working-document exception to the four required docs: the 0.9.0 pre-demo review, cleanup record, polish plan, and the 2026-08-28 dev rebuild/deployment record (§5); retired when 0.9.0 ships |
-| [GitHub Wiki](https://github.com/saulpatinojr/HCW-NetworkEyes_App/wiki) | Architecture, ADRs, runbooks, workflow reference, security posture, operating notes (deployment guides live with the appliances) |
+| [GitHub Wiki](https://github.com/saulpatinojr/HCW-NetworkEyes_App/wiki) | Architecture, ADRs, runbooks, workflow reference, security posture, operating notes |
 
 If you are picking up work on this repository, start with `TODO.md`. If you are waiting on
 someone, check `REVIEW.md`.
@@ -81,41 +82,72 @@ local/agent-config/   Vendored agent configuration — gitignored, not project s
 
 ---
 
-## Repository topology
+## Publishing the images
 
-CNA is delivered as one internal **core** repository (this one) and two customer-facing
-**appliance** repositories, one per cloud:
+NetworkEyes stands alone (owner decision 2026-10-25): this repository builds, scans, signs and publishes its own
+images and depends on nothing but itself and its own Docker Hub repository. It deploys nothing, calls no other
+repository and notifies no one. Whoever runs the images (a person or a separate project) takes them from Docker Hub.
 
-| Repository | Owns | Does not contain |
-|---|---|---|
-| `HCW-NetworkEyes_App` (this repository; the Core lineage merged back on 2026-10-10) | Application code (`apps/`, `cna/`), container image builds and publishing (`200-build-images.yml`), tests and releases | Customer deployments |
-| [`Work-Cloud_Network_Azure_Appliance`](https://github.com/saulpatinojr/Work-Cloud_Network_Azure_Appliance) | Azure Terraform, deploy / update / drift / teardown workflows, the Azure release catalog | Application code, anything AWS |
-| [`Work-Cloud_Network_AWS_Appliance`](https://github.com/saulpatinojr/Work-Cloud_Network_AWS_Appliance) | AWS Terraform, the same workflows, the AWS release catalog | Application code, anything Azure |
+- **Where.** One public Docker Hub repository, `docker.io/hybridcloudworks/img-ne-appliance-app` (the owner's
+  `img-<short name>-<job>-<type>` convention). Tags: `<component>-sha-<7>` for `api`, `worker`, `web` and `migrator`,
+  `sha-<7>` for the CLI image, floating `*-latest` (moved only while the built commit is still current: the tip of the default branch, or an
+  ancestor of it with nothing between them that `200` builds from; otherwise only the sha tags are attached), and for a release the version tags `X.Y.Z` on the CLI image and `api-X.Y.Z`,
+  `worker-X.Y.Z`, `web-X.Y.Z` and `migrator-X.Y.Z` on the others.
+- **How an image is published.** `200-build-images.yml` pushes each image by digest, has Docker Scout scan it, signs it
+  with cosign (keyless, under the workflow's own GitHub identity) and attaches the build provenance; only when all five
+  images pass does it attach the tags. It logs in to Docker Hub through Docker's OIDC connection (the repository
+  variable `DOCKERHUB_CONNECTION`), so no Docker Hub password is stored for it. The record of a build is a table in
+  the step summary of the run (one row per component: tags, digest, signed); it commits nothing and notifies no other
+  repository.
+- **Releases.** A `v*.*.*` tag runs `310-release-version.yml`, which gives the five images `200`
+  already built and signed for that commit, or for the last build before it when only documentation, tests or another
+  workflow changed since, their version tags (it checks all five first and creates none if one already exists with
+  another digest), and lists each version tag, its build-time tag and its digest in the release notes. A tag on a commit that
+  changed a file `200` builds from fails and names it and the nearest built commit. The Docker Hub connection needs a
+  separate tag-only rule (`refs/tags/v*`, Image Push) for this workflow before the first release (`TODO.md` T-728; the connection has not been read from here, so it is
+  not confirmed that the rule exists yet).
+- **Cutting a release (owner steps).** (1) In the browser: Actions, **310 · Release CLI Tool**, **Run workflow**, branch
+  `main`, leave **dry_run** ticked (the default). It finds and verifies the image of the latest build, prints what it
+  would promote and the commit it was built from, and creates nothing. (2) If the summary looks right, tag that
+  commit. Bash or PowerShell, in a clone of this repository (use the commit shown in the summary for `<sha>`):
+  `git tag vX.Y.Z <sha>` then `git push origin vX.Y.Z`. (3) The tag run adds the five version tags and creates the GitHub
+  Release. `TODO.md` T-728 has the one-time Docker Hub steps and what to do when a run fails.
 
-The two appliances are structurally identical — same file names, workflow numbers, inputs,
-catalog schema, scripts, and documents — differing only in the cloud-specific parts each README
-enumerates. **Features ship once, here, in the images.** When `200-build-images.yml` publishes a
-new image set it verifies that all five digests are signed, tags them, and writes one row per component
-(tags, digest, signed) to the step summary of the run; it commits nothing and notifies no other repository.
-Releases (`v*.*.*` tags, `310-release-version.yml`) add a version tag to the CLI image `200` already built
-and signed for that commit, or for the last build before it when only documentation, tests or another workflow
-changed since, and list the digests of all five images in the release notes;
-a tag on a commit that changed a file `200` builds from fails and names it and the nearest built commit.
-Every image goes to one public Docker Hub repository, `<namespace>/img-ne-appliance-app`
-(the owner's `img-<short name>-<job>-<type>` convention; the tags inside it are unchanged). The full
-contract is in [`CLAUDE.md`](CLAUDE.md).
+The project started as a single repository that held the core until 2026-09-18. Its full history is imported here
+(`TODO.md` → T-509), so commit references in `CHANGELOG.md` still resolve; this repository is that original, renamed
+(`REVIEW.md` → R-014), so issue and pull-request numbers in documents older than 2026-10-10 name threads of the
+earlier repositories and are historical references only. New work, issues and pull requests belong here.
 
-The project started as a single repository, `Work-Cloud_Network_Assessment`, which held the core
-until 2026-09-18. Its full history is imported here (`TODO.md` → T-509), so commit references in
-`CHANGELOG.md` still resolve; the original repository is retired and being deleted (`REVIEW.md`
-→ R-014), so its issue and pull-request numbers in the documents are historical references only.
-New work, issues and pull requests belong here.
+The AI provider family is chosen at deploy time by `CNA_AI_MODE`: `saas` (Azure OpenAI on Azure, Amazon Bedrock on AWS,
+authenticated with the workload identity) or `byo-api` (no cloud AI resources; an admin pastes an Anthropic and/or
+OpenAI API key on the **AI Engine** admin page — the only secrets ever entered in the app, stored encrypted in the
+database).
 
-Every deploy is run from the appliance's **Run workflow** dialog, where `ai_mode` selects the AI
-provider family: `saas` (Azure OpenAI on Azure, Amazon Bedrock on AWS — provisioned by
-Terraform, authenticated with the workload identity) or `byo-api` (no cloud AI resources; an
-admin pastes an Anthropic and/or OpenAI API key on the **AI Engine** admin page — the only
-secrets ever entered in the app, stored encrypted in the database).
+### Verifying images
+
+Every published digest is signed (cosign, keyless) and carries a SLSA provenance attestation made by `200-build-images.yml`
+on `main`. Resolve a tag to a digest, then verify that exact digest before you run it. A digest that does not verify must
+not be deployed. A released image has a version tag (`X.Y.Z` for the CLI image, `<component>-X.Y.Z` for the others); the
+release notes list each version tag with its digest, and you verify the digest, not the tag.
+
+```bash
+IMAGE=docker.io/hybridcloudworks/img-ne-appliance-app@sha256:<64 hex>
+ID=https://github.com/saulpatinojr/HCW-NetworkEyes_App/.github/workflows/200-build-images.yml@refs/heads/main
+ISS=https://token.actions.githubusercontent.com
+cosign verify "$IMAGE" --certificate-identity "$ID" --certificate-oidc-issuer "$ISS"
+cosign verify-attestation "$IMAGE" --type slsaprovenance02 --certificate-identity "$ID" --certificate-oidc-issuer "$ISS"   | jq -r '.payload | @base64d | fromjson | .predicate.builder.id'
+```
+
+The last command prints the attestation's `predicate.builder.id`, which must begin with
+`https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/runs/` (a run of this repository). `cosign verify-attestation`
+alone does not check it; `scripts/ci/verify_signed_digest.sh` does.
+
+Pass `--use-signed-timestamps` if you want the signed timestamp from the timestamp authority; without it cosign 3 uses the
+transparency-log time. The identity string must match exactly: renaming or
+transferring the repository, or renaming the workflow file or the default branch, changes it (the change is announced in the
+release notes). `scripts/ci/verify_signed_digest.sh` does the same checks and also binds the digest to a commit. The five
+digests of each build are in the step summary of its `200-build-images.yml` run, and those of a release are in its release
+notes.
 
 ---
 
@@ -159,12 +191,9 @@ committed in `uv.lock` with hash checking. After changing a dependency in `pypro
 
 ### Deploying an environment
 
-Deployment does not happen from this repository. Each appliance repository owns its cloud's
-Terraform, bootstrap, deploy, drift and teardown workflows and documents the procedure in its
-`README.md` → *Operating the appliance*: [Azure](https://github.com/saulpatinojr/Work-Cloud_Network_Azure_Appliance) · [AWS](https://github.com/saulpatinojr/Work-Cloud_Network_AWS_Appliance). This repository
-only publishes the images they deploy (`200-build-images.yml`). Deployment blockers live in the
-appliances' `REVIEW.md` files; the AWS appliance's deploy stays fail-fast until its account,
-state backend and OIDC role exist (its R-001 – R-003).
+Deployment does not happen from this repository, which only publishes the images. Run them with your own process: pull
+by digest, verify the signature (see [Publishing the images](#publishing-the-images)) and
+supply the runtime settings listed in `.env.example`.
 
 ---
 
@@ -172,44 +201,23 @@ state backend and OIDC role exist (its R-001 – R-003).
 
 Configuration comes from three places, in this order of authority:
 
-1. **GitHub Secrets and Variables** — for this repository, only what the build and release
-   workflows need (Docker Hub, the GitHub App for appliance notification). Deployment secrets and
-   variables belong to the appliance repositories, where cloud credentials use OIDC and there are
-   no long-lived keys.
-2. **The appliance's vault** (Azure Key Vault / AWS Secrets Manager) — runtime secrets for a
-   deployed environment, injected by the appliance's Terraform; its `340-sync-keys` workflow can
-   pull them into a short-lived `.env` artifact.
+1. **GitHub Secrets and Variables** — for this repository, only what its workflows need (names only; values are never
+   in the repository): `DOCKERHUB_NAMESPACE`, `DOCKERHUB_CONNECTION` (the Docker Hub OIDC connection id) and
+   `DOCKERHUB_ENABLED` (the publishing switch) for `200` and `310`; `DOCKERHUB_PERSONAL_USERNAME` (variable) and
+   `DOCKERHUB_PERSONAL_TOKEN` (secret) for the registry cleanup `370`; `PYPI_PUBLISH_ENABLED` for the engine release
+   `320`; and, for the owner-approved `390` only, the credentials of the `admin-ops` environment (`APP_CLIENT_ID`,
+   `APP_PRIVATE_KEY`, `PROJECT_TOKEN`). The build, release and registry-cleanup workflows use no GitHub App and notify
+   no other repository; the App credentials in `admin-ops` belong to the separate `390-repository-admin.yml` only. `TODO.md` T-728 and `REVIEW.md` R-026 have the steps. Deployment secrets and
+   variables belong to whoever deploys the images.
+2. **The deployment's vault** (Azure Key Vault / AWS Secrets Manager) — runtime secrets for a deployed environment,
+   injected by whoever deploys the images.
 3. **`.env` / `.env.local`** — local development only, never committed.
 
 `.env.example` at the repository root is the complete inventory of the runtime environment
 contract — every variable the images read, each with a one-line description and which side
-(appliance Terraform or local `.env`) supplies it.
+(the deployment or local `.env`) supplies it.
 `apps/cna-web/.env.example` covers the web application specifically. The Wiki's **Secrets
 Reference** explains each value in full.
-
----
-
-## Verifying images
-
-Every published digest is signed (cosign, keyless) and carries a SLSA provenance attestation made by `200-build-images.yml`
-on `main`. Resolve a tag to a digest, then verify that exact digest before you run it. A digest that does not verify must
-not be deployed.
-
-```bash
-IMAGE=docker.io/hybridcloudworks/img-ne-appliance-app@sha256:<64 hex>
-ID=https://github.com/saulpatinojr/HCW-NetworkEyes_App/.github/workflows/200-build-images.yml@refs/heads/main
-ISS=https://token.actions.githubusercontent.com
-cosign verify "$IMAGE" --certificate-identity "$ID" --certificate-oidc-issuer "$ISS"
-cosign verify-attestation "$IMAGE" --type slsaprovenance02 --certificate-identity "$ID" --certificate-oidc-issuer "$ISS"
-```
-
-Pass `--use-signed-timestamps` if you want the signed timestamp from the timestamp authority; without it cosign 3 uses the
-transparency-log time. The attestation's `predicate.builder.id` begins with
-`https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/runs/`. The identity string must match exactly: renaming or
-transferring the repository, or renaming the workflow file or the default branch, changes it (the change is announced in the
-release notes). `scripts/ci/verify_signed_digest.sh` does the same checks and also binds the digest to a commit. The five
-digests of each build are in the step summary of its `200-build-images.yml` run, and those of a release are in its release
-notes.
 
 ---
 
@@ -220,14 +228,14 @@ notes.
   from the two optional temporary documents named in "Documentation map" (`REFACTOR_APP.md`, `CNA-0.90-updates.md`) and the
   community files in `.github/`.
   Long-form documentation goes to the Wiki. Content determines destination, not filename.
-- **The appliance contract is mirrored, never implied.** Any change to the image tag scheme, the
+- **Image contract changes are recorded, never implied.** Any change to the image tag scheme, the
   signed-digest record, or the runtime environment contract
-  (`CNA_AI_MODE`, `CNA_APPLIANCE_CLOUD`, …) is made in both appliance repositories in the same
-  change set — see [`CLAUDE.md`](CLAUDE.md).
-- **Numbered workflows.** Workflows use numeric bands shared by the core and both appliances:
-  `000` bootstrap, `100` validation, `200` build and deploy, `300` test, release, and operations.
-  The core keeps `200`, `300`, `310`, `320` (the engine release) and `370`, plus the one owner-approved
-  exception `390` (repository admin; manual, dry-run by default); the appliances keep the rest. Within a band, the
+  (`CNA_AI_MODE`, `CNA_APPLIANCE_CLOUD`, …) is recorded under `Changed` in `CHANGELOG.md` and in the release notes,
+  where a consumer will look; nobody is notified — see [`CLAUDE.md`](CLAUDE.md).
+- **Numbered workflows.** Workflows use numeric bands:
+  `000` bootstrap, `100` validation, `200` build, `300` test, release, and operations.
+  This repository has `200`, `300`, `310`, `320` (the engine release) and `370`, plus the one owner-approved
+  exception `390` (repository admin; manual, dry-run by default). Within a band, the
   number is stable — reference workflows by filename, not by position, and never renumber.
 - **Never hardcode a value at a call site.** Regions, endpoints, account IDs, and every other
   environment-specific value is *declared* — as a `DiscoveryOptions` field, a named module-level

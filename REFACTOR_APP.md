@@ -4,14 +4,14 @@
 |---|---|
 | Date | 2026-10-10 |
 | Program | HCW App-to-AddOn initiative (Pair 3, NetworkEyes) |
-| This repository | `saulpatinojr/HCW-NetworkEyes_App` — retired on 2026-09-18, **restored on 2026-10-10** by the owner's decision (the `Work-Cloud_Network_Core` lineage merged back here) |
-| Implementation target | **this repository** (owner decision 2026-10-10; written for `saulpatinojr/Work-Cloud_Network_Core`, whose paths are identical here) |
+| This repository | `saulpatinojr/HCW-NetworkEyes_App` — retired on 2026-09-18, **restored on 2026-10-10** by the owner's decision (the earlier core repository's lineage merged back here) |
+| Implementation target | **this repository** (owner decision 2026-10-10; written for the earlier core repository, whose paths are identical here) |
 | Evidence commit | `5d3b914` (last `main` commit before retirement, read with `git show` and `git ls-tree` only) |
 | Downstream consumer | `saulpatinojr/HCW-NetworkEyes_AddOn` (lab edition, id `network-assessment`) |
 
-> **Owner decision 2026-10-10:** this repository is the implementation target. The paragraph that stood here said the repository was archived and the target was `Work-Cloud_Network_Core`; the Core lineage has since been merged back here, so every path below applies to this tree unchanged.
+> **Owner decision 2026-10-10:** this repository is the implementation target. The paragraph that stood here said the repository was archived and the target was the earlier core repository; its lineage has since been merged back here, so every path below applies to this tree unchanged. **Owner decision 2026-10-25 (standalone):** this repository depends on no other repository, so every statement below about appliance repositories, a build manifest (`latest-build.json`, `.deployment-catalog/`) or a dispatch to other repositories is the 2026-10-10 plan as written and no longer applies: the record of a build is the digest table in the step summary of `200-build-images.yml` and the five digests in the `310` release notes (`CLAUDE.md`, *The image contract*).
 
-**Where this file lives.** This plan is an allowed root document in this repository (`scripts/validate_documentation_model.py` lists it as optional) and is removed once its change sets have shipped. The earlier paragraph here described a "policy exception" written while the repository was retired and the Core was the target; that situation ended on 2026-10-10 (see the owner decision above), so the paragraph was removed on 2026-10-24 (ticket #250). Nothing for this repository is written in `Work-Cloud_Network_Core`, which is reference only (`CLAUDE.md`).
+**Where this file lives.** This plan is an allowed root document in this repository (`scripts/validate_documentation_model.py` lists it as optional) and is removed once its change sets have shipped. The earlier paragraph here described a "policy exception" written while the repository was retired and the Core was the target; that situation ended on 2026-10-10 (see the owner decision above), so the paragraph was removed on 2026-10-24 (ticket #250). Nothing for this repository is written in the earlier core repository, which is reference only (`CLAUDE.md`).
 
 **Owner's Azure target decision (2026-10-09, `PLAN.md` owner decision 2), quoted:** "*App* = Azure Container Apps + user-assigned managed identity (Reader; + Cost Management Reader for Cloud Assessor) on a client subscription/RG, clients clone the repo, anonymous live results, no visitor credential. *AddOn* = the **same Docker image** in a `lab` edition on the Hostinger VPS: visitors upload an **Azure Resource Graph export** (JSON/CSV, 5 MB / 5,000 rows, Turnstile-gated, in-memory, TTL), mirroring the Azure Migrate lab model; restart erases everything."
 
@@ -48,20 +48,20 @@ Evidence at `5d3b914`, line counts from `git show <path> | wc -l`.
 | SP help modal | `apps/cna-web/components/ui/sp-help-modal.tsx` | 363 | Tells customers to grant Network Contributor (lines 93, 176, 197, 209 to 211, 218 to 225) |
 | Packaging | `pyproject.toml` | 182 | `cna 0.8.0b0`, `requires-python >=3.11` (line 9), `boto3` and seven `azure-*` packages in base deps, `enrichment` and `dev` extras, no `license` field |
 | Images | `Dockerfile` (94), `apps/cna-api/Dockerfile` (99) | | `python:3.14-slim@sha256:cae66f2e...` pinned, uid 1001, pip removed, draw.io plus xvfb; OCI label `licenses="Proprietary"` (`Dockerfile` line 50); API deps installed inline (lines 17 to 39) including `psycopg2-binary` and `boto3` |
-| CI and release | `.github/workflows/{200-build-images,300-test-codebase,310-release-version,370-registry-cleanup}.yml` | 363 (200) | Docker Hub login with `secrets.DOCKERHUB_TOKEN` (200: lines 67 to 72), Scout by digest, `notify-appliances` dispatch; release on tags `v*.*.*` (310: line 16) |
-| Build manifest | `.deployment-catalog/latest-build.json` | 13 | `sha-11eaa7e` tags for `cli, api, worker, web, migrator` under `docker.io/hybridcloudworks/img-ne-appliance-app`; no digests |
+| CI and release | `.github/workflows/{200-build-images,300-test-codebase,310-release-version,370-registry-cleanup}.yml` | 363 (200) | Docker Hub login with `secrets.DOCKERHUB_TOKEN` (200: lines 67 to 72), Scout by digest, `notify-appliances` dispatch (removed 2026-10-25); release on tags `v*.*.*` (310: line 16) |
+| Build manifest | `.deployment-catalog/latest-build.json` | 13 | `sha-11eaa7e` tags for `cli, api, worker, web, migrator` under `docker.io/hybridcloudworks/img-ne-appliance-app`; no digests (the file was removed 2026-10-25) |
 | Backlog | `TODO.md` (1,849), `REVIEW.md` (548), `CHANGELOG.md` (245) | | T-401 to T-419, T-501 to T-508; R-008 (line 328), R-009 (375), R-011 (469), R-012 (516) open; `[Unreleased]` at `CHANGELOG.md` line 10 |
 | Vendored agent configuration | `.agents/`, `.claude/`, `.codex/`, `.kiro/` | about 52 MB | Not product code |
 | Tests | `tests/unit/` (73 files), `tests/integration/` | | `test_azure_discovery.py` 2,333 lines of mocked SDK; no `tests/security/` directory |
 
 **The two rule engines.** Engine A (`analysis_engine.py`) is typed, versioned, hedge-checked, and used only by the CLI `cna analyze` and by the API's AWS path. Engine B (`main.py` `_check_*`) is what `_run_azure_discovery` (line 1603) runs for every Azure job; it overlaps Engine A on DDoS, NSG, WAF and flow-log checks and adds 14 checks Engine A lacks (RDP/SSH from Internet, wildcard rules, default route to Internet, BGP propagation, custom DNS, WAF detection mode, Basic SKUs, VPN generation, connection status, pending private endpoints, no firewall, no Bastion, zone redundancy for App Gateway and Load Balancer). Its remaining checks (`_check_nvas`, `_check_bgp_gateway`, `_check_observability`, `_check_network_metrics`) depend on live collectors.
 
-**Deployment at this commit.** Terraform was removed by T-504 (`TODO.md` line 1486; last copy at `8bb989d`). The two appliance repositories hold the per-cloud Terraform and consume `latest-build.json`.
+**Deployment at this commit.** Terraform was removed by T-504 (`TODO.md` line 1486; last copy at `8bb989d`). The per-cloud Terraform is not in this repository; whoever deploys the images owns it.
 
 ## 3 Target-state summary
 
 ```
-Work-Cloud_Network_Core (upstream)
+HCW-NetworkEyes_App (upstream)
   packages/cna-azure-network-engine/  -> PyPI: cna-azure-network-engine (wheel)
     cna_azure_network_engine/{model, rules, classify, findings, report, normalize}   (base: pydantic only)
     cna_azure_network_engine/discovery/   ([azure] extra: resource_graph + live_bgp/metrics/diagnostics/cost/law)
@@ -97,7 +97,7 @@ Package contract:
 5. The Core keeps its own `CLAUDE.md` rules for PRs, changelog and review; this document does not override them.
 6. Owner-pasteable commands have no placeholders; both bash and PowerShell are given where the shells differ.
 7. Every Microsoft Learn citation, role action name and compliance-framework control reference carries `[VERIFY]` until checked.
-8. The appliance's Terraform lives in `Work-Cloud_Network_Azure_Appliance` (T-504); this document names the resources it must gain but the files are written there.
+8. The appliance's Terraform is not in this repository (T-504); this document names the resources it must gain, and whoever deploys the appliance writes the files.
 
 ## 5 Architectural issues
 
@@ -114,7 +114,7 @@ Package contract:
 | 9 | Raw exception strings persisted | `azure_discovery.py:441` (`topo.block_reason = str(e)`); `main.py:1704,1812` (`errorMessage=str(exc)`) | Hostnames, paths and SDK text reach the database and the UI |
 | 10 | AWS entanglement | `topology_schema.py:64-313`; `analysis_engine.py` `_check_aws_*` (lines 198 to 638); `boto3` in base deps (`pyproject.toml:13`) and in the API image (`apps/cna-api/Dockerfile:30`); `cna/core/escalation_engine.py:9` | An Azure-only install carries boto3 and AWS rules; the lab boundary test cannot forbid `boto3` without an extra |
 | 11 | 52 MB vendored agent configuration | `.agents/`, `.claude/`, `.codex/`, `.kiro/` | Every clone, image context and `ty` run pays for it; `pyproject.toml:109` already excludes it from type checking |
-| 12 | No image digests in the manifest | `.deployment-catalog/latest-build.json` carries `sha-<7>` tags only | Appliances and the AddOn cannot pin by digest from the manifest |
+| 12 | No image digests recorded | The build record carried `sha-<7>` tags only (resolved 2026-10-25: the `tag-images` step summary and the `310` release notes carry the digests) | A consumer could not pin by digest from the record |
 
 ## 6 Required refactoring
 
@@ -129,7 +129,7 @@ Package contract:
 | G | Appliance on Container Apps with UAMI; remove SP secrets | P1 (security) | Delete `ClientSecretCredential`, `sp_client_secret`, `/discovery/test-connection`; Prisma migration drops `spSecretEnc` |
 | H | API bearer auth and exception redaction | P1 (security) | Entra JWT validation on `cna-api`; redaction helper for persisted errors |
 | I | Lab boundary image target and boundary test | P2 | `ARG EDITION=appliance|lab` in the root `Dockerfile`; the `lab` target is a build-only boundary proof, never pushed; `tests/security/test_lab_boundary.py`; the deployable lab edition is the AddOn's image |
-| J | Engine release workflow and image digests | P3 | `320-release-engine.yml`; `digests{}` in `latest-build.json` |
+| J | Engine release workflow and image digests | P3 | `320-release-engine.yml`; digests in the `tag-images` step summary and the `310` release notes |
 | K | AWS gating behind an extra | P3 | `aws` extra and `cna/aws/` subpackage; `boto3` leaves the base |
 
 ## 7 File-by-file implementation instructions
@@ -498,18 +498,18 @@ FROM final-${EDITION}
 
 `apps/cna-api/requirements.txt` (new, exact pins; section 11) replaces the inline package list at `apps/cna-api/Dockerfile:17-39`. New `tests/security/test_lab_boundary.py` runs against a venv built with `pip install packages/cna-azure-network-engine` (no extra): `find_spec("azure") is None`; `importlib.metadata.distributions()` lists no name starting with `azure-`, `msal` or `boto3`; the engine's `edition.py` guard (shared with the AddOn) exits 1 with "lab edition" on stderr when `find_spec("azure")`, `msal` or `boto3` resolves or when any of `IDENTITY_ENDPOINT`, `MSI_ENDPOINT`, `AZURE_CLIENT_SECRET`, `AZURE_FEDERATED_TOKEN_FILE` is set. The lab HTTP checks (`/api/health` reporting `edition: "lab"`, `azureConnectivity: "disabled-by-design"`, no password inputs, image-level `import azure` on the shipped image) live in the AddOn's `tests/security/test_edition_boundary.py` and its image job, not here.
 
-- **Components affected.** `Dockerfile`, `apps/cna-api/Dockerfile` (its body becomes the `final-appliance` stage; the file is deleted), `apps/cna-api/requirements.txt` (new), `200-build-images.yml` (the `lab` target is built with `push: false` and is absent from `latest-build.json`), `tests/security/`.
+- **Components affected.** `Dockerfile`, `apps/cna-api/Dockerfile` (its body becomes the `final-appliance` stage; the file is deleted), `apps/cna-api/requirements.txt` (new), `200-build-images.yml` (the `lab` target is built with `push: false` and is never pushed), `tests/security/`.
 - **Tests.** The venv tests above; `300-test-codebase.yml` gains a job `lab-image` that builds with `--build-arg EDITION=lab -t cna:lab`, runs `docker run --rm cna:lab` expecting exit 0 and `docker run --rm cna:lab python -c "import azure"` expecting exit 1.
 - **Acceptance.** Both targets build from one Dockerfile; `docker run --rm cna:lab` exits 0; `docker run --rm cna:lab python -m pip` fails (pip removed); `cna:lab` appears in no registry and no manifest.
 - **Priority** P2. **Dependencies** C. **Rollback** `EDITION` defaults to `appliance`, so existing builds are unchanged; the lab target is additive.
 
 ### 7.J Engine release workflow and image digests (change set J)
 
-**Current behavior.** `310-release-version.yml` releases on tags `v*.*.*` (line 16) and pushes images; `200-build-images.yml` logs in with `secrets.DOCKERHUB_TOKEN` (lines 67 to 72) and writes `latest-build.json` with `sha-<7>` tags only.
+**Current behavior.** `310-release-version.yml` releases on tags `v*.*.*` (line 16) and pushes images; `200-build-images.yml` logs in with `secrets.DOCKERHUB_TOKEN` (lines 67 to 72) and wrote a build manifest with `sha-<7>` tags only (removed 2026-10-25).
 
-**Required behavior.** A tag `engine-v*` builds, tests and publishes the wheel; the manifest carries digests; publishing uses the Docker OIDC connection, not a long-lived token.
+**Required behavior.** A tag `engine-v*` builds, tests and publishes the wheel; the digests are recorded in the step summary and the release notes; publishing uses the Docker OIDC connection, not a long-lived token.
 
-**Exact change.** New `.github/workflows/320-release-engine.yml`, `on: push: tags: ['engine-v*']`, top-level `permissions: contents: read`, `runs-on: ubuntu-26.04`, actions pinned to full commit SHAs re-verified with `gh api repos/saulpatinojr/Work-Cloud_Network_Core/git/ref/tags/v7.0.0` style lookups before merge (the Core's existing pins `actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0` and `actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97` are reused). Three jobs with job-level permissions:
+**Exact change.** New `.github/workflows/320-release-engine.yml`, `on: push: tags: ['engine-v*']`, top-level `permissions: contents: read`, `runs-on: ubuntu-26.04`, actions pinned to full commit SHAs re-verified with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>` style lookups before merge (the Core's existing pins `actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0` and `actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97` are reused). Three jobs with job-level permissions:
 
 | Job | `permissions` | Steps |
 |---|---|---|
@@ -517,12 +517,12 @@ FROM final-${EDITION}
 | `publish-pypi` | `id-token: write`, `contents: read` | `if: vars.PYPI_PUBLISH_ENABLED == 'true'`; download the artifact; `uv publish --trusted-publishing always dist/*` (OIDC to PyPI through uv itself; no third-party publishing action and no token) |
 | `release-upload` | `contents: write` | download the artifact; `gh release create "$GITHUB_REF_NAME" --verify-tag --notes-from-tag dist/*` with `GH_TOKEN: ${{ github.token }}`; this is the only job with write access to the repository |
 
-In `200-build-images.yml`: replace the `login-action` step's `password: ${{ secrets.DOCKERHUB_TOKEN }}` with the website's OIDC form (`env: DOCKERHUB_OIDC_CONNECTIONID: ${{ vars.DOCKERHUB_CONNECTION }}`, `DOCKERHUB_OIDC_EXPIREIN: '900'`, `with: registry: docker.io, username: hybridcloudworks`; gate on `vars.DOCKERHUB_ENABLED == 'true'`); write `digests: { cli, api, worker, web, migrator }` into `.deployment-catalog/latest-build.json` from each `steps.build*.outputs.digest` (the `lab` target is built with `push: false` and has no entry); keep the Scout gate by digest.
+In `200-build-images.yml`: replace the `login-action` step's `password: ${{ secrets.DOCKERHUB_TOKEN }}` with the website's OIDC form (`env: DOCKERHUB_OIDC_CONNECTIONID: ${{ vars.DOCKERHUB_CONNECTION }}`, `DOCKERHUB_OIDC_EXPIREIN: '900'`, `with: registry: docker.io, username: hybridcloudworks`; gate on `vars.DOCKERHUB_ENABLED == 'true'`); record the digest of each of `cli, api, worker, web, migrator` in the step summary of `tag-images` and in the `310` release notes (the `lab` target is built with `push: false` and has no entry); nothing is written to the repository; keep the Scout gate by digest.
 
-- **Components affected.** Workflows, manifest, appliance `230-image-update` consumers, `docs/release/`.
-- **Tests.** `actionlint`; `tests/unit/test_build_manifest.py` (`digests` keys equal `images` keys, each value matches `^sha256:[0-9a-f]{64}$`).
-- **Acceptance.** `pip download cna-azure-network-engine --no-deps -d ./wheel` succeeds once publishing is enabled; `latest-build.json` carries digests.
-- **Priority** P3. **Dependencies** C, I. **Rollback** the workflow is additive; the manifest keeps `images{}`; consumers that ignore `digests{}` keep working.
+- **Components affected.** Workflows, `docs/release/`.
+- **Tests.** `actionlint`; the digest shape is checked by `scripts/ci/verify_signed_digest.sh` and `scripts/ci/release_digests.sh`.
+- **Acceptance.** `pip download cna-azure-network-engine --no-deps -d ./wheel` succeeds once publishing is enabled; the step summary carries a digest for every image.
+- **Priority** P3. **Dependencies** C, I. **Rollback** the workflow is additive; the old login step is one commit away.
 
 ### 7.K AWS gating behind an extra (change set K)
 
@@ -567,7 +567,7 @@ Headers on every response: `X-Addon-Id: network-assessment`, `X-Addon-Version`, 
 | Rule registry | none; Engine B has no ids | `RULES_VERSION` (calendar string, hash-pinned in a test); every rule has `id, title, severity, category, version, learn_url, frameworks, applies_to, evidence`; live-only rules are registered and surface in `unknowns[]` |
 | Resource Graph row | not consumed | `{ id, name, type, location, resourceGroup, subscriptionId, tags, zones, sku, kind, properties }`; `type` lower-cased; `resourceGroup` and `subscriptionId` derived from `id` when absent; the `az graph query` envelope `{ count, data, skip_token, total_records }` is accepted by the normalizer's caller. A `skip_token` is followed by the Core's discovery until it is exhausted and normal paging records nothing; a warning is recorded only when a token remains unconsumed (paging stopped at the row cap or a page failed) or `total_records` exceeds the rows received (truncated response). An uploaded envelope that still carries a `skip_token` is by definition unconsumed, which is why the lab edition warns on it |
 | Prisma `CloudCredential` | `spClientId`, `spSecretEnc` (`schema.prisma:216-217`) | Dropped by migration `20261010000016_drop_sp_secret` (7.G) |
-| Build manifest | `{ sha_tag, commit, built_at, run_id, images{} }` | plus `digests{}` with exactly the keys of `images{}` (no `lab` entry: that target is never pushed) |
+| Build record | `{ sha_tag, commit, built_at, run_id, images{} }` in a manifest file | digest table in the `tag-images` step summary, one row per component (no `lab` entry: that target is never pushed); no manifest file (2026-10-25) |
 
 ## 10 Configuration changes
 
@@ -613,13 +613,13 @@ Headers on every response: `X-Addon-Id: network-assessment`, `X-Addon-Version`, 
 
 ## 12 Infrastructure changes
 
-Files are written in `Work-Cloud_Network_Azure_Appliance` (T-504 moved Terraform there); the Core documents the contract in `docs/deployment/appliance.md`.
+Terraform is not in this repository (T-504); this section records the resources a deployment of the appliance needs, and whoever deploys it writes the files.
 
 Pattern: `/home/user/HCW-AzMigrateOrchestrator_App/infrastructure/terraform/appliance-azure/main.tf` (read only): `azurerm_resource_group`, `azurerm_user_assigned_identity`, `azurerm_role_assignment.reader` with `for_each = toset(var.assessment_scope_ids)`, `azurerm_log_analytics_workspace`, `azurerm_container_app_environment`, `azurerm_container_app` with `identity { type = "UserAssigned" }`, `ingress { external_enabled = true }`, `env { name = "AZURE_CLIENT_ID", value = azurerm_user_assigned_identity.app.client_id }`, and an `azuread_application` for the API audience.
 
 | Resource | Setting |
 |---|---|
-| `azurerm_container_app.api` | `revision_mode = "Single"`; `template { min_replicas = 1, max_replicas = 1 }` (`CONTRACT-DECISIONS` item 21: scale-to-zero loses the in-memory snapshot; the zero-replica trade is documented as an owner option, not the default); `cpu = 0.5`, `memory = "1Gi"`; `target_port = 8080`; image `docker.io/hybridcloudworks/img-ne-appliance-app@sha256:...` taken from `latest-build.json` `digests.api`, never a floating tag |
+| `azurerm_container_app.api` | `revision_mode = "Single"`; `template { min_replicas = 1, max_replicas = 1 }` (`CONTRACT-DECISIONS` item 21: scale-to-zero loses the in-memory snapshot; the zero-replica trade is documented as an owner option, not the default); `cpu = 0.5`, `memory = "1Gi"`; `target_port = 8080`; image `docker.io/hybridcloudworks/img-ne-appliance-app@sha256:...` taken from the `api` digest in the `200` step summary or the `310` release notes, never a floating tag |
 | `env` | `CNA_EDITION=appliance`, `CNA_SCOPES`, `CNA_REFRESH_SECONDS=900`, `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `CNA_ENTRA_*`, `NA_FRAME_ANCESTORS`, `NA_SITE_ORIGINS`, `NA_TRUST_PROXY=1` |
 | `azurerm_role_assignment` | `Reader` `for_each` over `assessment_scope_ids`; optional `Security Reader`, `Cost Management Reader`, `Log Analytics Reader` (on `var.log_analytics_workspace_ids`) behind `var.enable_live_rules` |
 | `azurerm_role_definition.bgp_reader` | From `docs/roles/cna-network-bgp-reader.json` with `assignable_scopes = var.assessment_scope_ids`; assigned with the live rules flag |
@@ -629,7 +629,7 @@ Pattern: `/home/user/HCW-AzMigrateOrchestrator_App/infrastructure/terraform/appl
 | `azurerm_consumption_budget_resource_group` | Monthly budget with one alert `[VERIFY amount]` |
 | Images | Docker Hub `docker.io/hybridcloudworks/img-ne-appliance-app:*` by digest; published by `200-build-images.yml` through the Docker OIDC connection (`vars.DOCKERHUB_CONNECTION`, `vars.DOCKERHUB_ENABLED`), the pattern the website's `publish-lab-image.yml` uses; the Core already publishes to Docker Hub, so this is a login-step change, not a registry move |
 
-Clients clone the appliance repository, set `assessment_scope_ids`, `tenant_id` and `image_digest` in `terraform.tfvars`, and run `terraform plan` then `terraform apply`; `terraform apply` is a human-reviewed step and is never run from an automated session. The lab edition is not deployed on Container Apps: it runs on the Hostinger lab host from the AddOn's image (AddOn ADR-0003).
+Clients set `assessment_scope_ids`, `tenant_id` and `image_digest` in `terraform.tfvars`, and run `terraform plan` then `terraform apply`; `terraform apply` is a human-reviewed step and is never run from an automated session. The lab edition is not deployed on Container Apps: it runs on the Hostinger lab host from the AddOn's image (AddOn ADR-0003).
 
 ## 13 Security changes
 
@@ -642,7 +642,7 @@ Clients clone the appliance repository, set `assessment_scope_ids`, `tenant_id` 
 | Persisted error text | H | `str(exc)` (`main.py:1704,1812`; `azure_discovery.py:441`) | Class name and status only |
 | Lab boundary | I | None | No Azure SDK installed; startup refusal on identity env; image-level `import azure` must fail; `edition: lab` in health |
 | Scope allow-list | D, G | None (any subscription the SP could read) | `CNA_SCOPES` enforced before any query |
-| Supply chain | J | Docker Hub token secret | OIDC connection; digests in the manifest; Scout and `pip-audit` gates |
+| Supply chain | J | Docker Hub token secret | OIDC connection; digests in the step summary and the release notes; Scout and `pip-audit` gates |
 | AWS surface | K | Always installed | Optional extra |
 | Rate limiting on the public surface | 8 | n/a | Token bucket per client, `X-Forwarded-For` only with `NA_TRUST_PROXY=1`, never `CF-Connecting-IP` |
 
@@ -673,7 +673,7 @@ Unchanged by this document and still open: R-011 (BYO AI key path and egress rev
 | H | `tests/unit/test_cna_api_auth.py` (401 no token, 401 wrong audience, 403 `insufficient_role`, 200 role in `roles`, 200 role in `scp`, protected routes all on the `internal` router, public routes 200 without a token); `tests/security/test_profile_refused.py` (`CNA_PROFILE` set in an appliance build exits 1); `tests/unit/test_api_errors.py` | unit |
 | 8 (public API) | `tests/unit/test_public_api.py` (`POST /api/assessments` is 405 with `Allow: GET` and `error.code == "edition_readonly"`; `X-Frame-Options: DENY` present only when `NA_FRAME_ANCESTORS` is exactly `'none'`); `tests/security/test_appliance_boundary.py` (no route under `/api/assessments` accepts a body) | unit |
 | I | `tests/security/test_lab_boundary.py` against the engine venv without `[azure]`; CI `lab-image` job: `docker run --rm cna:lab` exits 0 and `docker run --rm cna:lab python -c "import azure"` exits 1; the lab HTTP checks are the AddOn's | unit + image job |
-| J | `actionlint`; `tests/unit/test_build_manifest.py` (digest shape) | CI |
+| J | `actionlint`; `tests/security/test_standalone_boundary.py` | CI |
 | K | `tests/packaging/test_azure_only_install.py`; `@pytest.mark.aws` skips | packaging job |
 | Ported to the AddOn and kept green upstream | `TestAzureNetFindingRules`, `TestAzurePeeringGatewayTransit`, `TestObservedStateEnforcer` in `test_analysis_engine.py`; `test_bcdr_signals.py`; `test_topology_classifier.py`; `test_finops_signals.py` (001 and 004 cases); `test_findings_schema.py` | unit |
 
@@ -691,7 +691,7 @@ Order: **A -> C -> (B, E) -> D -> F -> G -> H -> I -> J -> K.** F, G and H are i
 | 3 | B | `engine-v0.2.0` + `v0.10.1` | `RULES_VERSION` bump; web findings gain ids |
 | 4 | D | `v0.11.0` | `CNA_DISCOVERY_BACKEND` defaults to `resource-graph`; `arm` kept one release |
 | 5 | I | `v0.11.1` | Build-only lab boundary target; boundary test in CI; the AddOn ships the deployable lab edition |
-| 6 | J | `v0.11.2` | OIDC login; digests in the manifest; appliances switch to digests |
+| 6 | J | `v0.11.2` | OIDC login; digests in the step summary and the release notes |
 | 7 | K | `v0.12.0` | AWS extra; remove the A shims and the `arm` backend in the same release |
 
 One PR per change set, ready for review, following the Core's PR template; `CHANGELOG.md` `[Unreleased]` (line 10) gains one entry per set.
@@ -700,7 +700,7 @@ One PR per change set, ready for review, following the Core's PR template; `CHAN
 
 - **Import shims (A, K).** `cna.core.topology_schema` and the moved AWS module paths keep working for one release with a `DeprecationWarning`; CI runs with `-W error::DeprecationWarning` for the Core's own code only after the shims are deleted.
 - **Discovery backend flag (D).** `CNA_DISCOVERY_BACKEND=arm|resource-graph`; default `resource-graph`; the `arm` value and the old loop are deleted in step 7.
-- **Appliance repositories.** `Work-Cloud_Network_Azure_Appliance` consumes `latest-build.json`; `images{}` keeps its shape and `digests{}` is additive. The AWS appliance is unaffected until K, when its image must be built with `[aws]`.
+- **Consumers of the images.** They pull by digest. From K the published images carry the `[aws]` extra (`TODO.md` T-729).
 - **Web tier.** The findings page reads the rule id from the title prefix (`_finding_model_to_dict`, `main.py:1176`); B keeps that convention until a `ruleId` column is added in a later migration.
 - **AddOn.** `TOPOLOGY_MODEL_VERSION`, `RULES_VERSION`, rule ids and severities in B are the contract the AddOn's interim port already uses; a Core change to any of them is a `[VERIFY]` item in the AddOn's `core-update` PR.
 - **Python floor.** `>=3.14` matches the images; a 3.13 developer environment runs `uv python install 3.14`.
@@ -736,7 +736,7 @@ One PR per change set, ready for review, following the Core's PR template; `CHAN
 | P2 | Unify Engine A and B; typed `AZ-NET-020..033`, `AZ-BCDR-006/007` | B | T-417 (ids make the four generated reports consistent) |
 | P2 | Resource Graph discovery; remove scanner-host DNS | D | T-403, T-408 (fixtures replace SDK mocks; coverage stays measured); R-008 (live acceptance on the new backend) |
 | P2 | Build-only lab boundary target and `tests/security/test_lab_boundary.py` | I | new |
-| P3 | `320-release-engine.yml`; OIDC login; digests | J | T-503 (owner steps for appliances unchanged); T-504 to T-508 done, unaffected |
+| P3 | `320-release-engine.yml`; OIDC login; digests | J | T-503 (withdrawn 2026-10-25); T-504 to T-508 done, unaffected |
 | P3 | AWS behind an extra | K | T-404 (boto3 and azure-mgmt consistency gaps close by separation); T-418 (diagrams stay Azure-only) |
 | P3 | Remove the 52 MB vendored agent configuration from the product tree or move it to a separate repository | hygiene | T-411 (detect-secrets triage shrinks) |
 | Unaffected | R-009 (Wiki access), R-012 (project board token), T-401, T-405 to T-407, T-409, T-415, T-416, T-419, T-501, T-502, T-505 | | Owner items; listed so the mapping is complete |
@@ -746,19 +746,19 @@ One PR per change set, ready for review, following the Core's PR template; `CHAN
 1. `pip install ./packages/cna-azure-network-engine` in a clean venv installs `pydantic` only; `python -c "import cna_azure_network_engine as e, sys; print(e.RULES_VERSION); assert 'azure' not in sys.modules"` prints the version.
 2. `pip install "./packages/cna-azure-network-engine[azure]"` adds discovery; `python -c "from cna_azure_network_engine.discovery import ResourceGraphDiscovery"` succeeds.
 3. `git grep -c "def _check_" -- apps/cna-api/main.py` prints nothing; `git grep -n "Network Contributor" -- apps cna docs .env.example` prints nothing; `git grep -n "ClientSecretCredential\|DefaultAzureCredential\|sp_client_secret\|spSecretEnc\|gethostbyname" -- apps cna packages` prints nothing.
-4. `docker build --build-arg EDITION=lab -t cna:lab .` succeeds, `docker run --rm cna:lab` exits 0 and `docker run --rm cna:lab python -c "import azure"` exits 1; the image is never pushed and has no manifest entry; `docker build --build-arg EDITION=appliance -t cna:appliance .` succeeds.
+4. `docker build --build-arg EDITION=lab -t cna:lab .` succeeds, `docker run --rm cna:lab` exits 0 and `docker run --rm cna:lab python -c "import azure"` exits 1; the image is never pushed and has no digest row; `docker build --build-arg EDITION=appliance -t cna:appliance .` succeeds.
 5. `GET /api/health` on the appliance returns `edition: "appliance"`, `azureConnectivity: "managed-identity"`, `id: "network-assessment"` and `version` at the top level, with no token. The `lab` form of the envelope is the AddOn's acceptance, on its own image.
 6. `POST /api/assessments` on the appliance returns 405 with header `Allow: GET` and `error.code == "edition_readonly"`.
 7. `GET /discovery/jobs/anything` on `cna-api` without a bearer token returns 401; with a valid token lacking `Discovery.Run` it returns 403 `insufficient_role`; the appliance exits 1 at startup when `CNA_PROFILE` or any `FORBIDDEN_ENV` variable is set.
 8. A Reader-only identity completes Resource Graph discovery of a subscription with zero `HttpResponseError` from list calls; live-only rules report `state: "unknown"` with a reason; the timing is recorded in `VALIDATION.md`.
 9. Every finding carries `rule_id`, `rule_version`, `observed_state.state`; every rule title and description passes `ObservedStateEnforcer`; `RULES_VERSION` changes when the id set changes.
-10. `.deployment-catalog/latest-build.json` carries `digests{}` for every image; the Azure appliance's Terraform references an image by digest.
+10. The step summary of `200-build-images.yml`'s `tag-images` job carries a digest for every image, and the `310` release notes list all five.
 11. `pip install .` of the monorepo installs no `boto3`; `pip install ".[aws]"` passes the AWS tests.
 12. `uv run pytest -q` and `uv run ruff check .` pass; `300-test-codebase.yml` is green on 3.14.
 
 ## 20 Validation commands or procedures
 
-Run from the root of a `Work-Cloud_Network_Core` clone on the branch carrying the change set. Each line is one command; the `# Expected` comment above it says what success looks like, so a real failure can be told from a reporting failure. Docker commands need a running daemon (CI has one; this program's session did not).
+Run from the root of a clone of this repository on the branch carrying the change set. Each line is one command; the `# Expected` comment above it says what success looks like, so a real failure can be told from a reporting failure. Docker commands need a running daemon (CI has one; this program's session did not).
 
 PowerShell:
 
@@ -808,7 +808,7 @@ Live acceptance (R-008), bash, after `az login` as an identity holding only Read
 
 | AddOn item | Relationship to the Core |
 |---|---|
-| Interim port: `src/network_assessment/model/topology.py` (from `topology_schema.py:315-1010`), `model/findings.py` (`findings_schema.py`), `model/enforcer.py` (`observed_state_enforcer.py` verbatim), `rules/azure_net.py` (Engine A `_check_azure_*` lines 639 to 1660 and Engine B lines 195 to 1127 as `AZ-NET-020..033`), `rules/azure_bcdr.py` (`bcdr_signals.py`), `rules/azure_cost.py` (`finops_signals.py` 001 and 004), `rules/taxonomy.py` (`finding_taxonomy.py`), `classify/topology.py` (`topology_classifier.py`) | Each file carries `# Ported from saulpatinojr/Work-Cloud_Network_Core <path> at 5d3b914; changes: ...`; the AddOn's root `PROVENANCE.md` lists file, source path, commit, lines, changes and reason. The Core's change sets A, B, C and E produce the same symbols under `cna_azure_network_engine`, so the port is removable without semantic change |
+| Interim port: `src/network_assessment/model/topology.py` (from `topology_schema.py:315-1010`), `model/findings.py` (`findings_schema.py`), `model/enforcer.py` (`observed_state_enforcer.py` verbatim), `rules/azure_net.py` (Engine A `_check_azure_*` lines 639 to 1660 and Engine B lines 195 to 1127 as `AZ-NET-020..033`), `rules/azure_bcdr.py` (`bcdr_signals.py`), `rules/azure_cost.py` (`finops_signals.py` 001 and 004), `rules/taxonomy.py` (`finding_taxonomy.py`), `classify/topology.py` (`topology_classifier.py`) | Each file carries `# Ported from <the earlier core repository> <path> at 5d3b914; changes: ...`; the AddOn's root `PROVENANCE.md` lists file, source path, commit, lines, changes and reason. The Core's change sets A, B, C and E produce the same symbols under `cna_azure_network_engine`, so the port is removable without semantic change |
 | Deletion of the port | When `cna-azure-network-engine` is on PyPI (section 15 step 2), the AddOn's `core-update.yml` pins the exact version, deletes `src/network_assessment/{model,rules,classify}`, keeps `ingestion/`, `store/`, `api/`, `security/`, `web/`, and removes the `PROVENANCE.md` rows for the deleted files |
 | Rule ids, severities, `RULES_VERSION`, `TOPOLOGY_MODEL_VERSION` | The AddOn uses the 7.B table and `lab-1.0.0` now; the Core must not renumber. The AddOn's `test_registry.py` hash-pins `RULES_VERSION`; a Core bump is adopted through `core-update` |
 | ARG normalizer | The AddOn's `ingestion/normalize.py` (type table in its design B.3) is the reference implementation for the Core's `normalize/resource_graph.py` (C, D); once published, the AddOn imports it too |
@@ -821,7 +821,7 @@ Live acceptance (R-008), bash, after `az login` as an identity holding only Read
 **Open questions (owner):**
 
 1. `[REVIEW REQUIRED]` **Relicensing.** The Core has no `license` field in `pyproject.toml` and labels its images `org.opencontainers.image.licenses="Proprietary"` (`Dockerfile:50`). The AddOn is MIT. The interim port and the future wheel both need an owner decision on the engine package's licence and the copyright holder (HCW or CBTS). Until decided, the AddOn's `PROVENANCE.md` makes the ported set removable and the wheel is not published.
-2. `[REVIEW REQUIRED]` **PyPI name and trusted publishing.** `cna-azure-network-engine` must be registered on PyPI with a trusted publisher for `saulpatinojr/Work-Cloud_Network_Core` and the `320-release-engine.yml` workflow; `vars.PYPI_PUBLISH_ENABLED` stays unset until then, and the wheel is attached to the GitHub Release instead.
+2. `[REVIEW REQUIRED]` **PyPI name and trusted publishing.** `cna-azure-network-engine` must be registered on PyPI with a trusted publisher for `saulpatinojr/HCW-NetworkEyes_App` and the `320-release-engine.yml` workflow; `vars.PYPI_PUBLISH_ENABLED` stays unset until then, and the wheel is attached to the GitHub Release instead.
 3. `[VERIFY]` **Custom role action names.** The six actions in `docs/roles/cna-network-bgp-reader.json` are to be checked against the current `Microsoft.Network` provider operations before `az role definition create`.
 4. `[REVIEW REQUIRED]` **Graph and Entra permissions.** The app registration for the bearer audience (7.H) and any Microsoft Graph permission the web tier needs to acquire tokens with its identity are tenant-admin steps.
 5. `[REVIEW REQUIRED]` **Compliance-framework references** (WAF, CIS, PCI-DSS, ISO 27001, HIPAA, FedRAMP, CISA ZTMM) carried as rule data from `analysis_engine.py` are claims shown to customers; every control reference is `[VERIFY]` and the set needs legal or compliance review before the appliance's anonymous public surface exposes them.
@@ -837,7 +837,7 @@ Live acceptance (R-008), bash, after `az login` as an identity holding only Read
 | A-2 | `python:3.14-slim` digest `cae66f2e...` is still the Core's pin or has been bumped deliberately | Use the Core's current pin; the `EDITION` change is independent of the base image |
 | A-3 | Resource Graph `Resources`, `ResourceContainers`, `SecurityResources` tables and `skipToken` paging behave as at the time of writing `[VERIFY]` | Adjust the KQL in 7.D; the normalizer contract is unchanged |
 | A-4 | Container Apps Consumption `min_replicas = 1` cost is on the order of US$5 to 15 per month `[VERIFY]` | Owner may choose scale-to-zero with a persisted snapshot |
-| A-5 | The Azure appliance repository accepts the Terraform additions of section 12 | The Core documents the contract and the appliance owner implements it |
+| A-5 | Whoever deploys the appliance applies the Terraform additions of section 12 | This document records the contract and the deployer implements it |
 | A-6 | The web tier can obtain a token for the API audience with its user-assigned identity | Fall back to a federated app credential; never a client secret |
 | A-7 | Basic Load Balancer and Basic Public IP retirement dates used in rule text are checked `[VERIFY]` | Text and severity adjusted; ids unchanged |
 | A-8 | The AddOn's `lab-1.0.0` model is a strict subset of the engine's `1.3.0` Azure classes | The AddOn's `core-update` PR records the field differences and adapts the normalizer |

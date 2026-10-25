@@ -164,9 +164,10 @@ class TestReleasePromotesTheScannedDigest:
     def test_the_verification_cannot_be_made_non_gating(self):
         # Mutation guard: `|| true`, continue-on-error, an `if:` or a `set +e` on the verify step all fail here.
         step = self._step("Verify the signature")
-        assert set(step) <= {"name", "env", "run"}, (
+        assert set(step) <= {"name", "id", "env", "run"}, (
             f"unexpected keys on the verify step: {sorted(step)}"
         )
+        assert step["id"] == "cli" and step["env"]["EMIT_BUILDER_RUN_ID"] == "true"
         assert "||" not in step["run"] and ";" not in step["run"] and "&" not in step["run"]
         assert "set +e" not in step["run"]
         assert step["run"].startswith("bash scripts/ci/verify_signed_digest.sh ")
@@ -774,9 +775,10 @@ class TestReleaseListsTheFiveDigests:
         assert step["run"] == "bash scripts/ci/release_digests.sh"
         assert set(step) <= {"name", "id", "env", "run"}
         assert step["id"] == "others"
+        # One run, the one that built the CLI image: not every run of the commit.
         assert step["env"] == {
             "BUILD_COMMIT": "${{ steps.scanned.outputs.build_commit }}",
-            "RUN_IDS": "${{ steps.scanned.outputs.run_ids }}",
+            "RUN_IDS": "${{ steps.cli.outputs.builder_run_id }}",
         }
 
     def test_the_release_notes_carry_all_five_digests_and_the_verification_command(self):
@@ -800,6 +802,9 @@ class TestReleaseListsTheFiveDigests:
             assert tag in body, tag
         assert "Only the CLI image" not in body
         assert "cosign verify " in body and "cosign verify-attestation" in body
+        assert ".predicate.builder.id" in body, (
+            "the release notes check the builder, not only the attestation type"
+        )
         assert "--certificate-identity" in body and "--certificate-oidc-issuer" in body
         assert "/.github/workflows/200-build-images.yml@refs/heads/main" in body
 

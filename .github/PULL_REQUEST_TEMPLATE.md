@@ -33,7 +33,7 @@ Closes #
 - Checks not run and why:
 - Evidence level: [ ] Static [ ] Local [ ] CI [ ] Live (name the environment)
 
-## Core and appliance contract (delete this section if the change does not touch it)
+## Image contract (delete this section if the change does not touch it)
 
 - [ ] The image tag scheme, the signing identity and the runtime environment settings are unchanged, or the change is recorded under `Changed` in `CHANGELOG.md` and in `TODO.md`.
 - [ ] `.env.example` lists every setting the code reads.
