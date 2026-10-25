@@ -105,9 +105,8 @@ export function SpHelpModal() {
                     </ExternalLink>
                   </li>
                   <li>
-                    Open the identity the appliance deployment created (its name is
-                    printed by the appliance&apos;s Terraform output{" "}
-                    <Code>appliance_identity_name</Code>)
+                    Open the managed identity this app runs as (your deployment
+                    created it; its name is part of your deployment record)
                   </li>
                   <li>
                     On the Overview page note the <strong>Name</strong>; it is the

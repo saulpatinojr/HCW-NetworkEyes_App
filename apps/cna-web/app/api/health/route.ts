@@ -3,8 +3,7 @@ import { prisma } from "@/lib/prisma";
 
 // /api/health — liveness + readiness probe for Azure Container Apps.
 // Returns 200 only when the process is up AND the database is reachable.
-// The probe path in compute/main.tf and Terraform Front Door health probe
-// both point here.
+// Point the deployment's health probes here.
 export async function GET() {
   const checks: Record<string, "ok" | "error"> = {
     process: "ok",

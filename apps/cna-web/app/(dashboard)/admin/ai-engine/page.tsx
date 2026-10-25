@@ -67,12 +67,12 @@ const MODE_COPY = {
   saas: {
     title: "SaaS engine",
     blurb:
-      "This appliance was deployed with ai_mode = saas: the cloud-native GenAI service is provisioned by Terraform and authenticated with the workload identity. Switch modes by redeploying with a different ai_mode.",
+      "This deployment runs with CNA_AI_MODE = saas: the cloud-native GenAI service is set up by your deployment and authenticated with the workload identity. Change the mode in the deployment settings (CNA_AI_MODE) and redeploy.",
   },
   "byo-api": {
     title: "Bring-your-own API",
     blurb:
-      "This appliance was deployed with ai_mode = byo-api: no cloud AI service is provisioned. Paste an Anthropic and/or OpenAI API key below — these are the only secrets entered in the app, stored encrypted in the database. With one key that provider is used automatically; with both, the toggle chooses.",
+      "This deployment runs with CNA_AI_MODE = byo-api: no cloud AI service is expected. Paste an Anthropic and/or OpenAI API key below — these are the only secrets entered in the app, stored encrypted in the database. With one key that provider is used automatically; with both, the toggle chooses.",
   },
 } as const;
 
@@ -202,17 +202,17 @@ export default async function AiEnginePage() {
             <h2 className="font-bold">Deployment validation</h2>
             {state.cloud === "aws" ? (
               <p className="mt-2">
-                Amazon Bedrock is the Terraform-managed GenAI provider: the task role&apos;s invoke
+                Amazon Bedrock is the cloud-native GenAI provider here: the task role&apos;s invoke
                 policy, the inference profile, the bedrock-runtime VPC endpoint, and the app
-                environment variables are all provisioned by Terraform. Operators should confirm
+                environment variables are all expected from your deployment. Operators should confirm
                 model access is enabled for this account and region in the Bedrock console.
               </p>
             ) : (
               <>
                 <p className="mt-2">
-                  Azure OpenAI is the Terraform-managed GenAI provider: a private endpoint into the
+                  Azure OpenAI is the cloud-native GenAI provider here: a private endpoint into the
                   CNA VNet, RBAC via the app&apos;s managed identity, the model deployment, and the
-                  app environment variables are all provisioned by Terraform.
+                  app environment variables are all expected from your deployment.
                 </p>
                 <p className="mt-2">
                   Operators should confirm the Azure OpenAI host resolves through the private
@@ -230,7 +230,7 @@ export default async function AiEnginePage() {
           <div>
             <h2 className="text-xl font-bold text-navy-900 dark:text-white">MCP Servers</h2>
             <p className="text-sm text-navy-500 dark:text-navy-300">
-              These values are injected by Terraform and surfaced here for validation.
+              These values come from the deployment settings and are surfaced here for validation.
             </p>
           </div>
           {!isAdmin && (

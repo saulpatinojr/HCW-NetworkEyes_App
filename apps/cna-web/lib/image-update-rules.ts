@@ -1,19 +1,16 @@
 /**
  * Image-update rules — pure functions, no I/O.
  *
- * A deployed appliance runs immutable images (`img-ne-appliance-app:{web,api,worker}-sha-<7>`)
- * and only changes them through its own workflows: `230-image-update` picks
- * up every new image set the core publishes, redeploys `dev` automatically
- * and opens an `update-available` issue for `prod`, which a human applies via
- * `210-deploy`. Nothing inside the containers updates itself.
+ * A deployment runs immutable images (`img-ne-appliance-app:{web,api,worker}-sha-<7>`)
+ * and only changes them when whoever deploys it rolls out a newer image set.
+ * Nothing inside the containers updates itself.
  *
  * This module gives the web tier a way to *see* that state per deployment:
  * the running build (baked into the image as CNA_BUILD_SHA at build time) is
  * compared with the newest build the registry carries under the floating
  * `*-latest` tag of the same component. The comparison is registry-agnostic
- * (OCI distribution API) and every deployed appliance checks on its own with
- * the pull-only credential it already holds — no shared service and no access
- * to the core repository is involved.
+ * (OCI distribution API) and every deployment checks on its own with the
+ * pull-only credential it already holds — no shared service is involved.
  *
  * Everything that reads the environment or the network lives in
  * `image-update.ts`; this file holds the rules so they can be unit-tested.
@@ -33,7 +30,7 @@ export const DOCKER_HUB_API_HOST = "registry-1.docker.io";
 /** Docker Hub's library namespace for bare references (`postgres` → `library/postgres`). */
 export const DOCKER_HUB_LIBRARY_NAMESPACE = "library";
 
-/** OCI labels `docker/metadata-action` stamps on every image the core builds. */
+/** OCI labels `docker/metadata-action` stamps on every image NetworkEyes builds. */
 export const LABEL_REVISION = "org.opencontainers.image.revision";
 export const LABEL_CREATED = "org.opencontainers.image.created";
 
@@ -49,17 +46,8 @@ export const MANIFEST_ACCEPT_TYPES = [
 export const ATTESTATION_ANNOTATION = "vnd.docker.reference.type";
 export const ATTESTATION_ANNOTATION_VALUE = "attestation-manifest";
 
-/** The platform the appliances run; attestation manifests report `unknown`. */
+/** The platform the images run on; attestation manifests report `unknown`. */
 export const TARGET_PLATFORM = { os: "linux", architecture: "amd64" } as const;
-
-/**
- * Appliance workflow files the page links to. Numbers and names are part of
- * the shared contract (CLAUDE.md → workflow bands) and never change.
- */
-export const APPLIANCE_IMAGE_UPDATE_WORKFLOW = "230-image-update.yml";
-export const APPLIANCE_DEPLOY_WORKFLOW = "210-deploy.yml";
-/** Label `230-image-update` puts on the prod update request it opens. */
-export const APPLIANCE_UPDATE_ISSUE_LABEL = "update-available";
 
 export type ImageReference = {
   /** Registry host, e.g. `docker.io` or `ghcr.io`. */
@@ -277,22 +265,6 @@ export function tokenUrlFor(challenge: BearerChallenge, fallbackScope: string): 
 /** `repository:<repo>:pull` — the only scope the check ever asks for. */
 export function pullScopeFor(repository: string): string {
   return `repository:${repository}:pull`;
-}
-
-/** Links into the appliance repository, when the deployment knows its own. */
-export function applianceLinks(
-  repo: string | undefined | null,
-  serverUrl: string,
-): { repo: string; imageUpdateWorkflow: string; deployWorkflow: string; updateIssues: string } | null {
-  const value = clean(repo);
-  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value)) return null;
-  const base = `${serverUrl.replace(/\/+$/, "")}/${value}`;
-  return {
-    repo: value,
-    imageUpdateWorkflow: `${base}/actions/workflows/${APPLIANCE_IMAGE_UPDATE_WORKFLOW}`,
-    deployWorkflow: `${base}/actions/workflows/${APPLIANCE_DEPLOY_WORKFLOW}`,
-    updateIssues: `${base}/issues?q=${encodeURIComponent(`is:open label:${APPLIANCE_UPDATE_ISSUE_LABEL}`)}`,
-  };
 }
 
 /**

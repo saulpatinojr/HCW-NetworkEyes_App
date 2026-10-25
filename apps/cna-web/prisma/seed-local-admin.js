@@ -1,10 +1,9 @@
 // Break-glass local admin seed step, run once per deploy from the migrator
 // image (see Dockerfile "migrator" stage) right after `prisma migrate deploy`.
 //
-// Reads LOCAL_ADMIN_PASSWORD (a PBKDF2 hash string, never the plaintext —
-// see lib/local-admin.ts and the appliance repositories'
-// scripts/Initialize-CnaGitHubSecrets.ps1) and
-// upserts the single local admin User row. No-ops if the env var isn't set,
+// Reads LOCAL_ADMIN_PASSWORD (a PBKDF2 hash string, never the plaintext, in the
+// format `pbkdf2$sha256$210000$<salt b64>$<hash b64>` documented in
+// lib/local-admin.ts) and upserts the single local admin User row. No-ops if the env var isn't set,
 // so environments that haven't bootstrapped this secret yet deploy unchanged.
 //
 // Plain CommonJS (not TypeScript): the migrator image only carries

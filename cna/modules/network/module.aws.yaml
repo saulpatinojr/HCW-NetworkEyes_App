@@ -1,7 +1,7 @@
 # AWS half of the network module's permissions (REFACTOR_APP.md change set K).
 # Split from module.yaml so the Azure-only install (no [aws] extra) carries no
 # AWS permission list; the discovery code that needs these imports boto3 behind
-# cna.aws.require_aws_extra(). The IAM policy the AWS appliance's Terraform
+# cna.aws.require_aws_extra(). The IAM policy the AWS deployment
 # builds from this list is [VERIFY] against the actions the collectors call.
 name: network
 cloud: aws
