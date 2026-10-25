@@ -21,6 +21,10 @@
 #   REGISTRY (docker.io), WORKFLOW_FILE (.github/workflows/200-build-images.yml),
 #   FIND_WAIT_SECONDS (1500), FIND_POLL_SECONDS (30), FIND_MAX_COMMITS (100), GITHUB_OUTPUT (when set, the results are appended to it; always printed too)
 # Needs: git, gh (with GH_TOKEN), jq, docker buildx, python3.
+# run_ids lists every 200 run of that commit, a rehearsal run (workflow_dispatch with `rehearsal`) included: a
+# rehearsal signs under the same workflow identity. That is accepted because the digest comes from the `sha-<7>`
+# tag, which only 200's tag-images job creates, and verify_signed_digest.sh also requires the revision label to be
+# the commit; see the rehearsal comment in 200-build-images.yml.
 # Output: digest, build_commit, run_ids (space separated ids of the 200 runs of that commit), tag.
 set -euo pipefail
 

@@ -28,6 +28,8 @@ name: "200 · Build Container Images"
 # (Actions, Re-run failed jobs; the build jobs and their outputs are kept). It verifies every digest again and then
 # repeats `imagetools create`, which gives a tag the digest it already has without error, so nothing is duplicated.
 # Do not re-run the whole workflow for this: that rebuilds everything under a new run id.
+# The *-latest tags only ever move to the tip of the default branch: a re-run of a superseded run (or a run that a
+# newer push overtook) attaches its sha tags and leaves *-latest alone, so `*-latest` cannot move backwards.
 #
 # Signing (TODO.md T-703). Once an image has passed its gates, the build job
 # signs the digest with cosign — keyless, under this workflow's OIDC identity
@@ -57,11 +59,13 @@ on:
     inputs:
       rehearsal:
         description: >-
-          Rehearse without publishing, before DOCKERHUB_ENABLED is switched on. One job runs:
-          the Docker Hub login (proves the OIDC connection's ruleset and its Image Push scope by
-          pushing an empty labelled image BY DIGEST ONLY, main branch only, then has Docker
-          Scout analyse it with the same call the real build uses). No product image is built
-          and nothing is tagged or signed.
+          Rehearse without publishing, before DOCKERHUB_ENABLED is switched on (main branch only). One job
+          runs: the Docker Hub login, a throwaway labelled image pushed BY DIGEST with provenance, Docker
+          Scout on it (the same call the real build uses), then it is SIGNED and ATTESTED and VERIFIED with
+          the real scripts under the production workflow identity, and given ONE tag, rehearsal-<run id>.
+          It leaves that image, its signature artifacts and that tag on Docker Hub and writes entries to
+          the public Sigstore transparency logs, which cannot be removed. No product image is built, no
+          sha or latest tag is touched, and nothing is deleted.
         type: boolean
         default: false
 
@@ -75,8 +79,11 @@ on:
 # Dependabot merges costs at most one superseded full build, and runs finish in
 # push order (the queued run starts only after the in-flight one completes), so
 # `*-latest` can never move backwards.
+#
+# A rehearsal has a concurrency group of its own (the last part of the name): in the group of the real
+# builds it would take the "newest queued run" place and cancel a pending real build.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.rehearsal && 'rehearsal' || 'build' }}
   cancel-in-progress: false
 
 env:
@@ -535,6 +542,9 @@ jobs:
           # (the builder of its provenance).
           EXPECTED_REVISION: ${{ github.sha }}
           EXPECTED_RUN_IDS: ${{ github.run_id }}
+          # The tip of the default branch decides whether this run may move the *-latest tags.
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
           IMAGE="docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}"
@@ -596,19 +606,46 @@ jobs:
             exit 1
           fi
 
+          # *-latest must never move backwards. Only the tip of the default branch may move it: a run of an
+          # older commit (a re-run of a superseded run, or a run overtaken by a newer push while it was building)
+          # attaches its immutable sha tags and leaves every *-latest tag alone; the run of the tip owns them. If
+          # the tip cannot be read, nothing is tagged.
+          TIP="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${DEFAULT_BRANCH}" --jq .sha)" || TIP=""
+          if ! [[ "$TIP" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Could not read the tip of ${DEFAULT_BRANCH} (got '${TIP}'), so it is not known whether this commit may move the *-latest tags; refusing to tag anything."
+            exit 1
+          fi
+          MOVE_LATEST=yes
+          if [ "$TIP" != "$GITHUB_SHA" ]; then
+            MOVE_LATEST=no
+            echo "::warning::${GITHUB_SHA} is not the tip of ${DEFAULT_BRANCH} (${TIP}); its sha tags are attached and the *-latest tags are NOT moved."
+          fi
+
           # The record is written BEFORE the first tag moves, so a failure part-way through the loop still
           # leaves it. Without the closing line below, tagging did not finish: re-run this job.
-          write_table "Verified; tagging in progress (no 'All five components tagged' line below means it stopped part-way: re-run this job)"
+          write_table "Verified; tagging in progress (no closing line below means it stopped part-way: re-run this job)"
+          if [ "$MOVE_LATEST" = no ]; then
+            echo "The *-latest tags will NOT be moved: this commit is not the tip of ${DEFAULT_BRANCH} (${TIP})." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
           for c in $COMPONENTS; do
             ARGS=()
             while IFS= read -r t; do
+              name="${t##*:}"
+              if [ "$MOVE_LATEST" = no ] && { [ "$name" = latest ] || [[ "$name" == *-latest ]]; }; then
+                echo "Not moving ${t}: this commit is not the tip of ${DEFAULT_BRANCH}."
+                continue
+              fi
               [ -n "$t" ] && ARGS+=(-t "$t")
             done < <(jq -r '.[]' <<< "${TAGS[$c]}")
             echo "Tagging ${c}: ${IMAGE}@${DIGESTS[$c]} ->" "${ARGS[@]}"
             docker buildx imagetools create "${ARGS[@]}" "${IMAGE}@${DIGESTS[$c]}"
           done
-          echo "### All five components tagged" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$MOVE_LATEST" = yes ]; then
+            echo "### All five components tagged" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Sha tags attached; the *-latest tags were not moved (this commit is not the tip of ${DEFAULT_BRANCH})" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   # Dry run of the Docker Hub OIDC connection (workflow_dispatch with `rehearsal`, main only). It does
   # not need DOCKERHUB_ENABLED, so it can prove the connection before publishing is switched on:
@@ -634,6 +671,15 @@ jobs:
   #      `imagetools create` does to a signed index. That tag matches none of 370's patterns, so nothing prunes
   #      it: remove it, the untagged digest and cosign's signature/attestation artifacts by hand on Docker Hub if you
   #      do not want them. This job deletes nothing; it created only those objects.
+  # Residual facts of a rehearsal. (a) It signs under the PRODUCTION identity,
+  # 200-build-images.yml@refs/heads/main, so its digest is indistinguishable from a real one by identity alone;
+  # what marks it is the label rehearsal=true, a builder run with no tag-images job, and the absence of any
+  # `sha-<7>` tag. (b) Sigstore transparency-log entries cannot be removed. (c) Its run id is a run of the commit
+  # that scripts/ci/find_release_image.sh passes to 310 as an acceptable builder (EXPECTED_RUN_IDS). That is
+  # accepted: 310 promotes only the digest named by the `sha-<7>` tag, which only tag-images creates, and it also
+  # requires the image's revision label to equal the commit; a rehearsal digest could be promoted only by someone
+  # who can already write tags to this registry repository, and every tag already rests on that trust.
+  # (d) The rehearsal runs in its own concurrency group.
   # What the rehearsal cannot cover: the five real images and their digest hand-over between jobs, the
   # revision label that docker/metadata-action puts on the real images (here it is set by hand), the digest
   # table and the verify-before-tag gate of tag-images, and 310. It never touches `latest` or any `*-sha-*` tag and
@@ -665,7 +711,7 @@ jobs:
             exit 1
           fi
           if ! [[ "$CONNECTION" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
-            echo "::error::DOCKERHUB_CONNECTION must be the Docker Hub OIDC connection id, a UUID (got '${CONNECTION}'). Set it with: gh variable set DOCKERHUB_CONNECTION --body <connection id>."
+            echo "::error::DOCKERHUB_CONNECTION must be the Docker Hub OIDC connection id, a UUID of 36 characters (the variable is ${#CONNECTION} characters long; its value is not printed). Set it with: gh variable set DOCKERHUB_CONNECTION --body <connection id>."
             exit 1
           fi
 

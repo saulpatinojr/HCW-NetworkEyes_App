@@ -11,11 +11,15 @@
 # applies before it moves `latest`. So this workflow never builds, never pushes layers and never touches `latest`
 # (200 owns it, after the scan).
 #
-# THE FIVE DIGESTS. Only the CLI image gets the `<version>` tag. The release notes list the digest of all five
-# images of that build (CLI, api, worker, web, migrator), each resolved from its own `sha-<7>` tag and verified the
-# same way as the CLI digest (scripts/ci/release_digests.sh), so the notes are the permanent record of what the
-# release is made of. The four others stay pullable by that digest only while a tag keeps them: 370 keeps the newest
-# KEEP_COUNT `<component>-sha-<7>` tags per component and deletes older ones. See CLAUDE.md.
+# THE FIVE DIGESTS. The release notes list the digest of all five images of that build (CLI, api, worker, web,
+# migrator), each resolved from its own `sha-<7>` tag and verified the same way as the CLI digest
+# (scripts/ci/release_digests.sh). The release job then gives each of the five a version tag: `X.Y.Z` for the CLI
+# image and `api-X.Y.Z`, `worker-X.Y.Z`, `web-X.Y.Z`, `migrator-X.Y.Z` for the others. Those tags match none of
+# 370's SHA patterns, so they are never pruned and 370 keeps the sha tags that share an image with them: a released
+# image stays pullable by tag and by digest. Hub tag names are plain names; the OIDC ruleset for `refs/tags/v*`
+# below is about the GitHub ref of this run, and its one Image Push scope on the repository covers all five tags
+# (the release job has no other registry credential than that login). Every tag is checked before any is created,
+# and an existing tag with another digest stops the release (fail closed); a re-run skips tags already correct.
 #
 # WHICH COMMIT TO TAG. A commit that changes only documentation, tests or another workflow touches nothing 200 builds
 # from, so the path filter gives it no 200 run. The search therefore walks back from the tagged commit to the nearest
@@ -182,7 +186,7 @@ jobs:
             echo "- image found: \`${REGISTRY}/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}:${SHA_TAG}\`"
             echo "- built from commit: \`${BUILD_COMMIT}\`"
             echo "- signature, provenance and revision label of all five images: verified"
-            echo "- a pushed \`vX.Y.Z\` tag would add the tag \`X.Y.Z\` to the CLI digest"
+            echo "- a pushed \`vX.Y.Z\` tag would add the tags \`X.Y.Z\` (CLI), \`api-X.Y.Z\`, \`worker-X.Y.Z\`, \`web-X.Y.Z\` and \`migrator-X.Y.Z\`"
             echo ""
             echo "| Component | Tag | Digest |"
             echo "| --- | --- | --- |"
@@ -243,43 +247,77 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ vars.DOCKERHUB_NAMESPACE }}
 
-      - name: Promote the digest to the release tag
+      # Version tags for all five images of the verified build: `X.Y.Z` for the CLI image and `<component>-X.Y.Z`
+      # for api, worker, web and migrator. They are outside the SHA patterns, so 370 never prunes them and keeps
+      # the sha tags that share an image with them. Phase 1 checks every tag before anything is written, so a
+      # tag that already points at another digest stops the release before it creates any tag; phase 2 creates the
+      # missing ones and reads each back. A re-run after a partial failure repeats phase 1, skips what is done
+      # and creates the rest.
+      - name: Promote the digests to the release tags
         id: promote
         env:
           VERSION: ${{ steps.version.outputs.VERSION }}
-          DIGEST: ${{ needs.verify.outputs.digest }}
+          DIGEST_CLI: ${{ needs.verify.outputs.digest }}
+          DIGEST_API: ${{ needs.verify.outputs.digest_api }}
+          DIGEST_WORKER: ${{ needs.verify.outputs.digest_worker }}
+          DIGEST_WEB: ${{ needs.verify.outputs.digest_web }}
+          DIGEST_MIGRATOR: ${{ needs.verify.outputs.digest_migrator }}
         run: |
           set -euo pipefail
           # shellcheck source=scripts/ci/registry_digest.sh
           source scripts/ci/registry_digest.sh
           IMAGE="${REGISTRY}/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}"
-          # A release tag is immutable: refuse to move it to another digest. "Not found" and "could not ask" are
-          # different answers: only the first lets the tag be created.
-          rc=0
-          EXISTING="$(registry_digest "${IMAGE}:${VERSION}")" || rc=$?
-          case "$rc" in
-            0)
-              if [ "$EXISTING" = "$DIGEST" ]; then
-                echo "${IMAGE}:${VERSION} already points at ${DIGEST}; nothing to do."
-                exit 0
-              fi
-              echo "::error::${IMAGE}:${VERSION} already exists with digest ${EXISTING}, not ${DIGEST}; a release tag is never moved."
+          declare -A DIGESTS=(
+            [cli]="$DIGEST_CLI" [api]="$DIGEST_API" [worker]="$DIGEST_WORKER"
+            [web]="$DIGEST_WEB" [migrator]="$DIGEST_MIGRATOR"
+          )
+          declare -A TAGS=(
+            [cli]="${VERSION}" [api]="api-${VERSION}" [worker]="worker-${VERSION}"
+            [web]="web-${VERSION}" [migrator]="migrator-${VERSION}"
+          )
+          COMPONENTS="cli api worker web migrator"
+          for c in $COMPONENTS; do
+            if ! [[ "${DIGESTS[$c]}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::No valid digest for '${c}' (got '${DIGESTS[$c]}'); refusing to create any release tag."
               exit 1
-              ;;
-            1) ;;
-            *)
-              echo "::error::Could not check whether ${IMAGE}:${VERSION} exists (the registry's message is above); refusing to create a release tag blind."
+            fi
+          done
+
+          # Phase 1. A release tag is immutable: refuse to move it to another digest. "Not found" and "could not
+          # ask" are different answers: only the first lets the tag be created.
+          declare -A MISSING=()
+          for c in $COMPONENTS; do
+            rc=0
+            EXISTING="$(registry_digest "${IMAGE}:${TAGS[$c]}")" || rc=$?
+            case "$rc" in
+              0)
+                if [ "$EXISTING" = "${DIGESTS[$c]}" ]; then
+                  echo "${IMAGE}:${TAGS[$c]} already points at ${DIGESTS[$c]}; nothing to do."
+                else
+                  echo "::error::${IMAGE}:${TAGS[$c]} already exists with digest ${EXISTING}, not ${DIGESTS[$c]}; a release tag is never moved. No release tag was created by this run."
+                  exit 1
+                fi
+                ;;
+              1) MISSING[$c]=yes ;;
+              *)
+                echo "::error::Could not check whether ${IMAGE}:${TAGS[$c]} exists (the registry's message is above); refusing to create a release tag blind."
+                exit 1
+                ;;
+            esac
+          done
+
+          # Phase 2.
+          for c in $COMPONENTS; do
+            [ -n "${MISSING[$c]:-}" ] || continue
+            docker buildx imagetools create -t "${IMAGE}:${TAGS[$c]}" "${IMAGE}@${DIGESTS[$c]}"
+            rc=0
+            AFTER="$(registry_digest "${IMAGE}:${TAGS[$c]}")" || rc=$?
+            if [ "$rc" -ne 0 ] || [ "$AFTER" != "${DIGESTS[$c]}" ]; then
+              echo "::error::After creating it, ${IMAGE}:${TAGS[$c]} resolves to '${AFTER:-nothing}' (check status ${rc}), expected ${DIGESTS[$c]}. Delete that tag on Docker Hub (Repository, Tags) before re-running: a re-run refuses to move an existing tag."
               exit 1
-              ;;
-          esac
-          docker buildx imagetools create -t "${IMAGE}:${VERSION}" "${IMAGE}@${DIGEST}"
-          rc=0
-          AFTER="$(registry_digest "${IMAGE}:${VERSION}")" || rc=$?
-          if [ "$rc" -ne 0 ] || [ "$AFTER" != "$DIGEST" ]; then
-            echo "::error::After creating it, ${IMAGE}:${VERSION} resolves to '${AFTER:-nothing}' (check status ${rc}), expected ${DIGEST}. Delete that tag on Docker Hub (Repository, Tags) before re-running: a re-run refuses to move an existing tag."
-            exit 1
-          fi
-          echo "Promoted ${IMAGE}@${DIGEST} to ${IMAGE}:${VERSION}"
+            fi
+            echo "Promoted ${IMAGE}@${DIGESTS[$c]} to ${IMAGE}:${TAGS[$c]}"
+          done
 
       - name: What to check if the Docker Hub login or the promotion failed
         if: failure() && (steps.login.outcome == 'failure' || steps.promote.outcome == 'failure')
@@ -311,20 +349,19 @@ jobs:
 
             All five images were built from commit `${{ needs.verify.outputs.build_commit }}` by `200-build-images.yml`. Each digest below was
             checked before this release was created: signed and attested by that workflow (cosign, keyless), built by one of its runs for that
-            commit, and carrying that commit as its `org.opencontainers.image.revision` label. Only the CLI image gets the version tag
-            `${{ steps.version.outputs.VERSION }}`; the other four are identified by digest. Pull by digest and verify the signature before you run an image.
+            commit, and carrying that commit as its `org.opencontainers.image.revision` label. Each image has a version tag that
+            `370-registry-cleanup.yml` never prunes. Pull by digest and verify the signature before you run an image.
 
-            | Component | Tag at build time | Digest |
-            | --- | --- | --- |
-            | cli | `${{ needs.verify.outputs.tag }}`, `${{ steps.version.outputs.VERSION }}` | `${{ needs.verify.outputs.digest }}` |
-            | api | `api-${{ needs.verify.outputs.tag }}` | `${{ needs.verify.outputs.digest_api }}` |
-            | worker | `worker-${{ needs.verify.outputs.tag }}` | `${{ needs.verify.outputs.digest_worker }}` |
-            | web | `web-${{ needs.verify.outputs.tag }}` | `${{ needs.verify.outputs.digest_web }}` |
-            | migrator | `migrator-${{ needs.verify.outputs.tag }}` | `${{ needs.verify.outputs.digest_migrator }}` |
+            | Component | Version tag | Tag at build time | Digest |
+            | --- | --- | --- | --- |
+            | cli | `${{ steps.version.outputs.VERSION }}` | `${{ needs.verify.outputs.tag }}` | `${{ needs.verify.outputs.digest }}` |
+            | api | `api-${{ steps.version.outputs.VERSION }}` | `api-${{ needs.verify.outputs.tag }}` | `${{ needs.verify.outputs.digest_api }}` |
+            | worker | `worker-${{ steps.version.outputs.VERSION }}` | `worker-${{ needs.verify.outputs.tag }}` | `${{ needs.verify.outputs.digest_worker }}` |
+            | web | `web-${{ steps.version.outputs.VERSION }}` | `web-${{ needs.verify.outputs.tag }}` | `${{ needs.verify.outputs.digest_web }}` |
+            | migrator | `migrator-${{ steps.version.outputs.VERSION }}` | `migrator-${{ needs.verify.outputs.tag }}` | `${{ needs.verify.outputs.digest_migrator }}` |
 
-            Registry retention: the version tag is permanent. The `<component>-sha-<7>` tags of the other four images are pruned by
-            `370-registry-cleanup.yml` after the newest 10 builds per component, and a digest no tag points to may then be removed by
-            Docker Hub, so deploy from the digest soon after the release or keep your own copy of the image.
+            Registry retention: the version tags are permanent. The build-time `sha` tags are pruned after the newest 10 builds per
+            component, except those that share an image with a version tag, so a released image stays pullable by tag and by digest.
 
             ### Verify before you run
 

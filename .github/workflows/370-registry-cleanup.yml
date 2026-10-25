@@ -5,23 +5,25 @@ name: "370 · Docker Hub Registry Cleanup"
 # accumulate unbounded with nothing ever deleting them.
 #
 # Retention: for each component, keep the newest KEEP_COUNT SHA tags, plus
-# the *-latest tag (never touched). Everything else older than that is deleted.
+# the *-latest tags (never touched). Everything else older than that is deleted.
 # Nothing is read from the repository: the newest build is always among the newest KEEP_COUNT tags of its
-# component, so a rollback source needs no extra protection. A release tag (`1.2.3`, from 310) matches none of the
-# patterns below and is never listed for deletion.
+# component, so a rollback source needs no extra protection.
 #
-# What this does NOT protect: a consumer that pins an image by digest and whose `<component>-sha-<7>` tag has aged
-# out (more than KEEP_COUNT builds of that component since). Docker Hub may remove a digest no tag points to
-# (whether and when it does was not checked against its documentation), and cosign signatures are referrers of the
-# digest, so the pin could stop resolving. Only the CLI image has a release tag, and the 310 release notes list
-# the digests of all five images. A consumer that needs an older web, api, worker or migrator image should copy it
-# to its own registry at the time it adopts it, or raise KEEP_COUNT here (the cost is Docker Hub storage).
+# Release tags. 310 gives each of the five images of a released build a version tag: `X.Y.Z` (the CLI image) and
+# `api-X.Y.Z`, `worker-X.Y.Z`, `web-X.Y.Z`, `migrator-X.Y.Z`. They match none of the SHA patterns below, so they are
+# never listed for deletion, and a `<component>-sha-<7>` tag is also KEPT when an image of it is shared with any
+# tag outside the SHA patterns (the version tags, the `*-latest` tags). The comparison uses the digests Docker Hub
+# lists for each tag (the tag's own `digest` and every `images[].digest`); a SHA tag that lists no digest at all is
+# kept too, because sharing cannot be ruled out. So deleting a SHA tag can never be what removes the manifest of
+# a released build. cosign's referrer tags (`sha256-<hex>`) are not part of that comparison: they point at signature
+# manifests, never at an image, and there can be thousands of them.
 #
-# A `<component>-sha-<7>` tag is also KEPT when an image of it is shared with a tag outside the SHA patterns. A
-# release tag (`1.2.3`, from 310, which tags the very index 200 built) and every `*-latest` tag are such tags, and so
-# is any future `<component>-<version>` tag. The comparison uses the digests Docker Hub lists for each tag (the
-# tag's own `digest` and every `images[].digest`); a SHA tag that lists no digest at all is kept too, because
-# sharing cannot be ruled out. So deleting a SHA tag can never be what removes the manifest of a release.
+# What this does NOT protect: a consumer that pins an image by digest taken from a build that was never released,
+# once its `<component>-sha-<7>` tag has aged out (more than KEEP_COUNT builds of that component since). Docker Hub
+# may remove a digest no tag points to (whether and when it does was not checked against its documentation), and
+# cosign signatures are referrers of the digest, so the pin could stop resolving. A consumer that needs an image of
+# an unreleased build should copy it to its own registry at the time it adopts it, or raise KEEP_COUNT here (the cost
+# is Docker Hub storage). A release made before 310 tagged all five images covers only its CLI image.
 #
 # Not verified: Docker Hub's semantics of `DELETE .../tags/<tag>/` when another tag points at the same manifest. The
 # current Hub API reference (https://docs.docker.com/reference/api/hub/latest/, OpenAPI file
@@ -179,12 +181,17 @@ jobs:
           TOTAL=$(jq 'length' "$ALL_TAGS_JSON")
           echo "Fetched $TOTAL total tags from Docker Hub."
 
-          # Every digest that a tag OUTSIDE the SHA patterns points to (release tags, *-latest, signature
-          # referrer tags, any future <component>-<version> tag).
+          # Every digest that a tag OUTSIDE the SHA patterns points to (version tags, *-latest), as an object
+          # {"sha256:...": true} in a FILE. It is never passed as an argument: cosign's referrer tags
+          # (sha256-<hex>, never pruned, TODO.md T-718) make the tag list grow without bound, and one argument
+          # over 128 KiB ends the job with "Argument list too long". Referrer tags are left out of the set.
           PATTERNS_JSON=$(printf '%s\n' "${COMPONENT_PATTERNS[@]}" | jq -R . | jq -sc .)
-          PERMANENT_JSON=$(jq -c --argjson pats "$PATTERNS_JSON" \
-            '[.[] | select((.name as $n | any($pats[]; . as $p | $n | test($p))) | not) | .digests[]] | unique' \
-            "$ALL_TAGS_JSON")
+          PERMANENT_FILE=$(mktemp)
+          jq -c --argjson pats "$PATTERNS_JSON" \
+            '[.[] | select((.name as $n | any($pats[]; . as $p | $n | test($p))) | not)
+                  | select(.name | test("^sha256-[0-9a-f]{64}([.](sig|att|sbom))?$") | not)
+                  | .digests[]] | unique | map({(.): true}) | add // {}' \
+            "$ALL_TAGS_JSON" > "$PERMANENT_FILE"
 
           DELETED=0
           FAILED=0
@@ -195,9 +202,9 @@ jobs:
             pattern="${COMPONENT_PATTERNS[$component]}"
             # Newest-first rows "<tag><TAB><own|shared|unknown>" for this component's SHA pattern: `shared` when one
             # of the tag's digests is also a digest of a tag outside the patterns, `unknown` when Hub lists none.
-            mapfile -t rows < <(jq -r --arg pat "$pattern" --argjson perm "$PERMANENT_JSON" \
+            mapfile -t rows < <(jq -r --arg pat "$pattern" --slurpfile perm "$PERMANENT_FILE" \
               '[.[] | select(.name | test($pat))] | sort_by(.last_updated) | reverse | .[]
-               | [.name, (if (.digests | length) == 0 then "unknown" elif (.digests | any(. as $d | $perm | index($d) != null)) then "shared" else "own" end)]
+               | [.name, (if (.digests | length) == 0 then "unknown" elif (.digests | any(. as $d | $perm[0][$d] == true)) then "shared" else "own" end)]
                | @tsv' \
               "$ALL_TAGS_JSON")
 
