@@ -18,8 +18,8 @@ overview, and `TODO.md` is the work queue.
 
 - **Product code:** `apps/cna-web` (Next.js), `apps/cna-api` and `apps/cna-worker` (Python), the `cna` package, and
   `packages/cna-azure-network-engine`. Deployment is not done here: the Azure and AWS appliance repositories deploy the
-  images this repository builds. A change to the image tags, the build manifest, the `cna-image-published` dispatch or
-  the runtime environment settings changes both appliances; `CLAUDE.md` explains how to mirror it.
+  images this repository builds. A change to the image tags, the signing identity or
+  the runtime environment settings changes what consumers rely on; `CLAUDE.md` explains how to record it.
 - **Documents:** the repository keeps `README.md`, `CHANGELOG.md`, `REVIEW.md` and `TODO.md` (plus `CLAUDE.md`, and two
   temporary working documents). `scripts/validate_documentation_model.py` fails the build on any other markdown file.
   Long-form documentation goes to the GitHub Wiki. The only exception is the community files GitHub itself reads from
