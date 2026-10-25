@@ -24,9 +24,9 @@ const FULL_SHA = "abc1234" + "0".repeat(33);
 
 describe("parseImageReference", () => {
   it("parses the contract's web image reference", () => {
-    expect(parseImageReference("docker.io/acme/cna:web-sha-abc1234")).toEqual({
+    expect(parseImageReference("docker.io/acme/img-ne-appliance-app:web-sha-abc1234")).toEqual({
       registry: "docker.io",
-      repository: "acme/cna",
+      repository: "acme/img-ne-appliance-app",
       tag: "web-sha-abc1234",
       digest: "",
     });
@@ -34,20 +34,20 @@ describe("parseImageReference", () => {
 
   it("parses the appliances' pinned tag@digest form and keeps the component tag", () => {
     const digest = "sha256:" + "ab".repeat(32);
-    expect(parseImageReference(`docker.io/acme/cna:web-sha-abc1234@${digest}`)).toEqual({
+    expect(parseImageReference(`docker.io/acme/img-ne-appliance-app:web-sha-abc1234@${digest}`)).toEqual({
       registry: "docker.io",
-      repository: "acme/cna",
+      repository: "acme/img-ne-appliance-app",
       tag: "web-sha-abc1234",
       digest,
     });
-    expect(parseImageReference(`docker.io/acme/cna@${digest}`)?.tag).toBe("");
-    expect(parseImageReference("docker.io/acme/cna:web-sha-abc1234@sha256:abc")).toBeNull();
+    expect(parseImageReference(`docker.io/acme/img-ne-appliance-app@${digest}`)?.tag).toBe("");
+    expect(parseImageReference("docker.io/acme/img-ne-appliance-app:web-sha-abc1234@sha256:abc")).toBeNull();
   });
 
   it("defaults registry and tag the way docker does", () => {
-    expect(parseImageReference("acme/cna")).toEqual({
+    expect(parseImageReference("acme/img-ne-appliance-app")).toEqual({
       registry: "docker.io",
-      repository: "acme/cna",
+      repository: "acme/img-ne-appliance-app",
       tag: "latest",
       digest: "",
     });
@@ -55,10 +55,10 @@ describe("parseImageReference", () => {
   });
 
   it("keeps other registries and ports", () => {
-    expect(parseImageReference("ghcr.io/acme/cna:api-latest")?.registry).toBe("ghcr.io");
-    expect(parseImageReference("localhost:5000/cna:web-latest")).toEqual({
+    expect(parseImageReference("ghcr.io/acme/img-ne-appliance-app:api-latest")?.registry).toBe("ghcr.io");
+    expect(parseImageReference("localhost:5000/img-ne-appliance-app:web-latest")).toEqual({
       registry: "localhost:5000",
-      repository: "cna",
+      repository: "img-ne-appliance-app",
       tag: "web-latest",
       digest: "",
     });
@@ -66,16 +66,16 @@ describe("parseImageReference", () => {
 
   it("accepts digest references and rejects garbage", () => {
     const digest = `sha256:${"a".repeat(64)}`;
-    expect(parseImageReference(`docker.io/acme/cna@${digest}`)).toEqual({
+    expect(parseImageReference(`docker.io/acme/img-ne-appliance-app@${digest}`)).toEqual({
       registry: "docker.io",
-      repository: "acme/cna",
+      repository: "acme/img-ne-appliance-app",
       tag: "",
       digest,
     });
     expect(parseImageReference("")).toBeNull();
     expect(parseImageReference("   ")).toBeNull();
-    expect(parseImageReference("acme/cna:bad tag")).toBeNull();
-    expect(parseImageReference("acme/cna@sha256:short")).toBeNull();
+    expect(parseImageReference("acme/img-ne-appliance-app:bad tag")).toBeNull();
+    expect(parseImageReference("acme/img-ne-appliance-app@sha256:short")).toBeNull();
   });
 });
 
@@ -161,22 +161,22 @@ describe("registry auth", () => {
 
   it("parses a bearer challenge and builds the token url", () => {
     const challenge = parseBearerChallenge(
-      'Bearer realm="https://auth.docker.io/token",service="registry.docker.io",scope="repository:acme/cna:pull"',
+      'Bearer realm="https://auth.docker.io/token",service="registry.docker.io",scope="repository:acme/img-ne-appliance-app:pull"',
     );
     expect(challenge).toEqual({
       realm: "https://auth.docker.io/token",
       service: "registry.docker.io",
-      scope: "repository:acme/cna:pull",
+      scope: "repository:acme/img-ne-appliance-app:pull",
     });
-    expect(tokenUrlFor(challenge!, pullScopeFor("acme/cna"))).toBe(
-      "https://auth.docker.io/token?service=registry.docker.io&scope=repository%3Aacme%2Fcna%3Apull",
+    expect(tokenUrlFor(challenge!, pullScopeFor("acme/img-ne-appliance-app"))).toBe(
+      "https://auth.docker.io/token?service=registry.docker.io&scope=repository%3Aacme%2Fimg-ne-appliance-app%3Apull",
     );
   });
 
   it("uses the pull scope when the challenge carries none", () => {
     const challenge = parseBearerChallenge('Bearer realm="https://ghcr.io/token"');
-    expect(tokenUrlFor(challenge!, pullScopeFor("acme/cna"))).toBe(
-      "https://ghcr.io/token?scope=repository%3Aacme%2Fcna%3Apull",
+    expect(tokenUrlFor(challenge!, pullScopeFor("acme/img-ne-appliance-app"))).toBe(
+      "https://ghcr.io/token?scope=repository%3Aacme%2Fimg-ne-appliance-app%3Apull",
     );
     expect(parseBearerChallenge("Basic realm=x")).toBeNull();
     expect(parseBearerChallenge(null)).toBeNull();
