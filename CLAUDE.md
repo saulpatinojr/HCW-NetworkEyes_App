@@ -123,10 +123,12 @@ or record a `TODO.md` item naming them — never leave one side implied.
 - **TypeScript runs side by side in `apps/cna-web`.** `typescript` is the alias `npm:@typescript/typescript6` (the
   TypeScript 6 API that eslint, typescript-eslint and Next.js import) and `@typescript/native` is `npm:typescript@^7`
   (the `tsc` that `npm run typecheck` runs). Never change `typescript` to a plain 7.x: TypeScript 7 has no
-  programmatic API until 7.1 and typescript-eslint cannot load against it (Dependabot #209). Dependabot ignores
-  `typescript`; `lib/typescript-toolchain.test.ts` fails first if the pairing breaks, and the non-blocking
-  `typescript-canary` job in `300-test-codebase.yml` shows how the newest TypeScript behaves. The rule ends when
-  typescript-eslint supports the 7.1 API (`TODO.md` T-731).
+  programmatic API until 7.1 and typescript-eslint cannot load against it (Dependabot #209). Dependabot does not track
+  either alias, so no ignore rule exists; `lib/typescript-toolchain.test.ts` fails first if the pairing breaks, and the
+  same file fails when typescript-eslint starts accepting TypeScript 7.1, which is the cue to finish `TODO.md` T-731.
+  The non-blocking `typescript-canary` job in `300-test-codebase.yml` shows how the newest TypeScript behaves.
+  `@tanstack/react-table` is on version 9 (`useTable` and `tableFeatures`, not `useReactTable`); do not use its
+  deprecated `/legacy` entry point.
 - **Workflows are numbered in bands** (`000` bootstrap, `100` validation, `200`
   build/deploy, `300` test/release/ops). Numbers are stable across core and
   both appliances; never renumber, reference by filename. The core owns `200`,
