@@ -31,6 +31,10 @@ concurrency:
 
 env:
   DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
+  # The one repository this workflow prunes: the repository 200-build-images.yml publishes to
+  # (same name, same convention `img-<short name>-<job>-<type>`; tests/security/test_image_repository_name.py
+  # keeps the two equal). Never point this at the retired `cna` repository: it holds a different image.
+  IMAGE_REPOSITORY: img-ne-appliance-app
   KEEP_COUNT: 10
 
 jobs:
@@ -51,10 +55,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      - name: Validate Docker Hub namespace
+      - name: Validate Docker Hub namespace and repository
         run: |
           if [ -z "$DOCKERHUB_NAMESPACE" ]; then
             echo "::error::DOCKERHUB_NAMESPACE variable is required."
+            exit 1
+          fi
+          if [ -z "$IMAGE_REPOSITORY" ]; then
+            echo "::error::IMAGE_REPOSITORY is empty; refusing to guess which repository to prune."
             exit 1
           fi
 
@@ -69,7 +77,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          REPO="cna"
           KEEP="${KEEP_COUNT}"
 
           # Tags that must never be deleted regardless of age.
@@ -77,9 +84,23 @@ jobs:
 
           # The SHA currently recorded as deployed — extra safety net beyond
           # KEEP_COUNT so a slow rollout never loses its source image mid-flight.
+          # Only the manifest entries of THIS repository count: the manifest names each image
+          # `docker.io/<namespace>/<repository>:<tag>` (200-build-images.yml, `Write build manifest`),
+          # so the filter below is built from the same namespace and IMAGE_REPOSITORY. Entries of any
+          # other repository (the manifest committed before the rename names the retired one until the
+          # first build rewrites it) protect nothing here and are reported, not guessed at.
+          MANIFEST_PREFIX="docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}:"
           PROTECTED_DEPLOYED=""
           if [ -f .deployment-catalog/latest-build.json ]; then
-            PROTECTED_DEPLOYED=$(jq -r '.images | to_entries[] | .value | split(":")[-1]' .deployment-catalog/latest-build.json)
+            PROTECTED_DEPLOYED=$(jq -r --arg prefix "$MANIFEST_PREFIX" \
+              '.images | to_entries[] | .value | select(startswith($prefix)) | ltrimstr($prefix)' \
+              .deployment-catalog/latest-build.json)
+            FOREIGN=$(jq -r --arg prefix "$MANIFEST_PREFIX" \
+              '[.images | to_entries[] | .value | select(startswith($prefix) | not)] | length' \
+              .deployment-catalog/latest-build.json)
+            if [ "$FOREIGN" -gt 0 ]; then
+              echo "::notice::${FOREIGN} manifest image(s) name a repository other than ${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}; they protect no tag here. The next 200-build-images.yml run rewrites the manifest."
+            fi
           fi
 
           echo "Protected (raw): $PROTECTED_RAW"
@@ -140,7 +161,7 @@ jobs:
           # Fetch the full tag list once (paginated), newest first.
           ALL_TAGS_JSON=$(mktemp)
           echo "[]" > "$ALL_TAGS_JSON"
-          URL="https://hub.docker.com/v2/repositories/${DOCKERHUB_NAMESPACE}/${REPO}/tags/?page_size=100&ordering=-last_updated"
+          URL="https://hub.docker.com/v2/repositories/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}/tags/?page_size=100&ordering=-last_updated"
           while [ -n "$URL" ] && [ "$URL" != "null" ]; do
             PAGE_RESPONSE=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer ${TOKEN}" "$URL")
             PAGE_STATUS=$(tail -n1 <<<"$PAGE_RESPONSE")
@@ -196,7 +217,7 @@ jobs:
                 # run can start getting 401s; those must fail the job, not read as "deleted".
                 STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
                   -H "Authorization: Bearer ${TOKEN}" \
-                  "https://hub.docker.com/v2/repositories/${DOCKERHUB_NAMESPACE}/${REPO}/tags/${tag}/" || echo 000)
+                  "https://hub.docker.com/v2/repositories/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}/tags/${tag}/" || echo 000)
                 case "$STATUS" in
                   200|202|204) echo "  -> HTTP $STATUS"; DELETED=$((DELETED + 1)) ;;
                   404) echo "  -> HTTP 404 (already gone)" ;;

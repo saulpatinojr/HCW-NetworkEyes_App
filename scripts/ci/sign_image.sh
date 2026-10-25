@@ -4,7 +4,11 @@
 # passed Docker Scout (and, for web, the smoke test) — always by digest, never
 # by tag:
 #
-#   scripts/ci/sign_image.sh docker.io/<namespace>/cna@sha256:<64>
+#   IMAGE_REPOSITORY=<repository> scripts/ci/sign_image.sh docker.io/<namespace>/<repository>@sha256:<64>
+#
+# IMAGE_REPOSITORY is the one repository this repository publishes to. The workflow
+# defines it once (its workflow-level `env`) and this script only checks the reference
+# against it, so a digest of any other repository is refused and no name is written here.
 #
 # Keyless: cosign obtains a short-lived certificate from Fulcio for this
 # workflow run's OIDC identity (the job needs `id-token: write`) and records the
@@ -25,8 +29,13 @@
 set -euo pipefail
 
 REF="${1:-}"
-if ! [[ "$REF" =~ ^docker\.io/[a-z0-9][a-z0-9._-]*/cna@sha256:[0-9a-f]{64}$ ]]; then
-  echo "::error::sign_image.sh expects a digest reference docker.io/<namespace>/cna@sha256:<64> (got '${REF}')." >&2
+# The name is spliced into a regular expression below, so it must be plain repository characters.
+if ! [[ "${IMAGE_REPOSITORY:-}" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
+  echo "::error::IMAGE_REPOSITORY must name the Docker Hub repository (lowercase letters, digits and hyphens; got '${IMAGE_REPOSITORY:-}')." >&2
+  exit 1
+fi
+if ! [[ "$REF" =~ ^docker\.io/[a-z0-9][a-z0-9._-]*/${IMAGE_REPOSITORY}@sha256:[0-9a-f]{64}$ ]]; then
+  echo "::error::sign_image.sh expects a digest reference docker.io/<namespace>/${IMAGE_REPOSITORY}@sha256:<64> (got '${REF}')." >&2
   exit 1
 fi
 for v in GITHUB_SERVER_URL GITHUB_REPOSITORY GITHUB_RUN_ID; do

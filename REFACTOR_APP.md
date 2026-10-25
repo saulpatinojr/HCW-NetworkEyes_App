@@ -49,7 +49,7 @@ Evidence at `5d3b914`, line counts from `git show <path> | wc -l`.
 | Packaging | `pyproject.toml` | 182 | `cna 0.8.0b0`, `requires-python >=3.11` (line 9), `boto3` and seven `azure-*` packages in base deps, `enrichment` and `dev` extras, no `license` field |
 | Images | `Dockerfile` (94), `apps/cna-api/Dockerfile` (99) | | `python:3.14-slim@sha256:cae66f2e...` pinned, uid 1001, pip removed, draw.io plus xvfb; OCI label `licenses="Proprietary"` (`Dockerfile` line 50); API deps installed inline (lines 17 to 39) including `psycopg2-binary` and `boto3` |
 | CI and release | `.github/workflows/{200-build-images,300-test-codebase,310-release-version,370-registry-cleanup}.yml` | 363 (200) | Docker Hub login with `secrets.DOCKERHUB_TOKEN` (200: lines 67 to 72), Scout by digest, `notify-appliances` dispatch; release on tags `v*.*.*` (310: line 16) |
-| Build manifest | `.deployment-catalog/latest-build.json` | 13 | `sha-11eaa7e` tags for `cli, api, worker, web, migrator` under `docker.io/hybridcloudworks/cna`; no digests |
+| Build manifest | `.deployment-catalog/latest-build.json` | 13 | `sha-11eaa7e` tags for `cli, api, worker, web, migrator` under `docker.io/hybridcloudworks/img-ne-appliance-app`; no digests |
 | Backlog | `TODO.md` (1,849), `REVIEW.md` (548), `CHANGELOG.md` (245) | | T-401 to T-419, T-501 to T-508; R-008 (line 328), R-009 (375), R-011 (469), R-012 (516) open; `[Unreleased]` at `CHANGELOG.md` line 10 |
 | Vendored agent configuration | `.agents/`, `.claude/`, `.codex/`, `.kiro/` | about 52 MB | Not product code |
 | Tests | `tests/unit/` (73 files), `tests/integration/` | | `test_azure_discovery.py` 2,333 lines of mocked SDK; no `tests/security/` directory |
@@ -66,7 +66,7 @@ Work-Cloud_Network_Core (upstream)
     cna_azure_network_engine/{model, rules, classify, findings, report, normalize}   (base: pydantic only)
     cna_azure_network_engine/discovery/   ([azure] extra: resource_graph + live_bgp/metrics/diagnostics/cost/law)
   cna/ (monorepo package, depends on the engine; CLI, API, report and diagram engines unchanged in scope)
-  Dockerfile  ARG EDITION=appliance|lab  -> appliance image docker.io/hybridcloudworks/cna, consumed by digest;
+  Dockerfile  ARG EDITION=appliance|lab  -> appliance image docker.io/hybridcloudworks/img-ne-appliance-app, consumed by digest;
                                             lab target = CI boundary proof (engine without [azure]), never pushed
   .github/workflows/320-release-engine.yml  (tag engine-v*)
 Azure appliance repo: one Consumption Container App (min 1 / max 1), UAMI, Reader + optional reader roles
@@ -93,7 +93,7 @@ Package contract:
 1. Never weaken: the lab edition's inability to hold a credential or an Azure SDK, the appliance's read-only roles and refusal of client secrets, the "not production" labels, and the observed-state discipline (`_emit` hedge check at `analysis_engine.py` line 165 must apply to every rule, including the ported Engine B checks).
 2. No secrets, tokens, customer inventories or real tenant or subscription ids in fixtures, tests or docs. Sample subscriptions are `00000000-0000-0000-0000-000000000001` and `...0002`.
 3. Rule ids are never reused; a changed rule bumps its own `version`; live-only rules stay registered so the AddOn's `unknowns[]` list is stable.
-4. The Core publishes images to Docker Hub only (`docker.io/hybridcloudworks/cna`), by digest, through the Docker OIDC connection (section 12). No GHCR.
+4. The Core publishes images to Docker Hub only (`docker.io/hybridcloudworks/img-ne-appliance-app`), by digest, through the Docker OIDC connection (section 12). No GHCR.
 5. The Core keeps its own `CLAUDE.md` rules for PRs, changelog and review; this document does not override them.
 6. Owner-pasteable commands have no placeholders; both bash and PowerShell are given where the shells differ.
 7. Every Microsoft Learn citation, role action name and compliance-framework control reference carries `[VERIFY]` until checked.
@@ -619,7 +619,7 @@ Pattern: `/home/user/HCW-AzMigrateOrchestrator_App/infrastructure/terraform/appl
 
 | Resource | Setting |
 |---|---|
-| `azurerm_container_app.api` | `revision_mode = "Single"`; `template { min_replicas = 1, max_replicas = 1 }` (`CONTRACT-DECISIONS` item 21: scale-to-zero loses the in-memory snapshot; the zero-replica trade is documented as an owner option, not the default); `cpu = 0.5`, `memory = "1Gi"`; `target_port = 8080`; image `docker.io/hybridcloudworks/cna@sha256:...` taken from `latest-build.json` `digests.api`, never a floating tag |
+| `azurerm_container_app.api` | `revision_mode = "Single"`; `template { min_replicas = 1, max_replicas = 1 }` (`CONTRACT-DECISIONS` item 21: scale-to-zero loses the in-memory snapshot; the zero-replica trade is documented as an owner option, not the default); `cpu = 0.5`, `memory = "1Gi"`; `target_port = 8080`; image `docker.io/hybridcloudworks/img-ne-appliance-app@sha256:...` taken from `latest-build.json` `digests.api`, never a floating tag |
 | `env` | `CNA_EDITION=appliance`, `CNA_SCOPES`, `CNA_REFRESH_SECONDS=900`, `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `CNA_ENTRA_*`, `NA_FRAME_ANCESTORS`, `NA_SITE_ORIGINS`, `NA_TRUST_PROXY=1` |
 | `azurerm_role_assignment` | `Reader` `for_each` over `assessment_scope_ids`; optional `Security Reader`, `Cost Management Reader`, `Log Analytics Reader` (on `var.log_analytics_workspace_ids`) behind `var.enable_live_rules` |
 | `azurerm_role_definition.bgp_reader` | From `docs/roles/cna-network-bgp-reader.json` with `assignable_scopes = var.assessment_scope_ids`; assigned with the live rules flag |
@@ -627,7 +627,7 @@ Pattern: `/home/user/HCW-AzMigrateOrchestrator_App/infrastructure/terraform/appl
 | `azuread_app_role_assignment.web` | Assigns `Discovery.Run` on the API's service principal to the web tier's user-assigned identity (`principal_object_id = azurerm_user_assigned_identity.web.principal_id`); without it the web tier's token is valid but gets 403 `insufficient_role` (7.H) |
 | `azurerm_log_analytics_workspace` | 30-day retention, as the pattern |
 | `azurerm_consumption_budget_resource_group` | Monthly budget with one alert `[VERIFY amount]` |
-| Images | Docker Hub `docker.io/hybridcloudworks/cna:*` by digest; published by `200-build-images.yml` through the Docker OIDC connection (`vars.DOCKERHUB_CONNECTION`, `vars.DOCKERHUB_ENABLED`), the pattern the website's `publish-lab-image.yml` uses; the Core already publishes to Docker Hub, so this is a login-step change, not a registry move |
+| Images | Docker Hub `docker.io/hybridcloudworks/img-ne-appliance-app:*` by digest; published by `200-build-images.yml` through the Docker OIDC connection (`vars.DOCKERHUB_CONNECTION`, `vars.DOCKERHUB_ENABLED`), the pattern the website's `publish-lab-image.yml` uses; the Core already publishes to Docker Hub, so this is a login-step change, not a registry move |
 
 Clients clone the appliance repository, set `assessment_scope_ids`, `tenant_id` and `image_digest` in `terraform.tfvars`, and run `terraform plan` then `terraform apply`; `terraform apply` is a human-reviewed step and is never run from an automated session. The lab edition is not deployed on Container Apps: it runs on the Hostinger lab host from the AddOn's image (AddOn ADR-0003).
 
@@ -814,7 +814,7 @@ Live acceptance (R-008), bash, after `az login` as an identity holding only Read
 | ARG normalizer | The AddOn's `ingestion/normalize.py` (type table in its design B.3) is the reference implementation for the Core's `normalize/resource_graph.py` (C, D); once published, the AddOn imports it too |
 | Shared `/api/health` and pane contract | Both editions answer the flat envelope of section 8 with `id: "network-assessment"`; the website's status proxy reads exactly `configured, reachable, version, edition, capabilities, asOf`; the pane posts `{ type: 'hcw-addon', id, state }` with states `loading | ready | working | unavailable` to each `siteOrigins` entry. The Core's appliance public surface uses the same headers and error envelope so one pane bundle serves both editions |
 | Edition guard | The AddOn's `edition.py` (`sys.meta_path` finder, env refusal) is the model for the Core's lab guard in change set I; the Core may adopt it verbatim with provenance in the other direction |
-| Images | AddOn image `docker.io/hybridcloudworks/hcw-addon-network-assessment`; Core images `docker.io/hybridcloudworks/cna:*`; both by digest, both through the Docker OIDC connection |
+| Images | AddOn image `docker.io/hybridcloudworks/hcw-addon-network-assessment`; Core images `docker.io/hybridcloudworks/img-ne-appliance-app:*`; both by digest, both through the Docker OIDC connection |
 
 ## 22 Open questions and assumptions
 

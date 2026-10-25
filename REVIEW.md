@@ -580,8 +580,10 @@ Repository owner.
 **Required action** — in this order, so the appliances never lose their image source:
 1. On **this repository** → *Settings*: the Docker Hub OIDC connection and the variables `DOCKERHUB_NAMESPACE`,
    `DOCKERHUB_CONNECTION` and `DOCKERHUB_ENABLED` (`TODO.md` → T-728 carries the page, the subject-claim rules and the
-   `gh variable set` lines; no registry token is created), the variable `APPLIANCE_REPOS`
-   (`Work-Cloud_Network_Azure_Appliance,Work-Cloud_Network_AWS_Appliance`), and the secrets `GH_APP_ID`,
+   `gh variable set` lines; no registry token is created; the image repository is `img-ne-appliance-app`, created
+   public on Docker Hub first), the variable `APPLIANCE_REPOS`
+   (`Work-Cloud_Network_Azure_Appliance,Work-Cloud_Network_AWS_Appliance`) with `APPLIANCE_OWNER`
+   (`saulpatino-cbts`, the account that owns them), and the secrets `GH_APP_ID`,
    `GH_APP_PRIVATE_KEY` for the cross-repository dispatch. Set *Actions → General → Workflow permissions* to
    *Read and write* (`310` and the manifest commit in `200` need it).
 2. No runner to register: every workflow here and in both appliances runs on GitHub-hosted runners.

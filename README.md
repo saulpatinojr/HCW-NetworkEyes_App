@@ -98,10 +98,13 @@ catalog schema, scripts, and documents — differing only in the cloud-specific 
 enumerates. **Features ship once, here, in the images.** When `200-build-images.yml` publishes a
 new image set it opens a pull request that updates `.deployment-catalog/latest-build.json` (it merges itself
 once the required checks pass, because `main` is protected) and sends a `repository_dispatch`
-(`cna-image-published`) to every repository named in the `APPLIANCE_REPOS` variable; each
+(`cna-image-published`) to every repository named in the `APPLIANCE_REPOS` variable, under the account named in
+`APPLIANCE_OWNER` (the appliances do not live under this repository's owner); each
 appliance also polls the manifest. An appliance auto-deploys new images to `dev` and opens an
 "update available" issue for `prod`, which a human approves through its deploy workflow's
-approval gate. The full contract is in [`CLAUDE.md`](CLAUDE.md).
+approval gate. Every image goes to one Docker Hub repository, `<namespace>/img-ne-appliance-app`
+(the owner's `img-<short name>-<job>-<type>` convention; the tags inside it are unchanged). The full
+contract is in [`CLAUDE.md`](CLAUDE.md).
 
 The project started as a single repository, `Work-Cloud_Network_Assessment`, which held the core
 until 2026-09-18. Its full history is imported here (`TODO.md` → T-509), so commit references in
