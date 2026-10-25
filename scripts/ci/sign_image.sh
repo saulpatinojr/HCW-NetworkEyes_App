@@ -65,6 +65,12 @@ if ! jq -e '
   echo "::error::No BuildKit provenance found on ${REF} (is provenance: true set on its build step?)." >&2
   exit 1
 fi
+# BuildKit writes SLSA v1 (buildDefinition / runDetails) when the build step leaves the schema version unset, and
+# this script, verify_signed_digest.sh and 310 read v0.2 (builder.id, cosign type slsaprovenance02).
+if jq -e 'has("buildDefinition")' "$WORK/predicate.json" >/dev/null; then
+  echo "::error::The provenance on ${REF} is SLSA v1, but signing and verifying read SLSA v0.2. Build with provenance: mode=max,version=v0.2 (200-build-images.yml pins it on every build step)." >&2
+  exit 1
+fi
 BUILDER_ID="$(jq -r '.builder.id // empty' "$WORK/predicate.json")"
 if [[ "$BUILDER_ID" != "$EXPECTED_BUILDER_PREFIX"* ]]; then
   echo "::error::Provenance builder.id '${BUILDER_ID}' does not name this run (expected prefix ${EXPECTED_BUILDER_PREFIX}); refusing to attest." >&2
