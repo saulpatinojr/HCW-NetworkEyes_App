@@ -489,6 +489,8 @@ class TestVerifySignedDigest:
         repository=REPOSITORY,
         image=None,
         signatures=None,
+        emit=None,
+        emit_flag="true",
     ):
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
@@ -531,6 +533,7 @@ class TestVerifySignedDigest:
             IMAGE_REPOSITORY=repository,
             EXPECTED_REVISION=expected_revision,
             EXPECTED_RUN_IDS=run_ids,
+            **({"EMIT_BUILDER_RUN_ID": emit_flag, "GITHUB_OUTPUT": str(emit)} if emit else {}),
         )
         result = _run("verify_signed_digest.sh", ref or self.REF, env=env, cwd=tmp_path)
         calls = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
@@ -603,6 +606,22 @@ class TestVerifySignedDigest:
             signatures=[{"payloadType": "application/vnd.in-toto+json", "payload": "e30="}],
         )
         assert result.returncode != 0 and "no signature on exactly" in result.stderr
+
+    def test_the_builder_run_id_is_reported_only_when_asked_for(self, tmp_path):
+        out = tmp_path / "github_output"
+        result, _ = self._verify(tmp_path, emit=out)
+        assert result.returncode == 0, result.stderr
+        assert out.read_text(encoding="utf-8").splitlines() == [f"builder_run_id={RUN_ID}"]
+        quiet = tmp_path / "quiet"
+        quiet.mkdir()
+        out2 = quiet / "github_output"
+        result, _ = self._verify(quiet, emit=out2, emit_flag="")
+        assert result.returncode == 0 and not out2.exists()
+
+    def test_nothing_is_reported_when_the_verification_fails(self, tmp_path):
+        out = tmp_path / "github_output"
+        result, _ = self._verify(tmp_path, emit=out, revision="d" * 40)
+        assert result.returncode != 0 and not out.exists()
 
     def test_a_signature_on_another_digest_fails(self, tmp_path):
         result, _ = self._verify(tmp_path, sig_digest=OTHER_HEX)
@@ -798,6 +817,13 @@ class TestReleaseDigests:
         result, out, _ = self._run(tmp_path, revision="d" * 40)
         assert result.returncode != 0 and out == {}
         assert "revision label" in result.stderr
+
+    @pytest.mark.parametrize("run_ids", ["111 222", "", "abc", "111,222"])
+    def test_anything_but_one_run_id_is_refused(self, tmp_path, run_ids):
+        # The five images of a release must come from one workflow run (the CLI image's), not from any run of the commit.
+        result, out, calls = self._run(tmp_path, run_ids=run_ids)
+        assert result.returncode == 1 and out == {} and calls == []
+        assert "single run id" in result.stderr
 
     def test_a_build_commit_that_is_not_a_full_sha_is_refused(self, tmp_path):
         result, out, calls = self._run(tmp_path, build_commit="main")
@@ -1315,6 +1341,23 @@ class TestPruneStep:
         assert result.returncode == 0 and deleted == []
         assert "would delete: sha-c3" in result.stdout and "would delete: sha-e5" in result.stdout
         assert "would delete: sha-d4" not in result.stdout
+
+    def test_a_version_tag_without_any_digest_stops_the_prune_before_anything_is_deleted(
+        self, tmp_path
+    ):
+        tags = [*self._tags(), _hub_tag("api-1.0.0", 9, None)]
+        for dry_run in ("false", "true"):
+            sub = tmp_path / dry_run
+            sub.mkdir()
+            result, deleted = self._run(sub, dry_run=dry_run, tags=tags)
+            assert result.returncode == 1 and deleted == []
+            assert "lists no digest for the tag(s) api-1.0.0" in result.stdout + result.stderr
+            assert "would delete" not in result.stdout
+
+    def test_a_referrer_tag_without_a_digest_does_not_stop_the_prune(self, tmp_path):
+        tags = [*self._tags(), _hub_tag("sha256-" + "a" * 64, 9, None)]
+        result, deleted = self._run(tmp_path, tags=tags)
+        assert result.returncode == 0 and sorted(deleted) == ["sha-c3", "sha-e5"]
 
     def test_a_refused_delete_fails_the_job(self, tmp_path):
         result, deleted = self._run(tmp_path, delete_status="403")

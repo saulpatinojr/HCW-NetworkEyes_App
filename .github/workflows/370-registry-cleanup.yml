@@ -14,7 +14,8 @@ name: "370 · Docker Hub Registry Cleanup"
 # never listed for deletion, and a `<component>-sha-<7>` tag is also KEPT when an image of it is shared with any
 # tag outside the SHA patterns (the version tags, the `*-latest` tags). The comparison uses the digests Docker Hub
 # lists for each tag (the tag's own `digest` and every `images[].digest`); a SHA tag that lists no digest at all is
-# kept too, because sharing cannot be ruled out. So deleting a SHA tag can never be what removes the manifest of
+# kept too, because sharing cannot be ruled out; and a tag outside the patterns for which Hub lists no digest at
+# all stops the whole prune (nothing deleted, the job fails) for the same reason. So deleting a SHA tag can never be what removes the manifest of
 # a released build. cosign's referrer tags (`sha256-<hex>`) are not part of that comparison: they point at signature
 # manifests, never at an image, and there can be thousands of them.
 #
@@ -192,6 +193,18 @@ jobs:
                   | select(.name | test("^sha256-[0-9a-f]{64}([.](sig|att|sbom))?$") | not)
                   | .digests[]] | unique | map({(.): true}) | add // {}' \
             "$ALL_TAGS_JSON" > "$PERMANENT_FILE"
+
+          # Fail closed: a version or latest tag for which Docker Hub lists no digest at all could share an image with
+          # a SHA tag, and cannot be compared. Nothing is deleted until that is looked at.
+          mapfile -t NO_DIGEST < <(jq -r --argjson pats "$PATTERNS_JSON" \
+            '.[] | select((.name as $n | any($pats[]; . as $p | $n | test($p))) | not)
+                 | select(.name | test("^sha256-[0-9a-f]{64}([.](sig|att|sbom))?$") | not)
+                 | select((.digests | length) == 0) | .name' \
+            "$ALL_TAGS_JSON")
+          if [ "${#NO_DIGEST[@]}" -gt 0 ]; then
+            echo "::error::Docker Hub lists no digest for the tag(s) ${NO_DIGEST[*]}, so it cannot be ruled out that a SHA tag shares their image; nothing was deleted. Look at them on Docker Hub (Repository, Tags) first."
+            exit 1
+          fi
 
           DELETED=0
           FAILED=0
