@@ -71,9 +71,10 @@ class TestCustomRoleFile:
             assert action.endswith(("/read", "/action"))
             assert not any(verb in action.lower() for verb in ("write", "delete"))
 
-    def test_actions_are_marked_for_verification_and_scope_is_fictional(self):
+    def test_actions_are_dated_as_checked_and_scope_is_fictional(self):
         role = json.loads(ROLE_FILE.read_text(encoding="utf-8"))
-        assert "[VERIFY actions]" in role["Description"]
+        assert "[VERIFY" not in role["Description"]
+        assert "Microsoft Learn" in role["Description"] and "2026-10-25" in role["Description"]
         assert role["AssignableScopes"] == ["/subscriptions/00000000-0000-0000-0000-000000000001"]
 
 
@@ -87,12 +88,13 @@ class TestModuleManifest:
             assert action in azure
         assert not any("write" in a.lower() or "delete" in a.lower() for a in azure)
 
-    def test_every_action_line_carries_the_verify_marker(self):
+    def test_every_action_line_names_the_role_that_grants_it_and_no_verify_marker(self):
         text = MODULE_YAML.read_text(encoding="utf-8")
         azure_block = text.split("  azure:\n", 1)[1].split("\nai_recommendations_enabled", 1)[0]
         action_lines = [line for line in azure_block.splitlines() if line.strip().startswith("- ")]
         assert len(action_lines) == 8 + len(EXPECTED_ACTIONS)
-        assert all("[VERIFY actions]" in line for line in action_lines)
+        assert all("[VERIFY" not in line and "  # " in line for line in action_lines)
+        assert "Checked 2026-10-25" in text
 
 
 class TestGuidanceAgrees:
@@ -120,4 +122,4 @@ class TestGuidanceAgrees:
         ):
             assert role in text
         assert "docs/roles/cna-network-bgp-reader.json" in text
-        assert "[VERIFY actions]" in text
+        assert "[VERIFY" not in text

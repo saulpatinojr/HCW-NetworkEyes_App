@@ -433,7 +433,6 @@ export function FindingsClient({ findings }: Props) {
             // Display title uses the normalized pattern (e.g. "No Azure Firewall deployed in '…'")
             const displayTitle = normalizeTitle(rep.title)
               // Capitalise first letter for display
-              .replace(/^'/, "'")
               .replace(/^\w/, (c) => c.toUpperCase());
 
             return (
