@@ -2469,8 +2469,10 @@ builder, so it did not change. The two `brace-expansion` `overrides` are gone an
 High. The pull-request job `Image Scan (Trivy)` in `300-test-codebase.yml` builds the migrator and runner targets, checks the migrator tree inside the
 image and scans both with the digest-pinned Trivy for fixable HIGH and CRITICAL findings and secrets (one narrow suppression in `.trivyignore.yaml`:
 the public Azurite key the Azure SDK bundles into the web build); `tests/unit/test_migrator_image.py` and `tests/unit/test_ci_hygiene.py` pin the rest.
-Open: (1) `postcss-selector-parser` 6 (Moderate, held by `@tailwindcss/typography`; `npm audit fix` offers only a downgrade) and the other Moderate
-advisory in that chain; (2) the owner adds `Image Scan (Trivy)` to the `Protect main` required checks (`REVIEW.md` R-026 lists the other three);
+Done 2026-10-25: (1) `postcss-selector-parser` (Dependabot alert 46, CVE-2026-104844): an `overrides` entry under `@tailwindcss/typography` lifts it
+from 6.0.10 to 7.1.7, a Tailwind compile of a `prose` fixture is byte-identical before and after, `npm audit` (development dependencies included)
+reports 0, and `lib/npm-overrides.test.ts` fails if the lockfile resolves an older one; (2) `Image Scan (Trivy)` is among the required checks of the
+live `Protect main` ruleset (read back 2026-10-25). Still open:
 (3) the first real run of the Docker Scout step in `200-build-images.yml` is the only place Scout itself is exercised, and it cannot be run
 without Docker credentials, so Trivy is the proxy; (4) findings in the base image that have no fix are not covered (`--ignore-unfixed`, like the
 Scout gate's `only-fixed`) and move with the pinned `node:24-alpine` digest.

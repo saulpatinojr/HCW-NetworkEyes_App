@@ -18,6 +18,9 @@
     "db:generate": "prisma generate"
   },
   "overrides": {
+    "@tailwindcss/typography": {
+      "postcss-selector-parser": "^7.1.6"
+    },
     "next": {
       "postcss": "$postcss"
     },

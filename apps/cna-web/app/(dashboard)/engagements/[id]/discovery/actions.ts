@@ -96,8 +96,12 @@ export async function startAllDiscovery(
   const started = results.filter((r) => r.status === "fulfilled").length;
   const failed = results.filter((r) => r.status === "rejected").length;
   if (failed > 0) {
+    // A fixed format string, with the values as arguments: a value inside the template could carry "%s"
+    // and the like (CodeQL js/tainted-format-string).
     console.error(
-      `startAllDiscovery: ${failed} job(s) failed for engagement ${engagementId}:`,
+      "startAllDiscovery: %d job(s) failed for engagement %s:",
+      failed,
+      engagementId,
       results.filter((r) => r.status === "rejected").map((r) => (r as PromiseRejectedResult).reason),
     );
     await Promise.allSettled(
