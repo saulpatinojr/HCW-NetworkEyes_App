@@ -13,11 +13,18 @@ import json
 import re
 from pathlib import Path
 
+from tests.security.test_image_repository_name import configured_image_repository
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = REPO_ROOT / ".deployment-catalog" / "latest-build.json"
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "200-build-images.yml"
 IMAGE_KEYS = {"cli", "api", "worker", "web", "migrator"}
-DIGEST_RE = re.compile(r"^docker\.io/[a-z0-9-]+/cna@sha256:[0-9a-f]{64}$")
+# The repository is the one `200-build-images.yml` configures (owner convention img-<short name>-<job>-<type>);
+# tests/security/test_image_repository_name.py guards that name. The committed manifest predates the rename and
+# carries no `digests{}`, so nothing here depends on the repository it names; the first build rewrites it.
+DIGEST_RE = re.compile(
+    rf"^docker\.io/[a-z0-9-]+/{re.escape(configured_image_repository())}@sha256:[0-9a-f]{{64}}$"
+)
 
 
 def test_manifest_images_cover_every_published_image_and_nothing_else():
@@ -42,5 +49,11 @@ def test_the_workflow_writes_digests_for_every_image_key_and_validates_them():
     assert match is not None
     assert set(re.findall(r'"([a-z]+)":', match.group(1))) == IMAGE_KEYS
     assert '[[ "${!v}" =~ ^sha256:[0-9a-f]{64}$ ]]' in text
+    # Every manifest entry is `${IMAGE}:…` or `${IMAGE}@…` with IMAGE built from the configured repository.
+    assert 'IMAGE="docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}"' in text
+    heredoc = text.split("cat > .deployment-catalog/latest-build.json <<EOF", 1)[1].split(
+        "\n          EOF", 1
+    )[0]
+    assert len(re.findall(r'"\$\{IMAGE\}[:@]', heredoc)) == 10
     assert "secrets.DOCKERHUB_TOKEN" not in text
     assert "DOCKERHUB_OIDC_CONNECTIONID: ${{ vars.DOCKERHUB_CONNECTION }}" in text

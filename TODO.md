@@ -2304,28 +2304,56 @@ Nothing publishes until the owner flips the variables below. Open, in order:
   Success looks like: `gh variable list --repo saulpatinojr/HCW-NetworkEyes_App` shows
   `PYPI_PUBLISH_ENABLED  true`. Until then the `publish-pypi` job is skipped and the tag still builds,
   tests and attaches the wheel to the GitHub Release.
-- `[REVIEW REQUIRED]` **Docker Hub OIDC connection.** In a browser at <https://app.docker.com/>, switch to
-  the **hybridcloudworks** organisation, open **Identity & auth** → **OIDC connections** → **Create OIDC
-  connection** (provider GitHub Actions), and add one ruleset with two subject-claim rules, read and write
-  on the `hybridcloudworks/cna` repository (the ids are GitHub's immutable owner and repository ids, so a
-  rename never breaks the rule):
-  `repo:saulpatinojr@34853639/HCW-NetworkEyes_App@1173847343:ref:refs/heads/main` (for `200-build-images.yml`)
-  and `repo:saulpatinojr@34853639/HCW-NetworkEyes_App@1173847343:ref:refs/tags/*` (for `310-release-version.yml`).
-  Copy the connection id it shows. Then, PowerShell, which reads the id from the prompt so nothing is
-  retyped into the command:
+- `[REVIEW REQUIRED]` **Docker Hub repository and OIDC connection** (the repository is renamed from `cna` to
+  `img-ne-appliance-app` by the owner's convention `img-<short name>-<job>-<type>`, 2026-10-25; the old `cna`
+  repository holds a different image and this repository never touches it again). Docker's own pages:
+  <https://docs.docker.com/security/authentication/oidc-connections/rulesets-claims> and
+  <https://docs.docker.com/security/authentication/oidc-connections/troubleshoot>. In this order:
+  1. In a browser at <https://hub.docker.com/>, in the **hybridcloudworks** organisation, create the **public**
+     repository `img-ne-appliance-app` with the description `NetworkEyes appliance image, published by
+     HCW-NetworkEyes_App.`
+  2. At <https://app.docker.com/>, in the same organisation, open **Identity & auth** → **OIDC connections** →
+     **Create OIDC connection** (provider GitHub Actions) and add ONE ruleset whose subject-claim rule is the
+     immutable form (GitHub's owner and repository ids, so a rename never breaks it):
+     `repo:saulpatinojr@34853639/HCW-NetworkEyes_App@1173847343:ref:refs/heads/main` (for `200-build-images.yml`),
+     with the scope **Image Push** on `hybridcloudworks/img-ne-appliance-app` plus **Read public repositories**
+     (**Image Pull** is optional while the repository is public). Add no tag rule yet. `310-release-version.yml` now promotes the image `200` built
+     instead of building one, and its run is a tag (`refs/tags/v…`), so before the first release add a second
+     rule `repo:saulpatinojr@34853639/HCW-NetworkEyes_App@1173847343:ref:refs/tags/*` with the same two scopes on
+     the same repository (it only pushes a `<version>` tag onto a digest `200` scanned and signed). Copy the
+     connection id it shows.
+  3. PowerShell, which reads the id from the prompt so nothing is retyped into the command:
 
   ```powershell
   $conn = Read-Host "Docker Hub OIDC connection id"
   gh variable set DOCKERHUB_NAMESPACE --body hybridcloudworks --repo saulpatinojr/HCW-NetworkEyes_App
   gh variable set DOCKERHUB_CONNECTION --body $conn --repo saulpatinojr/HCW-NetworkEyes_App
+  gh variable set APPLIANCE_OWNER --body saulpatino-cbts --repo saulpatinojr/HCW-NetworkEyes_App
   gh variable set DOCKERHUB_ENABLED --body true --repo saulpatinojr/HCW-NetworkEyes_App
   gh secret delete DOCKERHUB_TOKEN --repo saulpatinojr/HCW-NetworkEyes_App
   ```
 
-  Success looks like: the next push to `main` that touches a Dockerfile runs `200-build-images.yml`
-  with the `Log in to Docker Hub` step green and no `password` input in its log; a failed exchange reads
-  `unable to exchange OIDC token` and means the connection id or its repository scope is wrong. Delete the
-  secret only after that first green run.
+  `APPLIANCE_OWNER` is the account that owns the appliance repositories named in `APPLIANCE_REPOS` (they moved
+  from `saulpatinojr`); the GitHub App behind `GH_APP_ID` must be installed on that account for those two
+  repositories, or `notify-appliances` cannot mint its token. Success looks like: the next push to `main` that
+  touches a Dockerfile runs `200-build-images.yml` with the `Log in to Docker Hub` step green and no `password`
+  input in its log; a failed exchange reads `unable to exchange OIDC token` and means the connection id, the
+  subject claim or its repository scope is wrong (see the troubleshooting page). Delete the secret only after
+  that first green run.
+- `[REVIEW REQUIRED]` **Dry run of the Docker Hub connection, before `DOCKERHUB_ENABLED` is set.** After this is
+  merged to `main` (the job only runs there, because the connection's ruleset names `refs/heads/main`): in the
+  browser, **Actions** → **200 · Build Container Images** → **Run workflow**, branch `main`, tick **rehearsal**
+  (leave **merge** unticked), **Run workflow**. One run executes two jobs: `rehearse-manifest-pr` (the GitHub App
+  and auto-merge) and `rehearse-docker-login`. Success for the Docker job looks like: `Log in to Docker Hub` green
+  (the subject claim matches the ruleset), `Push the rehearsal image by digest` green (the Image Push scope), and
+  `Read the pushed digest back` printing `Docker Hub accepted the login and the push`. The pushed image is untagged
+  and empty, and Docker Hub garbage-collects it; nothing is tagged, signed or written to the manifest, and the real
+  build jobs stay skipped. If it fails, the failing step prints the three likely causes (mutable instead of immutable
+  `sub`, the ruleset missing the repository, the scope missing); open the connection's **Failures** tab in Docker
+  Home for the claims Docker received. Docker's guide:
+  <https://docs.docker.com/security/authentication/oidc-connections/troubleshoot>. Then close the tickets that
+  waited on the connection and set `DOCKERHUB_ENABLED`. The dry run does not prove `tag-images` (it retags a digest
+  in the same repository) or cosign signing; the first real build does.
 - `[VERIFY]` `DOCKERHUB_OIDC_CONNECTIONID` / `DOCKERHUB_OIDC_EXPIREIN` and the minimum `docker/login-action`
   release that reads them, against Docker's documentation at the time of enabling; `actionlint` over
   `.github/workflows/` on the first pull request (not installed where this was written).

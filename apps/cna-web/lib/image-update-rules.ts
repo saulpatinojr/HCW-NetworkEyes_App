@@ -1,7 +1,7 @@
 /**
  * Image-update rules — pure functions, no I/O.
  *
- * A deployed appliance runs immutable images (`cna:{web,api,worker}-sha-<7>`)
+ * A deployed appliance runs immutable images (`img-ne-appliance-app:{web,api,worker}-sha-<7>`)
  * and only changes them through its own workflows: `230-image-update` picks
  * up every new image set the core publishes, redeploys `dev` automatically
  * and opens an `update-available` issue for `prod`, which a human applies via
@@ -64,7 +64,7 @@ export const APPLIANCE_UPDATE_ISSUE_LABEL = "update-available";
 export type ImageReference = {
   /** Registry host, e.g. `docker.io` or `ghcr.io`. */
   registry: string;
-  /** Repository path under the registry, e.g. `acme/cna`. */
+  /** Repository path under the registry, e.g. `acme/img-ne-appliance-app`. */
   repository: string;
   /** Tag; empty when the reference pins a digest instead. */
   tag: string;
