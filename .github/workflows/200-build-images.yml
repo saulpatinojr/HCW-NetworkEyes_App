@@ -48,9 +48,12 @@ on:
     inputs:
       rehearsal:
         description: >-
-          Rehearse the manifest pull request only: no image is built, nothing is pushed to
-          Docker Hub, and the pull request is closed again. Proves the GitHub App, auto-merge
-          and the required checks work before DOCKERHUB_ENABLED is switched on.
+          Rehearse without publishing, before DOCKERHUB_ENABLED is switched on. Two jobs run:
+          the manifest pull request (proves the GitHub App, auto-merge and the required checks;
+          the pull request is closed again) and the Docker Hub login (proves the OIDC
+          connection's ruleset and its Image Push scope by pushing an empty labelled image BY
+          DIGEST ONLY, main branch only). No product image is built, nothing is tagged, signed
+          or written to the manifest.
         type: boolean
         default: false
       merge:
@@ -761,3 +764,99 @@ jobs:
           title: "chore(rehearsal): self-merging pull request"
           body: Rehearsal run ${{ github.run_id }} of the self-merging pull request. Safe to close.
           rehearsal: ${{ inputs.merge && 'false' || 'true' }}
+
+  # Dry run of the Docker Hub OIDC connection (workflow_dispatch with `rehearsal`, main only). It does
+  # not need DOCKERHUB_ENABLED, so it can prove the connection before publishing is switched on:
+  #   1. the login alone proves the run's OIDC subject (`repo:…:ref:refs/heads/main`) matches the
+  #      connection's ruleset;
+  #   2. an image with no layers (`FROM scratch` plus two labels) pushed by digest only, with no tag,
+  #      proves the Image Push scope on the repository; an untagged digest is inert and Docker Hub
+  #      garbage-collects it;
+  #   3. reading the digest back proves the image is there.
+  # It never signs, never tags (so never touches `latest`), never writes the manifest, and logs out.
+  # The real build jobs above stay skipped: they need DOCKERHUB_ENABLED == 'true' and `!inputs.rehearsal`.
+  rehearse-docker-login:
+    runs-on: ubuntu-latest
+    # Same ref guard as publish-build-manifest: the connection's ruleset names refs/heads/main only.
+    if: inputs.rehearsal && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write  # the login below exchanges this job's GitHub OIDC token
+    env:
+      DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
+    steps:
+      - name: Validate Docker Hub namespace and connection
+        env:
+          CONNECTION: ${{ vars.DOCKERHUB_CONNECTION }}
+        run: |
+          if [ -z "$DOCKERHUB_NAMESPACE" ]; then
+            echo "::error::DOCKERHUB_NAMESPACE variable is required (the Docker Hub organisation that owns the repository)."
+            exit 1
+          fi
+          if ! [[ "$CONNECTION" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+            echo "::error::DOCKERHUB_CONNECTION must be the Docker Hub OIDC connection id, a UUID (got '${CONNECTION}'). Set it with: gh variable set DOCKERHUB_CONNECTION --body <connection id>."
+            exit 1
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+
+      - name: Log in to Docker Hub
+        # Exactly as the real jobs log in (change set J of REFACTOR_APP.md): the action exchanges this
+        # job's id-token for a short-lived registry credential, so no long-lived access token is stored.
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
+        env:
+          DOCKERHUB_OIDC_CONNECTIONID: ${{ vars.DOCKERHUB_CONNECTION }}
+          DOCKERHUB_OIDC_EXPIREIN: '900'  # a 15-minute job
+        with:
+          registry: docker.io
+          username: ${{ vars.DOCKERHUB_NAMESPACE }}
+
+      - name: Write the rehearsal image definition
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/rehearsal-image"
+          printf 'FROM scratch\nLABEL rehearsal="true" run_id="%s"\n' "$GITHUB_RUN_ID" > "${RUNNER_TEMP}/rehearsal-image/Dockerfile"
+          cat "${RUNNER_TEMP}/rehearsal-image/Dockerfile"
+
+      # Push by digest only (`push-by-digest=true`, no `tags:`), as the real build does; no provenance
+      # or SBOM, so the pushed image is the config and nothing else.
+      - name: Push the rehearsal image by digest
+        id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
+        with:
+          context: ${{ runner.temp }}/rehearsal-image
+          outputs: type=image,name=docker.io/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }},push-by-digest=true,name-canonical=true,push=true
+          provenance: false
+          sbom: false
+
+      - name: Read the pushed digest back
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::The push returned no valid digest (got '${DIGEST}')."
+            exit 1
+          fi
+          READ=$(docker buildx imagetools inspect "docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}@${DIGEST}" --format '{{.Manifest.Digest}}')
+          if [ "$READ" != "$DIGEST" ]; then
+            echo "::error::Read back ${READ}, expected ${DIGEST}."
+            exit 1
+          fi
+          echo "Docker Hub accepted the login and the push, and returns ${DIGEST} for docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}."
+          echo "The image is untagged and inert; Docker Hub garbage-collects it. Nothing was tagged, signed or written to the manifest."
+
+      - name: What to check if this failed
+        if: failure()
+        run: |
+          echo "::error::The Docker Hub rehearsal failed. The three most likely causes:"
+          echo "::error::1. The ruleset's subject claim does not match this run. Use the immutable form repo:<owner>@<owner id>/<repository>@<repository id>:ref:refs/heads/main, not the mutable name form (or the reverse of what the connection was created with)."
+          echo "::error::2. The ruleset does not cover this repository, or the connection is for another organisation than DOCKERHUB_NAMESPACE."
+          echo "::error::3. The scope is missing: the ruleset needs Image Push on ${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY} (a failed login is cause 1 or 2, a failed push is cause 3)."
+          echo "::error::Docker's guide: https://docs.docker.com/security/authentication/oidc-connections/troubleshoot . The connection's Failures tab in Docker Home (Identity & auth, OIDC connections) shows the claims Docker received and why the exchange was refused."
+
+      - name: Log out of Docker Hub
+        if: always()
+        run: docker logout docker.io || true

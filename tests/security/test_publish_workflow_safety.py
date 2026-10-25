@@ -75,6 +75,7 @@ class TestDockerHubLogin:
                 "200-build-images.yml:build-images",
                 "200-build-images.yml:build-web",
                 "200-build-images.yml:tag-images",
+                "200-build-images.yml:rehearse-docker-login",
                 "310-release-version.yml:release",
             ]
         )
@@ -184,3 +185,112 @@ class TestVerifyScript:
         assert '"docker-manifest-digest"' in self.text
         assert "/${IMAGE_REPOSITORY}@sha256:" in self.text
         assert "${IMAGE_REPOSITORY:-}" in self.text
+
+
+class TestDockerLoginRehearsal:
+    """The dry run of the OIDC connection: login plus a digest-only push, before publishing is on."""
+
+    def setup_method(self):
+        self.doc = _load(BUILD)
+        self.job = self.doc["jobs"]["rehearse-docker-login"]
+        self.steps = _steps(self.job)
+
+    def test_it_runs_for_the_rehearsal_input_on_the_default_branch_only(self):
+        condition = self.job["if"]
+        assert "inputs.rehearsal" in condition
+        assert (
+            "github.event.repository.default_branch" in condition and "refs/heads/{0}" in condition
+        )
+
+    def test_it_does_not_depend_on_publishing_being_enabled(self):
+        assert "DOCKERHUB_ENABLED" not in self.job["if"]
+        assert "DOCKERHUB_ENABLED" not in yaml.safe_dump(self.job)
+        # ... while every real publishing job stays off for a rehearsal run.
+        for name in ("build-images", "build-web", "tag-images", "publish-build-manifest"):
+            assert "!inputs.rehearsal" in self.doc["jobs"][name]["if"], name
+
+    def test_it_holds_only_the_permissions_the_login_needs_and_no_environment(self):
+        assert self.job["permissions"] == {"contents": "read", "id-token": "write"}
+        assert "environment" not in self.job
+
+    def test_it_checks_the_connection_id_and_the_namespace_before_logging_in(self):
+        check = _index_of(self.job, "Validate Docker Hub namespace")
+        assert check < _login_index(self.job)
+        script = self.steps[check]["run"]
+        assert (
+            "DOCKERHUB_NAMESPACE" in script and "[0-9a-fA-F]{8}-" in script and "exit 1" in script
+        )
+        assert self.steps[check]["env"]["CONNECTION"] == "${{ vars.DOCKERHUB_CONNECTION }}"
+
+    def test_it_logs_in_exactly_as_the_real_jobs_do(self):
+        mine = self.steps[_login_index(self.job)]
+        real = _steps(self.doc["jobs"]["tag-images"])[_login_index(self.doc["jobs"]["tag-images"])]
+        assert mine["uses"] == real["uses"]  # the same pinned action
+        assert (
+            mine["with"]
+            == real["with"]
+            == {"registry": "docker.io", "username": "${{ vars.DOCKERHUB_NAMESPACE }}"}
+        )
+        assert mine["env"]["DOCKERHUB_OIDC_CONNECTIONID"] == "${{ vars.DOCKERHUB_CONNECTION }}"
+        assert EXPIRE_MIN <= int(mine["env"]["DOCKERHUB_OIDC_EXPIREIN"]) <= EXPIRE_MAX
+
+    def test_it_pushes_by_digest_only_with_no_tag(self):
+        push = next(
+            s for s in self.steps if str(s.get("uses", "")).startswith("docker/build-push-action@")
+        )
+        assert (
+            "push-by-digest=true" in push["with"]["outputs"]
+            and "push=true" in push["with"]["outputs"]
+        )
+        assert (
+            "${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}" in push["with"]["outputs"]
+        )
+        assert "tags" not in push["with"] and "load" not in push["with"]
+        assert (
+            "tag=" not in push["with"]["outputs"]
+            and ",name=" not in push["with"]["outputs"].split("name=", 1)[1]
+        )
+        # The image has no layers beyond its labels.
+        definition = next(s for s in self.steps if "Dockerfile" in str(s.get("run", "")))["run"]
+        assert (
+            "FROM scratch" in definition
+            and "rehearsal=" in definition
+            and "GITHUB_RUN_ID" in definition
+        )
+        assert not re.search(r"\n(RUN|COPY|ADD)", definition)
+
+    def test_it_reads_the_digest_back(self):
+        script = self.steps[_index_of(self.job, "Read the pushed digest back")]["run"]
+        assert "docker buildx imagetools inspect" in script and "@${DIGEST}" in script
+        assert 'READ" != "$DIGEST"' in script
+
+    def test_it_never_signs_tags_writes_the_manifest_or_reaches_latest(self):
+        text = yaml.safe_dump(
+            {**self.job, "runs-on": "runner"}
+        )  # ubuntu-latest is a runner label, not a tag
+        assert "latest" not in text
+        for forbidden in (
+            "cosign",
+            "sign_image",
+            "imagetools create",
+            "docker tag",
+            "docker push",
+            "latest-build.json",
+            "self-merging-pr",
+            "metadata-action",
+            "type=raw",
+            "type=sha",
+        ):
+            assert forbidden not in text, forbidden
+
+    def test_it_explains_a_failure_and_logs_out_at_the_end(self):
+        hint = next(s for s in self.steps if s.get("if") == "failure()")
+        assert (
+            "https://docs.docker.com/security/authentication/oidc-connections/troubleshoot"
+            in hint["run"]
+        )
+        assert (
+            "immutable" in hint["run"] and "Failures" in hint["run"] and "Image Push" in hint["run"]
+        )
+        last = self.steps[-1]
+        assert last["if"] == "always()" and "docker logout" in last["run"]

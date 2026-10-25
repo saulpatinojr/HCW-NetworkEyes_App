@@ -2316,8 +2316,8 @@ Nothing publishes until the owner flips the variables below. Open, in order:
      **Create OIDC connection** (provider GitHub Actions) and add ONE ruleset whose subject-claim rule is the
      immutable form (GitHub's owner and repository ids, so a rename never breaks it):
      `repo:saulpatinojr@34853639/HCW-NetworkEyes_App@1173847343:ref:refs/heads/main` (for `200-build-images.yml`),
-     with the scopes **Image Pull** and **Image Push** on `hybridcloudworks/img-ne-appliance-app`, plus **Read
-     public repositories**. Add no tag rule yet. `310-release-version.yml` now promotes the image `200` built
+     with the scope **Image Push** on `hybridcloudworks/img-ne-appliance-app` plus **Read public repositories**
+     (**Image Pull** is optional while the repository is public). Add no tag rule yet. `310-release-version.yml` now promotes the image `200` built
      instead of building one, and its run is a tag (`refs/tags/v…`), so before the first release add a second
      rule `repo:saulpatinojr@34853639/HCW-NetworkEyes_App@1173847343:ref:refs/tags/*` with the same two scopes on
      the same repository (it only pushes a `<version>` tag onto a digest `200` scanned and signed). Copy the
@@ -2340,6 +2340,20 @@ Nothing publishes until the owner flips the variables below. Open, in order:
   input in its log; a failed exchange reads `unable to exchange OIDC token` and means the connection id, the
   subject claim or its repository scope is wrong (see the troubleshooting page). Delete the secret only after
   that first green run.
+- `[REVIEW REQUIRED]` **Dry run of the Docker Hub connection, before `DOCKERHUB_ENABLED` is set.** After this is
+  merged to `main` (the job only runs there, because the connection's ruleset names `refs/heads/main`): in the
+  browser, **Actions** → **200 · Build Container Images** → **Run workflow**, branch `main`, tick **rehearsal**
+  (leave **merge** unticked), **Run workflow**. One run executes two jobs: `rehearse-manifest-pr` (the GitHub App
+  and auto-merge) and `rehearse-docker-login`. Success for the Docker job looks like: `Log in to Docker Hub` green
+  (the subject claim matches the ruleset), `Push the rehearsal image by digest` green (the Image Push scope), and
+  `Read the pushed digest back` printing `Docker Hub accepted the login and the push`. The pushed image is untagged
+  and empty, and Docker Hub garbage-collects it; nothing is tagged, signed or written to the manifest, and the real
+  build jobs stay skipped. If it fails, the failing step prints the three likely causes (mutable instead of immutable
+  `sub`, the ruleset missing the repository, the scope missing); open the connection's **Failures** tab in Docker
+  Home for the claims Docker received. Docker's guide:
+  <https://docs.docker.com/security/authentication/oidc-connections/troubleshoot>. Then close the tickets that
+  waited on the connection and set `DOCKERHUB_ENABLED`. The dry run does not prove `tag-images` (it retags a digest
+  in the same repository) or cosign signing; the first real build does.
 - `[VERIFY]` `DOCKERHUB_OIDC_CONNECTIONID` / `DOCKERHUB_OIDC_EXPIREIN` and the minimum `docker/login-action`
   release that reads them, against Docker's documentation at the time of enabling; `actionlint` over
   `.github/workflows/` on the first pull request (not installed where this was written).
