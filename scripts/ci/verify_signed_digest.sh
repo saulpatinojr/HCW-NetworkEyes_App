@@ -13,8 +13,8 @@
 #   2. cosign verify-attestation: a SLSA v0.2 provenance attestation under the same identity;
 #   3. the provenance statement names this digest as its subject, and its `predicate.builder.id` is a run of this
 #      repository (https://github.com/<repo>/actions/runs/<id>/...), one of EXPECTED_RUN_IDS when those are given
-#      (the 200 runs of the commit the caller found). Checks 1-3 are what the appliances' own
-#      verify_image_signature.sh make;
+#      (the 200 runs of the commit the caller found). Checks 1-3 are what any consumer of the
+#      image should make before it runs it (README, Verifying images);
 #   4. when EXPECTED_REVISION is set: the image's `org.opencontainers.image.revision` label, which is part of the
 #      signed digest, equals that commit, so the digest is bound to the commit and not only to the workflow.
 # cosign 3 accepts one proof of signing time per verification (a signed timestamp from the TSA, or Rekor's

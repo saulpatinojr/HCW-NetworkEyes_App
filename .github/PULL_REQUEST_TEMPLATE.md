@@ -35,7 +35,7 @@ Closes #
 
 ## Core and appliance contract (delete this section if the change does not touch it)
 
-- [ ] The image tag scheme, `.deployment-catalog/latest-build.json`, the `cna-image-published` dispatch and the runtime environment settings are unchanged, or the change is mirrored in both appliance repositories (linked here) or recorded in `TODO.md`.
+- [ ] The image tag scheme, the signing identity and the runtime environment settings are unchanged, or the change is recorded under `Changed` in `CHANGELOG.md` and in `TODO.md`.
 - [ ] `.env.example` lists every setting the code reads.
 - [ ] If the change reaches the lab edition (engine package, rules, an `engine-v*` release), an entry was added to `docs/whats-new-upstream.md` in `HCW-NetworkEyes_AddOn`, or this description says why none is needed.
 

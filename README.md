@@ -76,7 +76,6 @@ scripts/              Repository guards (documentation model, module graph, shap
                       and the headless draw.io wrapper the images use
 tests/                unit/ and integration/
 .github/workflows/    200 build images · 300 test · 310 release · 320 engine release · 370 registry cleanup · 390 repository admin
-.deployment-catalog/  latest-build.json — the build manifest the appliances consume
 local/agent-config/   Vendored agent configuration — gitignored, not project source
 ```
 
@@ -96,16 +95,13 @@ CNA is delivered as one internal **core** repository (this one) and two customer
 The two appliances are structurally identical — same file names, workflow numbers, inputs,
 catalog schema, scripts, and documents — differing only in the cloud-specific parts each README
 enumerates. **Features ship once, here, in the images.** When `200-build-images.yml` publishes a
-new image set it opens a pull request that updates `.deployment-catalog/latest-build.json` (it merges itself
-once the required checks pass, because `main` is protected) and sends a `repository_dispatch`
-(`cna-image-published`) to every repository named in the `APPLIANCE_REPOS` variable, under the account named in
-`APPLIANCE_OWNER` (the appliances do not live under this repository's owner); each
-appliance also polls the manifest. An appliance auto-deploys new images to `dev` and opens an
-"update available" issue for `prod`, which a human approves through its deploy workflow's
-approval gate. Releases (`v*.*.*` tags, `310-release-version.yml`) add a version tag to the image `200` already built
-and signed for that commit, or for the last build before it when only documentation or the manifest changed since;
-a tag on a commit that changed a file `200` builds from fails and names it (tag the `commit` recorded in
-`.deployment-catalog/latest-build.json`). Every image goes to one public Docker Hub repository, `<namespace>/img-ne-appliance-app`
+new image set it verifies that all five digests are signed, tags them, and writes one row per component
+(tags, digest, signed) to the step summary of the run; it commits nothing and notifies no other repository.
+Releases (`v*.*.*` tags, `310-release-version.yml`) add a version tag to the CLI image `200` already built
+and signed for that commit, or for the last build before it when only documentation, tests or another workflow
+changed since, and list the digests of all five images in the release notes;
+a tag on a commit that changed a file `200` builds from fails and names it and the nearest built commit.
+Every image goes to one public Docker Hub repository, `<namespace>/img-ne-appliance-app`
 (the owner's `img-<short name>-<job>-<type>` convention; the tags inside it are unchanged). The full
 contract is in [`CLAUDE.md`](CLAUDE.md).
 
@@ -201,7 +197,7 @@ Reference** explains each value in full.
   community files in `.github/`.
   Long-form documentation goes to the Wiki. Content determines destination, not filename.
 - **The appliance contract is mirrored, never implied.** Any change to the image tag scheme, the
-  build manifest, the `cna-image-published` dispatch, or the runtime environment contract
+  signed-digest record, or the runtime environment contract
   (`CNA_AI_MODE`, `CNA_APPLIANCE_CLOUD`, …) is made in both appliance repositories in the same
   change set — see [`CLAUDE.md`](CLAUDE.md).
 - **Numbered workflows.** Workflows use numeric bands shared by the core and both appliances:

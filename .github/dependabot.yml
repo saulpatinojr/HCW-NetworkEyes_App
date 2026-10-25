@@ -63,9 +63,9 @@ updates:
 
   # GitHub Actions
   - package-ecosystem: github-actions
+    # "/" covers .github/workflows. There is no local composite action; add "/.github/actions/*" back with the first one.
     directories:
       - "/"
-      - "/.github/actions/*"
     schedule:
       interval: weekly
       day: monday

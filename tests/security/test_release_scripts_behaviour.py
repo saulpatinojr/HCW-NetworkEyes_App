@@ -5,11 +5,11 @@ call, because a pin cannot show that a jq filter, a path glob or a "not found" t
 
 * ``scripts/ci/paths_touch_build.py``: which changed files make ``200-build-images.yml`` build;
 * ``scripts/ci/registry_digest.sh``: "the tag does not exist" and "I could not ask" are different answers;
-* ``scripts/ci/find_release_image.sh``: the search for the image to promote, including the head of main being the
-  manifest-only commit every successful 200 ends with;
-* ``scripts/ci/manifest_tags.sh``: the tags 370 protects, and only those of the configured repository;
+* ``scripts/ci/find_release_image.sh``: the search for the image to promote, including a tagged commit that changed
+  nothing 200 builds from;
 * ``scripts/ci/verify_signed_digest.sh``: the signature, subject, builder and revision checks, with a stub
-  ``cosign`` that records how it was called.
+  ``cosign`` that records how it was called;
+* ``scripts/ci/release_digests.sh``: the other four images of the build, which the release notes list.
 
 They need ``bash`` and ``jq``. GitHub's runners have both; a machine without them skips these tests, and
 ``test_ci_has_the_tools`` fails on CI if either is missing so a skip can never hide there.
@@ -102,7 +102,7 @@ class TestPathsTouchBuild:
             "README.md",
             "CHANGELOG.md",
             "TODO.md",
-            ".deployment-catalog/latest-build.json",
+            ".github/workflows/370-registry-cleanup.yml",
             ".github/workflows/310-release-version.yml",
             "scripts/ci/find_release_image.sh",
             "tests/security/test_image_repository_name.py",
@@ -128,9 +128,9 @@ class TestPathsTouchBuild:
             capture_output=True,
             text=True,
         )
-        hit = run("README.md\nDockerfile\n.deployment-catalog/latest-build.json\n")
+        hit = run("README.md\nDockerfile\nscripts/ci/release_digests.sh\n")
         assert (hit.returncode, hit.stdout.split()) == (1, ["Dockerfile"])
-        clean = run("README.md\n.deployment-catalog/latest-build.json\n")
+        clean = run("README.md\nscripts/ci/release_digests.sh\n")
         assert (clean.returncode, clean.stdout) == (0, "")
 
     def test_a_workflow_without_a_path_filter_is_refused_not_guessed(self, tmp_path):
@@ -328,12 +328,16 @@ class TestFindReleaseImage:
     BUILD = {
         "Dockerfile": "FROM scratch\n",
         "README.md": "one\n",
-        ".deployment-catalog/latest-build.json": '{"commit": "RECORDED"}\n',
     }
 
-    def test_the_manifest_only_head_of_main_finds_the_build_before_it(self, tmp_path):
-        # The first-release case: 200 built commit 0, and its self-merging manifest pull request added commit 1.
-        commits = [self.BUILD, {".deployment-catalog/latest-build.json": '{"commit": "new"}\n'}]
+    def test_a_head_of_main_that_changed_no_file_200_builds_from_finds_the_build_before_it(
+        self, tmp_path
+    ):
+        # The first-release case: 200 built commit 0; commit 1 only touched another workflow and a test.
+        commits = [
+            self.BUILD,
+            {".github/workflows/310-release-version.yml": "x\n", "tests/test_x.py": "y\n"},
+        ]
         result, out, shas = self._find(tmp_path, commits, [self._run_row(0, 111)], [(0, HEX)])
         assert result.returncode == 0, result.stderr
         assert (
@@ -350,24 +354,26 @@ class TestFindReleaseImage:
         assert result.returncode == 0, result.stderr
         assert out["build_commit"] == shas[0]
 
-    def test_a_change_to_a_file_200_builds_from_is_refused_naming_it_and_the_recorded_commit(
+    def test_a_change_to_a_file_200_builds_from_is_refused_naming_it_and_the_commit_to_tag(
         self, tmp_path
     ):
         commits = [
             self.BUILD,
             {"Dockerfile": "FROM scratch\nLABEL x=y\n"},
-            {".deployment-catalog/latest-build.json": '{"commit": "RECORDED", "n": 2}\n'},
+            {"README.md": "three\n"},
         ]
-        result, out, _ = self._find(tmp_path, commits, [self._run_row(0, 111)], [(0, HEX)])
+        result, out, shas = self._find(tmp_path, commits, [self._run_row(0, 111)], [(0, HEX)])
         assert result.returncode == 1 and out == {}
-        assert "Dockerfile" in result.stderr and "latest-build.json" in result.stderr
-        assert "RECORDED" in result.stderr, "it tells the owner which commit to tag"
+        assert "Dockerfile" in result.stderr
+        assert shas[0] in result.stderr, "it tells the owner which commit to tag"
+        assert "latest-build" not in result.stderr and "manifest" not in result.stderr
 
     def test_no_200_run_anywhere_fails_with_the_exact_message(self, tmp_path):
         result, out, _ = self._find(tmp_path, [self.BUILD, {"README.md": "two\n"}], [], [])
         assert result.returncode == 1 and out == {}
         assert "No run of 200-build-images.yml built an image for commit" in result.stderr
-        assert "Tag the commit that 200 built" in result.stderr and "RECORDED" in result.stderr
+        assert "Tag a commit that 200 built" in result.stderr
+        assert "latest-build" not in result.stderr and "manifest" not in result.stderr
 
     def test_a_finished_run_without_the_sha_tag_is_not_a_build(self, tmp_path):
         # The scan failed, publishing was off, or 370 pruned the tag: do not promote anything.
@@ -425,55 +431,6 @@ class TestFindReleaseImage:
         )
         result = _run("find_release_image.sh", env=env, cwd=repo)
         assert result.returncode == 1 and "40-character" in result.stderr
-
-
-# --- manifest_tags.sh ---
-
-MANIFEST = {
-    "images": {
-        "cli": f"{IMAGE}:sha-1234567",
-        "api": f"{IMAGE}:api-sha-1234567",
-        "worker": f"docker.io/{NAMESPACE}/cna:worker-sha-1111111",
-        "web": f"{IMAGE}:web-sha-1234567",
-        "migrator": f"docker.io/other/{REPOSITORY}:migrator-sha-1234567",
-    }
-}
-
-
-@needs_tools
-class TestManifestTags:
-    def _run(self, mode, tmp_path, manifest=None, prefix=f"{IMAGE}:"):
-        return _run(
-            "manifest_tags.sh",
-            mode,
-            prefix,
-            env=dict(os.environ),
-            cwd=tmp_path,
-            stdin=json.dumps(manifest or MANIFEST),
-        )
-
-    def test_only_the_tags_of_the_configured_repository_are_protected(self, tmp_path):
-        result = self._run("protected", tmp_path)
-        assert result.returncode == 0, result.stderr
-        assert result.stdout.split() == ["sha-1234567", "api-sha-1234567", "web-sha-1234567"]
-
-    def test_entries_of_another_repository_or_namespace_are_counted_not_protected(self, tmp_path):
-        assert self._run("foreign", tmp_path).stdout.strip() == "2"
-
-    def test_a_manifest_of_the_retired_repository_protects_nothing(self, tmp_path):
-        old = {"images": {k: v.replace(REPOSITORY, "cna") for k, v in MANIFEST["images"].items()}}
-        assert self._run("protected", tmp_path, old).stdout.strip() == ""
-        assert self._run("foreign", tmp_path, old).stdout.strip() == "5"
-
-    def test_a_prefix_without_the_colon_is_refused(self, tmp_path):
-        assert self._run("protected", tmp_path, prefix=IMAGE).returncode == 2
-
-    def test_the_committed_manifest_can_be_read(self, tmp_path):
-        committed = json.loads(
-            (REPO_ROOT / ".deployment-catalog" / "latest-build.json").read_text(encoding="utf-8")
-        )
-        result = self._run("foreign", tmp_path, committed)
-        assert result.returncode == 0 and result.stdout.strip().isdigit()
 
 
 # --- verify_signed_digest.sh ---
@@ -632,3 +589,273 @@ class TestVerifySignedDigest:
     ):
         result, calls = self._verify(tmp_path, ref=ref)
         assert result.returncode == 1 and calls == []
+
+
+# --- release_digests.sh ---
+
+#: component -> the prefix of its `<prefix><7 hex>` tag, as 200-build-images.yml writes them (the CLI has none).
+OTHER_IMAGES = {
+    "api": "api-sha-",
+    "worker": "worker-sha-",
+    "web": "web-sha-",
+    "migrator": "migrator-sha-",
+}
+
+#: A `cosign` that signs whatever digest it is asked about, as 200 would have: the signature, and a provenance
+#: statement built by run 111 of o/r naming that digest. Each call is logged.
+COSIGN_FOR_ANY_DIGEST = r"""
+echo "$*" >> "$COSIGN_LOG"
+[ -z "${STUB_COSIGN_FAIL:-}" ] || { echo "no matching signatures" >&2; exit 1; }
+ref=""; for a in "$@"; do case "$a" in docker.io/*) ref="$a" ;; esac; done; hex="${ref##*sha256:}"
+case "$1" in
+  verify)
+    printf '[{"critical":{"image":{"docker-manifest-digest":"sha256:%s"}}}]\n' "$hex" ;;
+  verify-attestation)
+    stmt="$(printf '{"predicateType":"https://slsa.dev/provenance/v0.2","subject":[{"digest":{"sha256":"%s"}}],"predicate":{"builder":{"id":"https://github.com/o/r/actions/runs/111/attempts/1"}}}' "$hex")"
+    printf '{"payload":"%s"}\n' "$(printf '%s' "$stmt" | base64 | tr -d '\n')" ;;
+esac
+"""
+
+
+def _digest_of(component: str) -> str:
+    return "sha256:" + {"api": "1", "worker": "2", "web": "3", "migrator": "4"}[component] * 64
+
+
+@needs_tools
+class TestReleaseDigests:
+    COMMIT = "c" * 40
+
+    def _run(
+        self,
+        tmp_path,
+        *,
+        missing=(),
+        registry_error="",
+        cosign_fails=False,
+        run_ids="111",
+        revision=None,
+        build_commit=None,
+    ):
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        _stub(bin_dir, "docker", DOCKER_STUB)
+        _stub(bin_dir, "cosign", COSIGN_FOR_ANY_DIGEST)
+        short = self.COMMIT[:7]
+        registry = tmp_path / "registry.txt"
+        registry.write_text(
+            "".join(
+                f"{IMAGE}:{prefix}{short} {_digest_of(component)}\n"
+                for component, prefix in OTHER_IMAGES.items()
+                if component not in missing
+            ),
+            encoding="utf-8",
+        )
+        image = tmp_path / "image.json"
+        label = revision or self.COMMIT
+        image.write_text(
+            json.dumps(
+                {
+                    "linux/amd64": {
+                        "config": {"Labels": {"org.opencontainers.image.revision": label}}
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        out = tmp_path / "github_output"
+        log = tmp_path / "cosign.log"
+        env = _env(
+            bin_dir,
+            COSIGN_LOG=str(log),
+            STUB_REGISTRY=str(registry),
+            STUB_REGISTRY_ERROR=registry_error,
+            STUB_IMAGE=str(image),
+            STUB_COSIGN_FAIL="1" if cosign_fails else "",
+            GITHUB_SERVER_URL="https://github.com",
+            GITHUB_REPOSITORY="o/r",
+            GITHUB_OUTPUT=str(out),
+            DOCKERHUB_NAMESPACE=NAMESPACE,
+            IMAGE_REPOSITORY=REPOSITORY,
+            BUILD_COMMIT=build_commit or self.COMMIT,
+            RUN_IDS=run_ids,
+        )
+        result = _run("release_digests.sh", env=env, cwd=tmp_path)
+        outputs = (
+            dict(line.split("=", 1) for line in out.read_text(encoding="utf-8").splitlines())
+            if out.exists()
+            else {}
+        )
+        calls = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
+        return result, outputs, calls
+
+    def test_the_four_other_images_are_resolved_by_their_own_sha_tag_and_verified(self, tmp_path):
+        result, out, calls = self._run(tmp_path)
+        assert result.returncode == 0, result.stderr
+        assert out == {f"digest_{c}": _digest_of(c) for c in OTHER_IMAGES}
+        # Two cosign calls (signature, provenance) per image, each on exactly that digest and the 200 identity.
+        assert len(calls) == 2 * len(OTHER_IMAGES)
+        for component in OTHER_IMAGES:
+            ref = f"{IMAGE}@{_digest_of(component)}"
+            mine = [c for c in calls if f" {ref}" in c]
+            assert len(mine) == 2, component
+            for call in mine:
+                assert (
+                    "--certificate-identity https://github.com/o/r/.github/workflows/200-build-images.yml@refs/heads/main"
+                    in call
+                )
+
+    def test_a_missing_tag_means_an_incomplete_build_and_stops_the_release(self, tmp_path):
+        result, out, _ = self._run(tmp_path, missing=("web",))
+        assert result.returncode == 1
+        assert f"{IMAGE}:web-sha-{self.COMMIT[:7]} does not exist" in result.stderr
+        assert "complete set" in result.stderr
+        assert "digest_web" not in out and "digest_migrator" not in out
+
+    def test_a_registry_error_is_not_read_as_a_missing_tag(self, tmp_path):
+        result, out, _ = self._run(tmp_path, registry_error="denied: requested access")
+        assert result.returncode == 1 and out == {}
+        assert "refusing to guess" in result.stderr and "does not exist" not in result.stderr
+
+    def test_an_image_that_does_not_verify_is_not_listed(self, tmp_path):
+        result, out, _ = self._run(tmp_path, cosign_fails=True)
+        assert result.returncode != 0 and out == {}
+        assert "not signed by" in result.stderr
+
+    def test_a_digest_built_by_a_run_other_than_the_commits_is_refused(self, tmp_path):
+        result, out, _ = self._run(tmp_path, run_ids="999")
+        assert result.returncode != 0 and out == {}
+        assert "No provenance statement names" in result.stderr
+
+    def test_an_image_built_from_another_commit_is_refused(self, tmp_path):
+        result, out, _ = self._run(tmp_path, revision="d" * 40)
+        assert result.returncode != 0 and out == {}
+        assert "revision label" in result.stderr
+
+    def test_a_build_commit_that_is_not_a_full_sha_is_refused(self, tmp_path):
+        result, out, calls = self._run(tmp_path, build_commit="main")
+        assert result.returncode == 1 and out == {} and calls == []
+        assert "40-character" in result.stderr
+
+    def test_the_tag_prefixes_are_the_ones_200_attaches(self):
+        # The script resolves `<prefix><sha7>`; 200 must create exactly those tags. A prefix changed on one side
+        # only would make every release fail with "does not exist" (or, worse, verify some other image).
+        import yaml
+
+        doc = yaml.safe_load(BUILD_WORKFLOW.read_text(encoding="utf-8"))
+        matrix = {
+            item["key"]: item["sha_prefix"]
+            for item in doc["jobs"]["build-images"]["strategy"]["matrix"]["include"]
+        }
+        web_text = "\n".join(
+            str(step.get("with", {}).get("tags", "")) for step in doc["jobs"]["build-web"]["steps"]
+        )
+        for role in ("web", "migrator"):
+            assert f"type=sha,prefix={role}-sha-" in web_text, role
+            matrix[role] = f"{role}-sha-"
+        assert matrix["cli"] == ""
+        assert {k: v for k, v in matrix.items() if k != "cli"} == OTHER_IMAGES
+
+
+# --- the "Verify, tag and record" step of tag-images in 200-build-images.yml ---
+
+
+def _tag_images_script() -> str:
+    import yaml
+
+    doc = yaml.safe_load(BUILD_WORKFLOW.read_text(encoding="utf-8"))
+    steps = doc["jobs"]["tag-images"]["steps"]
+    return next(s for s in steps if "Verify, tag and record" in s.get("name", ""))["run"]
+
+
+COMPONENT_TAGS = {
+    "cli": ["latest", "sha-abc1234"],
+    "api": ["api-latest", "api-sha-abc1234"],
+    "worker": ["worker-latest", "worker-sha-abc1234"],
+    "web": ["web-latest", "web-sha-abc1234"],
+    "migrator": ["migrator-latest", "migrator-sha-abc1234"],
+}
+
+
+@needs_tools
+class TestTagImagesStep:
+    """The step is run as bash with stubs for docker and for the verification script it calls."""
+
+    def _run(self, tmp_path, *, bad=None, digests=None):
+        digests = digests or {c: f"sha256:{str(i) * 64}" for i, c in enumerate(COMPONENT_TAGS, 1)}
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        _stub(bin_dir, "docker", 'echo "$*" >> "$DOCKER_LOG"')
+        verify = tmp_path / "scripts" / "ci" / "verify_signed_digest.sh"
+        verify.parent.mkdir(parents=True)
+        verify.write_text(
+            "#!/usr/bin/env bash\n"
+            'echo "$1 revision=$EXPECTED_REVISION runs=$EXPECTED_RUN_IDS" >> "$VERIFY_LOG"\n'
+            '[ -z "${STUB_BAD:-}" ] || case "$1" in *"$STUB_BAD") exit 1 ;; esac\n',
+            encoding="utf-8",
+            newline="\n",
+        )
+        summary = tmp_path / "summary.md"
+        env = _env(
+            bin_dir,
+            DOCKER_LOG=str(tmp_path / "docker.log"),
+            VERIFY_LOG=str(tmp_path / "verify.log"),
+            STUB_BAD=digests[bad] if bad else "",
+            GITHUB_STEP_SUMMARY=str(summary),
+            GITHUB_SHA="f" * 40,
+            GITHUB_RUN_ID="4242",
+            DOCKERHUB_NAMESPACE=NAMESPACE,
+            IMAGE_REPOSITORY=REPOSITORY,
+            EXPECTED_REVISION="f" * 40,
+            EXPECTED_RUN_IDS="4242",
+            **{f"DIGEST_{c.upper()}": d for c, d in digests.items()},
+            **{
+                f"TAGS_{c.upper()}": json.dumps([f"{IMAGE}:{t}" for t in COMPONENT_TAGS[c]])
+                for c in COMPONENT_TAGS
+            },
+        )
+        result = subprocess.run(
+            [BASH, "-c", _tag_images_script()],
+            env=env,
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+        )
+
+        def read(name):
+            path = tmp_path / name
+            return path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+
+        return result, read("docker.log"), read("verify.log"), read("summary.md"), digests
+
+    def test_every_digest_is_verified_then_tagged_and_the_table_lists_all_five(self, tmp_path):
+        result, docker_log, verify_log, summary, digests = self._run(tmp_path)
+        assert result.returncode == 0, result.stderr
+        assert len(verify_log) == 5 and len(docker_log) == 5
+        assert all("revision=" + "f" * 40 + " runs=4242" in line for line in verify_log)
+        assert [line.split()[-1] for line in docker_log] == [
+            f"{IMAGE}@{digests[c]}" for c in COMPONENT_TAGS
+        ]
+        assert "### Published images" in summary
+        rows = [line for line in summary if line.startswith("| ") and "Component" not in line]
+        rows = [line for line in rows if not line.startswith("| ---")]
+        assert len(rows) == 5
+        for row, component in zip(rows, COMPONENT_TAGS, strict=True):
+            tags = ", ".join(f"`{t}`" for t in COMPONENT_TAGS[component])
+            assert row == f"| {component} | {tags} | `{digests[component]}` | yes |"
+
+    def test_no_tag_moves_when_one_digest_does_not_verify_and_the_table_says_no(self, tmp_path):
+        result, docker_log, verify_log, summary, _ = self._run(tmp_path, bad="web")
+        assert result.returncode == 1
+        assert docker_log == [], "a tag was created although a digest did not verify"
+        assert len(verify_log) == 5, "every digest is checked so the table names all that fail"
+        assert "### NOT TAGGED: 1 of 5 digests did not verify" in summary
+        assert [line for line in summary if line.startswith("| web ")][0].endswith("| no |")
+        assert sum(line.endswith("| yes |") for line in summary) == 4
+        assert "refusing to tag anything" in result.stdout + result.stderr
+
+    def test_a_missing_digest_fails_before_anything_is_verified_or_tagged(self, tmp_path):
+        digests = {c: f"sha256:{str(i) * 64}" for i, c in enumerate(COMPONENT_TAGS, 1)}
+        digests["worker"] = ""
+        result, docker_log, verify_log, summary, _ = self._run(tmp_path, digests=digests)
+        assert result.returncode == 1 and docker_log == [] and verify_log == [] and summary == []
+        assert "No valid digest for 'worker'" in result.stdout + result.stderr

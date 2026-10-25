@@ -138,8 +138,8 @@ jobs:
   # The same fast checks the Python package gets, for apps/cna-web. Runs on
   # the runner's own Node (ubuntu-latest ships a current LTS; the image build
   # in 200 is the authoritative Node 24 run) — actions/setup-node is not used
-  # because every action here is SHA-pinned and none of the three repositories
-  # carries an audited digest for it yet.
+  # because every action here is SHA-pinned and no audited digest for it
+  # exists in this repository yet.
   web:
     name: Web lint, typecheck & tests
     runs-on: ubuntu-latest

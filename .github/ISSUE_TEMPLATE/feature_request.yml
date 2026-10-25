@@ -55,7 +55,7 @@ body:
       label: Boundaries
       description: These are rules of this repository; a request that needs one of them to change is a decision for the owner.
       options:
-        - label: This request does not change how the images are tagged, the build manifest, or the runtime settings the appliances inject, or I say below why it must.
+        - label: This request does not change how the images are tagged or signed, or the runtime settings the appliances inject, or I say below why it must.
           required: true
         - label: This request does not ask this repository to deploy anything. Deployment belongs to the appliance repositories.
           required: true

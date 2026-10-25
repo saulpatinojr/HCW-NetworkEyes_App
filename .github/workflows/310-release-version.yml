@@ -7,17 +7,22 @@
 # auto-generated changelog from PRs merged since the last tag.
 #
 # Why promote and not build again: a second build of the same commit has no scan gate and is a different digest
-# from the one the appliances verify; and a `latest` tag pushed from here could move ahead of the scan that 200
+# from the one consumers verify; and a `latest` tag pushed from here could move ahead of the scan that 200
 # applies before it moves `latest`. So this workflow never builds, never pushes layers and never touches `latest`
 # (200 owns it, after the scan).
 #
-# WHICH COMMIT TO TAG. Every successful 200 ends with a squash commit that only changes
-# .deployment-catalog/latest-build.json, a path 200 does not build from, so the head of main right after a build
-# has no 200 run of its own. The search therefore walks back from the tagged commit to the nearest commit whose 200
-# run left a `sha-<7>` tag, and accepts the tagged commit when nothing changed between the two in a file 200 builds
-# from (its `on.push.paths`): documentation, or the manifest commit. If the tagged commit changed such a file, the
-# release fails and names it; tag the commit recorded as `commit` in .deployment-catalog/latest-build.json instead.
-# If no 200 build is found at all, the release fails with that same advice.
+# THE FIVE DIGESTS. Only the CLI image gets the `<version>` tag. The release notes list the digest of all five
+# images of that build (CLI, api, worker, web, migrator), each resolved from its own `sha-<7>` tag and verified the
+# same way as the CLI digest (scripts/ci/release_digests.sh), so the notes are the permanent record of what the
+# release is made of. The four others stay pullable by that digest only while a tag keeps them: 370 keeps the newest
+# KEEP_COUNT `<component>-sha-<7>` tags per component and deletes older ones. See CLAUDE.md.
+#
+# WHICH COMMIT TO TAG. A commit that changes only documentation, tests or another workflow touches nothing 200 builds
+# from, so the path filter gives it no 200 run. The search therefore walks back from the tagged commit to the nearest
+# commit whose 200 run left a `sha-<7>` tag, and accepts the tagged commit when nothing changed between the two in a
+# file 200 builds from (its `on.push.paths`). If the tagged commit changed such a file, the release fails and names
+# it and the nearest built commit; tag that commit instead, or run 200 on the tagged one first. If no 200 build is
+# found at all, the release fails with the same advice.
 #
 # DRY RUN. Actions, 310 · Release CLI Tool, Run workflow, branch main, `dry_run` ticked (the default): runs the
 # search and the verification against the head of main, prints which digest it would promote, and stops. It never
@@ -138,22 +143,43 @@ jobs:
           EXPECTED_RUN_IDS: ${{ steps.scanned.outputs.run_ids }}
         run: bash scripts/ci/verify_signed_digest.sh "${REGISTRY}/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}@${DIGEST}"
 
+      # The other four images of the same build: each must exist under its own `sha-<7>` tag (a missing one means an
+      # incomplete build and stops the release) and must verify like the CLI digest above. No `||`, no `if`: the
+      # tests pin that, as for the step above.
+      - name: Find and verify the other images of that build
+        id: others
+        env:
+          BUILD_COMMIT: ${{ steps.scanned.outputs.build_commit }}
+          RUN_IDS: ${{ steps.scanned.outputs.run_ids }}
+        run: bash scripts/ci/release_digests.sh
+
       - name: Report what a release would promote (dry run)
         if: github.event_name == 'workflow_dispatch'
         env:
           DIGEST: ${{ steps.scanned.outputs.digest }}
           BUILD_COMMIT: ${{ steps.scanned.outputs.build_commit }}
           SHA_TAG: ${{ steps.scanned.outputs.tag }}
+          DIGEST_API: ${{ steps.others.outputs.digest_api }}
+          DIGEST_WORKER: ${{ steps.others.outputs.digest_worker }}
+          DIGEST_WEB: ${{ steps.others.outputs.digest_web }}
+          DIGEST_MIGRATOR: ${{ steps.others.outputs.digest_migrator }}
         run: |
           {
             echo "### 310 dry run: nothing was logged in, tagged or released"
             echo ""
             echo "- head of main: \`${GITHUB_SHA}\`"
             echo "- image found: \`${REGISTRY}/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}:${SHA_TAG}\`"
-            echo "- digest: \`${DIGEST}\`"
             echo "- built from commit: \`${BUILD_COMMIT}\`"
-            echo "- signature, provenance and revision label: verified"
-            echo "- a pushed \`vX.Y.Z\` tag would add the tag \`X.Y.Z\` to that digest"
+            echo "- signature, provenance and revision label of all five images: verified"
+            echo "- a pushed \`vX.Y.Z\` tag would add the tag \`X.Y.Z\` to the CLI digest"
+            echo ""
+            echo "| Component | Tag | Digest |"
+            echo "| --- | --- | --- |"
+            echo "| cli | \`${SHA_TAG}\` | \`${DIGEST}\` |"
+            echo "| api | \`api-${SHA_TAG}\` | \`${DIGEST_API}\` |"
+            echo "| worker | \`worker-${SHA_TAG}\` | \`${DIGEST_WORKER}\` |"
+            echo "| web | \`web-${SHA_TAG}\` | \`${DIGEST_WEB}\` |"
+            echo "| migrator | \`migrator-${SHA_TAG}\` | \`${DIGEST_MIGRATOR}\` |"
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
       # Log in to Docker Hub, just before the only step that writes to it.
@@ -236,3 +262,37 @@ jobs:
             docker pull ${{ env.REGISTRY }}/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}:${{ steps.version.outputs.VERSION }}
             docker run --rm ${{ env.REGISTRY }}/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}:${{ steps.version.outputs.VERSION }} --help
             ```
+
+            ### Images in this release
+
+            All five images were built from commit `${{ steps.scanned.outputs.build_commit }}` by `200-build-images.yml`. Each digest below was
+            checked before this release was created: signed and attested by that workflow (cosign, keyless), built by one of its runs for that
+            commit, and carrying that commit as its `org.opencontainers.image.revision` label. Only the CLI image gets the version tag
+            `${{ steps.version.outputs.VERSION }}`; the other four are identified by digest. Pull by digest and verify the signature before you run an image.
+
+            | Component | Tag at build time | Digest |
+            | --- | --- | --- |
+            | cli | `${{ steps.scanned.outputs.tag }}`, `${{ steps.version.outputs.VERSION }}` | `${{ steps.scanned.outputs.digest }}` |
+            | api | `api-${{ steps.scanned.outputs.tag }}` | `${{ steps.others.outputs.digest_api }}` |
+            | worker | `worker-${{ steps.scanned.outputs.tag }}` | `${{ steps.others.outputs.digest_worker }}` |
+            | web | `web-${{ steps.scanned.outputs.tag }}` | `${{ steps.others.outputs.digest_web }}` |
+            | migrator | `migrator-${{ steps.scanned.outputs.tag }}` | `${{ steps.others.outputs.digest_migrator }}` |
+
+            Registry retention: the version tag is permanent. The `<component>-sha-<7>` tags of the other four images are pruned by
+            `370-registry-cleanup.yml` after the newest 10 builds per component, and a digest no tag points to may then be removed by
+            Docker Hub, so deploy from the digest soon after the release or keep your own copy of the image.
+
+            ### Verify before you run
+
+            ```bash
+            IMAGE=${{ env.REGISTRY }}/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}@sha256:<64 hex from the table>
+            ID=${{ github.server_url }}/${{ github.repository }}/.github/workflows/200-build-images.yml@refs/heads/main
+            ISS=https://token.actions.githubusercontent.com
+            cosign verify "$IMAGE" --certificate-identity "$ID" --certificate-oidc-issuer "$ISS"
+            cosign verify-attestation "$IMAGE" --type slsaprovenance02 --certificate-identity "$ID" --certificate-oidc-issuer "$ISS"
+            ```
+
+            Pass `--use-signed-timestamps` for the signed timestamp from the timestamp authority; without it cosign 3 uses the
+            transparency-log time. The identity string must match exactly. Renaming or transferring this repository, or renaming the
+            workflow file or the default branch, changes it; such a change is announced in the release notes. A digest that does not
+            verify must not be deployed.

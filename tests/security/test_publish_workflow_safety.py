@@ -5,10 +5,11 @@ Defects an independent review of ``200-build-images.yml`` found by reading it, k
 * every job that logs in to Docker Hub through OIDC may mint a GitHub OIDC token (``id-token: write``);
 * the Docker token outlives the job that uses it (the long jobs ask for the 3600 s maximum);
 * the namespace is validated before the login that depends on it;
-* the appliances' owner is its own variable, not this repository's owner, and a dispatch never follows a
-  redirect;
+* ``tag-images`` verifies that every digest is signed before it moves a tag and records one row per component
+  (tags, digest, signed) in the run's step summary: nothing is written back to the repository;
 * ``310-release-version.yml`` promotes the digest ``200`` scanned and signed for the tagged commit, after
-  verifying its signature, and never builds, never pushes layers and never moves ``latest``.
+  verifying its signature, lists the digests of all five images in the release notes, and never builds, never
+  pushes layers and never moves ``latest``.
 
 These are static checks of the workflow files; they do not prove a Docker Hub exchange or a registry
 push, which only a real run does.
@@ -101,35 +102,6 @@ class TestDockerHubLogin:
     @pytest.mark.parametrize(("workflow", "name", "doc", "job"), LOGINS, ids=IDS)
     def test_the_namespace_is_validated_before_the_login(self, workflow, name, doc, job):
         assert _index_of(job, "Validate Docker Hub namespace") < _login_index(job)
-
-
-class TestNotifyAppliances:
-    def setup_method(self):
-        self.text = BUILD.read_text(encoding="utf-8")
-        self.job = _load(BUILD)["jobs"]["notify-appliances"]
-
-    def test_the_owner_is_the_appliance_owner_variable_not_this_repositorys(self):
-        assert "github.repository_owner" not in self.text
-        token = next(s for s in _steps(self.job) if s.get("id") == "app-token")
-        assert token["with"]["owner"] == "${{ vars.APPLIANCE_OWNER }}"
-        dispatch = next(
-            s for s in _steps(self.job) if "Send cna-image-published" in s.get("name", "")
-        )
-        assert dispatch["env"]["OWNER"] == "${{ vars.APPLIANCE_OWNER }}"
-
-    def test_a_missing_owner_fails_before_any_token_is_minted(self):
-        check = _index_of(self.job, "Require APPLIANCE_OWNER")
-        assert check < _index_of(self.job, "Generate GitHub App token")
-        script = _steps(self.job)[check]["run"]
-        assert "exit 1" in script and "APPLIANCE_OWNER" in script
-
-    def test_the_dispatch_follows_no_redirect_and_checks_the_status(self):
-        script = next(
-            s for s in _steps(self.job) if "Send cna-image-published" in s.get("name", "")
-        )["run"]
-        assert "--max-redirs 0" in script
-        assert not re.search(r"curl\b[^\n]*\s-[a-zA-Z]*L\b", script) and "--location" not in script
-        assert "%{http_code}" in script and "::warning::" in script
 
 
 def _code(text: str) -> str:
@@ -236,7 +208,7 @@ class TestReleasePromotesTheScannedDigest:
         header = self.text.split("name:", 1)[0]
         assert "SECOND RULESET" in header and "refs/tags/v*" in header and "Image Push" in header
         assert "Image Pull is not needed" in header
-        assert "latest-build.json" in header and "commit" in header
+        assert "WHICH COMMIT TO TAG" in header and "THE FIVE DIGESTS" in header
         assert "DRY RUN" in header and "POST-CHECK" in header.upper()
 
 
@@ -313,7 +285,7 @@ class TestDockerLoginRehearsal:
         assert "DOCKERHUB_ENABLED" not in self.job["if"]
         assert not any("DOCKERHUB_ENABLED" in str(s.get("if", "")) for s in self.steps)
         # ... while every real publishing job stays off for a rehearsal run.
-        for name in ("build-images", "build-web", "tag-images", "publish-build-manifest"):
+        for name in ("build-images", "build-web", "tag-images"):
             assert "!inputs.rehearsal" in self.doc["jobs"][name]["if"], name
 
     def test_it_holds_only_the_permissions_the_login_needs_and_no_environment(self):
@@ -437,6 +409,153 @@ class TestDockerLoginRehearsal:
     def test_it_claims_nothing_about_docker_hub_deleting_untagged_images(self):
         text = BUILD.read_text(encoding="utf-8")
         assert "garbage-collect" not in text and "garbage collect" not in text
+
+
+class TestBuildWorkflowStandsAlone:
+    """200 builds, scans, signs, tags and records. It dispatches nothing, opens no pull request, writes no file back."""
+
+    def setup_method(self):
+        self.text = BUILD.read_text(encoding="utf-8")
+        self.doc = _load(BUILD)
+
+    def test_the_jobs_are_exactly_the_build_the_tagging_and_the_login_rehearsal(self):
+        assert sorted(self.doc["jobs"]) == [
+            "build-images",
+            "build-web",
+            "rehearse-docker-login",
+            "tag-images",
+        ]
+
+    def test_the_only_input_is_the_rehearsal_switch(self):
+        trigger = self.doc.get("on", self.doc.get(True))
+        assert sorted(trigger["workflow_dispatch"]["inputs"]) == ["rehearsal"]
+
+    def test_no_job_can_write_to_the_repository_or_uses_an_environment(self):
+        assert self.doc["permissions"] == {}
+        for name, job in self.doc["jobs"].items():
+            permissions = job.get("permissions", {})
+            assert permissions.get("contents") == "read", name
+            assert set(permissions) <= {"contents", "id-token"}, (name, permissions)
+            assert "environment" not in job, name
+            assert "outputs" not in job or all(
+                key.startswith(("digest_", "tags_")) for key in job["outputs"]
+            ), name
+
+    def test_it_reads_no_secret_and_only_the_docker_hub_variables(self):
+        assert "secrets." not in self.text.replace("secrets.GITHUB_TOKEN", "")
+        used = set(re.findall(r"vars\.([A-Z_]+)", self.text))
+        assert used == {"DOCKERHUB_CONNECTION", "DOCKERHUB_ENABLED", "DOCKERHUB_NAMESPACE"}
+
+
+class TestTagImagesVerifiesAndRecords:
+    def setup_method(self):
+        self.doc = _load(BUILD)
+        self.job = self.doc["jobs"]["tag-images"]
+        self.step = _steps(self.job)[_index_of(self.job, "Verify, tag and record")]
+        self.script = self.step["run"]
+
+    def test_the_script_and_cosign_are_available_before_the_step(self):
+        step = _index_of(self.job, "Verify, tag and record")
+        checkout = next(
+            i
+            for i, s in enumerate(_steps(self.job))
+            if str(s.get("uses", "")).startswith("actions/checkout@")
+        )
+        cosign = next(
+            i
+            for i, s in enumerate(_steps(self.job))
+            if str(s.get("uses", "")).startswith("sigstore/cosign-installer@")
+        )
+        assert checkout < step and cosign < step
+        assert _steps(self.job)[cosign]["with"]["cosign-release"] == "${{ env.COSIGN_VERSION }}"
+        assert _steps(self.job)[checkout]["with"] == {"persist-credentials": False}
+
+    def test_every_digest_is_verified_for_this_commit_and_run_before_any_tag_moves(self):
+        env = self.step["env"]
+        assert env["EXPECTED_REVISION"] == "${{ github.sha }}"
+        assert env["EXPECTED_RUN_IDS"] == "${{ github.run_id }}"
+        verify = self.script.index("scripts/ci/verify_signed_digest.sh")
+        assert verify < self.script.index("imagetools create")
+        assert re.search(
+            r'for c in \$COMPONENTS; do\s+if bash scripts/ci/verify_signed_digest\.sh "\$\{IMAGE\}@\$\{DIGESTS\[\$c\]\}"',
+            self.script,
+        )
+        refuse = self.script.index('if [ "$UNSIGNED" -gt 0 ]; then')
+        assert verify < refuse < self.script.index("imagetools create")
+        assert re.search(r'refusing to tag anything\."\s+exit 1\s+fi', self.script[refuse:])
+
+    def test_a_failed_verification_is_not_made_optional(self):
+        assert "|| true" not in self.script and "|| :" not in self.script
+        assert "continue-on-error" not in yaml.safe_dump(self.job)
+        assert "set +e" not in self.script
+
+    def test_the_digest_table_has_one_row_per_component_with_tags_digest_and_signed(self):
+        assert "$GITHUB_STEP_SUMMARY" in self.script
+        assert "| Component | Tags | Digest | Signed |" in self.script
+        assert 'COMPONENTS="cli api worker web migrator"' in self.script
+        assert "${SIGNED[$c]}" in self.script and "${DIGESTS[$c]}" in self.script
+        # The table is written on both paths: when something did not verify (before the refusal) and at the end.
+        assert self.script.count("write_table ") == 2
+
+    def test_the_job_cannot_write_to_the_repository(self):
+        assert self.job["permissions"] == {"contents": "read", "id-token": "write"}
+
+
+class TestReleaseListsTheFiveDigests:
+    def setup_method(self):
+        self.text = RELEASE.read_text(encoding="utf-8")
+        self.doc = _load(RELEASE)
+        self.job = self.doc["jobs"]["release"]
+
+    def _step(self, needle: str) -> dict:
+        return _steps(self.job)[_index_of(self.job, needle)]
+
+    def test_the_other_four_images_are_found_and_verified_before_any_write(self):
+        find = _index_of(self.job, "Find the scanned image")
+        verify = _index_of(self.job, "Verify the signature")
+        others = _index_of(self.job, "Find and verify the other images")
+        report = _index_of(self.job, "Report what a release would promote")
+        assert find < verify < others < report < _login_index(self.job)
+
+    def test_that_step_is_the_script_and_cannot_be_made_optional(self):
+        step = self._step("Find and verify the other images")
+        assert step["run"] == "bash scripts/ci/release_digests.sh"
+        assert set(step) <= {"name", "id", "env", "run"}
+        assert step["id"] == "others"
+        assert step["env"] == {
+            "BUILD_COMMIT": "${{ steps.scanned.outputs.build_commit }}",
+            "RUN_IDS": "${{ steps.scanned.outputs.run_ids }}",
+        }
+
+    def test_the_release_notes_carry_all_five_digests_and_the_verification_command(self):
+        body = self._step("Create GitHub Release")["with"]["body"]
+        for expression in (
+            "steps.scanned.outputs.digest",
+            "steps.others.outputs.digest_api",
+            "steps.others.outputs.digest_worker",
+            "steps.others.outputs.digest_web",
+            "steps.others.outputs.digest_migrator",
+        ):
+            assert "${{ " + expression + " }}" in body, expression
+        assert "cosign verify " in body and "cosign verify-attestation" in body
+        assert "--certificate-identity" in body and "--certificate-oidc-issuer" in body
+        assert "/.github/workflows/200-build-images.yml@refs/heads/main" in body
+
+    def test_the_dry_run_report_lists_all_five_digests_too(self):
+        step = self._step("Report what a release would promote")
+        assert {k: v for k, v in step["env"].items() if k.startswith("DIGEST")} == {
+            "DIGEST": "${{ steps.scanned.outputs.digest }}",
+            "DIGEST_API": "${{ steps.others.outputs.digest_api }}",
+            "DIGEST_WORKER": "${{ steps.others.outputs.digest_worker }}",
+            "DIGEST_WEB": "${{ steps.others.outputs.digest_web }}",
+            "DIGEST_MIGRATOR": "${{ steps.others.outputs.digest_migrator }}",
+        }
+        assert "| Component | Tag | Digest |" in step["run"]
+        for component in ("cli", "api", "worker", "web", "migrator"):
+            assert f"| {component} |" in step["run"], component
+
+    def test_the_release_stays_independent_of_any_file_a_build_commits(self):
+        assert "latest-build" not in self.text and ".deployment-catalog" not in self.text
 
 
 class TestVerifyScript:

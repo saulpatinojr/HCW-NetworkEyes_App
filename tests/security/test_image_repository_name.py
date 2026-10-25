@@ -15,9 +15,7 @@ The name is defined in exactly one place per layer and read everywhere else:
 
 This guard fails if the configured name leaves the convention, if the three workflows disagree, if
 any workflow, script or contract names a repository other than the configured one, or if a
-parallel repository variable appears. History (``CHANGELOG.md``, ``TODO.md``, ``REVIEW.md``) and the
-generated ``.deployment-catalog/latest-build.json`` are not scanned: the first build after the
-rename rewrites the manifest.
+parallel repository variable appears. History (``CHANGELOG.md``, ``TODO.md``, ``REVIEW.md``) is not scanned.
 """
 
 from __future__ import annotations
@@ -234,31 +232,27 @@ class TestScriptsReadTheName:
             assert ref.startswith("docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}@"), ref
 
 
-class TestCleanupAgreesWithTheManifest:
-    """370 protects the tags the manifest of THIS repository names; 200 writes that manifest."""
+class TestTheDigestTableAndTheCleanupUseOnlyTheConfiguredRepository:
+    """200 records what it published in its step summary; 370 prunes by listing the registry. Neither reads a file."""
 
-    def test_the_manifest_images_are_built_from_the_variable(self):
+    def test_the_images_tag_images_verifies_and_tags_are_built_from_the_variable(self):
         text = BUILD_WORKFLOW.read_text(encoding="utf-8")
         assert (
-            text.count('IMAGE="docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}"') == 2
-        )  # tag-images, manifest
-        assert '"cli":      "${IMAGE}:${SHA_TAG}"' in text
-        for role in ("api", "worker", "web", "migrator"):
-            assert f'"{role}":' in text and f"${{IMAGE}}:{role}-${{SHA_TAG}}" in text
-            assert f"${{IMAGE}}@${{DIGEST_{role.upper()}}}" in text
+            text.count('IMAGE="docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}"') == 1
+        )  # tag-images
+        steps = _workflow(BUILD_WORKFLOW)["jobs"]["tag-images"]["steps"]
+        script = next(s for s in steps if "Verify, tag and record" in s.get("name", ""))["run"]
+        assert 'bash scripts/ci/verify_signed_digest.sh "${IMAGE}@${DIGESTS[$c]}"' in script
+        assert 'docker buildx imagetools create "${ARGS[@]}" "${IMAGE}@${DIGESTS[$c]}"' in script
 
-    def test_cleanup_protects_the_tags_of_the_repository_it_prunes(self):
+    def test_cleanup_lists_and_deletes_tags_in_the_repository_it_prunes_only(self):
         text = (WORKFLOWS / "370-registry-cleanup.yml").read_text(encoding="utf-8")
-        assert 'MANIFEST_PREFIX="docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}:"' in text
-        # The filters themselves are in the script (and run against stub manifests in
-        # test_release_scripts_behaviour.py); 370 must call it with that prefix, on the committed manifest.
-        assert (
-            'bash scripts/ci/manifest_tags.sh protected "$MANIFEST_PREFIX" < .deployment-catalog/latest-build.json'
-            in text
-        )
-        assert "select(startswith($prefix)) | ltrimstr($prefix)" in (
-            REPO_ROOT / "scripts" / "ci" / "manifest_tags.sh"
-        ).read_text(encoding="utf-8")
-        # It lists and deletes tags in that same repository, never another.
         assert text.count("/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}/tags") == 2
         assert "${REPO}" not in text and 'REPO="' not in text
+
+    def test_cleanup_reads_nothing_from_the_repository(self):
+        doc = _workflow(WORKFLOWS / "370-registry-cleanup.yml")
+        steps = doc["jobs"]["cleanup"]["steps"]
+        assert not any(str(s.get("uses", "")).startswith("actions/checkout@") for s in steps)
+        text = (WORKFLOWS / "370-registry-cleanup.yml").read_text(encoding="utf-8")
+        assert ".deployment-catalog" not in text and "latest-build" not in text
