@@ -1,5 +1,5 @@
 # ── Stage 1: deps ────────────────────────────────────────────────────────────
-FROM node:24-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS deps
+FROM node:24-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS deps
 WORKDIR /app
 
 # Install native build tools (needed by some optional Prisma packages).
@@ -9,7 +9,7 @@ COPY package.json package-lock.json* ./
 RUN npm ci --legacy-peer-deps
 
 # ── Stage 2: builder ─────────────────────────────────────────────────────────
-FROM node:24-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS builder
+FROM node:24-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS builder
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
@@ -48,7 +48,7 @@ RUN npm run build
 # (its own postinstall script, the same download the deps stage makes), and the
 # client is generated from the schema. The generated client is what seed-local-admin.js
 # loads, so this stage does not depend on the builder (no Next.js build).
-FROM node:24-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS migrator-deps
+FROM node:24-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS migrator-deps
 WORKDIR /src
 
 # Prisma checkpoint telemetry would try to reach the network and write under $HOME.
@@ -70,7 +70,7 @@ RUN node_modules/.bin/prisma generate
 # Standalone image used exclusively to run `prisma migrate deploy` once per
 # deployment (via workflow 210). Keeping CLI deps out of the runtime image avoids
 # chasing Prisma's transitive dep tree (effect, fast-check, etc.) across upgrades.
-FROM node:24-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS migrator
+FROM node:24-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS migrator
 WORKDIR /app
 
 # No `apk upgrade`: the base is pinned by digest, but libc6-compat is installed unpinned (hadolint DL3018 is
@@ -117,7 +117,7 @@ USER 1001
 CMD ["./prisma/migrate.sh"]
 
 # ── Stage 5: runner ──────────────────────────────────────────────────────────
-FROM node:24-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS runner
+FROM node:24-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
