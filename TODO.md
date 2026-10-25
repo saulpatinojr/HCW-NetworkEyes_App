@@ -2405,13 +2405,17 @@ Settings → Rules shows both patterns. Workflow-only change; the pull request n
   Done: `npm run typecheck` runs TypeScript 7.0.2 (`@typescript/native`, #266) and the project also type-checks under
   7.1.0-beta; `tsconfig.json` follows the TypeScript 7 defaults (`types` listed explicitly, `target` ES2022); the
   Dependabot `typescript` ignore is removed (Dependabot lists only direct, non-aliased dependencies, so it never
-  touched either alias: the 2026-10-25 npm run's direct-dependency snapshot has neither); and
-  `lib/typescript-toolchain.test.ts` now fails, with the finishing steps in its message, the moment the installed
-  typescript-eslint admits a TypeScript 7.1 peer, so the exit cannot be forgotten.
+  touched either alias: the direct-dependency snapshot in Dependabot's 2026-10-25 npm log, https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/runs/40192853727, has neither); and
+  two tripwires now say when to finish: `lib/typescript-toolchain.test.ts` fails, with the finishing steps in its
+  message, once the typescript-eslint in `package-lock.json` admits a TypeScript 7.1 peer, and the non-blocking
+  `typescript-canary` job in `300-test-codebase.yml` warns when the newest typescript-eslint on the registry does
+  (Dependabot bumps only direct dependencies, so the lockfile alone can lag behind). Neither is a guarantee; both
+  depend on someone reading a failing test or a warning annotation. Follow-up issue: https://github.com/saulpatinojr/HCW-NetworkEyes_App/issues/291.
   Still open: the compatibility package itself. typescript-eslint 8.72.0 (the newest, 2026-10-25) declares
   `typescript >=4.8.4 <6.1.0`, its issue 10940 is open, and TypeScript 7.1 is only at `7.1.0-beta`; Next.js also
   imports the TypeScript 6 API during `next build`. Nothing in this repository can lift that.
-- **Original description:** `apps/cna-web` keeps `typescript` as `npm:@typescript/typescript6` because typescript-eslint (inside `eslint-config-next`)
+- **Original description** (written before the Dependabot `typescript` ignore was removed by this change; the step
+  that names it below is already done): `apps/cna-web` keeps `typescript` as `npm:@typescript/typescript6` because typescript-eslint (inside `eslint-config-next`)
 refuses to load against TypeScript 7, which has no programmatic API until 7.1 (typescript-eslint issue 10940 tracks it).
 `@typescript/native` supplies `tsc` 7. Open: when a typescript-eslint release lists TypeScript 7.1 or later in its
 `typescript` peer range, change `typescript` to the same 7.x as `@typescript/native`, remove `@typescript/native`, the
@@ -2428,8 +2432,10 @@ newest TypeScript behaves in the meantime.
   grouping, so there was no such behaviour to carry over; the new `components/pivot/pivot-grid.test.tsx` (jsdom, 9 cases)
   renders the real component and pins headers, row order, totals, cost formatting, the dimension pickers, filters,
   new records and the empty state. The same 9 cases also pass against the old component on 8.21.3. The Dependabot
-  major ignore is removed. Not done: a look in a real browser (see the pull request).
-- **Original description:** `components/pivot/pivot-grid.tsx` uses the TanStack Table 8 API. Under version 9 (Dependabot #226) the type check
+  major ignore is removed. Done except one item: nobody has looked at the grid in a real browser yet (it needs the
+  signed-in app and a database), so the owner should open an engagement's traffic page and check the layout.
+- **Original description** (the browser check named at its end is the one item left for the owner, see the status
+  above): `components/pivot/pivot-grid.tsx` uses the TanStack Table 8 API. Under version 9 (Dependabot #226) the type check
 reports nine errors: `getCoreRowModel` and `useReactTable` are no longer exported and a generic now needs two type
 arguments. `.github/dependabot.yml` ignores the major until then. Open: migrate the component,
 remove the ignore, and check the grid in the browser (sorting, grouping, scrolling) because the type check does not

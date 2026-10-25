@@ -230,6 +230,25 @@ jobs:
             echo "::warning title=TypeScript canary::The web app does not type-check under the newest TypeScript. See the job summary."
           fi
 
+      # The unit test lib/typescript-toolchain.test.ts only sees the typescript-eslint that package-lock.json holds, and
+      # Dependabot bumps only direct dependencies, so a newer typescript-eslint can go unnoticed. This step asks the
+      # registry for the newest release and warns (never fails) once TypeScript 7.1.0 satisfies its peer range, which
+      # is the cue to drop the TypeScript 6 compatibility package (TODO.md T-731, issue 291).
+      - name: Check the newest typescript-eslint peer range (does not block)
+        continue-on-error: true
+        run: |
+          range="$(npm view typescript-eslint@latest peerDependencies.typescript || true)"
+          version="$(npm view typescript-eslint@latest version || true)"
+          if [ -z "$range" ]; then
+            echo "::notice title=typescript-eslint peer range::The registry did not answer; nothing was checked."
+            echo "typescript-eslint peer range: not checked (the registry did not answer)." >> "$GITHUB_STEP_SUMMARY"
+          elif npx --yes semver@7.8.5 -r "$range" 7.1.0 > /dev/null; then
+            echo "typescript-eslint $version accepts TypeScript 7.1.0 (peer range: $range)." >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=typescript-eslint supports TypeScript 7.1::typescript-eslint $version accepts TypeScript 7.1.0 (peer range $range). Check whether Next.js does too, then drop the TypeScript 6 compatibility package (TODO.md T-731, issue 291)."
+          else
+            echo "typescript-eslint $version still excludes TypeScript 7.1.0 (peer range: $range)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   # ------------------------------------------------------------------
   # 3. Unit tests — Python 3.14
   # ------------------------------------------------------------------

@@ -229,6 +229,7 @@ export function PivotGrid({
             <tbody className="divide-y divide-navy-700/30">
               {table.getRowModel().rows.map((row) => (
                 <tr key={row.id}>
+                  {/* getAllCells() differs from getVisibleCells() only if column visibility is ever registered. */}
                   {row.getAllCells().map((cell, i) => (
                     <td key={cell.id} className={`py-2 ${i === 0 ? "pr-4 text-left" : "pl-4 text-right"} text-navy-300`}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
