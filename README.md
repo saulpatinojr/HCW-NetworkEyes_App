@@ -90,16 +90,19 @@ repository and notifies no one. Whoever runs the images (a person or a separate 
 
 - **Where.** One public Docker Hub repository, `docker.io/hybridcloudworks/img-ne-appliance-app` (the owner's
   `img-<short name>-<job>-<type>` convention). Tags: `<component>-sha-<7>` for `api`, `worker`, `web` and `migrator`,
-  `sha-<7>` for the CLI image, floating `*-latest`, and `<version>` on the CLI image of a release.
+  `sha-<7>` for the CLI image, floating `*-latest` (moved only by the tip of the default branch; an older or re-run
+  commit gets its sha tags only), and for a release the version tags `X.Y.Z` on the CLI image and `api-X.Y.Z`,
+  `worker-X.Y.Z`, `web-X.Y.Z` and `migrator-X.Y.Z` on the others.
 - **How an image is published.** `200-build-images.yml` pushes each image by digest, has Docker Scout scan it, signs it
   with cosign (keyless, under the workflow's own GitHub identity) and attaches the build provenance; only when all five
   images pass does it attach the tags. It logs in to Docker Hub through Docker's OIDC connection (the repository
   variable `DOCKERHUB_CONNECTION`), so no Docker Hub password is stored for it. The record of a build is a table in
   the step summary of the run (one row per component: tags, digest, signed); it commits nothing and notifies no other
   repository.
-- **Releases.** A `v*.*.*` tag runs `310-release-version.yml`, which adds the `<version>` tag to the CLI image `200`
+- **Releases.** A `v*.*.*` tag runs `310-release-version.yml`, which gives the five images `200`
   already built and signed for that commit, or for the last build before it when only documentation, tests or another
-  workflow changed since, and lists the digests of all five images in the release notes. A tag on a commit that
+  workflow changed since, their version tags (it checks all five first and creates none if one already exists with
+  another digest), and lists each version tag, its build-time tag and its digest in the release notes. A tag on a commit that
   changed a file `200` builds from fails and names it and the nearest built commit. The Docker Hub connection needs a
   separate tag-only rule (`refs/tags/v*`, Image Push) for this workflow before the first release (`TODO.md` T-728; the connection has not been read from here, so it is
   not confirmed that the rule exists yet).
@@ -107,7 +110,7 @@ repository and notifies no one. Whoever runs the images (a person or a separate 
   `main`, leave **dry_run** ticked (the default). It finds and verifies the image of the latest build, prints what it
   would promote and the commit it was built from, and creates nothing. (2) If the summary looks right, tag that
   commit. Bash or PowerShell, in a clone of this repository (use the commit shown in the summary for `<sha>`):
-  `git tag vX.Y.Z <sha>` then `git push origin vX.Y.Z`. (3) The tag run adds the version tag and creates the GitHub
+  `git tag vX.Y.Z <sha>` then `git push origin vX.Y.Z`. (3) The tag run adds the five version tags and creates the GitHub
   Release. `TODO.md` T-728 has the one-time Docker Hub steps and what to do when a run fails.
 
 The project started as a single repository that held the core until 2026-09-18. Its full history is imported here
@@ -124,7 +127,8 @@ database).
 
 Every published digest is signed (cosign, keyless) and carries a SLSA provenance attestation made by `200-build-images.yml`
 on `main`. Resolve a tag to a digest, then verify that exact digest before you run it. A digest that does not verify must
-not be deployed.
+not be deployed. A released image has a version tag (`X.Y.Z` for the CLI image, `<component>-X.Y.Z` for the others); the
+release notes list each version tag with its digest, and you verify the digest, not the tag.
 
 ```bash
 IMAGE=docker.io/hybridcloudworks/img-ne-appliance-app@sha256:<64 hex>

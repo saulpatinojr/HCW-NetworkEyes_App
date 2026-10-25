@@ -583,8 +583,9 @@ this order:
    `DOCKERHUB_CONNECTION` and `DOCKERHUB_ENABLED`. No registry token is created for publishing (the registry cleanup
    `370` still uses a personal access token, step 3 of R-026). Leave *Actions → General → Workflow permissions* on
    *read-only*, which is how it is set (read 2026-10-25): `310` declares its own `contents: write` for the release job.
-4. Decide Docker Scout's credential and run the dry run of the connection (`200` with `rehearsal` ticked); both are in
-   T-728.
+4. Decide Docker Scout's credential and run the dry run of the connection (`200` with `rehearsal` ticked: one job that
+   logs in, pushes, signs, attests, verifies and tags a throwaway image `rehearsal-<run id>`, which you remove by
+   hand); both are in T-728.
 5. Run `200 · Build Container Images` once from *Run workflow* (or push to `main` touching a Dockerfile). To release:
    run `310 · Release CLI Tool` as a dry run first, then tag the commit it names (README → *Publishing the images*; the checks are under *Verifying images*).
 6. Keep the branch protection on `main` here (required check `300 · Test Codebase`, review requirements).
@@ -627,7 +628,7 @@ file for a hard-coded `sample-engagement` and exits. `POST /publish` superseded 
 always-on service, so it exits and restarts continuously, and its image is built and scanned on every push.
 
 **Why it needs an owner**
-Removing it changes the published image set (the `worker` image), which consumers rely on and which `CLAUDE.md`
+Removing it changes the published image set (the `worker` image and its `worker-<version>` release tag), which consumers rely on and which `CLAUDE.md`
 (*The image contract*) says is never a unilateral cleanup.
 
 **Required owner**
@@ -647,7 +648,7 @@ describes a component that does nothing.
 ## R-017 — Stop publishing the CLI image on every push
 
 **Problem**
-Nothing in this repository pulls the CLI image (`sha-<7>`) except the release, which gives it the `<version>` tag.
+Nothing in this repository pulls the CLI image (`sha-<7>`) except the release, which gives it the `<version>` tag (the other four images get `<component>-<version>`).
 It is the largest image (draw.io + Electron + Xvfb) and its root
 `COPY . .` ships `TODO.md`, `REVIEW.md` and `cna/review/**` inside a customer-pullable artifact.
 
@@ -656,7 +657,7 @@ Repository owner.
 
 **Required action**
 Decide: keep the CLI image as a developer-only local build (`docker-compose.yml` already has it) and
-drop it from `200-build-images.yml` and `310` (a release would then need another image to carry the version tag); or
+drop it from `200-build-images.yml` and `310` (a release would then lose the plain `<version>` tag, which sits on the CLI image); or
 keep publishing and fence the build context.
 
 **Impact if unresolved**

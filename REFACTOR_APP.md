@@ -642,7 +642,7 @@ Clients set `assessment_scope_ids`, `tenant_id` and `image_digest` in `terraform
 | Persisted error text | H | `str(exc)` (`main.py:1704,1812`; `azure_discovery.py:441`) | Class name and status only |
 | Lab boundary | I | None | No Azure SDK installed; startup refusal on identity env; image-level `import azure` must fail; `edition: lab` in health |
 | Scope allow-list | D, G | None (any subscription the SP could read) | `CNA_SCOPES` enforced before any query |
-| Supply chain | J | Docker Hub token secret | OIDC connection; digests in the manifest; Scout and `pip-audit` gates |
+| Supply chain | J | Docker Hub token secret | OIDC connection; digests in the step summary and the release notes; Scout and `pip-audit` gates |
 | AWS surface | K | Always installed | Optional extra |
 | Rate limiting on the public surface | 8 | n/a | Token bucket per client, `X-Forwarded-For` only with `NA_TRUST_PROXY=1`, never `CF-Connecting-IP` |
 
@@ -746,7 +746,7 @@ One PR per change set, ready for review, following the Core's PR template; `CHAN
 1. `pip install ./packages/cna-azure-network-engine` in a clean venv installs `pydantic` only; `python -c "import cna_azure_network_engine as e, sys; print(e.RULES_VERSION); assert 'azure' not in sys.modules"` prints the version.
 2. `pip install "./packages/cna-azure-network-engine[azure]"` adds discovery; `python -c "from cna_azure_network_engine.discovery import ResourceGraphDiscovery"` succeeds.
 3. `git grep -c "def _check_" -- apps/cna-api/main.py` prints nothing; `git grep -n "Network Contributor" -- apps cna docs .env.example` prints nothing; `git grep -n "ClientSecretCredential\|DefaultAzureCredential\|sp_client_secret\|spSecretEnc\|gethostbyname" -- apps cna packages` prints nothing.
-4. `docker build --build-arg EDITION=lab -t cna:lab .` succeeds, `docker run --rm cna:lab` exits 0 and `docker run --rm cna:lab python -c "import azure"` exits 1; the image is never pushed and has no manifest entry; `docker build --build-arg EDITION=appliance -t cna:appliance .` succeeds.
+4. `docker build --build-arg EDITION=lab -t cna:lab .` succeeds, `docker run --rm cna:lab` exits 0 and `docker run --rm cna:lab python -c "import azure"` exits 1; the image is never pushed and has no digest row; `docker build --build-arg EDITION=appliance -t cna:appliance .` succeeds.
 5. `GET /api/health` on the appliance returns `edition: "appliance"`, `azureConnectivity: "managed-identity"`, `id: "network-assessment"` and `version` at the top level, with no token. The `lab` form of the envelope is the AddOn's acceptance, on its own image.
 6. `POST /api/assessments` on the appliance returns 405 with header `Allow: GET` and `error.code == "edition_readonly"`.
 7. `GET /discovery/jobs/anything` on `cna-api` without a bearer token returns 401; with a valid token lacking `Discovery.Run` it returns 403 `insufficient_role`; the appliance exits 1 at startup when `CNA_PROFILE` or any `FORBIDDEN_ENV` variable is set.

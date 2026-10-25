@@ -2241,8 +2241,8 @@ Nothing publishes until the owner flips the variables below. Open, in order:
      the first) to the same connection: subject claim
      `repo:saulpatinojr@34853639/HCW-NetworkEyes_App@1173847343:ref:refs/tags/v*`, resource
      `hybridcloudworks/img-ne-appliance-app`, scope **Image Push** only (Image Pull is not needed: the repository is
-     public and `310` reads it anonymously). It only lets a pushed `v*` tag add a `<version>` tag to a digest `200`
-     scanned and signed. Copy the connection id it shows.
+     public and `310` reads it anonymously). It only lets a pushed `v*` tag add the five version tags (`X.Y.Z`,
+     `api-X.Y.Z`, `worker-X.Y.Z`, `web-X.Y.Z`, `migrator-X.Y.Z`) to digests `200` scanned and signed. Copy the connection id it shows.
   3. PowerShell, which reads the id from the prompt so nothing is retyped into the command:
 
   ```powershell
@@ -2269,9 +2269,12 @@ Nothing publishes until the owner flips the variables below. Open, in order:
   `scripts/ci/verify_signed_digest.sh` exactly as `tag-images` and `310` do, gives it one tag, `rehearsal-<run id>`, and
   reads that tag back. It deletes nothing. It leaves on Docker Hub the `rehearsal-<run id>` tag, the digest and
   cosign's signature and attestation artefacts, and in the public Sigstore transparency log the entries for that
-  signature; remove the Docker Hub objects by hand if you want them gone (whether and when Docker Hub deletes an
-  untagged digest was not checked against Docker's documentation, and `370` does not match the rehearsal tag). The real
-  build jobs stay skipped. If it fails, the failing step prints the three likely causes (mutable instead of immutable
+  signature (public, and not removable); remove the Docker Hub objects by hand if you want them gone (whether and
+  when Docker Hub deletes an untagged digest was not checked against Docker's documentation, and `370` does not match
+  the rehearsal tag). It signs under the production identity (`200-build-images.yml@refs/heads/main`), so only the label
+  `rehearsal=true`, the absence of a `tag-images` job and of any `sha-<7>` tag tell its digest from a real one; its run
+  id is accepted by `scripts/ci/find_release_image.sh` on purpose (see the header of the job). It runs in its own
+  concurrency group. The real build jobs stay skipped. If it fails, the failing step prints the three likely causes (mutable instead of immutable
   `sub`, the ruleset missing the repository, the scope missing); open the connection's **Failures** tab in Docker
   Home for the claims Docker received. Docker's guide:
   <https://docs.docker.com/security/authentication/oidc-connections/troubleshoot>. Then close the tickets that
@@ -2295,10 +2298,16 @@ Nothing publishes until the owner flips the variables below. Open, in order:
   from; it logs in for nothing and creates nothing. (2) Tag that commit (bash or PowerShell: `git tag vX.Y.Z <sha>`,
   `git push origin vX.Y.Z`). `310` accepts a tag on a documentation-only commit after a build, because nothing `200`
   builds from changed since. A tag on a commit that changed a file in `200`'s `on.push.paths` after the last build fails
-  with the file names: tag the commit the dry run names instead. (3) The release notes list the digests of all five
-  images. If the run fails after `Promote the digest` created the tag but the post-check disagrees ("resolves to
-  ... expected ..."), the version tag exists with the wrong digest: delete that tag on Docker Hub (Repository, Tags)
-  and re-run; a re-run refuses to move an existing tag, and so does it if the tag was created by something else.
+  with the file names: tag the commit the dry run names instead (the message names that commit). (3) The step `Promote the digests to the
+  release tags` gives the five images their version tags (`X.Y.Z` on the CLI image, `<component>-X.Y.Z` on the others)
+  in two phases: phase 1 checks all five and creates nothing if any tag already exists with another digest (the message
+  names the tag and both digests and says that no release tag was created); phase 2 creates the missing ones and reads
+  each back. A re-run skips tags that are already correct, so it is safe. If a post-check fails ("After creating it,
+  `<component>-X.Y.Z` resolves to ... expected ..."), that tag exists with the wrong digest: delete it on Docker Hub
+  (Repository, Tags) and re-run; a re-run refuses to move an existing tag, and so does it if the tag was created by
+  something else. The release notes list each version tag, its build-time tag and its digest; the version tags are
+  permanent, and `370` keeps the sha tags that share an image with them. A release made before this change tagged
+  only the CLI image, so the other four of its images can still age out.
 - **Who can mint the Docker token through a tag.** The ruleset "Protect release tags"
   (<https://github.com/saulpatinojr/HCW-NetworkEyes_App/rules/25778333>, read again with
   `gh api repos/saulpatinojr/HCW-NetworkEyes_App/rulesets/25778333` on 2026-10-25, last updated 2026-10-25 10:09
@@ -2307,7 +2316,7 @@ Nothing publishes until the owner flips the variables below. Open, in order:
   Admin role) limits who can create a `v*` tag: with the `creation` rule only the bypass actor can. Earlier readings of
   this ruleset (no `creation` rule, no bypass actor) are out of date. The run uses the workflow file at the tagged
   commit, and its OIDC subject `...:ref:refs/tags/vX.Y.Z` matches the Docker Hub tag ruleset once that exists. The
-  credential it obtains can push to `img-ne-appliance-app`; `310` as written only adds a version tag to a digest it
+  credential it obtains can push to `img-ne-appliance-app`; `310` as written only adds version tags to digests it
   verified, but a tag on a commit whose workflow file was edited could do more, so the bypass actor (repository
   administrators) is the group to trust. Adding an environment with required reviewers on the release job would
   narrow it further; that is an owner decision. Pull request
@@ -2327,7 +2336,8 @@ Nothing publishes until the owner flips the variables below. Open, in order:
   `src/network_assessment` (its `PROVENANCE.md`). That adoption belongs in the AddOn (its
   `REFACTOR_APP.md` change set C) and is tracked in its `docs/whats-new-upstream.md`.
 - Consumers: the digests are in the step summary of `tag-images` (`200-build-images.yml`) and in the `310` release
-  notes; nothing is written to the repository. A consumer pins by digest and verifies the cosign signature.
+  notes (with each image's version tag); nothing is written to the repository. The `*-latest` tags move only for the
+  tip of the default branch. A consumer pins by digest and verifies the cosign signature.
 
 ### T-729 — AWS extra: move the AWS modules under `cna/aws/` with shims (change set K)
 `boto3` is the `[aws]` extra; the AWS paths are guarded by `cna.aws` (`CHANGELOG.md` `[Unreleased]`;

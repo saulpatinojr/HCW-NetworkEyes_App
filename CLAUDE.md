@@ -50,17 +50,23 @@ change under `Changed` in `CHANGELOG.md` (and in the release notes) where a cons
    `tests/security/test_image_repository_name.py` fails if any workflow, script or contract
    names another repository. Tags inside it: `img-ne-appliance-app:{api,worker,web,migrator}-sha-<7>`
    immutable tags plus floating `*-latest`; the CLI image is `img-ne-appliance-app:sha-<7>` /
-   `img-ne-appliance-app:latest`, and a release adds `img-ne-appliance-app:<version>` to the CLI image.
+   `img-ne-appliance-app:latest`. A release (`310`) adds a version tag to each of the five images of the released
+   build: `img-ne-appliance-app:<version>` on the CLI image and `{api,worker,web,migrator}-<version>` on the others.
+   The `200` rehearsal (a manual dry run of the Docker Hub connection) leaves one throwaway tag, `rehearsal-<run id>`,
+   on Docker Hub; it matches no `370` pattern, so nothing prunes it, and it is removed by hand.
 2. **The record of a build is the digest table in the step summary of `200-build-images.yml`'s
    `tag-images` job**: one row per component (`cli`, `api`, `worker`, `web`, `migrator`) with its
    tags, its digest (`docker.io/<ns>/img-ne-appliance-app@sha256:<64>`) and whether it is signed
    (`tag-images` verifies each digest with `scripts/ci/verify_signed_digest.sh` before it moves
-   a tag). The release notes of `310-release-version.yml` repeat the five digests of the released
-   build. Nothing is committed to the repository and no pull request is opened: there is no
+   a tag). The `*-latest` tags move only when the built commit is the tip of the default branch; an older or re-run
+   commit gets its sha tags only, with a warning. The release notes of `310-release-version.yml` list the five version
+   tags, their build-time tags and the five digests of the released build. Nothing is committed to the repository and no pull request is opened: there is no
    build manifest and no `.deployment-catalog/` directory. A consumer pulls by digest (tag for people and for the web
    tier's image-update check, digest as the authoritative pull); floating `*-latest` tags are never deployed.
    `370-registry-cleanup.yml` keeps the newest 10 `<component>-sha-<7>` tags per component, the
-   `*-latest` tags, every release tag and any sha tag whose image a release tag shares; see its header for
+   `*-latest` tags, every release tag and any sha tag that shares an image with a non-sha tag, and ignores cosign's
+   referrer tags (`sha256-<hex>`, `.sig`, `.att`, `.sbom`). Builds that were never released can still age out of the
+   newest 10, and so can the other four images of a release made before `310` tagged all five; see its header for
    what that does not protect. Tagging is not atomic: if `tag-images` stops part-way, the table shows
    "tagging in progress" without the closing line, and the recovery is to re-run that job (it verifies
    every digest again; re-creating a tag with the digest it already has is not an error).
@@ -92,8 +98,8 @@ change under `Changed` in `CHANGELOG.md` (and in the release notes) where a cons
    personal access token `370-registry-cleanup.yml` uses to delete tags (`REVIEW.md` R-026 step 3).
 7. **Releases are cut by the owner**, dry run first: Actions, `310 · Release CLI Tool`, Run workflow, branch `main`,
    `dry_run` ticked (the default); read the summary, which names the commit the image was built from; then tag that
-   commit (`git tag vX.Y.Z <sha>`, `git push origin vX.Y.Z`). The release notes list the digests of all five
-   images. Steps and failure cases: `TODO.md` T-728.
+   commit (`git tag vX.Y.Z <sha>`, `git push origin vX.Y.Z`). The release gives all five images a version tag (every
+   tag is checked before any is created) and the release notes list the tags and digests. Steps and failure cases: `TODO.md` T-728.
 
 ## AI engine rules
 
