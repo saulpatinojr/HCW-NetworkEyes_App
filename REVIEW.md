@@ -29,7 +29,7 @@ Anything an engineer can solve without external input belongs in [`TODO.md`](TOD
 | [R-017](#r-017--stop-publishing-the-cli-image-on-every-push) | Stop building/publishing the CLI image `sha-<7>` (nothing in this repository pulls it except the release) | Repository owner | Open — not blocking |
 | [R-018](#r-018--remove-cnareview-from-the-shipped-package) | Move `cna/review/**` out of the shipped package and API image | Repository owner | Open — not blocking |
 | [R-019](#r-019--diagram-editor-sends-customer-topology-to-embeddiagramsnet) | Diagram editor posts customer topology XML to public `embed.diagrams.net`; no offline path | Product owner / Security | Decided 2026-10-25 — self-host; implemented (ticket #248) |
-| [R-020](#r-020--aeonik-font-licence-and-oci-licence-label) | Aeonik typeface licence coverage; OCI label `Proprietary` vs Apache-2.0 `LICENSE` | Legal / brand | Open — [VERIFY] |
+| [R-020](#r-020--aeonik-font-licence-and-oci-licence-label) | Aeonik typeface licence coverage; OCI label `Proprietary` vs Apache-2.0 `LICENSE` | Legal / brand | Licence label decided 2026-10-25 (Apache-2.0, done); font licence still to be confirmed — owner |
 | [R-021](#r-021--byo-api-mode-scope-for-10) | Ship 1.0 `saas`-only or complete R-011 first | Product owner / Security | Open |
 | [R-022](#r-022--version-100-release-identity) | Version 1.0.0 identity: withdrawn `[1.0.0]` heading, version strings, first tag | Repository owner | Open — before the first `v*` tag |
 | [R-025](#r-025--the-drawio-mcp-route-is-internal-only) | Is `/api/drawio-mcp` public or internal only? | Repository owner | Decided 2026-10-24 — internal only; implemented (ticket #245) |
@@ -765,11 +765,28 @@ commercial typeface as a webfont and embedded in PDFs with no licence file in th
 OCI image label says `licenses="Proprietary"` while the repository `LICENSE` is Apache-2.0.
 
 **Required owner**
-Legal / brand.
+Legal / brand (the font part only; the label part is decided and done).
+
+**Decision, 2026-10-25 (owner)**
+Apache-2.0 for the code and for the image label. Done in ticket #251: `org.opencontainers.image.licenses` in
+`Dockerfile` now reads `Apache-2.0`, matching `LICENSE`, and a new `NOTICE` file says the Aeonik typeface is
+separately licensed. `tests/unit/test_licence_statement.py` fails if the label, `LICENSE` and `NOTICE` stop agreeing.
+
+**Still open: the Aeonik font licence**
+What was checked on 2026-10-25: the font file's own metadata names "Mark Bloom and Joe Leadbeater (c) 2018",
+version 1.000, and the licence "This Is Our Shop EULA" (thisisourshop.com, which no longer resolves). CoType Foundry
+now sells Aeonik under four agreements (desktop, web, app, trial; https://cotypefoundry.com/licensing/). Its trial
+agreement allows internal evaluation only, forbids use on any public website or in final commercial files, and
+forbids passing the font on to anyone (https://www.datocms-assets.com/135497/1731056476-cotype-eula-trial-24.pdf).
+Nothing in the repository shows which agreement, if any, covers the copy that is committed here and shipped in the
+web image and in PDF reports, so `NOTICE` lists it as "licence to be confirmed".
 
 **Required action**
-Confirm the Aeonik licence covers web-serving and PDF embedding for customer deliverables
-[VERIFY]; pick one licence statement for the images and `LICENSE`.
+Either show proof of a CoType (or This Is Our Shop) desktop and web licence that covers serving the font on the web
+and embedding it in customer PDFs, and record it here; or replace Aeonik with a font under an open licence (for
+example one under the SIL Open Font License) in `apps/cna-web/app/fonts/`, `apps/cna-web/app/layout.tsx`,
+`apps/cna-web/app/globals.css` and `cna/report_engine/templates/`. Recommended default: replace it, because the
+repository is public and the font file is downloadable from it.
 
 **Impact if unresolved**
 Possible licence non-compliance in a customer-facing artifact.
