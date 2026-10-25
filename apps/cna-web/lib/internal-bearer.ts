@@ -7,15 +7,22 @@
 // container nothing can match, so every request is refused. The token is never
 // logged and never echoed.
 
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+
+// A random key, new for every process, so the digests below mean nothing outside this process.
+// The token is a high-entropy shared secret, not a user password, and nothing here is stored:
+// the keyed digest only makes both sides the same length for `timingSafeEqual`. (A plain SHA-256
+// of the token also works, but static analysis rightly reads "token hashed with a fast hash" as
+// password storage, CodeQL js/insufficient-password-hash.)
+const COMPARE_KEY = randomBytes(32);
 
 function digest(value: string): Buffer {
-  return createHash("sha256").update(value, "utf8").digest();
+  return createHmac("sha256", COMPARE_KEY).update(value, "utf8").digest();
 }
 
 /**
  * True when the request carries `Authorization: Bearer <CNA_API_TOKEN>`.
- * Both sides are hashed first so the comparison takes the same time whatever
+ * Both sides are digested first so the comparison takes the same time whatever
  * the lengths are, then compared with `timingSafeEqual`.
  */
 export function hasValidInternalBearer(req: Request): boolean {
