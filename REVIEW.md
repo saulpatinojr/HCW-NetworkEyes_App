@@ -714,19 +714,41 @@ appliance) and disabling the Diagram page (the page is the product's editor).
 - The editor's files carry their own Content-Security-Policy (`next.config.ts`, values in `lib/drawio-embed.ts`):
   `default-src 'none'`, `connect-src 'self'`, no inline script. Even a hostile diagram cannot make the browser send data to
   another host. The application's own CSP now has `frame-src 'self'` only.
-- The iframe is sandboxed without `allow-same-origin`, so the editor's scripts get an opaque origin and cannot read the
-  application's cookies, storage or same-origin responses. The price is that the host page answers the editor with
-  `postMessage(..., "*")` (the only target an opaque origin accepts) to the one window it created, and `/drawio/*` is sent
-  with `Access-Control-Allow-Origin: *` (public static files).
+- The editor runs in a sandbox without `allow-same-origin`, so its scripts get an opaque origin and cannot read the
+  application's cookies, storage or same-origin responses. The sandbox is set twice: as the `sandbox` attribute of the
+  iframe and as the `sandbox` directive of the editor's own CSP, so it also holds when someone opens
+  `/drawio/index.html` directly (without the directive that visit would run the editor as the application's origin, with
+  the session cookie readable; checked in a browser, see `CHANGELOG.md`). The editor's service worker files are deleted
+  from the image so nothing registers one on the application's origin. The price of the sandbox is that the host page
+  answers the editor with `postMessage(..., "*")` (the only target an opaque origin accepts) to the one window it
+  created, and that `/drawio/*` is sent with `Access-Control-Allow-Origin: *`: the editor fetches its language file with
+  XHR and an opaque origin needs CORS for that. Those files are public Apache-2.0 static content with no customer data;
+  a browser that applies Private Network Access lets any website read them from an appliance on a private address,
+  which exposes nothing that is not public. Scoping the header to the fetched paths was left out: the set of paths
+  depends on which editor features are used, and a miss breaks the editor.
+- The files in the image are read-only (mode 444/555) and carry the version in the image label
+  `io.github.saulpatinojr.drawio-webapp.version`.
 - The "Launch draw.io" link to the public site on the Diagram page is gone, and the MCP `create_diagram` result returns
   the same-origin path instead of the public viewer.
-- Guards: `apps/cna-web/lib/drawio-embed.test.ts` (embed URL has no host, CSP names no host and allows `connect-src
-  'self'` only, sandbox keeps no `allow-same-origin`, no web source file names a public host) and
-  `tests/security/test_drawio_self_hosted.py` (pin, checksum-before-unzip, licence, no live file names a public host).
+- Guards: `apps/cna-web/lib/drawio-embed.test.ts` (embed URL has no host; every CSP directive has exactly its expected
+  sources, no bare `*`, host or scheme; the CSP carries the sandbox without `allow-same-origin`; `next.config.ts` sends
+  those headers on `/drawio/:path*`; the middleware matcher leaves the path out; no web source or test file names a public
+  host), `apps/cna-web/components/diagrams/DrawioEmbed.test.tsx` (the rendered iframe is sandboxed; messages from another
+  window or another origin are ignored; replies go to the iframe's window only) and
+  `tests/security/test_drawio_self_hosted.py` (pin shape, checksum verified before the unzip in one `&&` chain, the trim
+  fails closed, read-only files, licence, label, the weekly workflow, no live file names a public host).
+- **Owner and cadence:** the repository owner owns the pin. Review it monthly (the first Monday of the month) and on
+  every security advisory: the workflow `380 · draw.io Editor Pin Check` runs weekly, compares `ARG DRAWIO_WEBAPP_VERSION`
+  with the newest jgraph/drawio release and the advisories published since the pinned release, and opens or updates one
+  issue titled "draw.io editor pin is out of date" (it closes it when the pin is current). Advisories:
+  https://github.com/jgraph/drawio/security/advisories. At 32.6.1 the published ones are fixed (the newest, GHSA-v2pv-rjf8-9w9v
+  and GHSA-ff67-v9r9-6877, fixed in 31.4.6, are query-parameter exfiltration bugs of the kind that `connect-src 'self'`
+  and the sandbox cap anyway). To bump: change both ARGs, run the web and security tests, rebuild, repeat the browser
+  check, add a `CHANGELOG.md` line.
 - Known limits: the draw.io project calls its Docker image "a test version" and sells a supported production edition;
-  the Apache-2.0 code is free to use as done here, but support and security fixes come from bumping the pin (change both
-  ARGs, run the web tests). Dependabot cannot track a release asset. The editor files add about 65 MB to the web image.
-  Local development has no `/drawio/` until the files are copied in (comment on the Dockerfile stage).
+  the Apache-2.0 code is free to use as done here, but support and security fixes come from bumping the pin. Dependabot
+  cannot track a release asset (the reminder above stands in for it). The editor files add about 65 MB to the web
+  image. Local development has no `/drawio/` until the files are copied in (comment on the Dockerfile stage).
 
 **Impact if unresolved**
 Resolved: no customer topology leaves the deployment through the editor.

@@ -42,6 +42,7 @@ def test_topology_covers_all_core_workflows():
         "310-release-version.yml",
         "320-release-engine.yml",
         "370-registry-cleanup.yml",
+        "380-drawio-pin-check.yml",
     )
     # No workflow is both self-hosted-only and GitHub-hosted.
     assert not set(SELF_HOSTED_ONLY_WORKFLOWS) & set(GITHUB_HOSTED_WORKFLOWS)
@@ -181,7 +182,8 @@ def test_all_workflow_files_parse_as_yaml():
     Guards against a future 9.1/9.3-style edit reintroducing a YAML break. The
     core keeps only the build/test/release/registry workflows — the deploy and
     operations workflows moved to the appliance repositories (TODO.md T-504) —
-    plus one owner-approved exception, ``390-repository-admin.yml`` (manual,
+    plus ``380-drawio-pin-check.yml`` (weekly reminder that the pinned draw.io editor is behind; opens one issue, REVIEW.md
+    R-019) and one owner-approved exception, ``390-repository-admin.yml`` (manual,
     dry-run by default, approved per run; it deploys nothing).
     """
     import pathlib
@@ -196,6 +198,7 @@ def test_all_workflow_files_parse_as_yaml():
         "310-release-version.yml",
         "320-release-engine.yml",
         "370-registry-cleanup.yml",
+        "380-drawio-pin-check.yml",
         "390-repository-admin.yml",
     }
     for path in files:

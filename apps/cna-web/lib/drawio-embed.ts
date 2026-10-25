@@ -32,7 +32,11 @@ export const DRAWIO_EMBED_SRC = `${DRAWIO_BASE_PATH}index.html?${new URLSearchPa
  * this application's cookies, storage or same-origin responses even though they are served from the same host.
  * That is why the files under /drawio/ carry `Access-Control-Allow-Origin: *` (see `DRAWIO_HEADERS`): the editor
  * fetches its own language file with XHR, and an opaque origin needs CORS for that. The files are public static
- * assets of an Apache-2.0 project, so nothing is exposed by it.
+ * assets of an Apache-2.0 project and hold no customer data, so nothing is exposed by it. (A browser that applies
+ * Private Network Access lets any site read them from an appliance on a private address; that is public code.)
+ *
+ * The same flags are also sent as the `sandbox` directive of the editor's own CSP (`DRAWIO_CSP`), so the sandbox
+ * holds when someone opens /drawio/index.html directly instead of through this iframe.
  */
 export const DRAWIO_IFRAME_SANDBOX = "allow-scripts allow-modals allow-downloads";
 
@@ -43,6 +47,10 @@ export const DRAWIO_MESSAGE_ORIGIN = "null";
  * Content-Security-Policy of the editor's own files. `connect-src 'self'` is the control that matters: whatever the
  * editor's code or a hostile diagram tried, the browser refuses a request to any other host. The editor needs
  * 'wasm-unsafe-eval' for its connector-routing module and `blob:` for exports; it needs no inline script.
+ *
+ * `sandbox` makes the editor's document an opaque origin however it is opened. Without it, a direct visit to
+ * /drawio/index.html would run the editor with this application's origin: it could read the session cookie that is
+ * not HttpOnly and its same-origin requests would carry the session.
  */
 export const DRAWIO_CSP = [
   "default-src 'none'",
@@ -56,6 +64,7 @@ export const DRAWIO_CSP = [
   "base-uri 'self'",
   "form-action 'none'",
   "frame-ancestors 'self'",
+  `sandbox ${DRAWIO_IFRAME_SANDBOX}`,
 ].join("; ");
 
 /** Response headers for /drawio/:path* (next.config.ts). */
@@ -90,5 +99,40 @@ export function isPublicDrawioHost(url: string): boolean {
   // The text up to the first "/", "?", "#" or ":" once a scheme is dropped. A path such as "/drawio/index.html" has
   // no host; a bare "embed.<domain>" is one.
   const host = (url.trim().replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/^\/\//, "").split(/[/?#:]/)[0] ?? "").toLowerCase();
-  return /(^|\.)(diagrams\.net|draw\.io)$/.test(host);
+  return /(^|\.)(diagrams\.net|draw\.io|drawio\.com)$/.test(host);
+}
+
+/** Where a reply to the editor goes: an opaque origin accepts no other target origin. See DrawioEmbed.tsx. */
+export const DRAWIO_REPLY_TARGET = "*";
+
+/** The one method of the editor's window the host page uses. */
+export type DrawioFrameWindow = { postMessage(message: string, targetOrigin: string): void };
+
+/**
+ * Handles one `message` event for the editor iframe. Pure of the DOM so that it can be tested with fake windows.
+ *
+ * - A message from any window other than the iframe's own is ignored, and so is one whose origin is not the
+ *   sandbox's opaque "null".
+ * - `init` is answered with `load` carrying the diagram; `save` is forwarded to `onSave` and answered with `status`.
+ * - Replies go to `frameWindow` only.
+ */
+export function handleDrawioMessage(
+  event: { source: unknown; origin: string; data: unknown },
+  frameWindow: DrawioFrameWindow | null | undefined,
+  initialXml: string,
+  onSave?: (xml: string) => void,
+): void {
+  if (!frameWindow || event.source !== frameWindow) return;
+  if (event.origin !== DRAWIO_MESSAGE_ORIGIN) return;
+
+  const msg = parseDrawioMessage(event.data);
+  if (msg?.event === "init") {
+    frameWindow.postMessage(JSON.stringify({ action: "load", xml: initialXml, autosave: 0 }), DRAWIO_REPLY_TARGET);
+  } else if (msg?.event === "save" && typeof msg.xml === "string") {
+    onSave?.(msg.xml);
+    frameWindow.postMessage(
+      JSON.stringify({ action: "status", message: "Saved to engagement", modified: false }),
+      DRAWIO_REPLY_TARGET,
+    );
+  }
 }

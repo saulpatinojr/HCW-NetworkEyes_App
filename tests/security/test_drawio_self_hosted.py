@@ -2,17 +2,22 @@
 
 ``REVIEW.md`` R-019 / issue NE-9. The editor on the Diagram page is the draw.io web app, fetched at image build
 (stage ``drawio-webapp`` of ``apps/cna-web/Dockerfile``) and served under ``/drawio/`` with a Content-Security-Policy
-that lets it talk to nothing but this origin. These checks keep that from coming back:
+that lets it talk to nothing but this origin and runs it in a sandbox. These checks keep that from coming back:
 
-* ``TestTheEditorIsPinned`` — the release is pinned by version and sha256, the download URL is built from the pinned
-  version, and the runner image receives the files.
-* ``TestNoLiveFileNamesAPublicDrawioHost`` — no code, configuration or workflow file names a public draw.io or
-  diagrams.net host. The web tier has the same check in ``apps/cna-web/lib/drawio-embed.test.ts``, next to the
-  CSP and embed-URL assertions.
+* ``TestTheEditorIsPinned`` — the release is pinned by version and sha256 at the top of the Dockerfile, the download
+  URL is built from the pinned version, the checksum is verified before the unzip in one ``&&`` chain, the trim fails
+  closed (the server side and the service worker are deleted and checked to be gone), the files are read-only, the
+  licence travels with them, and the runner records the version in an image label.
+* ``TestTheWeeklyPinCheck`` — the scheduled workflow that reminds the owner when the pin is behind.
+* ``TestNoLiveFileNamesAPublicDrawioHost`` — no code, configuration, test or workflow file names a public draw.io,
+  diagrams.net or drawio.com host. The only thing not read is the vendored editor itself (``public/drawio``), which
+  is third-party code. The web tier has the same check in ``apps/cna-web/lib/drawio-embed.test.ts``, next to the CSP,
+  sandbox, header and embed-URL assertions.
 * ``TestTheWebCspFramesOnlyThisOrigin`` — the application's own CSP has no draw.io host in ``frame-src`` or anywhere.
 
-All three are static reads of files. They do not prove what the running image serves; the build smoke test and the
-vitest suite cover the headers, and a browser run is the proof that the editor loads (``CHANGELOG.md``).
+All of them are static reads of files. They do not prove what the running image serves; the vitest suite covers the
+headers and a browser run against the built image is the proof that the editor loads and stays sandboxed
+(``CHANGELOG.md``).
 """
 
 from __future__ import annotations
@@ -22,41 +27,41 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 THIS_FILE = Path(__file__).resolve()
 DOCKERFILE = REPO_ROOT / "apps" / "cna-web" / "Dockerfile"
 MIDDLEWARE = REPO_ROOT / "apps" / "cna-web" / "middleware.ts"
+WORKFLOW = REPO_ROOT / ".github" / "workflows" / "380-drawio-pin-check.yml"
 
-#: A URL, or a well-known bare host such as ``embed.<domain>``, under draw.io's or diagrams.net's domains. The
-#: product name written as prose ("the draw.io editor") is not a host and does not match.
+#: A URL, or a well-known bare host such as ``embed.<domain>``, under draw.io's, diagrams.net's or drawio.com's
+#: domains. The product name written as prose ("the draw.io editor") is not a host and does not match.
 PUBLIC_HOST = re.compile(
-    r"(?://|\b(?:embed|viewer|app|www|icons|log|test)\.)(?:[a-z0-9-]+\.)*(?:diagrams\.net|draw\.io)(?![a-z0-9-])",
+    r"(?://|\b(?:embed|viewer|app|www|icons|log|test)\.)(?:[a-z0-9-]+\.)*"
+    r"(?:diagrams\.net|draw\.io|drawio\.com)(?![a-z0-9-])",
     re.IGNORECASE,
 )
 
-#: Where code and configuration live. Documentation, history and the tests are not scanned: they may name a host to
-#: explain or to prove a guard (the web tier's own guard is ``apps/cna-web/lib/drawio-embed.test.ts``).
-SCANNED_ROOTS = ("apps", "cna", "packages", "scripts", ".github", "infra")
+#: Where code, configuration and tests live. Documentation and history (markdown) are not scanned: they may name a
+#: host to explain it.
+SCANNED_ROOTS = ("apps", "cna", "packages", "scripts", ".github", "infra", "tests")
 SCANNED_FILES = ("Dockerfile", "docker-compose.yml", "pyproject.toml", ".env.example")
 SKIPPED_DIRECTORIES = frozenset(
-    {
-        "node_modules",
-        ".next",
-        "__pycache__",
-        ".ruff_cache",
-        ".pytest_cache",
-        ".mypy_cache",
-        ".venv",
-        "tests",
-        "drawio",
-    }
+    {"node_modules", ".next", "__pycache__", ".ruff_cache", ".pytest_cache", ".mypy_cache", ".venv"}
 )
+#: The vendored editor (fetched at image build, git-ignored) names its own hosts; skipped at this path and nowhere else.
+VENDORED_EDITOR = "apps/cna-web/public/drawio"
+#: The guards themselves spell hosts out to prove their matchers.
 GUARD_FILES = frozenset({"apps/cna-web/lib/drawio-embed.test.ts"})
 MAX_BYTES = 2_000_000
 
 VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _dockerfile() -> str:
+    return DOCKERFILE.read_text(encoding="utf-8")
 
 
 def _stage(text: str, name: str) -> str:
@@ -70,12 +75,30 @@ def _stage(text: str, name: str) -> str:
     return match.group(1)
 
 
+def _runs(stage: str) -> list[str]:
+    """Each RUN instruction of a stage as one line: backslash continuations joined, comments dropped."""
+    lines = [line for line in stage.splitlines() if not line.lstrip().startswith("#")]
+    joined = re.sub(r"\\\s*\n\s*", " ", "\n".join(lines) + "\n")
+    return [line.strip()[4:].strip() for line in joined.splitlines() if line.startswith("RUN ")]
+
+
+def _run_containing(stage: str, needle: str) -> str:
+    matches = [run for run in _runs(stage) if needle in run]
+    assert len(matches) == 1, f"expected exactly one RUN with {needle!r}, found {len(matches)}"
+    return matches[0]
+
+
 def _scanned_files() -> list[Path]:
     files: list[Path] = [REPO_ROOT / name for name in SCANNED_FILES if (REPO_ROOT / name).is_file()]
     for root in SCANNED_ROOTS:
         base = REPO_ROOT / root
         for directory, subdirectories, names in os.walk(base):
-            subdirectories[:] = sorted(d for d in subdirectories if d not in SKIPPED_DIRECTORIES)
+            here = Path(directory).relative_to(REPO_ROOT).as_posix()
+            subdirectories[:] = sorted(
+                d
+                for d in subdirectories
+                if d not in SKIPPED_DIRECTORIES and f"{here}/{d}" != VENDORED_EDITOR
+            )
             for filename in sorted(names):
                 path = Path(directory) / filename
                 relative = path.relative_to(REPO_ROOT).as_posix()
@@ -90,46 +113,89 @@ def _scanned_files() -> list[Path]:
 
 
 class TestTheEditorIsPinned:
-    def test_the_pin_is_a_version_and_a_sha256(self):
-        stage = _stage(DOCKERFILE.read_text(encoding="utf-8"), "drawio-webapp")
-        version = re.search(r"^ARG DRAWIO_WEBAPP_VERSION=(\S+)\s*$", stage, re.MULTILINE)
-        digest = re.search(r"^ARG DRAWIO_WEBAPP_SHA256=(\S+)\s*$", stage, re.MULTILINE)
+    def test_the_pin_is_a_version_and_a_sha256_declared_before_the_first_stage(self):
+        text = _dockerfile()
+        head = text[: re.search(r"^FROM\s", text, re.MULTILINE).start()]
+        version = re.search(r"^ARG DRAWIO_WEBAPP_VERSION=(\S+)\s*$", head, re.MULTILINE)
+        digest = re.search(r"^ARG DRAWIO_WEBAPP_SHA256=(\S+)\s*$", head, re.MULTILINE)
         assert version and VERSION.fullmatch(version.group(1)), (
             "DRAWIO_WEBAPP_VERSION must be an exact x.y.z"
         )
         assert digest and SHA256.fullmatch(digest.group(1)), (
             "DRAWIO_WEBAPP_SHA256 must be 64 lowercase hex digits"
         )
+        assert len(re.findall(r"^ARG DRAWIO_WEBAPP_VERSION=", text, re.MULTILINE)) == 1
+        assert len(re.findall(r"^ARG DRAWIO_WEBAPP_SHA256=", text, re.MULTILINE)) == 1
 
-    def test_the_download_uses_the_pinned_version_and_is_verified_before_use(self):
-        stage = _stage(DOCKERFILE.read_text(encoding="utf-8"), "drawio-webapp")
+    def test_the_stage_and_the_runner_take_the_pin_from_the_top_without_redefining_it(self):
+        for name in ("drawio-webapp", "runner"):
+            stage = _stage(_dockerfile(), name)
+            assert re.search(r"^ARG DRAWIO_WEBAPP_VERSION\s*$", stage, re.MULTILINE), name
+        assert re.search(
+            r"^ARG DRAWIO_WEBAPP_SHA256\s*$", _stage(_dockerfile(), "drawio-webapp"), re.MULTILINE
+        )
+
+    def test_the_download_uses_the_pinned_version(self):
+        stage = _stage(_dockerfile(), "drawio-webapp")
         assert (
             "https://github.com/jgraph/drawio/releases/download/v${DRAWIO_WEBAPP_VERSION}/draw.war"
             in stage
         )
-        download = stage.index("RUN wget ")
-        check = stage.index('/tmp/draw.war" | sha256sum -c -')
-        unzip = stage.index("&& unzip -q")
-        assert '"${DRAWIO_WEBAPP_SHA256}  /tmp/draw.war"' in stage
-        assert download < check < unzip, (
-            "the checksum must be checked after the download and before the unzip"
-        )
 
-    def test_the_server_side_of_the_war_never_reaches_the_image(self):
-        stage = _stage(DOCKERFILE.read_text(encoding="utf-8"), "drawio-webapp")
-        assert "WEB-INF" in stage and "rm -rf" in stage, (
-            "the Java and OAuth side of the war must be deleted"
-        )
+    def test_the_checksum_is_verified_before_the_unzip_in_one_and_chain(self):
+        run = _run_containing(_stage(_dockerfile(), "drawio-webapp"), "sha256sum -c -")
+        steps = [step.strip() for step in run.split("&&")]
+        positions = {
+            "download": next(i for i, s in enumerate(steps) if s.startswith("wget ")),
+            "check": next(
+                i
+                for i, s in enumerate(steps)
+                if s == 'echo "${DRAWIO_WEBAPP_SHA256}  /tmp/draw.war" | sha256sum -c -'
+            ),
+            "unzip": next(i for i, s in enumerate(steps) if s.startswith("unzip ")),
+        }
+        assert positions["download"] < positions["check"] < positions["unzip"], positions
+        # `;` or `||` would let the build carry on after a failed checksum.
+        assert ";" not in run, "no `;` in the download and verify step"
+        assert "||" not in run, "no `||` in the download and verify step"
 
-    def test_the_licence_travels_with_the_files(self):
-        stage = _stage(DOCKERFILE.read_text(encoding="utf-8"), "drawio-webapp")
+    def test_the_trim_fails_closed(self):
+        run = _run_containing(_stage(_dockerfile(), "drawio-webapp"), "rm -rf WEB-INF")
+        assert ";" not in run and "||" not in run, "no `;` or `||` in the trim step"
+        steps = [step.strip() for step in run.split("&&")]
+        # What must be deleted ...
+        for gone in ("WEB-INF", "META-INF", "service-worker.js", "workbox-*.js"):
+            assert any(s.startswith(("rm -rf", "rm -f")) and gone in s for s in steps), gone
+        # ... is also checked to be gone, and what the editor needs is checked to be there.
+        for absent in ("test ! -e WEB-INF", "test ! -e META-INF", "test ! -e service-worker.js"):
+            assert absent in steps, absent
+        assert any(s.startswith("test -z") and "workbox-" in s for s in steps)
+        for needed in (
+            "test -f index.html",
+            "test -f js/app.min.js",
+            "test -f resources/dia.txt",
+            "test -f mxgraph/css/common.css",
+        ):
+            assert needed in steps, needed
+        # The checks come last, after every deletion.
+        last_delete = max(i for i, s in enumerate(steps) if s.startswith(("rm ", "find ")))
+        first_check = min(i for i, s in enumerate(steps) if s.startswith("test "))
+        assert last_delete < first_check
+
+    def test_the_files_are_read_only_and_the_licence_travels_with_them(self):
+        stage = _stage(_dockerfile(), "drawio-webapp")
         assert "COPY third-party/drawio/LICENSE /out/LICENSE" in stage
+        run = _run_containing(stage, "chmod 444")
+        assert "chmod 555" in run and "find /out -type f" in run and "find /out -type d" in run
+        # The chmod comes after the licence is copied, so the licence is read-only too.
+        assert stage.index("COPY third-party/drawio/LICENSE") < stage.index("chmod 444")
         licence = REPO_ROOT / "apps" / "cna-web" / "third-party" / "drawio" / "LICENSE"
         assert "Apache License" in licence.read_text(encoding="utf-8")[:200]
 
-    def test_the_runner_image_serves_the_editor_from_its_own_files(self):
-        runner = _stage(DOCKERFILE.read_text(encoding="utf-8"), "runner")
+    def test_the_runner_serves_the_editor_from_its_own_files_and_labels_the_version(self):
+        runner = _stage(_dockerfile(), "runner")
         assert "COPY --from=drawio-webapp --chown=nextjs:nodejs /out ./app/public/drawio" in runner
+        assert 'io.github.saulpatinojr.drawio-webapp.version="${DRAWIO_WEBAPP_VERSION}"' in runner
 
     def test_the_downloaded_files_are_not_committed(self):
         ignored = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
@@ -142,6 +208,41 @@ class TestTheEditorIsPinned:
         assert "public/drawio" in dockerignore
 
 
+class TestTheWeeklyPinCheck:
+    def _text(self) -> str:
+        return WORKFLOW.read_text(encoding="utf-8")
+
+    def test_it_runs_weekly_and_on_demand(self):
+        text = self._text()
+        assert re.search(r"^\s*schedule:\s*\n\s*- cron: '[^']+'", text, re.MULTILINE)
+        assert re.search(r"^\s*workflow_dispatch:", text, re.MULTILINE)
+
+    def test_it_can_read_the_repository_and_write_issues_and_nothing_else(self):
+        document = yaml.safe_load(self._text())
+        assert document["permissions"] == {"contents": "read"}
+        assert list(document["jobs"]) == ["check"]
+        assert document["jobs"]["check"]["permissions"] == {"contents": "read", "issues": "write"}
+
+    def test_it_uses_no_secret_and_only_a_pinned_checkout_action(self):
+        text = self._text()
+        assert "secrets." not in text
+        uses = re.findall(r"^\s*-?\s*uses:\s*(\S+)", text, re.MULTILINE)
+        assert len(uses) == 1 and re.fullmatch(r"actions/checkout@[0-9a-f]{40}", uses[0]), uses
+        assert "persist-credentials: false" in text
+
+    def test_it_compares_the_dockerfile_pin_with_the_latest_release_and_the_advisories(self):
+        text = self._text()
+        assert "ARG DRAWIO_WEBAPP_VERSION=" in text and "apps/cna-web/Dockerfile" in text
+        assert "gh api repos/jgraph/drawio/releases/latest" in text
+        assert "repos/jgraph/drawio/security-advisories" in text
+
+    def test_it_keeps_one_issue_with_a_fixed_title(self):
+        text = self._text()
+        assert "ISSUE_TITLE: draw.io editor pin is out of date" in text
+        assert text.count("gh issue create") == 1
+        assert "gh issue edit" in text and "gh issue close" in text
+
+
 class TestNoLiveFileNamesAPublicDrawioHost:
     @pytest.mark.parametrize(
         ("text", "named"),
@@ -152,6 +253,8 @@ class TestNoLiveFileNamesAPublicDrawioHost:
             ("http://www.draw.io/", True),
             ("embed.diagrams.net", True),
             ("//test.draw.io/x", True),
+            ("https://www.drawio.com/doc/faq/self-hosting", True),
+            ("//app.drawio.com", True),
             ("the draw.io editor", False),
             ("drawio-desktop release", False),
             ("/drawio/index.html?embed=1&proto=json", False),
@@ -165,15 +268,24 @@ class TestNoLiveFileNamesAPublicDrawioHost:
         names = {p.relative_to(REPO_ROOT).as_posix() for p in _scanned_files()}
         for expected in (
             "apps/cna-web/components/diagrams/DrawioEmbed.tsx",
+            "apps/cna-web/components/diagrams/DrawioEmbed.test.tsx",
             "apps/cna-web/middleware.ts",
             "apps/cna-web/next.config.ts",
             "apps/cna-web/lib/drawio-embed.ts",
             "apps/cna-web/lib/drawio-mcp/server.ts",
             "apps/cna-web/Dockerfile",
             "cna/ai_engine/mcp_client/drawio_mcp_client.py",
+            "tests/unit/test_drawio_mcp_client.py",
+            ".github/workflows/380-drawio-pin-check.yml",
         ):
             assert expected in names, expected
         assert len(names) > 100
+        assert not [n for n in names if n.startswith(VENDORED_EDITOR + "/")]
+
+    def test_only_the_vendored_editor_is_skipped(self, tmp_path):
+        # A directory called `drawio` anywhere else is scanned like any other.
+        assert "drawio" not in SKIPPED_DIRECTORIES
+        assert VENDORED_EDITOR == "apps/cna-web/public/drawio"
 
     def test_no_live_file_names_a_public_draw_io_host(self):
         offenders: list[str] = []

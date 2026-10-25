@@ -1,3 +1,10 @@
+# The pin of the self-hosted diagram editor (stage drawio-webapp below, REVIEW.md R-019): a release of jgraph/drawio
+# and the sha256 of its draw.war. Declared here, before the first FROM, so that the runner can record the version in
+# an image label and the weekly check (.github/workflows/380-drawio-pin-check.yml) reads one line. Change both
+# together; tests/security/test_drawio_self_hosted.py checks their shape.
+ARG DRAWIO_WEBAPP_VERSION=32.6.1
+ARG DRAWIO_WEBAPP_SHA256=44dd56958c8408963457dc98f04d2228408ac145c7aa1d8e6895d9c88d5e42aa
+
 # ── Stage 1: deps ────────────────────────────────────────────────────────────
 FROM node:24-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS deps
 WORKDIR /app
@@ -134,14 +141,15 @@ CMD ["./prisma/migrate.sh"]
 # The build fails if the checksum differs. Everything the embedded editor does not use is deleted before the files
 # can reach the runner: the Java and OAuth server side (WEB-INF), the viewer and integration bundles, the template
 # gallery, the math renderer, source maps and every language file but English. What remains is about 65 MB.
-FROM node:24-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS drawio-webapp
+FROM node:24-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS drawio-webapp
 
 # ash with pipefail: the checksum step is a pipe (`echo | sha256sum -c -`) and a failure on its left must fail the
 # build (hadolint DL4006).
 SHELL ["/bin/ash", "-o", "pipefail", "-c"]
 
-ARG DRAWIO_WEBAPP_VERSION=32.6.1
-ARG DRAWIO_WEBAPP_SHA256=44dd56958c8408963457dc98f04d2228408ac145c7aa1d8e6895d9c88d5e42aa
+# The values are declared at the top of this file; redeclaring the names brings them into this stage.
+ARG DRAWIO_WEBAPP_VERSION
+ARG DRAWIO_WEBAPP_SHA256
 
 RUN wget -q -O /tmp/draw.war "https://github.com/jgraph/drawio/releases/download/v${DRAWIO_WEBAPP_VERSION}/draw.war" \
  && echo "${DRAWIO_WEBAPP_SHA256}  /tmp/draw.war" | sha256sum -c - \
@@ -151,15 +159,24 @@ RUN wget -q -O /tmp/draw.war "https://github.com/jgraph/drawio/releases/download
 
 WORKDIR /out
 
+# service-worker.js and workbox-*.js go too: at the top level of /drawio/ they would register a service worker if
+# the page were ever opened outside the sandbox. The trailing checks make the trim fail closed: the files the editor
+# needs must exist, and the server side and the service worker must not.
 RUN rm -rf WEB-INF META-INF templates connect math4 \
  && rm -f js/viewer.min.js js/viewer-static.min.js js/integrate.min.js js/export.js js/embed.dev.js js/open.js js/clear.js \
           export3.html onedrive3.html open.html clear.html teams.html vsdxImporter.html monday-app-association.json \
+          service-worker.js workbox-*.js \
  && find . -name '*.map' -delete \
  && find resources -name 'dia_*.txt' ! -name 'dia_en.txt' -delete \
- && test -f index.html && test -f js/app.min.js && test -f resources/dia.txt && test -f mxgraph/css/common.css
+ && test -f index.html && test -f js/app.min.js && test -f resources/dia.txt && test -f mxgraph/css/common.css \
+ && test ! -e WEB-INF && test ! -e META-INF && test ! -e service-worker.js && test -z "$(find . -name 'workbox-*' | head -n 1)"
 
 # Apache-2.0 asks that the licence travels with the files (the war carries none of its own at the top level).
 COPY third-party/drawio/LICENSE /out/LICENSE
+
+# Read-only for everyone: the runner's user (uid 1001) owns the files after the COPY below but cannot change them.
+RUN find /out -type d -exec chmod 555 {} + \
+ && find /out -type f -exec chmod 444 {} +
 
 # ── Stage 5: runner ──────────────────────────────────────────────────────────
 FROM node:24-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS runner
@@ -192,6 +209,11 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static    ./app/.next/stati
 # The self-hosted diagram editor (stage drawio-webapp). Served by Next.js as static files under /drawio/; its
 # Content-Security-Policy and framing headers come from next.config.ts.
 COPY --from=drawio-webapp --chown=nextjs:nodejs /out ./app/public/drawio
+
+# The version of the editor in this image, readable with `docker inspect` (the pin is declared at the top of this file).
+ARG DRAWIO_WEBAPP_VERSION
+LABEL io.github.saulpatinojr.drawio-webapp.version="${DRAWIO_WEBAPP_VERSION}" \
+      io.github.saulpatinojr.drawio-webapp.source="https://github.com/jgraph/drawio/releases/tag/v${DRAWIO_WEBAPP_VERSION}"
 
 # Prisma runtime only — @prisma/client + generated query engine.
 # The Prisma CLI is intentionally excluded; migrations run from the
