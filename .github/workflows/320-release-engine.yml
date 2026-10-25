@@ -12,8 +12,7 @@ name: "320 · Release Engine Package"
 # is the only job with write access to the repository.
 #
 # Every third-party action is pinned to a full commit SHA with its version
-# beside it; the pins are the ones the Core's other workflows and the sibling
-# repositories already carry.
+# beside it; the pins are the ones this repository's other workflows already carry.
 
 on:
   push:

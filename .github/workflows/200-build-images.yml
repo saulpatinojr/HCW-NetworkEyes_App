@@ -1,9 +1,9 @@
 name: "200 · Build Container Images"
 
 # Runs on GitHub-hosted runners (ubuntu-latest). Nothing here needs a private
-# network or cloud credentials: images build with buildx (GitHub Actions cache),
-# push to Docker Hub through its OIDC connection (no stored token), and the manifest pull request and
-# appliance dispatch use a short-lived GitHub App token. The self-hosted runner the original
+# network, a cloud credential or a stored token: images build with buildx (GitHub Actions cache) and
+# push to Docker Hub through its OIDC connection. This workflow is the only publisher of the images and
+# calls nothing outside this repository and its own Docker Hub repository. The self-hosted runner the original
 # repository used is retired; a fresh clone of this repository needs no runner.
 #
 # First build in a new repository (REVIEW.md R-013 step 4): GitHub registers a
@@ -17,15 +17,34 @@ name: "200 · Build Container Images"
 # `*-sha-<7>` and floating `*-latest` tags. A failed scan therefore never moves
 # a tag; the untagged digest it leaves behind is inert (no tag resolves to it;
 # whether and when Docker Hub deletes such a manifest was not checked against its
-# documentation, so it may stay until removed by hand). The tag names, the `latest-build.json`
-# fields and the `cna-image-published` payload are unchanged; the manifest
-# additionally records `digests{}` so the appliances can pin by digest.
+# documentation, so it may stay until removed by hand). The record of a build is the digest table
+# `tag-images` writes to the run's step summary (one row per component: tags, digest, signed yes/no); the
+# 310 release notes repeat the digests. Nothing is written back to the repository.
+#
+# Tagging is NOT atomic and a re-run is the recovery. `tag-images` verifies all five digests, writes the table
+# (heading: "Verified; tagging in progress"), then moves the tags one component at a time. If it fails or is
+# cancelled part-way, some components carry the new tags and some still the old ones, and the summary shows the
+# table without the closing "All five components tagged" line. Recovery: re-run the failed `tag-images` job
+# (Actions, Re-run failed jobs; the build jobs and their outputs are kept). It verifies every digest again and then
+# repeats `imagetools create`, which gives a tag the digest it already has without error, so nothing is duplicated.
+# Do not re-run the whole workflow for this: that rebuilds everything under a new run id.
+# The *-latest tags move only while the built commit is still current: it is the tip of the default branch, or an
+# ancestor of the tip with nothing between them that this workflow builds from. That is read from GitHub's compare of
+# the two commits (status `ahead`, the changed file names, renames included), and the file names are matched against
+# THIS file's own `on.push.paths` by scripts/ci/paths_touch_build.py, so there is one list and no copy. A documentation,
+# test or other-workflow commit that lands during a build, or before a re-run, therefore does not strand the tags. In
+# every other case (the tip changed a build path, the commits diverged, the comparison is too large to list: GitHub
+# lists at most 250 commits and 300 files, https://docs.github.com/en/rest/commits/commits#compare-two-commits) the
+# run attaches its immutable sha tags and leaves every *-latest tag alone; the run of the newer commit that changed a
+# build path owns them. If the tip or the comparison cannot be read at all, NOTHING is tagged (re-run the job).
+# By design, when that newer run does not finish: build A running, B replaced by C, C fails its scan. A attaches its
+# sha tags and leaves *-latest, C never tags, so *-latest stays at the build before A until a later successful run.
 #
 # Signing (TODO.md T-703). Once an image has passed its gates, the build job
 # signs the digest with cosign — keyless, under this workflow's OIDC identity
 # (`id-token: write`, nothing stored in the repository) — and attaches BuildKit's
-# SLSA provenance as a cosign attestation (scripts/ci/sign_image.sh). The
-# appliances refuse to deploy a digest that does not verify against this
+# SLSA provenance as a cosign attestation (scripts/ci/sign_image.sh). A consumer
+# should refuse to deploy a digest that does not verify against this
 # workflow's identity, so a tag re-pointed on Docker Hub, or an image pushed with
 # the registry credential from anywhere else, cannot be rolled out.
 
@@ -49,30 +68,33 @@ on:
     inputs:
       rehearsal:
         description: >-
-          Rehearse without publishing, before DOCKERHUB_ENABLED is switched on. Two jobs run:
-          the manifest pull request (proves the GitHub App, auto-merge and the required checks;
-          the pull request is closed again) and the Docker Hub login (proves the OIDC
-          connection's ruleset and its Image Push scope by pushing an empty labelled image BY
-          DIGEST ONLY, main branch only, then has Docker Scout analyse it with the same call the
-          real build uses). No product image is built, nothing is tagged, signed or written to
-          the manifest.
-        type: boolean
-        default: false
-      merge:
-        description: "Rehearsal only: really merge a harmless file (.github/rehearsal.txt) instead of closing the pull request."
+          Rehearse without publishing, before DOCKERHUB_ENABLED is switched on (main branch only). One job
+          runs: the Docker Hub login, a throwaway labelled image pushed BY DIGEST with provenance, Docker
+          Scout on it (the same call the real build uses), then it is SIGNED and ATTESTED and VERIFIED with
+          the real scripts under the production workflow identity, and given ONE tag, rehearsal-<run id>.
+          It leaves that image, its signature artifacts and that tag on Docker Hub and writes entries to
+          the public Sigstore transparency logs, which cannot be removed. No product image is built, no
+          sha or latest tag is touched, and nothing is deleted.
         type: boolean
         default: false
 
-# Never cancel an in-flight build. Tags are created all-or-nothing in the final
-# `tag-images` job, but a cancellation while that job is mid-loop would still
-# leave a partial tagged set on Docker Hub (e.g. `api-latest` moved,
-# `web-latest` not) that the appliances' `*-latest` fallbacks would deploy.
+# Never cancel an in-flight build. Tagging in the final `tag-images` job is not
+# atomic (the check that nothing moves unless all five digests verify happens before
+# the first tag, but the tags then move one component at a time), so a cancellation while that
+# job is mid-loop would leave a partial tagged set on Docker Hub (e.g. `api-latest` moved,
+# `web-latest` not) that a consumer following the `*-latest` tags would deploy. See "Tagging is NOT
+# atomic" above for the recovery.
 # Queued runs for the same ref still collapse to the newest one, so a burst of
 # Dependabot merges costs at most one superseded full build, and runs finish in
-# push order (the queued run starts only after the in-flight one completes), so
-# `*-latest` can never move backwards.
+# push order (the queued run starts only after the in-flight one completes). The tip guard in
+# `tag-images` (see the header) is what makes `*-latest` unable to move backwards.
+#
+# A rehearsal has a concurrency group of its own (the last part of the name): in the group of the real
+# builds it would take the "newest queued run" place and cancel a pending real build. Transition: the group
+# name changed with that, so until the runs that started under the old name (without the last part) have
+# finished, one of them can run alongside the first run of the new group; the tip guard covers `*-latest`.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.rehearsal && 'rehearsal' || 'build' }}
   cancel-in-progress: false
 
 env:
@@ -83,10 +105,10 @@ env:
   # enforces the shape and that no workflow, script or contract names another repository).
   # Never reuse the retired `cna` repository: it belongs to a different image. Only the repository
   # changes the name; the tag scheme inside it (`sha-<7>`, `latest`, `<role>-sha-<7>`,
-  # `<role>-latest`) is part of the appliance contract and stays as it is.
+  # `<role>-latest`) is part of the published contract (CLAUDE.md) and stays as it is.
   IMAGE_REPOSITORY: img-ne-appliance-app
-  # cosign release that signs every image; both appliances verify with the same
-  # release (COSIGN_VERSION in their 210/220). Bump the three together.
+  # cosign release that signs every image and verifies it in `tag-images`. 310 verifies with the same
+  # release (COSIGN_VERSION there). Bump the two together.
   COSIGN_VERSION: v3.1.3
 
 # No workflow-wide grants: each job declares the least it needs below. The build
@@ -109,7 +131,7 @@ jobs:
   build-images:
     runs-on: ubuntu-latest
     # Pushing needs the Docker Hub OIDC connection; the variable is the owner's switch.
-    if: vars.DOCKERHUB_ENABLED == 'true' && !inputs.rehearsal
+    if: vars.DOCKERHUB_ENABLED == 'true' && !inputs.rehearsal && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     timeout-minutes: 45
     permissions:
       contents: read
@@ -221,7 +243,7 @@ jobs:
           exit-code: true
 
       # Sign only what Scout accepted, and only by digest: the signature is what
-      # the appliances verify before a deploy (scripts/ci/sign_image.sh).
+      # consumers verify before a deploy (scripts/ci/sign_image.sh).
       - name: Sign and attest ${{ matrix.name }} image
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
@@ -251,7 +273,7 @@ jobs:
   build-web:
     runs-on: ubuntu-latest
     # Pushing needs the Docker Hub OIDC connection; the variable is the owner's switch.
-    if: vars.DOCKERHUB_ENABLED == 'true' && !inputs.rehearsal
+    if: vars.DOCKERHUB_ENABLED == 'true' && !inputs.rehearsal && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     timeout-minutes: 45
     permissions:
       contents: read
@@ -460,10 +482,18 @@ jobs:
   # `*-latest` tags to the digest that was scanned — the tag can never point at
   # content Scout did not see. `imagetools create` re-tags the pushed index
   # (with its attestations) without rebuilding or re-pushing layers.
+  #
+  # Before any tag moves, scripts/ci/verify_signed_digest.sh checks that each of the five digests is signed and
+  # attested by THIS workflow at THIS commit and run, so no tag is ever attached to a digest a consumer could not
+  # verify. The job then writes one row per component (tags, digest, signed yes/no) to the run's step summary. That
+  # table is the record of what this build published; nothing is committed to the repository, and the release
+  # notes of 310 repeat the digests. If any digest does not verify, the table says `no` for it and the job stops
+  # before it tags anything.
   tag-images:
     runs-on: ubuntu-latest
-    if: vars.DOCKERHUB_ENABLED == 'true' && !inputs.rehearsal # owner step: Docker Hub OIDC connection + variables (REFACTOR_APP.md change set J)
-    timeout-minutes: 10
+    # Main only, like the rehearsal: the OIDC connection's ruleset and the signing identity both name refs/heads/main.
+    if: vars.DOCKERHUB_ENABLED == 'true' && !inputs.rehearsal && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) # owner step: Docker Hub OIDC connection + variables (REFACTOR_APP.md change set J)
+    timeout-minutes: 15
     needs: [build-images, build-web]
     permissions:
       contents: read
@@ -471,6 +501,12 @@ jobs:
     env:
       DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
     steps:
+      # The verification script lives in the repository, at the commit that was built.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
@@ -489,12 +525,19 @@ jobs:
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
         env:
           DOCKERHUB_OIDC_CONNECTIONID: ${{ vars.DOCKERHUB_CONNECTION }}
-          DOCKERHUB_OIDC_EXPIREIN: '900'
+          # The longest the connection allows: five verifications (cosign talks to Sigstore, up to two
+          # attempts each) run before the first tag moves, and the token is first used by the tagging.
+          DOCKERHUB_OIDC_EXPIREIN: '3600'
         with:
           registry: docker.io
           username: ${{ vars.DOCKERHUB_NAMESPACE }}
 
-      - name: Tag every scanned digest
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+
+      - name: Verify, tag and record every scanned digest
         env:
           DIGEST_CLI: ${{ needs.build-images.outputs.digest_cli }}
           DIGEST_API: ${{ needs.build-images.outputs.digest_api }}
@@ -506,6 +549,13 @@ jobs:
           TAGS_WORKER: ${{ needs.build-images.outputs.tags_worker }}
           TAGS_WEB: ${{ needs.build-web.outputs.tags_web }}
           TAGS_MIGRATOR: ${{ needs.build-web.outputs.tags_migrator }}
+          # What verify_signed_digest.sh pins every digest to: this commit (the image's revision label) and this run
+          # (the builder of its provenance).
+          EXPECTED_REVISION: ${{ github.sha }}
+          EXPECTED_RUN_IDS: ${{ github.run_id }}
+          # The tip of the default branch decides whether this run may move the *-latest tags.
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
           IMAGE="docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}"
@@ -531,241 +581,117 @@ jobs:
             fi
           done
 
+          # The digest table of this build, in the run's step summary. $1 is the heading.
+          write_table() {
+            {
+              echo "### $1"
+              echo ""
+              echo "Repository \`${IMAGE}\`, commit \`${GITHUB_SHA}\`, run ${GITHUB_RUN_ID}."
+              echo ""
+              echo "| Component | Tags | Digest | Signed |"
+              echo "| --- | --- | --- | --- |"
+              for c in $COMPONENTS; do
+                TAG_LIST=$(jq -r --arg prefix "${IMAGE}:" '[.[] | ltrimstr($prefix) | "`" + . + "`"] | join(", ")' <<< "${TAGS[$c]}")
+                echo "| ${c} | ${TAG_LIST} | \`${DIGESTS[$c]}\` | ${SIGNED[$c]} |"
+              done
+              echo ""
+              echo "Pull by digest, never by a floating tag, and verify the signature before running an image (README, Verifying images)."
+            } >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          # Verify every digest before any tag moves. A digest that does not verify is reported as `no` and
+          # stops the job, so a tag is never attached to a digest a consumer could not verify.
+          declare -A SIGNED=()
+          UNSIGNED=0
+          for c in $COMPONENTS; do
+            if bash scripts/ci/verify_signed_digest.sh "${IMAGE}@${DIGESTS[$c]}"; then
+              SIGNED[$c]=yes
+            else
+              SIGNED[$c]=no
+              UNSIGNED=$((UNSIGNED + 1))
+            fi
+          done
+          if [ "$UNSIGNED" -gt 0 ]; then
+            write_table "NOT TAGGED: ${UNSIGNED} of 5 digests did not verify"
+            echo "::error::${UNSIGNED} digest(s) are not signed and attested by this workflow at this commit (the table in the step summary names them); refusing to tag anything."
+            exit 1
+          fi
+
+          # *-latest must never move backwards, and must not be stranded. They move when this commit is the tip of
+          # the default branch, or is an ancestor of it and nothing after it changes a file this workflow builds
+          # from (the header explains why, and what happens otherwise). If the tip or the comparison cannot be
+          # read, nothing is tagged.
+          TIP="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${DEFAULT_BRANCH}" --jq .sha)" || TIP=""
+          if ! [[ "$TIP" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Could not read the tip of ${DEFAULT_BRANCH} (got '${TIP}'), so it is not known whether this commit may move the *-latest tags; refusing to tag anything."
+            exit 1
+          fi
+          MOVE_LATEST=yes
+          WHY=""
+          NOTE=""
+          if [ "$TIP" != "$GITHUB_SHA" ]; then
+            MOVE_LATEST=no
+            COMPARE="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${GITHUB_SHA}...${TIP}")" || COMPARE=""
+            if ! jq -e 'type == "object" and has("status")' > /dev/null 2>&1 <<< "$COMPARE"; then
+              echo "::error::Could not compare ${GITHUB_SHA} with the tip ${TIP} of ${DEFAULT_BRANCH}, so it is not known whether the *-latest tags may move; refusing to tag anything."
+              exit 1
+            fi
+            CMP_STATUS="$(jq -r '.status' <<< "$COMPARE")"
+            CMP_AHEAD="$(jq -r '.ahead_by // 0' <<< "$COMPARE")"
+            CMP_FILES="$(jq '(.files // []) | length' <<< "$COMPARE")"
+            if [ "$CMP_STATUS" != "ahead" ]; then
+              WHY="the tip is not ahead of this commit (compare status '${CMP_STATUS}')"
+            elif [ "$CMP_FILES" -ge 300 ] || [ "$CMP_AHEAD" -gt 250 ]; then
+              WHY="the comparison with the tip is too large to list completely (${CMP_AHEAD} commits, ${CMP_FILES} files; GitHub lists at most 250 commits and 300 files)"
+            else
+              CHANGED="$(mktemp)"
+              jq -r '(.files // [])[] | .filename, (.previous_filename // empty)' <<< "$COMPARE" > "$CHANGED"
+              rc=0
+              TOUCHING="$(python3 scripts/ci/paths_touch_build.py .github/workflows/200-build-images.yml < "$CHANGED")" || rc=$?
+              case "$rc" in
+                0)
+                  MOVE_LATEST=yes
+                  NOTE="The tip ${TIP} is ahead of this commit and changes nothing this workflow builds from, so the *-latest tags move."
+                  ;;
+                1) WHY="later commits change files this workflow builds from ($(tr '\n' ' ' <<< "$TOUCHING")); the run of the commit that changed them owns the *-latest tags" ;;
+                *)
+                  echo "::error::Could not read the paths this workflow builds from (exit ${rc}); refusing to tag anything."
+                  exit 1
+                  ;;
+              esac
+            fi
+            if [ "$MOVE_LATEST" = no ]; then
+              echo "::warning::The *-latest tags are NOT moved: ${WHY}. Its sha tags are attached."
+            fi
+          fi
+
+          # The record is written BEFORE the first tag moves, so a failure part-way through the loop still
+          # leaves it. Without the closing line below, tagging did not finish: re-run this job.
+          write_table "Verified; tagging in progress (no closing line below means it stopped part-way: re-run this job)"
+          if [ "$MOVE_LATEST" = no ]; then
+            echo "The *-latest tags will NOT be moved: ${WHY}." >> "$GITHUB_STEP_SUMMARY"
+          elif [ -n "$NOTE" ]; then
+            echo "$NOTE" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
           for c in $COMPONENTS; do
             ARGS=()
             while IFS= read -r t; do
+              name="${t##*:}"
+              if [ "$MOVE_LATEST" = no ] && { [ "$name" = latest ] || [[ "$name" == *-latest ]]; }; then
+                echo "Not moving ${t}: ${WHY}."
+                continue
+              fi
               [ -n "$t" ] && ARGS+=(-t "$t")
             done < <(jq -r '.[]' <<< "${TAGS[$c]}")
             echo "Tagging ${c}: ${IMAGE}@${DIGESTS[$c]} ->" "${ARGS[@]}"
             docker buildx imagetools create "${ARGS[@]}" "${IMAGE}@${DIGESTS[$c]}"
           done
-
-  publish-build-manifest:
-    runs-on: ubuntu-latest
-    # Only the default branch may open the manifest pull request: the branch name is shared,
-    # so a build dispatched from a feature branch could overwrite a main build's manifest.
-    if: vars.DOCKERHUB_ENABLED == 'true' && !inputs.rehearsal && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) # owner step: Docker Hub OIDC connection + variables (REFACTOR_APP.md change set J)
-    # Includes the wait for the manifest pull request to merge (the last step).
-    timeout-minutes: 40
-    # tag-images gates this job; build-images / build-web are listed as direct
-    # dependencies only so their digest outputs are reachable via `needs`.
-    needs: [build-images, build-web, tag-images]
-    # HCW Portfolio Admin is the routine pull-request bot (owner decision); its key lives in this
-    # environment, which only the default branch may use.
-    environment: admin-ops
-    # Read-only: main is protected by a ruleset that requires a pull request, so
-    # the manifest reaches it through a pull request opened with a GitHub App
-    # token, never by a push (and GITHUB_TOKEN may not open pull requests here).
-    permissions:
-      contents: read
-    env:
-      DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
-      DIGEST_CLI: ${{ needs.build-images.outputs.digest_cli }}
-      DIGEST_API: ${{ needs.build-images.outputs.digest_api }}
-      DIGEST_WORKER: ${{ needs.build-images.outputs.digest_worker }}
-      DIGEST_WEB: ${{ needs.build-web.outputs.digest_web }}
-      DIGEST_MIGRATOR: ${{ needs.build-web.outputs.digest_migrator }}
-    # The manifest is handed to notify-appliances as a job output so that job
-    # does not have to wait for the pull request below to reach main.
-    outputs:
-      manifest: ${{ steps.manifest.outputs.json }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          # create-pull-request pushes with its own token; a persisted checkout
-          # header beside it makes git send two and GitHub answers 400.
-          persist-credentials: false
-
-      # `images{}` keeps the tag form the appliances already read. `digests{}`
-      # is additive (same keys, `name@sha256:…` form) so an appliance can pin
-      # exactly what was scanned instead of trusting a mutable Docker Hub tag.
-      - name: Write build manifest
-        id: manifest
-        run: |
-          set -euo pipefail
-          if [ -z "$DOCKERHUB_NAMESPACE" ]; then
-            echo "::error::DOCKERHUB_NAMESPACE variable is required."
-            exit 1
+          if [ "$MOVE_LATEST" = yes ]; then
+            echo "### All five components tagged" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Sha tags attached; the *-latest tags were not moved (${WHY})" >> "$GITHUB_STEP_SUMMARY"
           fi
-          for v in DIGEST_CLI DIGEST_API DIGEST_WORKER DIGEST_WEB DIGEST_MIGRATOR; do
-            if ! [[ "${!v}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-              echo "::error::${v} is not a valid image digest (got '${!v}'); refusing to write the manifest."
-              exit 1
-            fi
-          done
-          SHA_TAG="sha-$(echo '${{ github.sha }}' | cut -c1-7)"
-          IMAGE="docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}"
-          mkdir -p .deployment-catalog
-          cat > .deployment-catalog/latest-build.json <<EOF
-          {
-            "sha_tag": "${SHA_TAG}",
-            "commit": "${{ github.sha }}",
-            "built_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "run_id": "${{ github.run_id }}",
-            "images": {
-              "cli":      "${IMAGE}:${SHA_TAG}",
-              "api":      "${IMAGE}:api-${SHA_TAG}",
-              "worker":   "${IMAGE}:worker-${SHA_TAG}",
-              "web":      "${IMAGE}:web-${SHA_TAG}",
-              "migrator": "${IMAGE}:migrator-${SHA_TAG}"
-            },
-            "digests": {
-              "cli":      "${IMAGE}@${DIGEST_CLI}",
-              "api":      "${IMAGE}@${DIGEST_API}",
-              "worker":   "${IMAGE}@${DIGEST_WORKER}",
-              "web":      "${IMAGE}@${DIGEST_WEB}",
-              "migrator": "${IMAGE}@${DIGEST_MIGRATOR}"
-            }
-          }
-          EOF
-          echo "Manifest written:"
-          cat .deployment-catalog/latest-build.json
-          echo "json=$(jq -c . .deployment-catalog/latest-build.json)" >> "$GITHUB_OUTPUT"
-          echo "sha_tag=${SHA_TAG}" >> "$GITHUB_OUTPUT"
-
-      # Lands the manifest on main through a self-merging pull request: main is
-      # protected by a ruleset that requires one, and the push this job used to
-      # make is refused for `github-actions`. The credential is the GitHub App
-      # HCW Portfolio Admin (APP_CLIENT_ID / APP_PRIVATE_KEY in the admin-ops
-      # environment), installed here with Contents and Pull requests read and
-      # write; the `rehearsal` run of this workflow checks it without a build.
-      # The wait holds `notify-appliances` until the manifest is on
-      # main. If it does not get there (a required check fails, auto-merge cannot
-      # be enabled, the wait times out) the job FAILS on purpose: the images are
-      # already tagged, but a build whose manifest is not on main must not be
-      # announced, or the appliances' poll of main and the dispatch would disagree.
-      - name: Open the manifest pull request and wait for the merge
-        id: manifest-pr
-        uses: ./.github/actions/self-merging-pr
-        with:
-          client-id: ${{ vars.APP_CLIENT_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          branch: build/latest-manifest
-          add-paths: .deployment-catalog/latest-build.json
-          title: "chore(build): update latest-build manifest to ${{ steps.manifest.outputs.sha_tag }}"
-          body: |
-            Automated by `200-build-images.yml` (run ${{ github.run_id }}) after every image passed the
-            vulnerability gate. Only `.deployment-catalog/latest-build.json` changes. It merges itself
-            (squash) once the required checks pass; nothing here needs a review.
-      - name: Fail loudly if the manifest did not reach main
-        if: steps.manifest-pr.outputs.merged != 'true'
-        env:
-          PR_NUMBER: ${{ steps.manifest-pr.outputs.pull-request-number }}
-        run: |
-          echo "::error::The manifest pull request (#${PR_NUMBER:-none}) did not merge, so notify-appliances is skipped. The images are built, scanned and tagged; fix the pull request, merge it, then re-run this job to announce the build."
-          exit 1
-  # Tell each appliance repository that a new image set exists so it can
-  # auto-update dev and open the prod update request (its 230-image-update
-  # workflow). This is the push-based fast path; the appliances also poll the
-  # committed manifest, so a failed dispatch is a warning, never a failed build.
-  #
-  # APPLIANCE_REPOS is a comma-separated list of repository names (e.g.
-  # "Work-Cloud_Network_Azure_Appliance,Work-Cloud_Network_AWS_Appliance") and APPLIANCE_OWNER the
-  # account that owns them. The owner is its own variable because the appliances do not have to live
-  # under this repository's owner (they moved to another account once; GitHub answers a dispatch to the
-  # old path with a redirect, never with a delivery). The GitHub App must be installed on that account
-  # for each of them; the token is scoped to exactly those repositories.
-  notify-appliances:
-    runs-on: ubuntu-latest
-    needs: publish-build-manifest
-    if: vars.APPLIANCE_REPOS != ''
-    # Nothing here uses GITHUB_TOKEN: the App token is minted from the App's
-    # private key and the dispatch calls use that token.
-    permissions: {}
-    steps:
-      # APPLIANCE_REPOS without APPLIANCE_OWNER is a configuration error, not "nobody to notify":
-      # guessing this repository's owner would mint a token for, and dispatch to, repositories that
-      # are not the appliances.
-      - name: Require APPLIANCE_OWNER
-        env:
-          APPLIANCE_OWNER: ${{ vars.APPLIANCE_OWNER }}
-        run: |
-          if [ -z "$APPLIANCE_OWNER" ]; then
-            echo "::error::APPLIANCE_REPOS is set but the APPLIANCE_OWNER variable is not. Set APPLIANCE_OWNER to the account that owns the appliance repositories (gh variable set APPLIANCE_OWNER --body <account>), or clear APPLIANCE_REPOS to stop notifying them."
-            exit 1
-          fi
-
-      - name: Generate GitHub App token (appliance repositories only)
-        id: app-token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510  # v3.3.0
-        with:
-          client-id: ${{ secrets.GH_APP_ID }}
-          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
-          owner: ${{ vars.APPLIANCE_OWNER }}
-          repositories: ${{ vars.APPLIANCE_REPOS }}
-
-      - name: Send cna-image-published to each appliance
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          OWNER: ${{ vars.APPLIANCE_OWNER }}
-          APPLIANCE_REPOS: ${{ vars.APPLIANCE_REPOS }}
-          MANIFEST_JSON: ${{ needs.publish-build-manifest.outputs.manifest }}
-        run: |
-          set -u
-          if [ -z "$MANIFEST_JSON" ]; then
-            echo "::warning::No build manifest output; appliances will pick the images up on their next poll."
-            exit 0
-          fi
-          PAYLOAD=$(jq -cn --argjson m "$MANIFEST_JSON" '{event_type: "cna-image-published", client_payload: $m}')
-          IFS=',' read -ra REPOS <<< "$APPLIANCE_REPOS"
-          for RAW in "${REPOS[@]}"; do
-            REPO=$(echo "$RAW" | xargs)
-            [ -n "$REPO" ] || continue
-            # No -L and --max-redirs 0: a moved or renamed repository answers 301/307/308, and following
-            # it would re-send the POST elsewhere (or drop it); the status is checked, never assumed.
-            STATUS=$(curl -sS --max-redirs 0 -o /tmp/dispatch.out -w '%{http_code}' -X POST \
-              -H "Authorization: Bearer $GH_TOKEN" \
-              -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/repos/${OWNER}/${REPO}/dispatches" \
-              -d "$PAYLOAD" || echo "000")
-            case "$STATUS" in
-              2??)
-                echo "Notified ${OWNER}/${REPO} (cna-image-published $(jq -r .sha_tag <<< "$MANIFEST_JSON"))"
-                ;;
-              301|302|307|308)
-                echo "::warning::${OWNER}/${REPO} has moved (HTTP ${STATUS}): check the APPLIANCE_OWNER and APPLIANCE_REPOS variables. It will pick the images up on its next scheduled poll."
-                ;;
-              *)
-                echo "::warning::Could not notify ${OWNER}/${REPO} (HTTP ${STATUS}); it will pick the images up on its next scheduled poll."
-                cat /tmp/dispatch.out 2>/dev/null || true
-                ;;
-            esac
-          done
-
-  # Rehearsal of the manifest pull request (workflow_dispatch with `rehearsal`).
-  # Runs the same composite action as `publish-build-manifest` against a harmless
-  # file, so the GitHub App, the pull request, auto-merge and the required checks
-  # can be proven before DOCKERHUB_ENABLED is switched on. Nothing is built or
-  # pushed to Docker Hub. By default the pull request is closed again; with
-  # `merge` it really merges `.github/rehearsal.txt`, once, as the end-to-end proof.
-  rehearse-manifest-pr:
-    runs-on: ubuntu-latest
-    if: inputs.rehearsal
-    timeout-minutes: 45
-    environment: admin-ops
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Write the rehearsal file
-        run: |
-          mkdir -p .github
-          printf 'Rehearsal of the self-merging pull request, run %s at %s.\n' "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .github/rehearsal.txt
-      - name: Rehearse
-        uses: ./.github/actions/self-merging-pr
-        with:
-          client-id: ${{ vars.APP_CLIENT_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          branch: rehearsal/self-merging-pr
-          add-paths: .github/rehearsal.txt
-          title: "chore(rehearsal): self-merging pull request"
-          body: Rehearsal run ${{ github.run_id }} of the self-merging pull request. Safe to close.
-          rehearsal: ${{ inputs.merge && 'false' || 'true' }}
 
   # Dry run of the Docker Hub OIDC connection (workflow_dispatch with `rehearsal`, main only). It does
   # not need DOCKERHUB_ENABLED, so it can prove the connection before publishing is switched on:
@@ -781,20 +707,47 @@ jobs:
   #      Scout's acceptance of the OIDC credential is rehearsed too. If Scout refuses it, the failure
   #      hint says so: the fix is a Docker Hub personal access token for Scout (the action's
   #      `dockerhub-user` / `dockerhub-password` inputs), and TODO.md T-728 records that this must be
-  #      settled before DOCKERHUB_ENABLED is set.
-  # It never signs, never tags (so never touches `latest`), never writes the manifest, and logs out.
+  #      settled before DOCKERHUB_ENABLED is set;
+  #   5. the digest is signed and attested by the SAME script the real jobs use (scripts/ci/sign_image.sh, with
+  #      BuildKit provenance and the SBOM as in the real build), so cosign v3's OCI-referrer storage on Docker Hub
+  #      and the provenance read-back are proven before the first publish;
+  #   6. scripts/ci/verify_signed_digest.sh then verifies that digest exactly as tag-images and 310 do (this
+  #      workflow's identity on main, GitHub's issuer, this run, this commit's revision label);
+  #   7. the digest gets one throwaway tag, `rehearsal-<run id>`, and it is read back, which is what tag-images'
+  #      `imagetools create` does to a signed index. That tag matches none of 370's patterns, so nothing prunes
+  #      it: remove it, the untagged digest and cosign's signature/attestation artifacts by hand on Docker Hub if you
+  #      do not want them. This job deletes nothing; it created only those objects.
+  # Residual facts of a rehearsal. (a) It signs under the PRODUCTION identity,
+  # 200-build-images.yml@refs/heads/main, so its digest is indistinguishable from a real one by identity alone;
+  # what marks it is the label rehearsal=true, a builder run with no tag-images job, and the absence of any
+  # `sha-<7>` tag. (b) Sigstore transparency-log entries cannot be removed. (c) Its run id is a run of the commit
+  # that scripts/ci/find_release_image.sh passes to 310 as an acceptable builder (EXPECTED_RUN_IDS). That is
+  # accepted: 310 promotes only the digest named by the `sha-<7>` tag, which only tag-images creates, and it also
+  # requires the image's revision label to equal the commit; a rehearsal digest could be promoted only by someone
+  # who can already write tags to this registry repository, and every tag already rests on that trust.
+  # (d) The rehearsal runs in its own concurrency group.
+  # What the rehearsal cannot cover: the five real images and their digest hand-over between jobs, the
+  # revision label that docker/metadata-action puts on the real images (here it is set by hand), the digest
+  # table and the verify-before-tag gate of tag-images, and 310. It never touches `latest` or any `*-sha-*` tag and
+  # writes nothing to the repository.
   # The real build jobs above stay skipped: they need DOCKERHUB_ENABLED == 'true' and `!inputs.rehearsal`.
   rehearse-docker-login:
     runs-on: ubuntu-latest
-    # Same ref guard as publish-build-manifest: the connection's ruleset names refs/heads/main only.
+    # Main only: the connection's ruleset names refs/heads/main only.
     if: inputs.rehearsal && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
-    timeout-minutes: 15
+    timeout-minutes: 25
     permissions:
       contents: read
-      id-token: write  # the login below exchanges this job's GitHub OIDC token
+      id-token: write  # the login below exchanges this job's GitHub OIDC token; cosign uses it for Fulcio
     env:
       DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
     steps:
+      # The signing and verification scripts live in the repository.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
       - name: Validate Docker Hub namespace and connection
         env:
           CONNECTION: ${{ vars.DOCKERHUB_CONNECTION }}
@@ -804,7 +757,7 @@ jobs:
             exit 1
           fi
           if ! [[ "$CONNECTION" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
-            echo "::error::DOCKERHUB_CONNECTION must be the Docker Hub OIDC connection id, a UUID (got '${CONNECTION}'). Set it with: gh variable set DOCKERHUB_CONNECTION --body <connection id>."
+            echo "::error::DOCKERHUB_CONNECTION must be the Docker Hub OIDC connection id, a UUID of 36 characters (the variable is ${#CONNECTION} characters long; its value is not printed). Set it with: gh variable set DOCKERHUB_CONNECTION --body <connection id>."
             exit 1
           fi
 
@@ -817,10 +770,15 @@ jobs:
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
         env:
           DOCKERHUB_OIDC_CONNECTIONID: ${{ vars.DOCKERHUB_CONNECTION }}
-          DOCKERHUB_OIDC_EXPIREIN: '900'  # a 15-minute job
+          DOCKERHUB_OIDC_EXPIREIN: '1800'  # a 25-minute job
         with:
           registry: docker.io
           username: ${{ vars.DOCKERHUB_NAMESPACE }}
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
 
       - name: Write the rehearsal image definition
         run: |
@@ -830,16 +788,20 @@ jobs:
           printf 'FROM scratch\nCOPY rehearsal.txt /rehearsal.txt\nLABEL rehearsal="true" run_id="%s"\n' "$GITHUB_RUN_ID" > "${RUNNER_TEMP}/rehearsal-image/Dockerfile"
           cat "${RUNNER_TEMP}/rehearsal-image/Dockerfile"
 
-      # Push by digest only (`push-by-digest=true`, no `tags:`), as the real build does; no provenance
-      # or SBOM, so the pushed image is its one layer, its config and nothing else.
+      # Push by digest only (`push-by-digest=true`, no `tags:`), as the real build does, with BuildKit
+      # provenance and the SBOM as the real build has them (sign_image.sh reads the provenance back), and the
+      # revision label that verify_signed_digest.sh checks.
       - name: Push the rehearsal image by digest
         id: push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
         with:
           context: ${{ runner.temp }}/rehearsal-image
           outputs: type=image,name=docker.io/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }},push-by-digest=true,name-canonical=true,push=true
-          provenance: false
-          sbom: false
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            rehearsal=true
+          provenance: true
+          sbom: true
 
       - name: Read the pushed digest back
         env:
@@ -856,7 +818,7 @@ jobs:
             exit 1
           fi
           echo "Docker Hub accepted the login and the push, and returns ${DIGEST} for docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}."
-          echo "The image is untagged and no tag resolves to it. Nothing was tagged, signed or written to the manifest. Remove the digest by hand on Docker Hub if you do not want it kept."
+          echo "The image is untagged and no tag resolves to it yet; the steps below sign it, verify it and give it one rehearsal tag."
 
       # The same action, version and arguments as the real build jobs use on every digest they push.
       - name: Docker Scout analyses the rehearsal digest
@@ -869,13 +831,63 @@ jobs:
           only-fixed: true
           exit-code: true
 
+      # The real signing path, on the throwaway digest: cosign sign and attest (keyless, this job's OIDC identity).
+      - name: Sign and attest the rehearsal digest
+        id: sign
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: scripts/ci/sign_image.sh "docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}@${DIGEST}"
+
+      # The real verification, with the same expected identity, issuer, run and revision rules as tag-images and 310.
+      - name: Verify the rehearsal digest as tag-images and 310 do
+        id: verify
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+          EXPECTED_REVISION: ${{ github.sha }}
+          EXPECTED_RUN_IDS: ${{ github.run_id }}
+        run: bash scripts/ci/verify_signed_digest.sh "docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}@${DIGEST}"
+
+      - name: Give the digest one rehearsal tag and read it back
+        id: retag
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          # shellcheck source=scripts/ci/registry_digest.sh
+          source scripts/ci/registry_digest.sh
+          IMAGE="docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}"
+          TAG="rehearsal-${GITHUB_RUN_ID}"
+          # Proves the live wording of a missing tag: registry_digest.sh must read it as absent (status 1), not as
+          # an error, or 310 and find_release_image.sh would stop on every tag that does not exist yet.
+          rc=0
+          registry_digest "${IMAGE}:${TAG}" > /dev/null || rc=$?
+          if [ "$rc" -ne 1 ]; then
+            echo "::error::A tag that does not exist gave status ${rc}, not 1 (the registry's message is above): its wording no longer matches scripts/ci/registry_digest.sh."
+            exit 1
+          fi
+          docker buildx imagetools create -t "${IMAGE}:${TAG}" "${IMAGE}@${DIGEST}"
+          READ="$(registry_digest "${IMAGE}:${TAG}")"
+          if [ "$READ" != "$DIGEST" ]; then
+            echo "::error::${IMAGE}:${TAG} resolves to ${READ}, expected ${DIGEST}."
+            exit 1
+          fi
+          echo "${IMAGE}:${TAG} -> ${DIGEST}. Remove this tag by hand on Docker Hub if you do not want it kept: 370 never prunes it."
+
+      - name: What to check if signing, verifying or tagging failed
+        if: failure() && (steps.sign.outcome == 'failure' || steps.verify.outcome == 'failure' || steps.retag.outcome == 'failure')
+        run: |
+          echo "::error::The login and the push worked, but the signing, verification or tagging of the rehearsal digest failed. The real jobs would fail the same way, so settle it BEFORE DOCKERHUB_ENABLED is set."
+          echo "::error::sign: cosign v3 stores a signature as an OCI referrer (falling back to a sha256-<digest> tag where the registry has no Referrers API); the Docker Hub OIDC scope must allow Image Push for those artifacts, and the provenance read-back needs provenance: true on the build."
+          echo "::error::verify: scripts/ci/verify_signed_digest.sh tries cosign with and without --use-signed-timestamps and expects the verify --output json array of critical.image.docker-manifest-digest entries; its log above shows which check failed."
+          echo "::error::tag: imagetools create needs Image Push on the repository."
+
       - name: What to check if Docker Scout failed
         if: failure() && steps.scout.outcome == 'failure'
         run: |
           echo "::error::Docker Scout could not analyse the rehearsal digest although the login and the push worked. Scout may not accept the OIDC credential: it may need a Docker Hub personal access token (the docker/scout-action inputs dockerhub-user and dockerhub-password, from a secret). If so, record that in TODO.md T-728 and settle it BEFORE DOCKERHUB_ENABLED is set, because the real build jobs call Scout the same way and would fail the same way."
 
       - name: What to check if this failed
-        if: failure() && steps.scout.outcome != 'failure'
+        if: failure() && steps.scout.outcome != 'failure' && steps.sign.outcome != 'failure' && steps.verify.outcome != 'failure' && steps.retag.outcome != 'failure'
         run: |
           echo "::error::The Docker Hub rehearsal failed. The three most likely causes:"
           echo "::error::1. The ruleset's subject claim does not match this run. Use the immutable form repo:<owner>@<owner id>/<repository>@<repository id>:ref:refs/heads/main, not the mutable name form (or the reverse of what the connection was created with)."

@@ -13,18 +13,18 @@
 # Keyless: cosign obtains a short-lived certificate from Fulcio for this
 # workflow run's OIDC identity (the job needs `id-token: write`) and records the
 # signature in the Sigstore transparency log; no key material exists anywhere.
-# The appliances verify with their scripts/ci/verify_image_signature.sh against:
+# A consumer verifies against (scripts/ci/verify_signed_digest.sh does exactly this):
 #
-#   certificate identity   https://github.com/<owner>/<core>/.github/workflows/200-build-images.yml@refs/heads/main
+#   certificate identity   https://github.com/<owner>/<repository>/.github/workflows/200-build-images.yml@refs/heads/main
 #   OIDC issuer            https://token.actions.githubusercontent.com
 #   attestation type       slsaprovenance02 (https://slsa.dev/provenance/v0.2)
-#   predicate.builder.id   https://github.com/<owner>/<core>/actions/runs/<run_id>/attempts/<n>
+#   predicate.builder.id   https://github.com/<owner>/<repository>/actions/runs/<run_id>/attempts/<n>
 #
 # The provenance predicate is BuildKit's own (build-push-action
 # `provenance: true`), read back from the attestation manifest buildx attached
 # to the pushed index, so the signed statement describes exactly the build that
 # produced this digest. build-push-action sets predicate.builder.id to this
-# run's URL; that is asserted here so the appliances' builder check can never be
+# run's URL; that is asserted here so a consumer's builder check can never be
 # the first place a missing value is noticed.
 set -euo pipefail
 

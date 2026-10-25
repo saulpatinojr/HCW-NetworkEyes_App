@@ -7,23 +7,35 @@
 # auto-generated changelog from PRs merged since the last tag.
 #
 # Why promote and not build again: a second build of the same commit has no scan gate and is a different digest
-# from the one the appliances verify; and a `latest` tag pushed from here could move ahead of the scan that 200
+# from the one consumers verify; and a `latest` tag pushed from here could move ahead of the scan that 200
 # applies before it moves `latest`. So this workflow never builds, never pushes layers and never touches `latest`
 # (200 owns it, after the scan).
 #
-# WHICH COMMIT TO TAG. Every successful 200 ends with a squash commit that only changes
-# .deployment-catalog/latest-build.json, a path 200 does not build from, so the head of main right after a build
-# has no 200 run of its own. The search therefore walks back from the tagged commit to the nearest commit whose 200
-# run left a `sha-<7>` tag, and accepts the tagged commit when nothing changed between the two in a file 200 builds
-# from (its `on.push.paths`): documentation, or the manifest commit. If the tagged commit changed such a file, the
-# release fails and names it; tag the commit recorded as `commit` in .deployment-catalog/latest-build.json instead.
-# If no 200 build is found at all, the release fails with that same advice.
+# THE FIVE DIGESTS. The release notes list the digest of all five images of that build (CLI, api, worker, web,
+# migrator), each resolved from its own `sha-<7>` tag and verified the same way as the CLI digest
+# (scripts/ci/release_digests.sh). The release job then gives each of the five a version tag: `X.Y.Z` for the CLI
+# image and `api-X.Y.Z`, `worker-X.Y.Z`, `web-X.Y.Z`, `migrator-X.Y.Z` for the others. Those tags match none of
+# 370's SHA patterns, so they are never pruned and 370 keeps the sha tags that share an image with them: a released
+# image stays pullable by tag and by digest. Hub tag names are plain names; the OIDC ruleset for `refs/tags/v*`
+# below is about the GitHub ref of this run, and its one Image Push scope on the repository covers all five tags
+# (the release job has no other registry credential than that login). Every tag is checked before any is created,
+# and an existing tag with another digest stops the release (fail closed); a re-run skips tags already correct.
+# Small known gap: between that check and the creation another writer could create the same tag with another digest;
+# the post-check then fails the job, but the tag has been moved. Docker Hub's immutable tags, if the plan offers
+# them, would close it; that was not checked.
+#
+# WHICH COMMIT TO TAG. A commit that changes only documentation, tests or another workflow touches nothing 200 builds
+# from, so the path filter gives it no 200 run. The search therefore walks back from the tagged commit to the nearest
+# commit whose 200 run left a `sha-<7>` tag, and accepts the tagged commit when nothing changed between the two in a
+# file 200 builds from (its `on.push.paths`). If the tagged commit changed such a file, the release fails and names
+# it and the nearest built commit; tag that commit instead, or run 200 on the tagged one first. If no 200 build is
+# found at all, the release fails with the same advice.
 #
 # DRY RUN. Actions, 310 · Release CLI Tool, Run workflow, branch main, `dry_run` ticked (the default): runs the
 # search and the verification against the head of main, prints which digest it would promote, and stops. It never
 # logs in for write, never creates a tag and never makes a release, so the cosign, jq and path logic is proven
 # before any tag exists. It needs a published image (so after the first real 200 build) and a public repository
-# (it reads anonymously). It does not need DOCKERHUB_ENABLED. Run with `dry_run` unticked, the workflow does nothing.
+# (it reads anonymously) and no write scope and no OIDC token. It does not need DOCKERHUB_ENABLED. Run with `dry_run` unticked, the workflow does nothing.
 #
 # Required repository variables (no secret): DOCKERHUB_NAMESPACE, DOCKERHUB_CONNECTION (the Docker Hub OIDC
 # connection id) and DOCKERHUB_ENABLED == 'true' (a pushed tag only). The tag run's OIDC subject is
@@ -35,8 +47,9 @@
 # one that was verified. Do not re-run first: the re-run refuses to move an existing tag. Delete the tag on Docker
 # Hub (Repository, Tags), find out why (a concurrent push of the same tag), then re-run this workflow.
 #
-# Required repository settings:
-#   Actions > General > Workflow permissions: Read and write
+# Permissions: the workflow grants nothing; the `verify` job (also the whole dry run) holds contents: read and
+# actions: read, and only the `release` job after it holds contents: write and id-token: write. The repository setting
+# Actions > General > Workflow permissions can stay on read-only.
 name: "310 · Release CLI Tool"
 
 # Runs on GitHub-hosted runners (ubuntu-latest): the release retags with a short-lived Docker Hub
@@ -57,10 +70,13 @@ on:
         type: boolean
         default: true
 
-permissions:
-  contents: write    # create GitHub Release
-  id-token: write    # OIDC (Docker Hub login, see the Docker Hub steps below)
-  actions: read      # find the 200 build of the tagged commit (gh run list)
+# Least privilege per job: the workflow grants nothing, and each job declares what it needs.
+#   verify  (push of a tag, or the dry run): contents: read and actions: read. It checks out, finds the image, runs cosign
+#           and reads the registry anonymously. It cannot write to the repository and cannot mint an OIDC token, so the
+#           dry run needs neither write scope.
+#   release (push of a tag only, after verify): contents: write for the GitHub Release and id-token: write for the Docker
+#           Hub login. Everything it acts on comes from verify's job outputs.
+permissions: {}
 
 env:
   # The Docker Hub repository the release tag is added to: the repository 200-build-images.yml
@@ -78,8 +94,8 @@ concurrency:
 
 jobs:
 
-  release:
-    name: Build, Push, Release
+  verify:
+    name: Find and verify the image
     runs-on: ubuntu-latest
     # A pushed tag needs publishing switched on; the dry run does not, and runs from main only.
     if: >-
@@ -88,20 +104,27 @@ jobs:
        github.ref == format('refs/heads/{0}', github.event.repository.default_branch))
     # Includes the wait for an in-flight 200 build of the tagged commit (up to 25 minutes).
     timeout-minutes: 40
+    permissions:
+      contents: read   # checkout
+      actions: read    # find the 200 build of the tagged commit (gh run list)
     env:
       REGISTRY: docker.io
       DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
+    outputs:
+      digest: ${{ steps.scanned.outputs.digest }}
+      build_commit: ${{ steps.scanned.outputs.build_commit }}
+      run_ids: ${{ steps.scanned.outputs.run_ids }}
+      tag: ${{ steps.scanned.outputs.tag }}
+      digest_api: ${{ steps.others.outputs.digest_api }}
+      digest_worker: ${{ steps.others.outputs.digest_worker }}
+      digest_web: ${{ steps.others.outputs.digest_web }}
+      digest_migrator: ${{ steps.others.outputs.digest_migrator }}
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
-
-      # Extract version from tag
-      - name: Extract version
-        id: version
-        if: github.event_name == 'push'
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          persist-credentials: false
 
       - name: Validate Docker Hub namespace
         run: |
@@ -121,7 +144,7 @@ jobs:
       # The digest 200 built, scanned and tagged `sha-<7>` for the tagged commit, or for the nearest earlier
       # commit it built when nothing 200 builds from changed since (see the header). 200 attaches that tag only
       # after every image passed Docker Scout, so its existence is the scan gate. Anonymous reads: the repository
-      # is public, and no write credential exists yet at this point.
+      # is public, and no write credential exists in this job.
       - name: Find the scanned image built from this commit
         id: scanned
         env:
@@ -138,28 +161,83 @@ jobs:
           EXPECTED_RUN_IDS: ${{ steps.scanned.outputs.run_ids }}
         run: bash scripts/ci/verify_signed_digest.sh "${REGISTRY}/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}@${DIGEST}"
 
+      # The other four images of the same build: each must exist under its own `sha-<7>` tag (a missing one means an
+      # incomplete build and stops the release) and must verify like the CLI digest above. No `||`, no `if`: the
+      # tests pin that, as for the step above.
+      - name: Find and verify the other images of that build
+        id: others
+        env:
+          BUILD_COMMIT: ${{ steps.scanned.outputs.build_commit }}
+          RUN_IDS: ${{ steps.scanned.outputs.run_ids }}
+        run: bash scripts/ci/release_digests.sh
+
       - name: Report what a release would promote (dry run)
         if: github.event_name == 'workflow_dispatch'
         env:
           DIGEST: ${{ steps.scanned.outputs.digest }}
           BUILD_COMMIT: ${{ steps.scanned.outputs.build_commit }}
           SHA_TAG: ${{ steps.scanned.outputs.tag }}
+          DIGEST_API: ${{ steps.others.outputs.digest_api }}
+          DIGEST_WORKER: ${{ steps.others.outputs.digest_worker }}
+          DIGEST_WEB: ${{ steps.others.outputs.digest_web }}
+          DIGEST_MIGRATOR: ${{ steps.others.outputs.digest_migrator }}
         run: |
           {
             echo "### 310 dry run: nothing was logged in, tagged or released"
             echo ""
             echo "- head of main: \`${GITHUB_SHA}\`"
             echo "- image found: \`${REGISTRY}/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}:${SHA_TAG}\`"
-            echo "- digest: \`${DIGEST}\`"
             echo "- built from commit: \`${BUILD_COMMIT}\`"
-            echo "- signature, provenance and revision label: verified"
-            echo "- a pushed \`vX.Y.Z\` tag would add the tag \`X.Y.Z\` to that digest"
+            echo "- signature, provenance and revision label of all five images: verified"
+            echo "- a pushed \`vX.Y.Z\` tag would add the tags \`X.Y.Z\` (CLI), \`api-X.Y.Z\`, \`worker-X.Y.Z\`, \`web-X.Y.Z\` and \`migrator-X.Y.Z\`"
+            echo ""
+            echo "| Component | Tag | Digest |"
+            echo "| --- | --- | --- |"
+            echo "| cli | \`${SHA_TAG}\` | \`${DIGEST}\` |"
+            echo "| api | \`api-${SHA_TAG}\` | \`${DIGEST_API}\` |"
+            echo "| worker | \`worker-${SHA_TAG}\` | \`${DIGEST_WORKER}\` |"
+            echo "| web | \`web-${SHA_TAG}\` | \`${DIGEST_WEB}\` |"
+            echo "| migrator | \`migrator-${SHA_TAG}\` | \`${DIGEST_MIGRATOR}\` |"
           } | tee -a "$GITHUB_STEP_SUMMARY"
+
+  release:
+    name: Promote and release
+    needs: verify
+    runs-on: ubuntu-latest
+    # Only a pushed tag writes anything, and only with publishing on. A Run workflow dry run never reaches this job.
+    if: github.event_name == 'push' && vars.DOCKERHUB_ENABLED == 'true'
+    timeout-minutes: 15
+    permissions:
+      contents: write   # create the GitHub Release
+      id-token: write   # OIDC (Docker Hub login, see the Docker Hub steps below)
+    env:
+      REGISTRY: docker.io
+      DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
+
+    steps:
+      # scripts/ci/registry_digest.sh is read from the tagged commit.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Extract version from tag
+      - name: Extract version
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate Docker Hub namespace
+        run: |
+          if [ -z "$DOCKERHUB_NAMESPACE" ]; then
+            echo "::error::DOCKERHUB_NAMESPACE variable is required."
+            exit 1
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
       # Log in to Docker Hub, just before the only step that writes to it.
       - name: Log in to Docker Hub
         id: login
-        if: github.event_name == 'push'
         # Docker Hub's OIDC connection (REFACTOR_APP.md change set J): the action
         # exchanges this job's id-token for a short-lived registry credential, so no
         # long-lived access token is stored.
@@ -172,44 +250,77 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ vars.DOCKERHUB_NAMESPACE }}
 
-      - name: Promote the digest to the release tag
+      # Version tags for all five images of the verified build: `X.Y.Z` for the CLI image and `<component>-X.Y.Z`
+      # for api, worker, web and migrator. They are outside the SHA patterns, so 370 never prunes them and keeps
+      # the sha tags that share an image with them. Phase 1 checks every tag before anything is written, so a
+      # tag that already points at another digest stops the release before it creates any tag; phase 2 creates the
+      # missing ones and reads each back. A re-run after a partial failure repeats phase 1, skips what is done
+      # and creates the rest.
+      - name: Promote the digests to the release tags
         id: promote
-        if: github.event_name == 'push'
         env:
           VERSION: ${{ steps.version.outputs.VERSION }}
-          DIGEST: ${{ steps.scanned.outputs.digest }}
+          DIGEST_CLI: ${{ needs.verify.outputs.digest }}
+          DIGEST_API: ${{ needs.verify.outputs.digest_api }}
+          DIGEST_WORKER: ${{ needs.verify.outputs.digest_worker }}
+          DIGEST_WEB: ${{ needs.verify.outputs.digest_web }}
+          DIGEST_MIGRATOR: ${{ needs.verify.outputs.digest_migrator }}
         run: |
           set -euo pipefail
           # shellcheck source=scripts/ci/registry_digest.sh
           source scripts/ci/registry_digest.sh
           IMAGE="${REGISTRY}/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}"
-          # A release tag is immutable: refuse to move it to another digest. "Not found" and "could not ask" are
-          # different answers: only the first lets the tag be created.
-          rc=0
-          EXISTING="$(registry_digest "${IMAGE}:${VERSION}")" || rc=$?
-          case "$rc" in
-            0)
-              if [ "$EXISTING" = "$DIGEST" ]; then
-                echo "${IMAGE}:${VERSION} already points at ${DIGEST}; nothing to do."
-                exit 0
-              fi
-              echo "::error::${IMAGE}:${VERSION} already exists with digest ${EXISTING}, not ${DIGEST}; a release tag is never moved."
+          declare -A DIGESTS=(
+            [cli]="$DIGEST_CLI" [api]="$DIGEST_API" [worker]="$DIGEST_WORKER"
+            [web]="$DIGEST_WEB" [migrator]="$DIGEST_MIGRATOR"
+          )
+          declare -A TAGS=(
+            [cli]="${VERSION}" [api]="api-${VERSION}" [worker]="worker-${VERSION}"
+            [web]="web-${VERSION}" [migrator]="migrator-${VERSION}"
+          )
+          COMPONENTS="cli api worker web migrator"
+          for c in $COMPONENTS; do
+            if ! [[ "${DIGESTS[$c]}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::No valid digest for '${c}' (got '${DIGESTS[$c]}'); refusing to create any release tag."
               exit 1
-              ;;
-            1) ;;
-            *)
-              echo "::error::Could not check whether ${IMAGE}:${VERSION} exists (the registry's message is above); refusing to create a release tag blind."
+            fi
+          done
+
+          # Phase 1. A release tag is immutable: refuse to move it to another digest. "Not found" and "could not
+          # ask" are different answers: only the first lets the tag be created.
+          declare -A MISSING=()
+          for c in $COMPONENTS; do
+            rc=0
+            EXISTING="$(registry_digest "${IMAGE}:${TAGS[$c]}")" || rc=$?
+            case "$rc" in
+              0)
+                if [ "$EXISTING" = "${DIGESTS[$c]}" ]; then
+                  echo "${IMAGE}:${TAGS[$c]} already points at ${DIGESTS[$c]}; nothing to do."
+                else
+                  echo "::error::${IMAGE}:${TAGS[$c]} already exists with digest ${EXISTING}, not ${DIGESTS[$c]}; a release tag is never moved. No release tag was created by this run."
+                  exit 1
+                fi
+                ;;
+              1) MISSING[$c]=yes ;;
+              *)
+                echo "::error::Could not check whether ${IMAGE}:${TAGS[$c]} exists (the registry's message is above); refusing to create a release tag blind."
+                exit 1
+                ;;
+            esac
+          done
+
+          # Phase 2.
+          for c in $COMPONENTS; do
+            [ -n "${MISSING[$c]:-}" ] || continue
+            docker buildx imagetools create -t "${IMAGE}:${TAGS[$c]}" "${IMAGE}@${DIGESTS[$c]}"
+            rc=0
+            AFTER="$(registry_digest "${IMAGE}:${TAGS[$c]}")" || rc=$?
+            if [ "$rc" -ne 0 ] || [ "$AFTER" != "${DIGESTS[$c]}" ]; then
+              echo "::error::After creating it, ${IMAGE}:${TAGS[$c]} resolves to '${AFTER:-nothing}' (check status ${rc}), expected ${DIGESTS[$c]}. Delete that tag on Docker Hub (Repository, Tags) before re-running: a re-run refuses to move an existing tag."
               exit 1
-              ;;
-          esac
-          docker buildx imagetools create -t "${IMAGE}:${VERSION}" "${IMAGE}@${DIGEST}"
-          rc=0
-          AFTER="$(registry_digest "${IMAGE}:${VERSION}")" || rc=$?
-          if [ "$rc" -ne 0 ] || [ "$AFTER" != "$DIGEST" ]; then
-            echo "::error::After creating it, ${IMAGE}:${VERSION} resolves to '${AFTER:-nothing}' (check status ${rc}), expected ${DIGEST}. Delete that tag on Docker Hub (Repository, Tags) before re-running: a re-run refuses to move an existing tag."
-            exit 1
-          fi
-          echo "Promoted ${IMAGE}@${DIGEST} to ${IMAGE}:${VERSION}"
+            fi
+            echo "Promoted ${IMAGE}@${DIGESTS[$c]} to ${IMAGE}:${TAGS[$c]}"
+          done
 
       - name: What to check if the Docker Hub login or the promotion failed
         if: failure() && (steps.login.outcome == 'failure' || steps.promote.outcome == 'failure')
@@ -220,9 +331,9 @@ jobs:
           echo "::error::3. The scope is missing: the tag ruleset needs Image Push on ${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY} (a failed login is cause 1 or 2, a failed tag creation is cause 3)."
           echo "::error::Docker's guide: https://docs.docker.com/security/authentication/oidc-connections/troubleshoot . The connection's Failures tab in Docker Home (Identity & auth, OIDC connections) shows the claims Docker received and why the exchange was refused."
 
-      # GitHub Release with auto-generated changelog
+      # GitHub Release with auto-generated changelog. The digests come from the verify job's outputs (they are
+      # validated hex digests and only appear in this input, never in a shell script).
       - name: Create GitHub Release
-        if: github.event_name == 'push'
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3.0.3
         with:
           generate_release_notes: true
@@ -230,9 +341,42 @@ jobs:
             ## CNA Platform ${{ github.ref_name }}
 
             Docker image: `${{ env.REGISTRY }}/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}:${{ steps.version.outputs.VERSION }}`
-            (digest `${{ steps.scanned.outputs.digest }}`: the image `200-build-images.yml` built, scanned and signed from commit `${{ steps.scanned.outputs.build_commit }}`)
+            (digest `${{ needs.verify.outputs.digest }}`: the image `200-build-images.yml` built, scanned and signed from commit `${{ needs.verify.outputs.build_commit }}`)
 
             ```bash
             docker pull ${{ env.REGISTRY }}/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}:${{ steps.version.outputs.VERSION }}
             docker run --rm ${{ env.REGISTRY }}/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}:${{ steps.version.outputs.VERSION }} --help
             ```
+
+            ### Images in this release
+
+            All five images were built from commit `${{ needs.verify.outputs.build_commit }}` by `200-build-images.yml`. Each digest below was
+            checked before this release was created: signed and attested by that workflow (cosign, keyless), built by one of its runs for that
+            commit, and carrying that commit as its `org.opencontainers.image.revision` label. Each image has a version tag that
+            `370-registry-cleanup.yml` never prunes. Pull by digest and verify the signature before you run an image.
+
+            | Component | Version tag | Tag at build time | Digest |
+            | --- | --- | --- | --- |
+            | cli | `${{ steps.version.outputs.VERSION }}` | `${{ needs.verify.outputs.tag }}` | `${{ needs.verify.outputs.digest }}` |
+            | api | `api-${{ steps.version.outputs.VERSION }}` | `api-${{ needs.verify.outputs.tag }}` | `${{ needs.verify.outputs.digest_api }}` |
+            | worker | `worker-${{ steps.version.outputs.VERSION }}` | `worker-${{ needs.verify.outputs.tag }}` | `${{ needs.verify.outputs.digest_worker }}` |
+            | web | `web-${{ steps.version.outputs.VERSION }}` | `web-${{ needs.verify.outputs.tag }}` | `${{ needs.verify.outputs.digest_web }}` |
+            | migrator | `migrator-${{ steps.version.outputs.VERSION }}` | `migrator-${{ needs.verify.outputs.tag }}` | `${{ needs.verify.outputs.digest_migrator }}` |
+
+            Registry retention: the version tags are permanent. The build-time `sha` tags are pruned after the newest 10 builds per
+            component, except those that share an image with a version tag, so a released image stays pullable by tag and by digest.
+
+            ### Verify before you run
+
+            ```bash
+            IMAGE=${{ env.REGISTRY }}/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}@sha256:<64 hex from the table>
+            ID=${{ github.server_url }}/${{ github.repository }}/.github/workflows/200-build-images.yml@refs/heads/main
+            ISS=https://token.actions.githubusercontent.com
+            cosign verify "$IMAGE" --certificate-identity "$ID" --certificate-oidc-issuer "$ISS"
+            cosign verify-attestation "$IMAGE" --type slsaprovenance02 --certificate-identity "$ID" --certificate-oidc-issuer "$ISS"
+            ```
+
+            Pass `--use-signed-timestamps` for the signed timestamp from the timestamp authority; without it cosign 3 uses the
+            transparency-log time. The identity string must match exactly. Renaming or transferring this repository, or renaming the
+            workflow file or the default branch, changes it; such a change is announced in the release notes. A digest that does not
+            verify must not be deployed.

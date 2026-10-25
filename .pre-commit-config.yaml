@@ -23,9 +23,7 @@ repos:
         # third-party security documentation packs full of example tokens, and
         # they contributed 413 of the 446 findings on the first readable scan —
         # noise that made the baseline untriageable and the hook unusable.
-        # `.deployment-catalog/` holds build manifests whose image digests trip
-        # the hex-entropy detector. These are the same directories
-        # `pyproject.toml` excludes from ruff and
+        # This is the same directory `pyproject.toml` excludes from ruff and
         # `scripts/validate_documentation_model.py` excludes from the
         # documentation model, on the same grounds: vendored configuration, not
         # project source (TODO.md T-411).
@@ -37,9 +35,8 @@ repos:
         #
         # `uv.lock` is the Python resolution (TODO.md T-702): thousands of
         # sha256 wheel hashes that are public PyPI data, not secrets, and every
-        # one trips the hex-entropy detector. Excluded on the same grounds as
-        # `.deployment-catalog/` above.
-        exclude: ^(local|\.deployment-catalog)/|^uv\.lock$
+        # one trips the hex-entropy detector, so it is excluded.
+        exclude: ^local/|^uv\.lock$
 
   # --- Python linting ---
   - repo: https://github.com/astral-sh/ruff-pre-commit

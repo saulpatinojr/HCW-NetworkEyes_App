@@ -25,7 +25,6 @@ from tests.packaging.test_engine_wheel import PACKAGE, REPO_ROOT, _in_venv, _pyt
 
 DOCKERFILE = REPO_ROOT / "Dockerfile"
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
-CATALOG = REPO_ROOT / ".deployment-catalog" / "latest-build.json"
 
 
 def _stages(text: str) -> dict[str, str]:
@@ -181,8 +180,6 @@ class TestCi:
         text = (WORKFLOWS / "200-build-images.yml").read_text(encoding="utf-8")
         assert "EDITION=lab" not in text and "target: final-lab" not in text
         assert '"lab":' not in text
-        manifest = CATALOG.read_text(encoding="utf-8")
-        assert '"lab"' not in manifest
 
 
 # ── the engine's guard ───────────────────────────────────────────────────────

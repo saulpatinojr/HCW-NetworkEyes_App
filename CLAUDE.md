@@ -51,26 +51,22 @@ or record a `TODO.md` item naming them — never leave one side implied.
    names another repository. Tags inside it: `img-ne-appliance-app:{api,worker,web,migrator}-sha-<7>`
    immutable tags plus floating `*-latest`; the CLI image is `img-ne-appliance-app:sha-<7>` /
    `img-ne-appliance-app:latest`.
-2. **`.deployment-catalog/latest-build.json`** — fields `sha_tag`, `commit`,
-   `built_at`, `run_id`, `images{cli,api,worker,web,migrator}` (immutable tags)
-   and `digests{cli,api,worker,web,migrator}` (`docker.io/<ns>/img-ne-appliance-app@sha256:<64>`).
-   Written by `200-build-images.yml` after every image passed the vulnerability
-   gate and landed on `main` through a self-merging pull request (branch
-   `build/latest-manifest`, opened with the GitHub App token because `main` is
-   protected, via `.github/actions/self-merging-pr`; the job fails, and the
-   dispatch below is skipped, if the manifest does not merge within 30 minutes);
-   read by the appliances' image-update workflow, which
-   deploys the combined form `docker.io/<ns>/img-ne-appliance-app:<role>-sha-<7>@sha256:<64>` —
-   tag for people and for the web tier's image-update check, digest as the
-   authoritative pull. Floating `*-latest` tags are never deployed.
-3. **`repository_dispatch` event `cna-image-published`** with the manifest as
-   `client_payload`, sent by `200-build-images.yml` to every repository listed in
-   the `APPLIANCE_REPOS` variable (comma-separated names) under the account in the
-   `APPLIANCE_OWNER` variable (required whenever `APPLIANCE_REPOS` is set: the appliances live
-   under `saulpatino-cbts`, not under this repository's owner; the job fails with a message
-   if it is missing, and a moved repository, which answers a redirect, is a warning). It is
-   a fast path only — the appliances also poll the manifest, so a failed dispatch
-   is a warning, never a failed build.
+2. **The record of a build is the digest table in the step summary of `200-build-images.yml`'s
+   `tag-images` job**: one row per component (`cli`, `api`, `worker`, `web`, `migrator`) with its
+   tags, its digest (`docker.io/<ns>/img-ne-appliance-app@sha256:<64>`) and whether it is signed
+   (`tag-images` verifies each digest with `scripts/ci/verify_signed_digest.sh` before it moves
+   a tag). The release notes of `310-release-version.yml` repeat the five digests of the released
+   build. Nothing is committed to the repository and no pull request is opened: there is no
+   build manifest. A consumer pulls by digest (tag for people and for the web tier's image-update
+   check, digest as the authoritative pull); floating `*-latest` tags are never deployed.
+   `370-registry-cleanup.yml` keeps the newest 10 `<component>-sha-<7>` tags per component, the
+   `*-latest` tags, every release tag and any sha tag whose image a release tag shares; see its header for
+   what that does not protect. Tagging is not atomic: if `tag-images` stops part-way, the table shows
+   "tagging in progress" without the closing line, and the recovery is to re-run that job (it verifies
+   every digest again; re-creating a tag with the digest it already has is not an error).
+3. **No push notification.** `200-build-images.yml` calls nothing outside this repository and its
+   Docker Hub repository: it sends no dispatch event and reads no variable naming another
+   repository.
 4. **Runtime environment contract** the images read, injected by the appliances'
    Terraform: `CNA_AI_MODE` (`saas` | `byo-api`), `CNA_APPLIANCE_CLOUD`
    (`azure` | `aws`), `CNA_AI_ENGINE_DEFAULT`, the SaaS engine variables
@@ -91,7 +87,7 @@ or record a `TODO.md` item naming them — never leave one side implied.
    (`210`, `220`) against their `IMAGE_SIGNING_IDENTITY` variable. Renaming or
    moving this repository, this workflow file, or its default branch changes
    the identity and breaks every appliance until that variable is updated; the
-   cosign release (`COSIGN_VERSION`) is pinned identically in all three.
+   cosign release (`COSIGN_VERSION`) is pinned identically in `200` and `310`.
 
 ## AI engine rules
 

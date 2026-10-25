@@ -5,9 +5,31 @@ name: "370 · Docker Hub Registry Cleanup"
 # accumulate unbounded with nothing ever deleting them.
 #
 # Retention: for each component, keep the newest KEEP_COUNT SHA tags, plus
-# the *-latest tag (never touched) and whatever SHA is currently recorded in
-# .deployment-catalog/latest-build.json (rollback safety net). Everything
-# else older than that is deleted.
+# the *-latest tags (never touched). Everything else older than that is deleted.
+# Nothing is read from the repository: the newest build is always among the newest KEEP_COUNT tags of its
+# component, so a rollback source needs no extra protection.
+#
+# Release tags. 310 gives each of the five images of a released build a version tag: `X.Y.Z` (the CLI image) and
+# `api-X.Y.Z`, `worker-X.Y.Z`, `web-X.Y.Z`, `migrator-X.Y.Z`. They match none of the SHA patterns below, so they are
+# never listed for deletion, and a `<component>-sha-<7>` tag is also KEPT when an image of it is shared with any
+# tag outside the SHA patterns (the version tags, the `*-latest` tags). The comparison uses the digests Docker Hub
+# lists for each tag (the tag's own `digest` and every `images[].digest`); a SHA tag that lists no digest at all is
+# kept too, because sharing cannot be ruled out. So deleting a SHA tag can never be what removes the manifest of
+# a released build. cosign's referrer tags (`sha256-<hex>`) are not part of that comparison: they point at signature
+# manifests, never at an image, and there can be thousands of them.
+#
+# What this does NOT protect: a consumer that pins an image by digest taken from a build that was never released,
+# once its `<component>-sha-<7>` tag has aged out (more than KEEP_COUNT builds of that component since). Docker Hub
+# may remove a digest no tag points to (whether and when it does was not checked against its documentation), and
+# cosign signatures are referrers of the digest, so the pin could stop resolving. A consumer that needs an image of
+# an unreleased build should copy it to its own registry at the time it adopts it, or raise KEEP_COUNT here (the cost
+# is Docker Hub storage). A release made before 310 tagged all five images covers only its CLI image.
+#
+# Not verified: Docker Hub's semantics of `DELETE .../tags/<tag>/` when another tag points at the same manifest. The
+# current Hub API reference (https://docs.docker.com/reference/api/hub/latest/, OpenAPI file
+# https://docs.docker.com/reference/api/hub/latest.yaml) documents no tag deletion at all, and documents no top-level
+# `digest` on a tag, only `images[].digest`; the delete call below was confirmed against the live API by this
+# workflow's author, and the rule above is there so that nothing depends on the answer.
 
 on:
   workflow_dispatch:
@@ -52,9 +74,6 @@ jobs:
     if: vars.DOCKERHUB_ENABLED == 'true' || inputs.dry_run == 'true' # owner step: Docker Hub OIDC connection + variables (REFACTOR_APP.md change set J)
     timeout-minutes: 15
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-
       - name: Validate Docker Hub namespace and repository
         run: |
           if [ -z "$DOCKERHUB_NAMESPACE" ]; then
@@ -68,7 +87,7 @@ jobs:
 
       - name: Prune stale SHA-tagged images
         env:
-          # Personal-account PAT, NOT the org access token in DOCKERHUB_TOKEN
+          # Personal-account PAT, NOT an organisation access token
           # (see comment below — org tokens can't manage tags via the Hub API
           # at all, confirmed against the live API, not just an auth quirk).
           DOCKERHUB_PERSONAL_USERNAME: ${{ vars.DOCKERHUB_PERSONAL_USERNAME }}
@@ -82,27 +101,7 @@ jobs:
           # Tags that must never be deleted regardless of age.
           PROTECTED_RAW="latest api-latest worker-latest web-latest migrator-latest"
 
-          # The SHA currently recorded as deployed — extra safety net beyond
-          # KEEP_COUNT so a slow rollout never loses its source image mid-flight.
-          # Only the manifest entries of THIS repository count: the manifest names each image
-          # `docker.io/<namespace>/<repository>:<tag>` (200-build-images.yml, `Write build manifest`),
-          # so the filter below is built from the same namespace and IMAGE_REPOSITORY. Entries of any
-          # other repository (the manifest committed before the rename names the retired one until the
-          # first build rewrites it) protect nothing here and are reported, not guessed at.
-          MANIFEST_PREFIX="docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}:"
-          PROTECTED_DEPLOYED=""
-          if [ -f .deployment-catalog/latest-build.json ]; then
-            # The jq filters live in a script so tests/security/test_manifest_and_release_scripts.py can run them
-            # against stub manifests.
-            PROTECTED_DEPLOYED=$(bash scripts/ci/manifest_tags.sh protected "$MANIFEST_PREFIX" < .deployment-catalog/latest-build.json)
-            FOREIGN=$(bash scripts/ci/manifest_tags.sh foreign "$MANIFEST_PREFIX" < .deployment-catalog/latest-build.json)
-            if [ "$FOREIGN" -gt 0 ]; then
-              echo "::notice::${FOREIGN} manifest image(s) name a repository other than ${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}; they protect no tag here. The next 200-build-images.yml run rewrites the manifest."
-            fi
-          fi
-
-          echo "Protected (raw): $PROTECTED_RAW"
-          echo "Protected (deployed): $PROTECTED_DEPLOYED"
+          echo "Protected: $PROTECTED_RAW"
 
           if [ -z "$DOCKERHUB_PERSONAL_USERNAME" ] || [ -z "$DOCKERHUB_PERSONAL_TOKEN" ]; then
             echo "::error::DOCKERHUB_PERSONAL_USERNAME variable and DOCKERHUB_PERSONAL_TOKEN secret are required."
@@ -110,8 +109,8 @@ jobs:
           fi
 
           # Docker Hub API auth — DOCKERHUB_NAMESPACE ("hybridcloudworks") is
-          # an Organization account, and org access tokens (DOCKERHUB_TOKEN,
-          # used elsewhere for docker login/push) cannot manage tags via the
+          # an Organization account, and org access tokens
+          # (the builds log in through OIDC and need none) cannot manage tags via the
           # Hub REST API at all — confirmed against the live API through
           # three failure modes, not just an auth quirk:
           #   - POST /v2/users/login/ (username+password session exchange)
@@ -172,7 +171,8 @@ jobs:
               exit 1
             fi
 
-            jq -c '[.results[] | {name: .name, last_updated: .last_updated}]' <<<"$PAGE" > /tmp/page.json
+            # `digests` = the tag's own digest (the index, when Hub reports it) and every image digest listed for it.
+            jq -c '[.results[] | {name: .name, last_updated: .last_updated, digests: (([.digest] + [(.images // [])[].digest]) | map(select(. != null and . != "")) | unique)}]' <<<"$PAGE" > /tmp/page.json
             jq -s '.[0] + .[1]' "$ALL_TAGS_JSON" /tmp/page.json > /tmp/merged.json
             mv /tmp/merged.json "$ALL_TAGS_JSON"
             URL=$(jq -r '.next // empty' <<<"$PAGE")
@@ -181,28 +181,53 @@ jobs:
           TOTAL=$(jq 'length' "$ALL_TAGS_JSON")
           echo "Fetched $TOTAL total tags from Docker Hub."
 
+          # Every digest that a tag OUTSIDE the SHA patterns points to (version tags, *-latest), as an object
+          # {"sha256:...": true} in a FILE. It is never passed as an argument: cosign's referrer tags
+          # (sha256-<hex>, never pruned, TODO.md T-718) make the tag list grow without bound, and one argument
+          # over 128 KiB ends the job with "Argument list too long". Referrer tags are left out of the set.
+          PATTERNS_JSON=$(printf '%s\n' "${COMPONENT_PATTERNS[@]}" | jq -R . | jq -sc .)
+          PERMANENT_FILE=$(mktemp)
+          jq -c --argjson pats "$PATTERNS_JSON" \
+            '[.[] | select((.name as $n | any($pats[]; . as $p | $n | test($p))) | not)
+                  | select(.name | test("^sha256-[0-9a-f]{64}([.](sig|att|sbom))?$") | not)
+                  | .digests[]] | unique | map({(.): true}) | add // {}' \
+            "$ALL_TAGS_JSON" > "$PERMANENT_FILE"
+
           DELETED=0
           FAILED=0
           KEPT=0
+          KEPT_SHARED=0
 
           for component in "${!COMPONENT_PATTERNS[@]}"; do
             pattern="${COMPONENT_PATTERNS[$component]}"
-            # Newest-first list of tag names matching this component's SHA pattern.
-            mapfile -t tags < <(jq -r --arg pat "$pattern" \
-              '[.[] | select(.name | test($pat))] | sort_by(.last_updated) | reverse | .[].name' \
+            # Newest-first rows "<tag><TAB><own|shared|unknown>" for this component's SHA pattern: `shared` when one
+            # of the tag's digests is also a digest of a tag outside the patterns, `unknown` when Hub lists none.
+            mapfile -t rows < <(jq -r --arg pat "$pattern" --slurpfile perm "$PERMANENT_FILE" \
+              '[.[] | select(.name | test($pat))] | sort_by(.last_updated) | reverse | .[]
+               | [.name, (if (.digests | length) == 0 then "unknown" elif (.digests | any(. as $d | $perm[0][$d] == true)) then "shared" else "own" end)]
+               | @tsv' \
               "$ALL_TAGS_JSON")
 
-            echo "--- $component: ${#tags[@]} SHA-tagged images ---"
+            echo "--- $component: ${#rows[@]} SHA-tagged images ---"
             i=0
-            for tag in "${tags[@]}"; do
+            for row in "${rows[@]}"; do
               i=$((i + 1))
+              tag="${row%%$'\t'*}"
+              sharing="${row#*$'\t'}"
               protected=false
-              for p in $PROTECTED_RAW $PROTECTED_DEPLOYED; do
+              for p in $PROTECTED_RAW; do
                 [ "$tag" = "$p" ] && protected=true && break
               done
 
               if [ "$protected" = true ] || [ "$i" -le "$KEEP" ]; then
                 KEPT=$((KEPT + 1))
+                continue
+              fi
+
+              if [ "$sharing" != "own" ]; then
+                echo "keeping: $tag (${sharing}: a tag outside the SHA patterns lists the same image, or Docker Hub lists no digest for it)"
+                KEPT=$((KEPT + 1))
+                KEPT_SHARED=$((KEPT_SHARED + 1))
                 continue
               fi
 
@@ -226,7 +251,7 @@ jobs:
           done
 
           echo ""
-          echo "Summary: kept $KEPT, $([ "$DRY_RUN" = "true" ] && echo "would delete" || echo "deleted") $DELETED (retention: last $KEEP per component + *-latest + currently-deployed)."
+          echo "Summary: kept $KEPT ($KEPT_SHARED of them because a release or other non-SHA tag shares their image), $([ "$DRY_RUN" = "true" ] && echo "would delete" || echo "deleted") $DELETED (retention: last $KEEP per component + *-latest)."
           if [ "$FAILED" -gt 0 ]; then
             echo "::error::$FAILED tag(s) could not be deleted; the summary above counts only confirmed deletions."
             exit 1
