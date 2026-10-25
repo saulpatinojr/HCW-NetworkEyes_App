@@ -127,6 +127,9 @@ updates:
     labels:
       - dependencies
       - npm
+    # `typescript` and `@typescript/native` are npm aliases (TypeScript 6 API and TypeScript 7 compiler, side by side).
+    # Dependabot only lists direct dependencies that are not aliases, so neither needs an ignore rule;
+    # apps/cna-web/lib/typescript-toolchain.test.ts guards the pairing and says when it can end (TODO.md T-731).
     ignore:
       # Prisma 7 requires the new prisma.config.ts datasource model. Keep Prisma
       # major upgrades manual until the schema/runtime migration is implemented.
@@ -134,16 +137,6 @@ updates:
         update-types:
           - "version-update:semver-major"
       - dependency-name: "@prisma/*"
-        update-types:
-          - "version-update:semver-major"
-      # `typescript` is the TypeScript 6 compatibility package (npm:@typescript/typescript6) that eslint and
-      # Next.js import; TypeScript 7 has no programmatic API until 7.1 and typescript-eslint cannot load against it.
-      # A plain typescript 7 bump broke lint (#209). `@typescript/native` supplies tsc 7 and still updates.
-      # lib/typescript-toolchain.test.ts guards the pairing. Lift this when typescript-eslint supports the 7.1 API (T-731).
-      - dependency-name: "typescript"
-      # TanStack Table 9 no longer exports the functions the pivot grid uses (useReactTable, getCoreRowModel) and
-      # broke the type check (#226). Adopt it by hand with the pivot-grid migration (T-732).
-      - dependency-name: "@tanstack/react-table"
         update-types:
           - "version-update:semver-major"
     groups:

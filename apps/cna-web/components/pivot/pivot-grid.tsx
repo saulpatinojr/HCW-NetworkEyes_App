@@ -5,12 +5,7 @@
 // client-side CSV export. Accepts server-fetched or derived records via props.
 
 import { useMemo, useState } from "react";
-import {
-  createColumnHelper,
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-} from "@tanstack/react-table";
+import { createColumnHelper, flexRender, tableFeatures, useTable } from "@tanstack/react-table";
 import {
   STAT_DIMENSIONS,
   STAT_MEASURES,
@@ -21,6 +16,11 @@ import {
   type StatMeasure,
 } from "@/lib/types/stat-master";
 import { pivot, pivotToCsv, distinctValues, type PivotFilter, type PivotRow } from "@/lib/pivot";
+
+// TanStack Table 9 is opt-in per feature. This grid only renders the core row model (no sorting, filtering,
+// grouping or paging), so no feature is registered. The pivot itself is computed in lib/pivot.ts.
+const features = tableFeatures({});
+const columnHelper = createColumnHelper<typeof features, PivotRow>();
 
 const selectCls =
   "rounded-lg border border-navy-200 bg-white px-2 py-1.5 text-xs font-medium text-navy-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-navy-700 dark:bg-navy-800/60 dark:text-navy-100";
@@ -62,9 +62,9 @@ export function PivotGrid({
     isCost ? `$${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : v.toLocaleString();
 
   const columns = useMemo(() => {
-    const helper = createColumnHelper<PivotRow>();
-    return [
-      helper.accessor("key", {
+    // columns() keeps each column's own value type (string row labels, number measures) instead of widening to unknown.
+    return columnHelper.columns([
+      columnHelper.accessor("key", {
         id: "__row",
         header: DIMENSION_LABELS[rowDim],
         cell: (info) => (
@@ -72,7 +72,7 @@ export function PivotGrid({
         ),
       }),
       ...result.columns.map((col) =>
-        helper.accessor((row) => row.values[col] ?? 0, {
+        columnHelper.accessor((row) => row.values[col] ?? 0, {
           id: `col_${col}`,
           header: col === "value" ? MEASURE_LABELS[measure] : col,
           cell: (info) => <span className="tabular-nums">{fmt(info.getValue())}</span>,
@@ -80,7 +80,7 @@ export function PivotGrid({
       ),
       ...(result.columns.length > 1
         ? [
-            helper.accessor("total", {
+            columnHelper.accessor("total", {
               id: "__total",
               header: "Total",
               cell: (info) => (
@@ -91,14 +91,14 @@ export function PivotGrid({
             }),
           ]
         : []),
-    ];
+    ]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result.columns, rowDim, measure, isCost]);
 
-  const table = useReactTable({
+  const table = useTable({
+    features,
     data: result.rows,
     columns,
-    getCoreRowModel: getCoreRowModel(),
   });
 
   function addFilter(value: string) {
@@ -229,7 +229,7 @@ export function PivotGrid({
             <tbody className="divide-y divide-navy-700/30">
               {table.getRowModel().rows.map((row) => (
                 <tr key={row.id}>
-                  {row.getVisibleCells().map((cell, i) => (
+                  {row.getAllCells().map((cell, i) => (
                     <td key={cell.id} className={`py-2 ${i === 0 ? "pr-4 text-left" : "pl-4 text-right"} text-navy-300`}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
