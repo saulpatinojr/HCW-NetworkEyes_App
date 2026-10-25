@@ -155,10 +155,12 @@ jobs:
       # produced is not promoted, whatever its tag says. This step has no `||` and no continue-on-error; the
       # tests pin that.
       - name: Verify the signature and provenance of that digest
+        id: cli
         env:
           DIGEST: ${{ steps.scanned.outputs.digest }}
           EXPECTED_REVISION: ${{ steps.scanned.outputs.build_commit }}
           EXPECTED_RUN_IDS: ${{ steps.scanned.outputs.run_ids }}
+          EMIT_BUILDER_RUN_ID: "true"
         run: bash scripts/ci/verify_signed_digest.sh "${REGISTRY}/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}@${DIGEST}"
 
       # The other four images of the same build: each must exist under its own `sha-<7>` tag (a missing one means an
@@ -168,7 +170,9 @@ jobs:
         id: others
         env:
           BUILD_COMMIT: ${{ steps.scanned.outputs.build_commit }}
-          RUN_IDS: ${{ steps.scanned.outputs.run_ids }}
+          # The ONE run that built the CLI image, not every run of the commit: the five images of a release come
+          # from the same build even if the commit was built twice.
+          RUN_IDS: ${{ steps.cli.outputs.builder_run_id }}
         run: bash scripts/ci/release_digests.sh
 
       - name: Report what a release would promote (dry run)
@@ -373,8 +377,11 @@ jobs:
             ID=${{ github.server_url }}/${{ github.repository }}/.github/workflows/200-build-images.yml@refs/heads/main
             ISS=https://token.actions.githubusercontent.com
             cosign verify "$IMAGE" --certificate-identity "$ID" --certificate-oidc-issuer "$ISS"
-            cosign verify-attestation "$IMAGE" --type slsaprovenance02 --certificate-identity "$ID" --certificate-oidc-issuer "$ISS"
+            cosign verify-attestation "$IMAGE" --type slsaprovenance02 --certificate-identity "$ID" --certificate-oidc-issuer "$ISS" \
+              | jq -r '.payload | @base64d | fromjson | .predicate.builder.id'
             ```
+
+            The last command prints the builder of the build; it must begin with `${{ github.server_url }}/${{ github.repository }}/actions/runs/`.
 
             Pass `--use-signed-timestamps` for the signed timestamp from the timestamp authority; without it cosign 3 uses the
             transparency-log time. The identity string must match exactly. Renaming or transferring this repository, or renaming the

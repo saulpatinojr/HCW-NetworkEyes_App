@@ -12,11 +12,14 @@
 #   1. the tag must exist: a missing tag means the build did not publish a complete set, and the release stops;
 #      "could not ask the registry" is a different answer and also stops it (registry_digest.sh);
 #   2. its digest must verify exactly as the CLI digest did: signed and attested by 200 of this repository on main,
-#      built by one of RUN_IDS, from BUILD_COMMIT (scripts/ci/verify_signed_digest.sh).
+#      built by the workflow run RUN_IDS names (one run, attempts of it allowed), from BUILD_COMMIT
+#      (scripts/ci/verify_signed_digest.sh). RUN_IDS is the run id of the builder of the CLI image's attestation
+#      (the `builder_run_id` output of its verification), not every run of the commit: the five images of one
+#      release then come from one build even when the commit was built more than once.
 # Outputs (stdout, and GITHUB_OUTPUT when set): digest_api, digest_worker, digest_web, digest_migrator.
 # Environment (all required): DOCKERHUB_NAMESPACE, IMAGE_REPOSITORY, BUILD_COMMIT, plus what verify_signed_digest.sh
 # needs (GITHUB_SERVER_URL, GITHUB_REPOSITORY, cosign, docker buildx). REGISTRY defaults to docker.io.
-# RUN_IDS is optional (any run of this repository is then accepted by the verification).
+# RUN_IDS is required: exactly one workflow run id.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,6 +33,10 @@ for v in DOCKERHUB_NAMESPACE IMAGE_REPOSITORY BUILD_COMMIT; do
     exit 1
   fi
 done
+if ! [[ "${RUN_IDS:-}" =~ ^[0-9]+$ ]]; then
+  echo "::error::RUN_IDS must be the single run id of the build that made the CLI image (got '${RUN_IDS:-}')." >&2
+  exit 1
+fi
 if ! [[ "$BUILD_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
   echo "::error::BUILD_COMMIT must be a full 40-character SHA (got '${BUILD_COMMIT}')." >&2
   exit 1
@@ -61,7 +68,7 @@ for entry in api:api-sha- worker:worker-sha- web:web-sha- migrator:migrator-sha-
     echo "::error::The registry answered '${digest}' for ${IMAGE}:${tag}, which is not a sha256 digest." >&2
     exit 1
   fi
-  EXPECTED_REVISION="$BUILD_COMMIT" EXPECTED_RUN_IDS="${RUN_IDS:-}" \
+  EXPECTED_REVISION="$BUILD_COMMIT" EXPECTED_RUN_IDS="$RUN_IDS" \
     bash "$HERE/verify_signed_digest.sh" "${IMAGE}@${digest}"
   emit "digest_${component}" "$digest"
 done

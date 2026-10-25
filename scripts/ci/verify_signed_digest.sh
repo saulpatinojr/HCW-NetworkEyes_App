@@ -6,6 +6,10 @@
 #   IMAGE_REPOSITORY=<repository> [EXPECTED_REVISION=<40-hex commit>] [EXPECTED_RUN_IDS="<id> <id>"] \
 #     scripts/ci/verify_signed_digest.sh docker.io/<namespace>/<repository>@sha256:<64>
 #
+# With EMIT_BUILDER_RUN_ID=true and GITHUB_OUTPUT set, the run id of the builder it accepted is appended to
+# GITHUB_OUTPUT as `builder_run_id=<id>`, so a caller can pin the images that belong to the same build to that one run
+# (310 does, for the four images besides the CLI image; see release_digests.sh).
+#
 # Checks, all of which must pass:
 #   1. cosign verify: a keyless signature on exactly this digest, under this repository's 200 workflow identity
 #      (certificate identity .../.github/workflows/200-build-images.yml@refs/heads/main), issued by GitHub's OIDC
@@ -133,5 +137,10 @@ if [ -n "$EXPECTED_REVISION" ]; then
     exit 1
   fi
   echo "Revision label ${REVISION} matches the commit"
+fi
+# Reported last, so that nothing is reported for a digest that failed any check.
+if [ "${EMIT_BUILDER_RUN_ID:-}" = "true" ] && [ -n "${GITHUB_OUTPUT:-}" ]; then
+  BUILDER_RUN_ID="${VERDICT#"$RUNS_PREFIX"}"
+  printf 'builder_run_id=%s\n' "${BUILDER_RUN_ID%%/*}" >> "$GITHUB_OUTPUT"
 fi
 echo "Verified ${REF}: signed and attested by ${IDENTITY}"
