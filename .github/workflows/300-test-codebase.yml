@@ -573,3 +573,114 @@ jobs:
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294  # v5.0.0
         with:
           fail-on-severity: high
+
+  # ------------------------------------------------------------------
+  # 11. Web images: what they hold, and a Trivy scan (TODO.md T-737)
+  # ------------------------------------------------------------------
+  # 200-build-images.yml scans each image with Docker Scout, but only when it publishes, and publishing is still
+  # off. A finding in an image therefore showed up at the first publish, not in the pull request that caused it:
+  # the migrator once copied the builder's whole node_modules (every devDependency, among them the Go-compiled
+  # TypeScript 7 compiler), which `npm audit --omit=dev` cannot see. This job builds the `migrator` and `runner`
+  # targets of apps/cna-web/Dockerfile on every pull request and checks them before anything is pushed.
+  #
+  #   1. The migrator holds the Prisma CLI, the client and its engines, and none of the build tooling (checked
+  #      against the image, not the Dockerfile text), every package in it is the version and integrity hash
+  #      package-lock.json names, and `prisma validate` runs inside it. The runner still holds no Prisma CLI.
+  #   2. Trivy 0.76.1 (the same digest as scripts/ci/local-container-checks.sh; tests/unit/test_ci_hygiene.py keeps
+  #      them equal) scans an exported tar of each image for fixable HIGH and CRITICAL vulnerabilities and for
+  #      secrets, and fails the job on any. `--ignore-unfixed` is the policy of the Scout gate in 200 (only-fixed),
+  #      so a package without a fix does not fail a pull request. The one suppression, the public Azurite emulator
+  #      key that the Azure SDK bundles into the web build, is keyed by rule id and path in .trivyignore.yaml with
+  #      its reason.
+  #
+  # The Trivy containers get no capabilities, no new privileges, a read-only root file system and a read-only
+  # mount of the exported images; the vulnerability database is the one thing they download, in a step of its own,
+  # and the scan step has no network. There is no Docker socket in any of them.
+  image-scan:
+    name: Image Scan (Trivy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      # Trivy 0.76.1 (released 2026-10-21). Never a tag alone: Trivy images were published under moving tags on
+      # 2026-03-19 and 2026-03-22 (GHSA-69fq-xp46-6x23). Move this and scripts/ci/local-container-checks.sh together.
+      TRIVY_IMAGE: ghcr.io/aquasecurity/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the migrator and web runner images
+        run: |
+          set -euo pipefail
+          docker build --target migrator -t cna-scan-migrator:ci apps/cna-web
+          docker build --target runner -t cna-scan-runner:ci apps/cna-web
+      - name: The migrator holds Prisma and no build tooling, and the runner holds no Prisma CLI
+        run: |
+          set -euo pipefail
+          sandbox=(--rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --entrypoint sh)
+          test "$(docker image inspect cna-scan-migrator:ci --format '{{.Config.User}}')" = "1001"
+          top="$(docker run "${sandbox[@]}" cna-scan-migrator:ci -c 'ls -A node_modules')"
+          bins="$(docker run "${sandbox[@]}" cna-scan-migrator:ci -c 'ls -A node_modules/.bin')"
+          failed=0
+          for need in .prisma @prisma prisma; do
+            grep -qxF -- "$need" <<<"$top" || { echo "::error::migrator is missing node_modules/$need"; failed=1; }
+          done
+          grep -qxF prisma <<<"$bins" || { echo "::error::migrator is missing node_modules/.bin/prisma"; failed=1; }
+          for banned in typescript @typescript eslint vitest vite tailwindcss @tailwindcss next react jsdom postcss; do
+            if grep -qxF -- "$banned" <<<"$top"; then echo "::error::migrator ships node_modules/$banned"; failed=1; fi
+          done
+          for banned in tsc tsserver eslint vitest vite tailwindcss next; do
+            if grep -qxF -- "$banned" <<<"$bins"; then echo "::error::migrator ships node_modules/.bin/$banned"; failed=1; fi
+          done
+          docker run "${sandbox[@]}" -e DATABASE_URL=postgresql://127.0.0.1:5432/db cna-scan-migrator:ci \
+            -c 'node_modules/.bin/prisma --version && node_modules/.bin/prisma validate' || failed=1
+          # Every package in the migrator is the version and integrity hash that package-lock.json names.
+          docker run "${sandbox[@]}" cna-scan-migrator:ci -c 'cat node_modules/.package-lock.json' > "$RUNNER_TEMP/migrator-installed.json"
+          python3 - "$RUNNER_TEMP/migrator-installed.json" apps/cna-web/package-lock.json <<'PY' || failed=1
+          import json
+          import sys
+
+          installed = json.load(open(sys.argv[1]))["packages"]
+          locked = json.load(open(sys.argv[2]))["packages"]
+          bad = [
+              f"{path}: installed {entry.get('version')}, lockfile {locked.get(path, {}).get('version')}"
+              for path, entry in installed.items()
+              if path not in locked
+              or entry.get("version") != locked[path].get("version")
+              or entry.get("integrity") != locked[path].get("integrity")
+          ]
+          print(f"migrator: {len(installed)} packages installed, {len(bad)} differ from package-lock.json")
+          for line in bad:
+              print(f"::error::{line}")
+          sys.exit(1 if bad or not installed else 0)
+          PY
+          # The runner copies only the generated client from the builder; prisma moving to dependencies must not change that.
+          docker run "${sandbox[@]}" cna-scan-runner:ci \
+            -c 'test ! -e node_modules/prisma && test ! -e node_modules/.bin/prisma && test -d node_modules/@prisma/client && test -d node_modules/.prisma/client' \
+            || { echo "::error::the web runner image must hold the Prisma client and engine but not the CLI"; failed=1; }
+          exit "$failed"
+      - name: Export the images and download the Trivy database
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/scan"
+          docker save cna-scan-migrator:ci -o "$RUNNER_TEMP/scan/migrator.tar"
+          docker save cna-scan-runner:ci -o "$RUNNER_TEMP/scan/runner.tar"
+          chmod -R a+rX "$RUNNER_TEMP/scan"
+          docker volume create cna-trivy-cache > /dev/null
+          docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp \
+            -v cna-trivy-cache:/root/.cache "$TRIVY_IMAGE" image --download-db-only --no-progress
+      - name: Trivy, fixable HIGH and CRITICAL vulnerabilities and secrets (no network)
+        run: |
+          set -euo pipefail
+          status=0
+          for target in migrator runner; do
+            echo "::group::trivy image ${target}"
+            docker run --rm --read-only --network none --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp \
+              -v cna-trivy-cache:/root/.cache -v "$RUNNER_TEMP/scan:/scan:ro" -v "$PWD:/work:ro" \
+              "$TRIVY_IMAGE" image --input "/scan/${target}.tar" --skip-db-update --skip-java-db-update --no-progress \
+              --scanners vuln,secret --severity HIGH,CRITICAL --ignore-unfixed \
+              --ignorefile /work/.trivyignore.yaml --exit-code 1 || status=1
+            echo "::endgroup::"
+          done
+          exit "$status"

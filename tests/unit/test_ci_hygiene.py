@@ -8,6 +8,9 @@ What is pinned here and why:
 * The tool images (hadolint, actionlint, Trivy) are pinned by digest. A tag can be moved to different content
   (Trivy's was, on 2026-03-19, GHSA-69fq-xp46-6x23); a digest cannot.
 * `.hadolint.yaml` may ignore only the rules approved below, each with a written reason beside it.
+* The `image-scan` job (TODO.md T-737) builds the migrator and web runner images in every pull request and scans
+  them with the same Trivy digest as the local script; `.trivyignore.yaml` suppresses only what it names, by rule
+  id and path, with the reason written beside it.
 * The four Dockerfiles keep the properties the lint fixes gave them, so a later edit cannot undo them without a
   test failing: digests on every base image, numeric `USER`, exec-form `CMD`/`ENTRYPOINT`/`HEALTHCHECK`, and
   `pipefail` wherever a `RUN` has a pipe.
@@ -26,6 +29,7 @@ WORKFLOW_300 = REPO_ROOT / ".github" / "workflows" / "300-test-codebase.yml"
 LOCAL_CHECKS = REPO_ROOT / "scripts" / "ci" / "local-container-checks.sh"
 HARDEN_FLAGS = REPO_ROOT / "scripts" / "ci" / "harden-flags.sh"
 HADOLINT_CONFIG = REPO_ROOT / ".hadolint.yaml"
+TRIVY_IGNORE = REPO_ROOT / ".trivyignore.yaml"
 
 # Job names that exist today and are required checks of the "Protect main" ruleset (read 2026-10-25).
 # `Unit Tests (Python ...)` is a template in the workflow; the ruleset holds the rendered 3.14 form.
@@ -43,6 +47,7 @@ NEW_JOB_NAMES = {
     "dockerfile-lint": "Dockerfile Lint (hadolint)",
     "workflow-lint": "Workflow Lint (actionlint)",
     "dependency-review": "Dependency Review",
+    "image-scan": "Image Scan (Trivy)",
 }
 
 # The only rules `.hadolint.yaml` may ignore; adding to this set is a reviewed decision.
@@ -192,6 +197,135 @@ def test_the_shared_hardening_flags_are_the_complete_set() -> None:
     assert "HARDEN=(" not in script_text(), "local-container-checks.sh must not define its own copy"
 
 
+def image_scan_runs() -> dict[str, str]:
+    return {
+        s.get("name", s.get("uses", "")): s.get("run", "")
+        for s in workflow()["jobs"]["image-scan"]["steps"]
+    }
+
+
+def test_image_scan_job_is_least_privilege_and_does_not_keep_credentials() -> None:
+    job = workflow()["jobs"]["image-scan"]
+    assert job["permissions"] == {"contents": "read"}
+    checkout = job["steps"][0]
+    assert re.fullmatch(r"actions/checkout@[0-9a-f]{40}", checkout["uses"])
+    assert checkout["with"]["persist-credentials"] is False
+
+
+def test_image_scan_job_uses_the_trivy_pin_of_the_local_script() -> None:
+    job = workflow()["jobs"]["image-scan"]
+    assert job["env"]["TRIVY_IMAGE"] == script_pin("TRIVY_IMAGE"), (
+        "the workflow and local-container-checks.sh pin different Trivy images"
+    )
+    assert DIGEST.search(job["env"]["TRIVY_IMAGE"])
+    for name, run in image_scan_runs().items():
+        if "trivy" in run.lower() and "TRIVY_IMAGE" not in run:
+            raise AssertionError(f"step {name!r} names Trivy without the pinned $TRIVY_IMAGE")
+
+
+def test_image_scan_job_builds_the_migrator_and_runner_targets() -> None:
+    run = "\n".join(image_scan_runs().values())
+    assert "docker build --target migrator" in run
+    assert "docker build --target runner" in run
+    assert "apps/cna-web" in run
+
+
+def test_image_scan_job_scans_with_the_gating_flags_and_the_hardened_container() -> None:
+    runs = image_scan_runs()
+    scan = next(run for name, run in runs.items() if name.startswith("Trivy"))
+    for flag in (
+        "--severity HIGH,CRITICAL",
+        "--ignore-unfixed",
+        "--exit-code 1",
+        "--ignorefile /work/.trivyignore.yaml",
+        "--scanners vuln,secret",
+        "--skip-db-update",
+        "--network none",
+        "--read-only",
+        "--cap-drop ALL",
+        "--security-opt no-new-privileges",
+        ":/scan:ro",
+        ":/work:ro",
+    ):
+        assert flag in scan, f"the Trivy scan step lacks {flag}"
+    assert "migrator runner" in scan, "both images are scanned"
+    # The database download is the only step that reaches the network, and it is hardened too.
+    download = next(run for name, run in runs.items() if name.startswith("Export"))
+    assert "--download-db-only" in download
+    assert "--cap-drop ALL" in download and "--security-opt no-new-privileges" in download
+    assert "--network none" not in download
+
+
+def test_image_scan_job_never_widens_the_sandbox() -> None:
+    text = "\n".join(image_scan_runs().values())
+    for forbidden in (
+        "docker login",
+        "docker push",
+        "--privileged",
+        "docker.sock",
+        "--network host",
+    ):
+        assert forbidden not in text, forbidden
+
+
+def test_image_scan_job_checks_the_migrator_tree_inside_the_built_image() -> None:
+    run = image_scan_runs()[
+        "The migrator holds Prisma and no build tooling, and the runner holds no Prisma CLI"
+    ]
+    for banned in ("typescript", "@typescript", "eslint", "vitest", "vite", "tailwindcss", "next"):
+        assert banned in run, banned
+    for required in ("node_modules/.bin/prisma", ".prisma", "@prisma"):
+        assert required in run, required
+    assert "prisma validate" in run
+    assert "package-lock.json" in run, "the installed tree is compared with the lockfile"
+    assert "cna-scan-runner:ci" in run, "the runner is checked for the absence of the Prisma CLI"
+
+
+def trivy_ignore() -> dict:
+    return yaml.safe_load(TRIVY_IGNORE.read_text(encoding="utf-8")) or {}
+
+
+def test_trivy_ignore_file_suppresses_only_secrets_by_rule_id_and_path() -> None:
+    config = trivy_ignore()
+    assert set(config) == {"secrets"}, (
+        "only secret rules may be suppressed here; a fixable vulnerability is fixed, not ignored"
+    )
+    assert config["secrets"], "an empty suppression list should be a deleted file"
+    for entry in config["secrets"]:
+        assert set(entry) == {"id", "paths", "statement"}, entry
+        assert re.fullmatch(r"[a-z0-9-]+", entry["id"]), entry
+        assert entry["statement"].strip()
+        assert entry["paths"], entry
+        for path in entry["paths"]:
+            assert path.startswith("/app/"), f"{path}: a glob must start at the image's /app"
+            literal = re.sub(r"\*+", "", path).strip("/.")
+            assert literal.count("/") >= 3, f"{path}: too broad to be a narrow suppression"
+
+
+def test_every_trivy_secret_suppression_has_a_written_reason_above_it() -> None:
+    lines = TRIVY_IGNORE.read_text(encoding="utf-8").splitlines()
+    checked = set()
+    for index, line in enumerate(lines):
+        match = re.match(r"\s*-\s+id:\s+(\S+)\s*$", line)
+        if not match:
+            continue
+        block: list[str] = []
+        cursor = index - 1
+        while cursor >= 0 and lines[cursor].lstrip().startswith("#"):
+            block.insert(0, lines[cursor])
+            cursor -= 1
+        comment = " ".join(part.lstrip("# ").strip() for part in block)
+        assert "Why suppressed" in comment, (
+            f"{match.group(1)}: start the reason with 'Why suppressed'"
+        )
+        assert len(comment) > 300, (
+            f"{match.group(1)}: the reason is too short to be a justification"
+        )
+        assert match.group(1) in comment or "Trivy's `" + match.group(1) + "`" in comment
+        checked.add(match.group(1))
+    assert checked == {entry["id"] for entry in trivy_ignore()["secrets"]}
+
+
 @pytest.mark.parametrize("variable", ("HADOLINT_IMAGE", "ACTIONLINT_IMAGE", "TRIVY_IMAGE"))
 def test_tool_images_are_pinned_by_digest(variable: str) -> None:
     assert DIGEST.search(script_pin(variable)), f"{variable} has no sha256 digest"
@@ -255,6 +389,14 @@ def test_local_script_never_logs_in_pushes_or_widens_the_sandbox() -> None:
     assert text.count("docker run ") == text.count('docker run "${HARDEN[@]}"'), (
         "every docker run is hardened"
     )
+
+
+def test_local_image_scan_follows_the_ci_policy() -> None:
+    """trivy-image reports fixable findings only and reads the same suppressions as the CI job."""
+    text = script_text()
+    assert "--ignore-unfixed" in text
+    assert "--ignorefile /work/.trivyignore.yaml" in text
+    assert "TRIVY_IGNORE_UNFIXED" in text
 
 
 def test_local_script_with_no_check_named_stops_with_exit_code_2() -> None:

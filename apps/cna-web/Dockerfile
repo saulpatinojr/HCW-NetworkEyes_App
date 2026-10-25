@@ -29,7 +29,44 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build
 
-# ── Stage 3: migrator ─────────────────────────────────────────────────────────
+# ── Stage 3: migrator-deps ───────────────────────────────────────────────────
+# The migrator's own dependency tree: the Prisma CLI, @prisma/client and what they
+# need, and nothing else. The migrator receives the database-owner connection
+# string, so it must not carry the web app's build tooling (the TypeScript 7
+# compiler, eslint, vitest, vite, tailwind ...) or the Next.js runtime: every
+# package in it is attack surface and a scanner finding that `npm audit --omit=dev`
+# cannot see (TODO.md T-737).
+#
+# `prisma` is a production dependency in package.json because it is the CLI that
+# prisma/migrate.sh runs. scripts/migrator-lockfile.mjs cuts the closure of prisma
+# and @prisma/client out of package-lock.json, entries copied as they are, so
+# `npm ci` installs the versions and integrity hashes the web app is audited with
+# and fails if the cut-out lockfile does not match its manifest.
+#
+# Install scripts stay off (`--ignore-scripts`). Prisma needs two things from
+# them, done explicitly: @prisma/engines downloads the schema and query engines
+# (its own postinstall script, the same download the deps stage makes), and the
+# client is generated from the schema. The generated client is what seed-local-admin.js
+# loads, so this stage does not depend on the builder (no Next.js build).
+FROM node:24-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS migrator-deps
+WORKDIR /src
+
+# Prisma checkpoint telemetry would try to reach the network and write under $HOME.
+ENV CHECKPOINT_DISABLE=1
+
+RUN apk add --no-cache libc6-compat
+
+COPY package.json package-lock.json scripts/migrator-lockfile.mjs ./
+RUN node migrator-lockfile.mjs /src /app
+
+WORKDIR /app
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
+ && node node_modules/@prisma/engines/scripts/postinstall.js
+
+COPY prisma/schema.prisma ./prisma/schema.prisma
+RUN node_modules/.bin/prisma generate
+
+# ── Stage 4: migrator ─────────────────────────────────────────────────────────
 # Standalone image used exclusively to run `prisma migrate deploy` once per
 # deployment (via workflow 210). Keeping CLI deps out of the runtime image avoids
 # chasing Prisma's transitive dep tree (effect, fast-check, etc.) across upgrades.
@@ -56,16 +93,16 @@ RUN apk add --no-cache libc6-compat \
 RUN addgroup --system --gid 1001 nodejs \
  && adduser --system --uid 1001 nextjs
 
-# `prisma migrate deploy` needs the full Prisma CLI dependency tree, not just the
-# prisma/@prisma/.prisma directories: prisma@6.19.3 depends on @prisma/config
-# (c12, effect, deepmerge-ts, empathic) and @prisma/engines (fetch-engine,
+# `prisma migrate deploy` needs the whole Prisma CLI dependency tree, not just the
+# prisma/@prisma/.prisma directories: prisma depends on @prisma/config (c12,
+# effect, deepmerge-ts, empathic) and @prisma/engines (fetch-engine,
 # get-platform, debug), and npm hoists all of those to the top-level
-# node_modules rather than nesting them under prisma/ or @prisma/. Copying only a
-# subset breaks the CLI at runtime, so copy the whole tree — the security win of
-# IMG-002 is the non-root USER below, which we keep. seed-local-admin.js also
-# needs @prisma/client from this tree.
-COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
+# node_modules. The migrator-deps stage holds exactly that tree plus the generated
+# client seed-local-admin.js loads, so copy it whole. Never copy the builder's
+# node_modules here: it carries every devDependency (tests/unit/test_ci_hygiene.py
+# fails if this stage does, and 300-test-codebase.yml scans the built image).
+COPY --chown=nextjs:nodejs prisma ./prisma
+COPY --from=migrator-deps --chown=nextjs:nodejs /app/node_modules ./node_modules
 
 # Small, reviewable entrypoint copied executable, replacing the inline sh -c.
 COPY --chmod=755 prisma/migrate.sh ./prisma/migrate.sh
@@ -79,7 +116,7 @@ USER 1001
 
 CMD ["./prisma/migrate.sh"]
 
-# ── Stage 4: runner ──────────────────────────────────────────────────────────
+# ── Stage 5: runner ──────────────────────────────────────────────────────────
 FROM node:24-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS runner
 WORKDIR /app
 

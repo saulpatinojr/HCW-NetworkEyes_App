@@ -2488,16 +2488,24 @@ same container receives `CNA_API_TOKEN` (the api already refuses to start withou
 `300-test-codebase.yml` runs hadolint 2.15.1 and actionlint 1.7.12 as containers pinned by digest, `pip-audit`, `ruff`, `pre-commit`, `uv` and `pyyaml` are pinned to exact versions, and `scripts/ci/local-container-checks.sh` pins the same two digests plus Trivy 0.76.1. Dependabot reads `FROM` lines and action references, not an image named in a `run:` step or a version in a `pip install`, so none of these pins moves by itself. Open: when a new release appears, pull the new tag, copy the digest Docker prints, and change the workflow and the script together (`tests/unit/test_ci_hygiene.py` fails when they differ). Consider moving the two images into a small Dockerfile that Dependabot's docker ecosystem can read, or into a scheduled job that opens an issue when a newer release exists. The apt and apk version pins that `.hadolint.yaml` ignores (DL3008, DL3018) are worth revisiting if the images ever move to a Debian snapshot mirror. `320-release-engine.yml` still runs an unpinned `uv pip install pytest`.
 
 ### T-737 — Clear the development-only npm advisories Trivy reports, and the migrator image's development tree
-`scripts/ci/local-container-checks.sh trivy-fs` (2026-10-25, Trivy 0.76.1, advisory database of that day) finds nothing in `uv.lock` and nothing
-in the production dependencies of `apps/cna-web/package-lock.json`, but with development dependencies included it reports 7 rows for four
-advisories, all in packages flagged `dev` in the lock: `brace-expansion` 1.1.18 and 5.0.9 (CVE-2026-102276 and CVE-2026-102278, High;
-CVE-2026-102277, Medium; fixed in 1.1.19 to 1.1.21 and 5.0.10 to 5.0.12) and `postcss-selector-parser` 6.0.10 (CVE-2026-104844, Medium; fixed in
-7.1.6). The two `brace-expansion` versions are held by the `overrides` entries in `apps/cna-web/package.json`. A scan of the built web image
-(runner target) shows no operating-system or library finding, so the development tree is not in it; but the migrator image copies the whole
-`node_modules` tree from the builder stage and the same scan of it reports 19 High findings: 4 for `brace-expansion` (fix available) and 15 in the Go
-standard library and `golang.org/x/text` compiled into `@typescript/typescript-linux-x64/lib/tsc`, the native TypeScript compiler (most with a fix in
-a newer Go toolchain, so in a newer `@typescript/native`). Open: raise the two overrides to 1.1.21 and 5.0.12, find what holds
-`postcss-selector-parser` 6, run `npm run lint`, `npm run typecheck`, `npm test` and the image build, then rerun `trivy-fs`. Separately decide
-whether the migrator needs the compiler at all (`prisma migrate deploy` does not); copying only the Prisma tree, or running `npm prune --omit=dev`
-in the builder before the copy, would take the 19 findings out of that image. Docker Scout in `200-build-images.yml` already gates the migrator on
-fixable critical and high findings, so check why it passes before changing anything.
+Found 2026-10-25 with `scripts/ci/local-container-checks.sh trivy-fs` and a Trivy scan of the built images (Trivy 0.76.1, advisory database of that
+day): with development dependencies included, `apps/cna-web/package-lock.json` had `brace-expansion` 1.1.18 and 5.0.9 (CVE-2026-102276 and
+CVE-2026-102278, High, GHSA-6j4f-fj2g-mc7p and GHSA-qhr7-859c-m2p7; fixed in 1.1.20 and 5.0.11) and `postcss-selector-parser` 6.0.10
+(CVE-2026-104844, Medium; fixed in 7.1.6). The web runner image had no finding, but the `migrator` target copied the builder's whole `node_modules`
+(526 top-level packages, 1048 MB, every devDependency), so a scan of it reported 19 High findings: 4 for `brace-expansion` and 15 in the Go
+standard library and `golang.org/x/text` compiled into `@typescript/typescript-linux-x64/lib/tsc`. `npm audit --omit=dev`, the CI gate, cannot see them,
+and the Docker Scout gate in `200-build-images.yml` (fixable critical and high) had not yet run on this image because publishing is off.
+Done (branch `ci/migrator-production-only`): the migrator has its own production-only tree. A `migrator-deps` stage in `apps/cna-web/Dockerfile`
+installs the Prisma CLI, `@prisma/client` and what they need (35 packages, 243 MB) with `npm ci --omit=dev --ignore-scripts` from a lockfile that
+`apps/cna-web/scripts/migrator-lockfile.mjs` cuts out of `package-lock.json` (entries copied as they are, so versions and integrity hashes are the web
+app's), then runs Prisma's two install-time jobs explicitly (engine download, client generation); the `migrator` stage copies that tree and no
+longer depends on the builder. `prisma` moved from `devDependencies` to `dependencies`; the runner copies only `.prisma` and `@prisma` from the
+builder, so it did not change. The two `brace-expansion` `overrides` are gone and the lockfile resolves 1.1.21 and 5.0.12; the full `npm audit` has no
+High. The pull-request job `Image Scan (Trivy)` in `300-test-codebase.yml` builds the migrator and runner targets, checks the migrator tree inside the
+image and scans both with the digest-pinned Trivy for fixable HIGH and CRITICAL findings and secrets (one narrow suppression in `.trivyignore.yaml`:
+the public Azurite key the Azure SDK bundles into the web build); `tests/unit/test_migrator_image.py` and `tests/unit/test_ci_hygiene.py` pin the rest.
+Open: (1) `postcss-selector-parser` 6 (Moderate, held by `@tailwindcss/typography`; `npm audit fix` offers only a downgrade) and the other Moderate
+advisory in that chain; (2) the owner adds `Image Scan (Trivy)` to the `Protect main` required checks (`REVIEW.md` R-026 lists the other three);
+(3) the first real run of the Docker Scout step in `200-build-images.yml` is the only place Scout itself is exercised, and it cannot be run
+without Docker credentials, so Trivy is the proxy; (4) findings in the base image that have no fix are not covered (`--ignore-unfixed`, like the
+Scout gate's `only-fixed`) and move with the pinned `node:24-alpine` digest.

@@ -151,6 +151,10 @@ or record a `TODO.md` item naming them — never leave one side implied.
   new job names in the pull request so the owner can add them to the ruleset. Dockerfiles must pass hadolint (`.hadolint.yaml` lists the only
   ignored rules, each with a written reason) and workflows must pass actionlint; run both with
   `bash scripts/ci/local-container-checks.sh hadolint actionlint`.
+  The `migrator` image runs only the Prisma CLI, so its `node_modules` comes from the `migrator-deps` stage of `apps/cna-web/Dockerfile` (cut out
+  of `package-lock.json` by `apps/cna-web/scripts/migrator-lockfile.mjs`); never copy the builder's `node_modules` into it. The job `Image Scan (Trivy)`
+  checks that in the built image and scans the migrator and web runner for fixable HIGH and CRITICAL findings (`.trivyignore.yaml` holds the one
+  narrow suppression, with its reason); `bash scripts/ci/local-container-checks.sh trivy-image <image>` runs the same scan locally.
 - **Every GitHub Action is pinned to a SHA digest.** `detect-secrets` fails the
   build on any finding not in `.secrets.baseline`; `gitleaks` is advisory.
 - **Secrets** travel as GitHub secrets → OIDC / Key Vault / Secrets Manager →
