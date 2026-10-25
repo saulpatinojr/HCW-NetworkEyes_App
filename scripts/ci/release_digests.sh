@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Resolve and verify the other four images of the build 310-release-version.yml promotes, so that the release
-# notes can list the digest of every image that build published, not only the CLI image that gets the `<version>` tag.
+# notes can list the digest of every image that build published, and so the release job can give each of the five its
+# version tag (this script supplies the four besides the CLI image, whose digest find_release_image.sh found).
 #
 #   BUILD_COMMIT=<40-hex commit 200 built> RUN_IDS="<id> <id>" scripts/ci/release_digests.sh
 #

@@ -219,6 +219,15 @@ class TestRegistryDigest:
             "Get https://registry-1.docker.io/v2/: dial tcp: lookup registry-1.docker.io: no such host",
             "toomanyrequests: You have reached your pull rate limit",
             "context deadline exceeded",
+            # Look like absence but do not name the queried reference as missing: they are errors, never "free".
+            "ERROR: failed to authorize: failed to fetch anonymous token: unexpected status: 404 Not Found",
+            "bash: line 1: cosign: command not found",
+            "HTTP status 404",
+            "MANIFEST_UNKNOWN: manifest unknown",
+            f'failed to resolve reference "{IMAGE}:1.0.0": failed to authorize: failed to fetch anonymous '
+            "token: unexpected status from GET request to https://auth.docker.io/token: 404 Not Found",
+            f"{IMAGE}:other: not found",
+            "docker.io/x/y:1: not found",
         ],
     )
     def test_any_other_failure_is_status_2_with_the_message_kept(self, tmp_path, message):
@@ -227,10 +236,21 @@ class TestRegistryDigest:
         assert message in result.stderr
 
     @pytest.mark.parametrize(
-        "message", ["x: not found", "MANIFEST_UNKNOWN: manifest unknown", "HTTP status 404"]
+        "template",
+        [
+            "{ref}: not found",
+            "ERROR: {ref}: not found",
+            "ERROR: {ref}: NOT FOUND",
+            "{ref}: manifest unknown",
+            "ERROR: {ref}: name unknown",
+        ],
     )
-    def test_the_registrys_not_found_wordings_are_status_1(self, tmp_path, message):
-        assert self._check(tmp_path, "", error=message).stdout.split() == ["rc=1"]
+    def test_the_registry_naming_the_queried_reference_as_missing_is_status_1(
+        self, tmp_path, template
+    ):
+        ref = f"{IMAGE}:1.0.0"
+        result = self._check(tmp_path, "", error=template.format(ref=ref), ref=ref)
+        assert result.stdout.split() == ["rc=1"]
 
 
 # --- find_release_image.sh ---
@@ -828,7 +848,18 @@ COMPONENT_TAGS = {
 class TestTagImagesStep:
     """The step is run as bash with stubs for docker and for the verification script it calls."""
 
-    def _run(self, tmp_path, *, bad=None, digests=None, fail_tag_call=0, tip="f" * 40):
+    def _run(
+        self,
+        tmp_path,
+        *,
+        bad=None,
+        digests=None,
+        fail_tag_call=0,
+        tip="f" * 40,
+        compare=None,
+        compare_fail=False,
+        compare_raw=None,
+    ):
         digests = digests or {c: f"sha256:{str(i) * 64}" for i, c in enumerate(COMPONENT_TAGS, 1)}
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
@@ -839,14 +870,34 @@ class TestTagImagesStep:
             'echo "$*" >> "$DOCKER_LOG"\n'
             '[ "$(wc -l < "$DOCKER_LOG")" -ne "${STUB_FAIL_CALL:-0}" ] || { echo "toomanyrequests" >&2; exit 1; }',
         )
-        # `gh api repos/<repo>/commits/<branch> --jq .sha` answers STUB_TIP; an empty STUB_TIP is a failed call.
+        # `gh api repos/<repo>/commits/<branch> --jq .sha` answers STUB_TIP (empty: a failed call); `gh api
+        # repos/<repo>/compare/<sha>...<tip>` answers the file STUB_COMPARE (STUB_COMPARE_FAIL: a failed call).
         _stub(
             bin_dir,
             "gh",
-            'echo "$*" >> "$GH_LOG"\n[ -n "${STUB_TIP:-}" ] || { echo "HTTP 502" >&2; exit 1; }\necho "$STUB_TIP"',
+            'echo "$*" >> "$GH_LOG"\n'
+            'case "$2" in\n'
+            '  */commits/*) [ -n "${STUB_TIP:-}" ] || { echo "HTTP 502" >&2; exit 1; }; echo "$STUB_TIP" ;;\n'
+            '  */compare/*) [ -z "${STUB_COMPARE_FAIL:-}" ] || { echo "HTTP 502" >&2; exit 1; }; cat "$STUB_COMPARE" ;;\n'
+            "esac",
         )
+        # The step reads 200's own on.push.paths through the real helper: both are copied from the repository.
+        (tmp_path / ".github" / "workflows").mkdir(parents=True)
+        (tmp_path / ".github" / "workflows" / "200-build-images.yml").write_text(
+            BUILD_WORKFLOW.read_text(encoding="utf-8"), encoding="utf-8", newline="\n"
+        )
+        (tmp_path / "scripts" / "ci").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "scripts" / "ci" / "paths_touch_build.py").write_text(
+            (CI_DIR / "paths_touch_build.py").read_text(encoding="utf-8"),
+            encoding="utf-8",
+            newline="\n",
+        )
+        compare_file = tmp_path / "compare.json"
+        compare_file.write_text(json.dumps(compare or {}), encoding="utf-8")
         verify = tmp_path / "scripts" / "ci" / "verify_signed_digest.sh"
-        verify.parent.mkdir(parents=True)
+        verify.parent.mkdir(parents=True, exist_ok=True)
+        if compare_raw is not None:
+            compare_file.write_text(compare_raw, encoding="utf-8")
         verify.write_text(
             "#!/usr/bin/env bash\n"
             'echo "$1 revision=$EXPECTED_REVISION runs=$EXPECTED_RUN_IDS" >> "$VERIFY_LOG"\n'
@@ -862,6 +913,8 @@ class TestTagImagesStep:
             STUB_BAD=digests[bad] if bad else "",
             STUB_FAIL_CALL=str(fail_tag_call),
             STUB_TIP=tip,
+            STUB_COMPARE=str(compare_file),
+            STUB_COMPARE_FAIL="1" if compare_fail else "",
             GH_LOG=str(tmp_path / "gh.log"),
             GH_TOKEN="x",
             GITHUB_REPOSITORY="o/r",
@@ -931,18 +984,122 @@ class TestTagImagesStep:
         rows = [line for line in summary if line.startswith("| ") and line.endswith("| yes |")]
         assert len(rows) == 5, "the table was written before the first tag moved"
 
-    def test_a_commit_that_is_not_the_tip_gets_its_sha_tags_and_no_latest_tag(self, tmp_path):
-        result, docker_log, verify_log, summary, digests = self._run(tmp_path, tip="a" * 40)
+    @staticmethod
+    def _ahead(*files, ahead_by=1, status="ahead"):
+        return {
+            "status": status,
+            "ahead_by": ahead_by,
+            "files": [f if isinstance(f, dict) else {"filename": f} for f in files],
+        }
+
+    def _latest_moved(self, docker_log):
+        return sum("-latest" in line or f"{IMAGE}:latest" in line for line in docker_log)
+
+    def test_a_tip_that_changes_nothing_200_builds_from_still_lets_latest_move(self, tmp_path):
+        # A documentation / test / other-workflow commit landed after the built commit: no newer 200 run exists,
+        # so this run must move *-latest or nobody will.
+        compare = self._ahead(
+            "README.md", "tests/unit/test_x.py", ".github/workflows/310-release-version.yml"
+        )
+        result, docker_log, _, summary, _ = self._run(tmp_path, tip="a" * 40, compare=compare)
+        assert result.returncode == 0, result.stderr + result.stdout
+        assert len(docker_log) == 5 and self._latest_moved(docker_log) == 5
+        assert summary[-1] == "### All five components tagged"
+        assert any("changes nothing this workflow builds from" in line for line in summary)
+
+    @pytest.mark.parametrize(
+        "changed",
+        [
+            "apps/cna-web/lib/image-update.ts",
+            "Dockerfile",
+            "uv.lock",
+            ".github/workflows/200-build-images.yml",
+            {
+                "filename": "docs/moved.md",
+                "previous_filename": "Dockerfile",
+            },  # renamed out of a build path
+        ],
+    )
+    def test_a_tip_that_changed_a_build_path_gets_its_sha_tags_and_no_latest_tag(
+        self, tmp_path, changed
+    ):
+        compare = self._ahead("README.md", changed)
+        result, docker_log, _, summary, _ = self._run(tmp_path, tip="a" * 40, compare=compare)
         assert result.returncode == 0, result.stderr + result.stdout
         assert len(docker_log) == 5, "every component still gets its immutable sha tag"
+        assert self._latest_moved(docker_log) == 0
         for line in docker_log:
-            assert "-latest" not in line and f"{IMAGE}:latest" not in line, line
             assert "sha-abc1234" in line
-        text = "\n".join(summary)
-        assert "The *-latest tags will NOT be moved" in text
+        assert any(
+            line.startswith("The *-latest tags will NOT be moved: later commits change files")
+            for line in summary
+        )
         assert summary[-1].startswith("### Sha tags attached; the *-latest tags were not moved")
         assert "### All five components tagged" not in summary
-        assert "not the tip of main" in result.stdout + result.stderr
+        assert "NOT moved" in result.stdout + result.stderr
+
+    @pytest.mark.parametrize("status", ["diverged", "behind", "identical"])
+    def test_a_tip_that_is_not_ahead_never_moves_latest(self, tmp_path, status):
+        compare = self._ahead("README.md", status=status)
+        result, docker_log, *_ = self._run(tmp_path, tip="a" * 40, compare=compare)
+        assert (
+            result.returncode == 0 and len(docker_log) == 5 and self._latest_moved(docker_log) == 0
+        )
+        assert f"compare status '{status}'" in result.stdout + result.stderr
+
+    def test_a_truncated_comparison_never_moves_latest(self, tmp_path):
+        many = [f"docs/{n}.md" for n in range(300)]  # GitHub lists at most 300 files
+        result, docker_log, *_ = self._run(tmp_path, tip="a" * 40, compare=self._ahead(*many))
+        assert result.returncode == 0 and self._latest_moved(docker_log) == 0
+        assert "too large to list completely" in result.stdout + result.stderr
+        (tmp_path / "b").mkdir()
+        result, docker_log, *_ = self._run(
+            tmp_path / "b", tip="a" * 40, compare=self._ahead("README.md", ahead_by=251)
+        )
+        assert result.returncode == 0 and self._latest_moved(docker_log) == 0
+
+    def test_just_under_the_limits_is_read_as_complete(self, tmp_path):
+        files = [f"docs/{n}.md" for n in range(299)]
+        result, docker_log, *_ = self._run(
+            tmp_path, tip="a" * 40, compare=self._ahead(*files, ahead_by=250)
+        )
+        assert result.returncode == 0 and self._latest_moved(docker_log) == 5
+
+    def test_a_failed_compare_tags_nothing(self, tmp_path):
+        result, docker_log, verify_log, summary, _ = self._run(
+            tmp_path, tip="a" * 40, compare_fail=True
+        )
+        assert result.returncode == 1 and docker_log == []
+        assert "refusing to tag anything" in result.stdout + result.stderr
+        assert not any("All five components tagged" in line for line in summary)
+
+    @pytest.mark.parametrize("body", ["", "not json", "[]", '{"message": "Not Found"}'])
+    def test_an_answer_without_a_status_tags_nothing(self, tmp_path, body):
+        result, docker_log, *_ = self._run(tmp_path, tip="a" * 40, compare_raw=body)
+        assert result.returncode == 1 and docker_log == []
+
+    def test_every_path_of_the_workflow_is_a_build_path_for_the_guard(self, tmp_path):
+        # One list, no copy: each pattern of 200's own on.push.paths, turned into a file name, must block latest.
+        import importlib.util as _u
+
+        spec = _u.spec_from_file_location("paths_touch_build_live", CI_DIR / "paths_touch_build.py")
+        module = _u.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        patterns = module.push_paths(BUILD_WORKFLOW.read_text(encoding="utf-8"))
+        assert len(patterns) >= 10
+        for index, pattern in enumerate(patterns):
+            name = pattern.replace("**", "a/b").replace("*", "z")
+            assert module.touching([name], [pattern]) == [name], pattern
+            sub = tmp_path / f"p{index}"
+            sub.mkdir()
+            _, docker_log, *_ = self._run(sub, tip="a" * 40, compare=self._ahead(name))
+            assert self._latest_moved(docker_log) == 0, pattern
+
+    def test_the_step_holds_no_copy_of_the_build_paths(self):
+        script = _tag_images_script()
+        assert "paths_touch_build.py .github/workflows/200-build-images.yml" in script
+        for fragment in ("apps/cna-web", "apps/cna-api", "uv.lock", "pyproject.toml", "Dockerfile"):
+            assert fragment not in script, fragment
 
     def test_the_tip_commit_moves_the_latest_tags_too(self, tmp_path):
         result, docker_log, *_ = self._run(tmp_path)
