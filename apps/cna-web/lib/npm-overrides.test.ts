@@ -21,6 +21,24 @@ function conflicting(overrides: Overrides, path: string[] = [], owner?: string):
   });
 }
 
+describe("postcss-selector-parser", () => {
+  // @tailwindcss/typography 0.5.20 pins postcss-selector-parser to exactly 6.0.10, which has a quadratic-time flaw in
+  // flat selector parsing (CVE-2026-104844, Dependabot alert 46, fixed in 7.1.6). The override in package.json lifts it;
+  // this fails if the lockfile ever resolves an older one again (for example when the override is dropped by mistake).
+  it("resolves to 7.1.6 or later", () => {
+    const lock = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"));
+    const versions = Object.entries<{ version: string }>(lock.packages)
+      .filter(([path]) => path.endsWith("node_modules/postcss-selector-parser"))
+      .map(([, entry]) => entry.version);
+    expect(versions.length).toBeGreaterThan(0);
+    for (const version of versions) {
+      const [major, minor, patch] = version.split(".").map(Number);
+      const ok = major > 7 || (major === 7 && (minor > 1 || (minor === 1 && patch >= 6)));
+      expect(ok, `postcss-selector-parser ${version} is below 7.1.6`).toBe(true);
+    }
+  });
+});
+
 describe("package.json overrides", () => {
   it("finds a literal range in the object form too", () => {
     // The checker itself: "." under a directly used package overrides that package, nested keys override its dependencies.

@@ -250,7 +250,9 @@ export async function generateDiagramFromDiscovery(
   let xml: string;
   let pageCount = 0;
   try {
-    const res = await fetch(`${apiUrl}/diagrams/${engagementId}/generate`, {
+    // The id is a database key the membership check above has just matched, but it still arrives from the
+    // caller, so it is encoded as one path segment (CodeQL js/request-forgery).
+    const res = await fetch(`${apiUrl}/diagrams/${encodeURIComponent(engagementId)}/generate`, {
       method: "POST",
       headers: apiHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
