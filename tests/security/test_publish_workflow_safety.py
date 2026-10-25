@@ -920,3 +920,38 @@ class TestProvenanceSchemaIsPinned:
         assert 'has("buildDefinition")' in sign
         assert sign.index('has("buildDefinition")') < sign.index("BUILDER_ID=")
         assert "version=v0.2" in sign
+
+
+CLEANUP = WORKFLOWS / "370-registry-cleanup.yml"
+#: The sha-tag prefix of each image, as 310 (``sha-<7>`` for the CLI) and 370 (its retention patterns) read them.
+SHA_PREFIXES = {
+    "cli": "sha-",
+    "api": "api-sha-",
+    "worker": "worker-sha-",
+    "web": "web-sha-",
+    "migrator": "migrator-sha-",
+}
+
+
+class TestShaTagPrefixes:
+    """The first real build tagged the CLI image ``3762d27`` instead of ``sha-3762d27``.
+
+    ``sha_prefix: ""`` reached ``docker/metadata-action`` as an explicit empty prefix, so the CLI sha tag was
+    a bare hex string. 310 looks for ``sha-<7>`` and 370 prunes ``^sha-[0-9a-f]+$``; neither would have found it.
+    """
+
+    def test_the_cli_and_matrix_prefixes_are_the_documented_ones(self):
+        matrix = _load(BUILD)["jobs"]["build-images"]["strategy"]["matrix"]["include"]
+        got = {row["key"]: row["sha_prefix"] for row in matrix}
+        assert got == {k: v for k, v in SHA_PREFIXES.items() if k in got}
+        assert "cli" in got and got["cli"] == "sha-"
+
+    def test_the_web_and_migrator_steps_use_the_documented_prefixes(self):
+        lines = [line.strip() for line in BUILD.read_text(encoding="utf-8").splitlines()]
+        for key in ("web", "migrator"):
+            assert f"type=sha,prefix={SHA_PREFIXES[key]}" in lines, key
+
+    def test_the_cleanup_patterns_match_those_prefixes(self):
+        text = CLEANUP.read_text(encoding="utf-8")
+        for key, prefix in SHA_PREFIXES.items():
+            assert f'["{key}"]="^{prefix}[0-9a-f]+$"' in text, key

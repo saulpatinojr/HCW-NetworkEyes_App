@@ -846,7 +846,7 @@ class TestReleaseDigests:
         for role in ("web", "migrator"):
             assert f"type=sha,prefix={role}-sha-" in web_text, role
             matrix[role] = f"{role}-sha-"
-        assert matrix["cli"] == ""
+        assert matrix["cli"] == "sha-"
         assert {k: v for k, v in matrix.items() if k != "cli"} == OTHER_IMAGES
 
 

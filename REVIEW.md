@@ -589,6 +589,7 @@ this order:
    hand); both are in T-728. Only when the dry run is green and the Scout decision is settled, set
    `DOCKERHUB_ENABLED` to `true`.
 5. Run `200 · Build Container Images` once from *Run workflow* (or push to `main` touching a Dockerfile). To release:
+   The first real build (2026-10-25) left the CLI image tagged `3762d27` instead of `sha-3762d27` (fixed by giving the CLI row the prefix `sha-`); that stray tag can be deleted by hand on Docker Hub (repository → Tags). Nothing deletes it and `370` does not match it.
    run `310 · Release CLI Tool` as a dry run first, then tag the commit it names (README → *Publishing the images*; the checks are under *Verifying images*).
 6. Keep the branch protection on `main` here (required check `300 · Test Codebase`, review requirements).
 

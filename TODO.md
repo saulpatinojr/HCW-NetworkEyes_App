@@ -2308,6 +2308,7 @@ Nothing publishes until the owner flips the variables below. Open, in order:
   therefore must: the wiring of `tag-images` (its digest table and the verify-before-tag gate), the hand-over of the five
   real digests between jobs, the revision label that `docker/metadata-action` puts on the real images, and `310`. None
   of these has run yet.
+  Update 2026-10-25: the first real build tagged the CLI image `3762d27`, not `sha-3762d27` (empty `sha_prefix`, now `sha-`); the stray tag can be deleted by hand on Docker Hub, no `370` pattern matches it.
 - `[DECISION]` **Docker Scout and the OIDC credential.** The real build jobs call `docker/scout-action` after the
   OIDC login with no extra credential. Whether Scout accepts that credential is unknown until the dry run above
   (its `Docker Scout analyses the rehearsal digest` step is the rehearsal). If it fails, the step says so: Scout
