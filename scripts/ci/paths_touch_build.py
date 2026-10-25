@@ -74,11 +74,17 @@ def touching(files: list[str], patterns: list[str]) -> list[str]:
 
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
-        print("usage: paths_touch_build.py <workflow.yml>   (changed file names on stdin)", file=sys.stderr)
+        print(
+            "usage: paths_touch_build.py <workflow.yml>   (changed file names on stdin)",
+            file=sys.stderr,
+        )
         return 2
     patterns = push_paths(Path(argv[1]).read_text(encoding="utf-8"))
     if not patterns:
-        print(f"no on.push.paths found in {argv[1]}; refusing to guess what it builds from", file=sys.stderr)
+        print(
+            f"no on.push.paths found in {argv[1]}; refusing to guess what it builds from",
+            file=sys.stderr,
+        )
         return 2
     files = [line.strip() for line in sys.stdin.read().splitlines() if line.strip()]
     hits = touching(files, patterns)
