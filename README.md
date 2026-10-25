@@ -246,7 +246,9 @@ Reference** explains each value in full.
   CI, and **fails the build** on any finding not recorded in `.secrets.baseline` — which holds only
   hand-audited false positives, never a suppression dump. `gitleaks` also runs in CI but is
   advisory: it needs a paid licence on private repositories, so its job is `continue-on-error` and
-  cannot fail a build. Do not read it as a gate.
+  cannot fail a build. Do not read it as a gate. Its 122 hits in the full history were all checked on
+  2026-10-25 and are false positives; `.gitleaksignore` lists them one by one (by fingerprint, so a new
+  finding still shows) with the reason for each class.
 - **Vendored agent configuration** (`.claude/`, `.agents/`, `.codex/`, `.kiro/`) is kept out of version
   control under `local/agent-config/` (gitignored). It is configuration, not project source; lint,
   the documentation model and secret scanning exclude `local/`, and it must never contain
