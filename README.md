@@ -100,8 +100,9 @@ repository and notifies no one. Whoever runs the images (a person or a separate 
 - **Releases.** A `v*.*.*` tag runs `310-release-version.yml`, which adds the `<version>` tag to the CLI image `200`
   already built and signed for that commit, or for the last build before it when only documentation, tests or another
   workflow changed since, and lists the digests of all five images in the release notes. A tag on a commit that
-  changed a file `200` builds from fails and names it and the nearest built commit. The Docker Hub connection has a
-  separate tag-only rule (`refs/tags/v*`, Image Push) for this workflow.
+  changed a file `200` builds from fails and names it and the nearest built commit. The Docker Hub connection needs a
+  separate tag-only rule (`refs/tags/v*`, Image Push) for this workflow before the first release (`TODO.md` T-728; the connection has not been read from here, so it is
+  not confirmed that the rule exists yet).
 - **Cutting a release (owner steps).** (1) In the browser: Actions, **310 · Release CLI Tool**, **Run workflow**, branch
   `main`, leave **dry_run** ticked (the default). It finds and verifies the image of the latest build, prints what it
   would promote and the commit it was built from, and creates nothing. (2) If the summary looks right, tag that
@@ -193,9 +194,13 @@ supply the runtime settings listed in `.env.example`.
 
 Configuration comes from three places, in this order of authority:
 
-1. **GitHub Secrets and Variables** — for this repository, only what the build and release workflows need: the Docker
-   Hub OIDC connection id and namespace (variables) and the personal access token the registry cleanup uses (secret).
-   Deployment secrets and variables belong to whoever deploys the images.
+1. **GitHub Secrets and Variables** — for this repository, only what its workflows need (names only; values are never
+   in the repository): `DOCKERHUB_NAMESPACE`, `DOCKERHUB_CONNECTION` (the Docker Hub OIDC connection id) and
+   `DOCKERHUB_ENABLED` (the publishing switch) for `200` and `310`; `DOCKERHUB_PERSONAL_USERNAME` (variable) and
+   `DOCKERHUB_PERSONAL_TOKEN` (secret) for the registry cleanup `370`; `PYPI_PUBLISH_ENABLED` for the engine release
+   `320`; and, for the owner-approved `390` only, the credentials of the `admin-ops` environment (`APP_CLIENT_ID`,
+   `APP_PRIVATE_KEY`, `PROJECT_TOKEN`). `TODO.md` T-728 and `REVIEW.md` R-026 have the steps. Deployment secrets and
+   variables belong to whoever deploys the images.
 2. **The deployment's vault** (Azure Key Vault / AWS Secrets Manager) — runtime secrets for a deployed environment,
    injected by whoever deploys the images.
 3. **`.env` / `.env.local`** — local development only, never committed.

@@ -34,6 +34,7 @@ Anything an engineer can solve without external input belongs in [`TODO.md`](TOD
 | [R-022](#r-022--version-100-release-identity) | Version 1.0.0 identity: withdrawn `[1.0.0]` heading, version strings, first tag | Repository owner | Open — before the first `v*` tag |
 | [R-025](#r-025--the-drawio-mcp-route-is-internal-only) | Is `/api/drawio-mcp` public or internal only? | Repository owner | Decided 2026-10-24 — internal only; implemented (ticket #245) |
 | [R-026](#r-026--owner-steps-after-the-governance-and-ci-hygiene-change) | Add three new checks to the `Protect main` ruleset; confirm private vulnerability reporting; the `370` token | Repository owner | Open — raised with the governance and CI hygiene pull request (tickets #247, #252, #253) |
+| [R-027](#r-027--remove-the-orphaned-cloud-trust-entries-of-the-earlier-repository-name) | Remove the cloud trust entries (Azure federated credentials, AWS role trust) that name this repository by its earlier name | Repository owner / cloud account owners | Open — not blocking |
 
 ---
 
@@ -579,13 +580,13 @@ this order:
 2. In Docker Home, create the OIDC connection with one ruleset for `main` (scope Image Push on that repository, used
    by `200`) and, before the first release, a SECOND ruleset for `refs/tags/v*` (Image Push only, used by `310`).
 3. On this repository → *Settings → Secrets and variables → Actions → Variables*: `DOCKERHUB_NAMESPACE`,
-   `DOCKERHUB_CONNECTION` and `DOCKERHUB_ENABLED`. No registry token is created. Set *Actions → General → Workflow
-   permissions* to *Read and write* (`310` needs it to create the GitHub Release).
+   `DOCKERHUB_CONNECTION` and `DOCKERHUB_ENABLED`. No registry token is created for publishing (the registry cleanup
+   `370` still uses a personal access token, step 3 of R-026). Leave *Actions → General → Workflow permissions* on
+   *read-only*, which is how it is set (read 2026-10-25): `310` declares its own `contents: write` for the release job.
 4. Decide Docker Scout's credential and run the dry run of the connection (`200` with `rehearsal` ticked); both are in
    T-728.
 5. Run `200 · Build Container Images` once from *Run workflow* (or push to `main` touching a Dockerfile). To release:
-   run `310 · Release CLI Tool` as a dry run first, then tag the commit it names (README → *Publishing and
-   verifying the images*).
+   run `310 · Release CLI Tool` as a dry run first, then tag the commit it names (README → *Publishing the images*; the checks are under *Verifying images*).
 6. Keep the branch protection on `main` here (required check `300 · Test Codebase`, review requirements).
 
 **Impact if unresolved**
@@ -814,3 +815,12 @@ A customer cannot tell what "1.0" they run; a new `[1.0.0]` heading would collid
 - **Step 3 — the `370` registry token (ticket #252, unchanged).** `370-registry-cleanup.yml` still uses the personal access token `DOCKERHUB_PERSONAL_TOKEN`; Docker Hub's OIDC connection does not replace it for deleting tags. The decision to keep it or to change how tags are removed is still open.
 - **Raised:** 2026-10-25.
 - **Status:** Open
+
+## R-027 — Remove the orphaned cloud trust entries of the earlier repository name
+
+- **Why this is here:** the earlier plan for the original repository (R-014) ended with a step that told the owner to delete the Azure federated identity credentials and the AWS OIDC role trust entries whose subject names that repository. R-014 is superseded and its text was dropped, so nothing else reminds the owner. This repository is that original, renamed, and GitHub puts the current repository name in a run's OIDC token, so an entry that still carries the earlier name matches no run of this repository. It is dead trust, and it would grant access again if anyone ever created a repository with that name under the same owner. (The earlier name is not written here on purpose: the standalone guard forbids it in live files. It is in this repository's git history and in the two clouds' trust entries themselves.)
+- **Where to look.** Azure: Microsoft Entra admin center → App registrations → each application used for GitHub deployments → Certificates & secrets → Federated credentials; the subject looks like `repo:saulpatinojr/<name>:ref:refs/heads/main` or `...:environment:<name>`. AWS: IAM → Roles → the GitHub deploy role → Trust relationships; the condition on `token.actions.githubusercontent.com:sub`. Documentation: <https://learn.microsoft.com/entra/workload-id/workload-identity-federation-create-trust> and <https://docs.github.com/actions/security-for-github-actions/security-hardening-your-deployments/about-security-hardening-with-openid-connect>.
+- **What to do.** Delete every entry whose repository part is not a repository you still deploy from. Keep entries for `HCW-NetworkEyes_App` and for the other current repositories. If you keep a subject for this repository, use the immutable form with the owner and repository ids (as `TODO.md` T-728 does for Docker Hub) so a rename never leaves a stale entry again.
+- **Impact if unresolved:** none today; a standing, unused grant.
+- **Raised:** 2026-10-25.
+- **Status:** Open — not blocking

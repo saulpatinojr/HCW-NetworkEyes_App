@@ -2263,16 +2263,22 @@ Nothing publishes until the owner flips the variables below. Open, in order:
   browser, **Actions** → **200 · Build Container Images** → **Run workflow**, branch `main`, tick **rehearsal**,
   **Run workflow**. One run executes one job, `rehearse-docker-login`. Success looks like: `Log in to Docker Hub` green
   (the subject claim matches the ruleset), `Push the rehearsal image by digest` green (the Image Push scope), and
-  `Read the pushed digest back` printing `Docker Hub accepted the login and the push`. The pushed image is untagged
-  and carries one tiny layer; no tag resolves to it, and whether and when Docker Hub deletes it was not checked
-  against Docker's documentation, so remove the digest by hand if you want it gone. Nothing is tagged or
-  signed, and the real build jobs stay skipped. The job also has Docker Scout analyse the digest
-  with the same call the real build makes. If it fails, the failing step prints the three likely causes (mutable instead of immutable
+  `Read the pushed digest back` printing `Docker Hub accepted the login and the push`. The job goes further than the
+  login: it pushes a one-layer image by digest with BuildKit provenance and the SBOM, has Docker Scout analyse it with
+  the call the real build makes, signs and attests it with `scripts/ci/sign_image.sh`, verifies it with
+  `scripts/ci/verify_signed_digest.sh` exactly as `tag-images` and `310` do, gives it one tag, `rehearsal-<run id>`, and
+  reads that tag back. It deletes nothing. It leaves on Docker Hub the `rehearsal-<run id>` tag, the digest and
+  cosign's signature and attestation artefacts, and in the public Sigstore transparency log the entries for that
+  signature; remove the Docker Hub objects by hand if you want them gone (whether and when Docker Hub deletes an
+  untagged digest was not checked against Docker's documentation, and `370` does not match the rehearsal tag). The real
+  build jobs stay skipped. If it fails, the failing step prints the three likely causes (mutable instead of immutable
   `sub`, the ruleset missing the repository, the scope missing); open the connection's **Failures** tab in Docker
   Home for the claims Docker received. Docker's guide:
   <https://docs.docker.com/security/authentication/oidc-connections/troubleshoot>. Then close the tickets that
-  waited on the connection and set `DOCKERHUB_ENABLED`. The dry run does not prove `tag-images` (it retags a digest
-  in the same repository) or cosign signing; the first real build does.
+  waited on the connection and set `DOCKERHUB_ENABLED`. What the dry run cannot prove, and the first real build
+  therefore must: the wiring of `tag-images` (its digest table and the verify-before-tag gate), the hand-over of the five
+  real digests between jobs, the revision label that `docker/metadata-action` puts on the real images, and `310`. None
+  of these has run yet.
 - `[DECISION]` **Docker Scout and the OIDC credential.** The real build jobs call `docker/scout-action` after the
   OIDC login with no extra credential. Whether Scout accepts that credential is unknown until the dry run above
   (its `Docker Scout analyses the rehearsal digest` step is the rehearsal). If it fails, the step says so: Scout
@@ -2294,14 +2300,20 @@ Nothing publishes until the owner flips the variables below. Open, in order:
   ... expected ..."), the version tag exists with the wrong digest: delete that tag on Docker Hub (Repository, Tags)
   and re-run; a re-run refuses to move an existing tag, and so does it if the tag was created by something else.
 - **Who can mint the Docker token through a tag.** The ruleset "Protect release tags"
-  (<https://github.com/saulpatinojr/HCW-NetworkEyes_App/rules/25778333>, read 2026-10-25: target tags, include
-  `refs/tags/v*`, enforcement active, rules `deletion`, `non_fast_forward`, `update`, no bypass actors) has no
-  `creation` restriction. Anyone with write access to the repository can therefore push a `v*` tag; the run uses the
-  workflow file at the tagged commit, and its OIDC subject `...:ref:refs/tags/vX.Y.Z` matches the tag ruleset once
-  that exists. The credential it obtains can push to `img-ne-appliance-app`; `310` as written only adds a version
-  tag to a digest it verified, but a tag on a commit whose workflow file was edited could do more. Nothing in this
-  change alters the ruleset (an owner decision); adding a `creation` rule limited to the owner, or an environment
-  with required reviewers on the release job, would close it.
+  (<https://github.com/saulpatinojr/HCW-NetworkEyes_App/rules/25778333>, read again with
+  `gh api repos/saulpatinojr/HCW-NetworkEyes_App/rulesets/25778333` on 2026-10-25, last updated 2026-10-25 10:09
+  local time: target tags, include `refs/tags/v*`, enforcement active, rules `deletion`, `non_fast_forward`, `update`
+  and `creation`, one bypass actor, `RepositoryRole` id 5 with mode `always`; GitHub's API documents id 5 as the
+  Admin role) limits who can create a `v*` tag: with the `creation` rule only the bypass actor can. Earlier readings of
+  this ruleset (no `creation` rule, no bypass actor) are out of date. The run uses the workflow file at the tagged
+  commit, and its OIDC subject `...:ref:refs/tags/vX.Y.Z` matches the Docker Hub tag ruleset once that exists. The
+  credential it obtains can push to `img-ne-appliance-app`; `310` as written only adds a version tag to a digest it
+  verified, but a tag on a commit whose workflow file was edited could do more, so the bypass actor (repository
+  administrators) is the group to trust. Adding an environment with required reviewers on the release job would
+  narrow it further; that is an owner decision. Pull request
+  https://github.com/saulpatinojr/HCW-NetworkEyes_App/pull/299 makes the `protect-release-tags` payload of
+  `390-repository-admin.yml` equal this live ruleset (it would otherwise drop `creation` and the bypass actor on apply);
+  until it merges, do not run that task with `apply` ticked.
 - `[VERIFY]` `DOCKERHUB_OIDC_CONNECTIONID` / `DOCKERHUB_OIDC_EXPIREIN` and the minimum `docker/login-action`
   release that reads them, against Docker's documentation at the time of enabling; `actionlint` over
   `.github/workflows/` on the first pull request (not installed where this was written).

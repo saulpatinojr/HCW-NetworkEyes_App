@@ -13,10 +13,13 @@ container images (`200-build-images.yml` → Docker Hub `<namespace>/img-ne-appl
 
 Customers consume the images, not this repository. **NetworkEyes stands alone** (owner decision 2026-10-25): this
 repository builds, scans, signs and publishes its own images and depends on nothing but itself and its own Docker Hub
-repository, `docker.io/hybridcloudworks/img-ne-appliance-app`. No workflow, script, Dockerfile, application code,
-template or live document here names, calls, dispatches to or reads a setting from another repository, and no build,
-release or cleanup workflow uses a GitHub App (only the owner-approved `390-repository-admin.yml` does, see
-`ADMIN_WORKFLOWS` in the boundary test). `tests/security/test_standalone_boundary.py` (the repository) and
+repository, `docker.io/hybridcloudworks/img-ne-appliance-app`. The dependencies that were removed
+stay removed: no workflow, script, Dockerfile, application code, template or live document names, calls, dispatches
+to or reads a setting from the appliance repositories (another owner's), and no build, release or cleanup workflow
+uses a GitHub App (only the owner-approved `390-repository-admin.yml` does, see `ADMIN_WORKFLOWS` in the boundary
+test). The one carve-out is the lab edition, `saulpatinojr/HCW-NetworkEyes_AddOn`: it is a downstream edition that
+pulls from this repository, so documents name and link it, this repository calls nothing in it and reads no setting
+from it, and the one rule that reaches into it is a documentation note (*Tell the lab edition what changed*, below). `tests/security/test_standalone_boundary.py` (the repository) and
 `apps/cna-web/lib/standalone-boundary.test.ts` (the web tier) fail when that comes back. Whoever deploys the images (a
 person or a separate project) pulls them from Docker Hub by digest and verifies the cosign signature; this repository
 does not know who that is and notifies no one.
@@ -83,8 +86,9 @@ change under `Changed` in `CHANGELOG.md` (and in the release notes) where a cons
    its default branch changes the identity and breaks verification for everyone who pinned the old one, so say so in
    `CHANGELOG.md` and the release notes; the cosign release (`COSIGN_VERSION`) is pinned identically in `200` and `310`.
 6. **Docker Hub is reached through its OIDC connection only** (the repository variable `DOCKERHUB_CONNECTION`; no
-   stored password). The connection has one ruleset for `main` (`200`) and a separate tag-only ruleset for
-   `refs/tags/v*` (`310`, scope Image Push); both are owner steps in `TODO.md` T-728. The one stored credential is the
+   stored password). The connection needs one ruleset for `main` (`200`; `TODO.md` T-728 records it as done by the owner, not
+   re-read here) and a separate tag-only ruleset for `refs/tags/v*` (`310`, scope Image Push) before the first
+   release; both are owner steps in `TODO.md` T-728. The one stored credential is the
    personal access token `370-registry-cleanup.yml` uses to delete tags (`REVIEW.md` R-026 step 3).
 7. **Releases are cut by the owner**, dry run first: Actions, `310 · Release CLI Tool`, Run workflow, branch `main`,
    `dry_run` ticked (the default); read the summary, which names the commit the image was built from; then tag that
