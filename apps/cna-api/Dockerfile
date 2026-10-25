@@ -44,6 +44,9 @@ RUN uv pip install --system --no-cache --no-deps --no-build-isolation --prefix=/
 # encyclopedia report's diagram SVGs render instead of silently degrading.
 FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS drawio-fetch
 
+# bash with pipefail, see the root Dockerfile (hadolint DL4006).
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 ARG DRAWIO_VERSION=31.3.2
 ARG DRAWIO_SHA256=725453f32ef7f2f63f8b50b374857a5c312e2aaabcf221cb0600332741ae1094
 
@@ -94,12 +97,15 @@ RUN python -m pip uninstall -y pip
 ARG CNA_BUILD_SHA=
 ENV CNA_BUILD_SHA=${CNA_BUILD_SHA}
 
-USER cna
+# Numeric uid, see the root Dockerfile (hadolint DL3066). 1001 is the `cna` user created above.
+USER 1001
 
 # Liveness for orchestrators (ECS/AKS/Container Apps): the API answers on 8080
 # once uvicorn is up. Uses the stdlib (no curl, and pip is stripped).
+# Exec form (hadolint DL3025). An uncaught exception (refused connection, timeout, HTTP error) already exits 1,
+# so the `|| exit 1` the shell form carried added nothing.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5).status < 500 else 1)" || exit 1
+    CMD ["python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5).status < 500 else 1)"]
 
 # Non-root can't bind <1024; the appliances' compute module targets this port
 # (`api_target_port` in the Azure appliance's Terraform).

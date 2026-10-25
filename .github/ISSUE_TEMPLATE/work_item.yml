@@ -1,0 +1,121 @@
+name: Work item (maintainers)
+description: A tracked piece of engineering, governance or CI work with acceptance criteria. The dropdowns use the project board's values.
+title: "[Work]: "
+labels:
+  - product:networkeyes
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For planned work with a clear outcome. Write for someone with no memory of earlier sessions: say what a thing is the
+        first time it appears. Mark each statement under Evidence as VERIFIED (you saw it) or ASSUMED (you did not).
+        Do not paste secrets or customer data.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What is wrong or missing, and why it matters.
+    validations:
+      required: true
+
+  - type: input
+    id: location
+    attributes:
+      label: Repository and affected path or component
+      placeholder: "saulpatinojr/HCW-NetworkEyes_App, .github/workflows/300-test-codebase.yml"
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: "VERIFIED / ASSUMED statements, each with the command, file and line, or link that shows it."
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Observable outcomes that make this done. One per line.
+    validations:
+      required: true
+
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation steps
+      description: Numbered steps, naming the shell (bash or PowerShell) and the result to expect.
+    validations:
+      required: true
+
+  - type: textarea
+    id: blockers
+    attributes:
+      label: Dependencies or blockers
+      description: Owner decisions, approvals or access this needs. Say "None" if there are none.
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - P0 Critical
+        - P1 High
+        - P2 Medium
+        - P3 Low
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - Critical
+        - High
+        - Medium
+        - Low
+    validations:
+      required: true
+
+  - type: dropdown
+    id: workstream
+    attributes:
+      label: Workstream
+      options:
+        - Presentation and Documentation
+        - Security and Dependencies
+        - Pull Requests and CI
+        - Testing and Validation
+        - GitHub Pages
+        - Governance
+        - Release
+    validations:
+      required: true
+
+  - type: dropdown
+    id: validation_environment
+    attributes:
+      label: Validation environment
+      options:
+        - Local
+        - CI
+        - Staging
+        - Production
+        - Not applicable
+    validations:
+      required: true
+
+  - type: dropdown
+    id: effort
+    attributes:
+      label: Effort
+      options:
+        - XS
+        - S
+        - M
+        - L
+        - XL

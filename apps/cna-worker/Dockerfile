@@ -45,13 +45,15 @@ RUN python -m pip uninstall -y pip
 ARG CNA_BUILD_SHA=
 ENV CNA_BUILD_SHA=${CNA_BUILD_SHA}
 
-USER cna
+# Numeric uid, see the root Dockerfile (hadolint DL3066). 1001 is the `cna` user created above.
+USER 1001
 
 # The worker is a run-once batch process (and a retirement candidate — see spec
 # task 4.5), so a network liveness probe would be misleading. This smoke check
 # verifies the module and its Azure SDK deps import cleanly, which is the
 # meaningful "the container is well-formed" signal for a batch image.
+# Exec form (hadolint DL3025); a failed import exits 1 by itself.
 HEALTHCHECK --interval=60s --timeout=10s --start-period=5s --retries=2 \
-    CMD python -c "import azure.identity, azure.storage.blob" || exit 1
+    CMD ["python", "-c", "import azure.identity, azure.storage.blob"]
 
 CMD ["python", "apps/cna-worker/main.py"]

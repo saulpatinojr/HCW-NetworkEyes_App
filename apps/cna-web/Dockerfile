@@ -16,12 +16,14 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Generate Prisma client before building.
-RUN npx prisma generate
-
+#
 # Pin draw.io shape catalog to ALLOWED_LIBS (azure2 + aws4) at build time.
 # This is layer #1 of the triple-enforced icon-library pinning; the route
 # handler and the Python client re-filter on every call.
-RUN node scripts/filter-shape-index.mjs lib/drawio-mcp/shape-index.json
+#
+# One layer for both steps (hadolint DL3059): they read the same COPY . . layer, so splitting them cached nothing.
+RUN npx prisma generate \
+ && node scripts/filter-shape-index.mjs lib/drawio-mcp/shape-index.json
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
@@ -37,12 +39,14 @@ WORKDIR /app
 # No `apk upgrade`: the image is the pinned base digest plus libc6-compat,
 # nothing that depends on the day it was built. Dependabot's docker ecosystem
 # bumps the digest; a Scout finding on a base apk is fixed there (TODO.md T-702).
-RUN apk add --no-cache libc6-compat
-
+#
 # The bundled npm CLI is unused here (prisma is invoked directly via
 # node_modules/.bin) and periodically carries fixable CVEs in its own
 # vendored deps (tar, brace-expansion, undici) — strip it.
-RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
+#
+# One layer for both (hadolint DL3059).
+RUN apk add --no-cache libc6-compat \
+ && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 
 # Non-root user for the migrator (IMG-002). This container receives the DB-owner
 # connection string and the local-admin hash, so it must not run as uid 0.
@@ -67,7 +71,9 @@ COPY --chmod=755 prisma/migrate.sh ./prisma/migrate.sh
 # Prisma CLI checkpoint telemetry would try to write under $HOME, which the
 # migrator user does not have; disable it explicitly.
 ENV CHECKPOINT_DISABLE=1
-USER nextjs
+# Numeric uid (hadolint DL3066): 1001 is the `nextjs` user created above. With a uid alone Docker still takes the
+# group from /etc/passwd, so the process runs with the same gid as before.
+USER 1001
 
 CMD ["./prisma/migrate.sh"]
 
@@ -81,13 +87,15 @@ ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
 # Add a non-root user for Container Apps security best practices.
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-
+#
 # The bundled npm CLI is unused here (CMD invokes node directly) and
 # periodically carries fixable CVEs in its own vendored deps (tar,
 # brace-expansion, undici) — strip it.
-RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
+#
+# One layer for the user, the group and the strip (hadolint DL3059).
+RUN addgroup --system --gid 1001 nodejs \
+ && adduser --system --uid 1001 nextjs \
+ && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 
 # Because outputFileTracingRoot is set to the repo root (two levels above the
 # app dir), Next.js mirrors the /app path inside .next/standalone — so the
@@ -113,7 +121,8 @@ RUN chown -R nextjs:nodejs ./node_modules/.prisma ./node_modules/@prisma
 ARG CNA_BUILD_SHA=
 ENV CNA_BUILD_SHA=${CNA_BUILD_SHA}
 
-USER nextjs
+# Numeric uid, see the migrator stage (hadolint DL3066).
+USER 1001
 
 EXPOSE 3000
 
@@ -123,7 +132,7 @@ EXPOSE 3000
 # (DB down) still counts as "process alive" for liveness. Uses node (no curl in
 # the runtime image).
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"
+    CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
 
 # server.js lives at /app/app/server.js due to outputFileTracingRoot path mirroring.
 CMD ["node", "app/server.js"]

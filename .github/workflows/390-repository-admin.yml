@@ -166,6 +166,7 @@ jobs:
           gql() { curl -sS -X POST https://api.github.com/graphql -H "Authorization: Bearer $1" -H "Content-Type: application/json" -d "$2"; }
           say "## board-fields on $BOARD_OWNER project $BOARD_NUMBER ($([ "$APPLY" = "true" ] && echo APPLY || echo DRY RUN))"
 
+          # shellcheck disable=SC2016  # GraphQL text: $login and $n are GraphQL variables, not shell expansions
           query='query($login:String!,$n:Int!){ user(login:$login){ projectV2(number:$n){ id title fields(first:100){ nodes{ ... on ProjectV2FieldCommon { name } } } } } }'
           body=$(jq -n --arg q "$query" --arg l "$BOARD_OWNER" --argjson n "$BOARD_NUMBER" '{query:$q,variables:{login:$l,n:$n}}')
 
@@ -200,6 +201,7 @@ jobs:
             {"name":"Target Release","type":"TEXT"},
             {"name":"Last Reviewed","type":"DATE"}
           ]'
+          # shellcheck disable=SC2016  # GraphQL text: $input is a GraphQL variable, not a shell expansion
           mutation='mutation($input: CreateProjectV2FieldInput!){ createProjectV2Field(input:$input){ projectV2Field{ ... on ProjectV2SingleSelectField { id name } ... on ProjectV2Field { id name } } } }'
           echo "$fields" | jq -c '.[]' | while read -r f; do
             name=$(echo "$f" | jq -r .name)
