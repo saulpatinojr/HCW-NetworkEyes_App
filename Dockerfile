@@ -168,7 +168,12 @@ RUN mkdir -p /app/engagements /app/output && chown -R cna:cna /app/engagements /
 # setuptools (declared in its own pip/_vendor/bom.cdx.json) that no
 # `pip install` can replace — strip it from the shipped image, the same
 # reasoning the web image uses to strip npm.
-RUN python -m pip uninstall -y pip
+# virtualenv arrives through diagrams -> pre-commit -> virtualenv, and ships its own SBOM
+# (virtualenv-*.dist-info/sboms/virtualenv.cdx.json) naming the pip wheels it embeds and
+# THEIR vendored certifi, urllib3, msgpack and setuptools. Docker Scout reads that SBOM and
+# fails the first real build on 1 critical and 11 high findings (run 40240474498). Nothing
+# here creates a virtual environment at runtime, so it goes with pip.
+RUN python -m pip uninstall -y pip virtualenv
 
 # Commit the image was built from (200-build-images passes github.sha). The web
 # tier compares it with the newest published build (Admin → Updates); empty
