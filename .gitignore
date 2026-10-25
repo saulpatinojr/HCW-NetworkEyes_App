@@ -61,3 +61,7 @@ PACS/
 
 # Scratch directory of scripts/ci/local-container-checks.sh trivy-image (the exported image tar)
 .trivy-image-scratch/
+
+# Self-hosted draw.io editor: fetched by the drawio-webapp stage of apps/cna-web/Dockerfile (or by hand for local
+# development, see the comment on that stage), never committed.
+apps/cna-web/public/drawio/

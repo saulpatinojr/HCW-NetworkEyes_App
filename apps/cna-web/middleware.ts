@@ -23,7 +23,7 @@ export function middleware(req: NextRequest) {
     img-src 'self' data:;
     font-src 'self';
     connect-src 'self' https://login.microsoftonline.com https://*.openai.azure.com;
-    frame-src 'self' https://embed.diagrams.net;
+    frame-src 'self';
     frame-ancestors 'none';
     object-src 'none';
     upgrade-insecure-requests;
@@ -61,6 +61,8 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  // Match all routes except API, Next.js internals, and static assets.
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+  // Match all routes except API, Next.js internals, and static assets. /drawio/ is the self-hosted diagram editor:
+  // its files carry their own Content-Security-Policy (next.config.ts), and a second one from here would be
+  // enforced as well and break it.
+  matcher: ["/((?!api|drawio/|_next/static|_next/image|favicon.ico).*)"],
 };
