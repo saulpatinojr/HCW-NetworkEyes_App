@@ -146,6 +146,7 @@ updates:
       next-ecosystem:
         patterns:
           - "next"
+          - "eslint-config-next"
           - "next-auth"
           - "react"
           - "react-dom"

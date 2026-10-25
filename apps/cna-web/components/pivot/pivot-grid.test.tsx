@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import type { StatMasterRecord } from "@/lib/types/stat-master";
 import { PivotGrid } from "./pivot-grid";
 
@@ -36,17 +36,23 @@ const RECORDS: StatMasterRecord[] = [
 
 let container: HTMLDivElement;
 let root: Root;
+let consoleError: MockInstance<typeof console.error>;
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
+  // React reports a duplicate or missing list key through console.error; a spy turns that into a failure.
+  consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
+  const logged = consoleError.mock.calls.map((args) => args.map(String).join(" "));
+  consoleError.mockRestore();
+  expect(logged, "React logged an error or warning (for example a duplicate list key)").toEqual([]);
 });
 
 function render(ui: React.ReactElement) {
@@ -99,12 +105,43 @@ describe("PivotGrid", () => {
     expect(footerRow()).toHaveLength(width);
   });
 
-  it("aligns the first column left and the rest right, and styles the row label", () => {
+  it("aligns the first column left and the rest right in the header and in every body row, and styles the row label", () => {
     render(<PivotGrid records={RECORDS} />);
     const headers = [...container.querySelectorAll("thead th")];
     expect(headers[0].className).toContain("text-left");
     expect(headers.slice(1).every((h) => h.className.includes("text-right"))).toBe(true);
+
+    const rows = [...container.querySelectorAll("tbody tr")];
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      const tds = [...row.querySelectorAll("td")];
+      expect(tds[0].className).toContain("text-left");
+      expect(tds[0].className).toContain("pr-4");
+      expect(tds.slice(1).every((td) => td.className.includes("text-right") && td.className.includes("pl-4"))).toBe(true);
+    }
     expect(container.querySelector("tbody tr td span")?.className).toContain("font-semibold");
+  });
+
+  it("logs no React key warning across a picker change, a filter and a data swap", () => {
+    render(<PivotGrid records={RECORDS} />);
+    choose(picker("Rows"), "severity");
+    choose(picker("Columns"), "category");
+    choose(picker("Measure"), "est_monthly_cost_impact");
+    render(<PivotGrid records={[record({ category: "Identity", severity: "Medium", finding_count: 9 })]} />);
+    // afterEach fails the test if console.error was called; make the intent explicit here too.
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it("keeps column values named like the grid's own columns apart from them", () => {
+    render(
+      <PivotGrid
+        records={["__row", "__total", "key", "total", "High"].map((severity, i) =>
+          record({ severity, finding_count: i + 1 }),
+        )}
+      />,
+    );
+    expect(headerRow()).toEqual(["Category", "High", "__row", "__total", "key", "total", "Total"]);
+    expect(bodyRows()).toEqual([["Network", "5", "1", "2", "3", "4", "15"]]);
   });
 
   it("drops the Total column and labels the single value column with the measure when no column dimension is picked", () => {
