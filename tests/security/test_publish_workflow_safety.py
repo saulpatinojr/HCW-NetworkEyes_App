@@ -266,6 +266,11 @@ class TestReleasePromotesTheScannedDigest:
             assert needle not in text, needle
         assert "refs/tags/v*" in self.text.split("name:", 1)[0]
 
+    def test_the_header_names_the_gap_between_the_check_and_the_creation(self):
+        header = " ".join(self.text.split("name:", 1)[0].split())
+        assert "between that check and the creation another writer" in header
+        assert "immutable tags" in header and "was not checked" in header
+
     def test_the_header_states_the_ruleset_and_the_first_release_flow(self):
         header = self.text.split("name:", 1)[0]
         assert "SECOND RULESET" in header and "refs/tags/v*" in header and "Image Push" in header
@@ -366,6 +371,12 @@ class TestDockerLoginRehearsal:
     def test_it_holds_only_the_permissions_the_login_needs_and_no_environment(self):
         assert self.job["permissions"] == {"contents": "read", "id-token": "write"}
         assert "environment" not in self.job
+
+    def test_it_proves_the_live_wording_of_a_missing_tag_before_creating_it(self):
+        retag = next(s for s in self.steps if s.get("id") == "retag")["run"]
+        absent = retag.index('registry_digest "${IMAGE}:${TAG}" > /dev/null || rc=$?')
+        assert absent < retag.index("imagetools create")
+        assert '[ "$rc" -ne 1 ]' in retag
 
     def test_it_never_prints_the_connection_id(self):
         check = self.steps[_index_of(self.job, "Validate Docker Hub namespace")]["run"]
@@ -649,7 +660,17 @@ class TestBuildWorkflowStandsAlone:
         assert tip < script.index('write_table "Verified') < script.index("imagetools create")
         assert job["permissions"] == {"contents": "read", "id-token": "write"}
         header = self.text.split("\non:\n", 1)[0]
-        assert "only ever move to the tip of the default branch" in " ".join(header.split())
+        flat = " ".join(header.split())
+        assert "move only while the built commit is still current" in flat
+        assert "scripts/ci/paths_touch_build.py" in flat and "there is one list and no copy" in flat
+        assert "does not strand the tags" in flat
+        # The by-design case and the transition are written down.
+        assert "build A running, B replaced by C, C fails its scan" in flat
+        assert "*-latest stays at the build before A" in flat
+        assert "Transition" in " ".join(
+            self.text.split()
+        ) and "the tip guard covers `*-latest`" in " ".join(self.text.split())
+        assert "the run of the tip owns" not in self.text and "only the tip" not in flat
 
     def test_tag_images_asks_for_the_longest_token_too(self):
         job = self.doc["jobs"]["tag-images"]

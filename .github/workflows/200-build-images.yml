@@ -28,8 +28,17 @@ name: "200 · Build Container Images"
 # (Actions, Re-run failed jobs; the build jobs and their outputs are kept). It verifies every digest again and then
 # repeats `imagetools create`, which gives a tag the digest it already has without error, so nothing is duplicated.
 # Do not re-run the whole workflow for this: that rebuilds everything under a new run id.
-# The *-latest tags only ever move to the tip of the default branch: a re-run of a superseded run (or a run that a
-# newer push overtook) attaches its sha tags and leaves *-latest alone, so `*-latest` cannot move backwards.
+# The *-latest tags move only while the built commit is still current: it is the tip of the default branch, or an
+# ancestor of the tip with nothing between them that this workflow builds from. That is read from GitHub's compare of
+# the two commits (status `ahead`, the changed file names, renames included), and the file names are matched against
+# THIS file's own `on.push.paths` by scripts/ci/paths_touch_build.py, so there is one list and no copy. A documentation,
+# test or other-workflow commit that lands during a build, or before a re-run, therefore does not strand the tags. In
+# every other case (the tip changed a build path, the commits diverged, the comparison is too large to list: GitHub
+# lists at most 250 commits and 300 files, https://docs.github.com/en/rest/commits/commits#compare-two-commits) the
+# run attaches its immutable sha tags and leaves every *-latest tag alone; the run of the newer commit that changed a
+# build path owns them. If the tip or the comparison cannot be read at all, NOTHING is tagged (re-run the job).
+# By design, when that newer run does not finish: build A running, B replaced by C, C fails its scan. A attaches its
+# sha tags and leaves *-latest, C never tags, so *-latest stays at the build before A until a later successful run.
 #
 # Signing (TODO.md T-703). Once an image has passed its gates, the build job
 # signs the digest with cosign — keyless, under this workflow's OIDC identity
@@ -77,11 +86,13 @@ on:
 # atomic" above for the recovery.
 # Queued runs for the same ref still collapse to the newest one, so a burst of
 # Dependabot merges costs at most one superseded full build, and runs finish in
-# push order (the queued run starts only after the in-flight one completes), so
-# `*-latest` can never move backwards.
+# push order (the queued run starts only after the in-flight one completes). The tip guard in
+# `tag-images` (see the header) is what makes `*-latest` unable to move backwards.
 #
 # A rehearsal has a concurrency group of its own (the last part of the name): in the group of the real
-# builds it would take the "newest queued run" place and cancel a pending real build.
+# builds it would take the "newest queued run" place and cancel a pending real build. Transition: the group
+# name changed with that, so until the runs that started under the old name (without the last part) have
+# finished, one of them can run alongside the first run of the new group; the tip guard covers `*-latest`.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.rehearsal && 'rehearsal' || 'build' }}
   cancel-in-progress: false
@@ -606,26 +617,61 @@ jobs:
             exit 1
           fi
 
-          # *-latest must never move backwards. Only the tip of the default branch may move it: a run of an
-          # older commit (a re-run of a superseded run, or a run overtaken by a newer push while it was building)
-          # attaches its immutable sha tags and leaves every *-latest tag alone; the run of the tip owns them. If
-          # the tip cannot be read, nothing is tagged.
+          # *-latest must never move backwards, and must not be stranded. They move when this commit is the tip of
+          # the default branch, or is an ancestor of it and nothing after it changes a file this workflow builds
+          # from (the header explains why, and what happens otherwise). If the tip or the comparison cannot be
+          # read, nothing is tagged.
           TIP="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${DEFAULT_BRANCH}" --jq .sha)" || TIP=""
           if ! [[ "$TIP" =~ ^[0-9a-f]{40}$ ]]; then
             echo "::error::Could not read the tip of ${DEFAULT_BRANCH} (got '${TIP}'), so it is not known whether this commit may move the *-latest tags; refusing to tag anything."
             exit 1
           fi
           MOVE_LATEST=yes
+          WHY=""
+          NOTE=""
           if [ "$TIP" != "$GITHUB_SHA" ]; then
             MOVE_LATEST=no
-            echo "::warning::${GITHUB_SHA} is not the tip of ${DEFAULT_BRANCH} (${TIP}); its sha tags are attached and the *-latest tags are NOT moved."
+            COMPARE="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${GITHUB_SHA}...${TIP}")" || COMPARE=""
+            if ! jq -e 'type == "object" and has("status")' > /dev/null 2>&1 <<< "$COMPARE"; then
+              echo "::error::Could not compare ${GITHUB_SHA} with the tip ${TIP} of ${DEFAULT_BRANCH}, so it is not known whether the *-latest tags may move; refusing to tag anything."
+              exit 1
+            fi
+            CMP_STATUS="$(jq -r '.status' <<< "$COMPARE")"
+            CMP_AHEAD="$(jq -r '.ahead_by // 0' <<< "$COMPARE")"
+            CMP_FILES="$(jq '(.files // []) | length' <<< "$COMPARE")"
+            if [ "$CMP_STATUS" != "ahead" ]; then
+              WHY="the tip is not ahead of this commit (compare status '${CMP_STATUS}')"
+            elif [ "$CMP_FILES" -ge 300 ] || [ "$CMP_AHEAD" -gt 250 ]; then
+              WHY="the comparison with the tip is too large to list completely (${CMP_AHEAD} commits, ${CMP_FILES} files; GitHub lists at most 250 commits and 300 files)"
+            else
+              CHANGED="$(mktemp)"
+              jq -r '(.files // [])[] | .filename, (.previous_filename // empty)' <<< "$COMPARE" > "$CHANGED"
+              rc=0
+              TOUCHING="$(python3 scripts/ci/paths_touch_build.py .github/workflows/200-build-images.yml < "$CHANGED")" || rc=$?
+              case "$rc" in
+                0)
+                  MOVE_LATEST=yes
+                  NOTE="The tip ${TIP} is ahead of this commit and changes nothing this workflow builds from, so the *-latest tags move."
+                  ;;
+                1) WHY="later commits change files this workflow builds from ($(tr '\n' ' ' <<< "$TOUCHING")); the run of the commit that changed them owns the *-latest tags" ;;
+                *)
+                  echo "::error::Could not read the paths this workflow builds from (exit ${rc}); refusing to tag anything."
+                  exit 1
+                  ;;
+              esac
+            fi
+            if [ "$MOVE_LATEST" = no ]; then
+              echo "::warning::The *-latest tags are NOT moved: ${WHY}. Its sha tags are attached."
+            fi
           fi
 
           # The record is written BEFORE the first tag moves, so a failure part-way through the loop still
           # leaves it. Without the closing line below, tagging did not finish: re-run this job.
           write_table "Verified; tagging in progress (no closing line below means it stopped part-way: re-run this job)"
           if [ "$MOVE_LATEST" = no ]; then
-            echo "The *-latest tags will NOT be moved: this commit is not the tip of ${DEFAULT_BRANCH} (${TIP})." >> "$GITHUB_STEP_SUMMARY"
+            echo "The *-latest tags will NOT be moved: ${WHY}." >> "$GITHUB_STEP_SUMMARY"
+          elif [ -n "$NOTE" ]; then
+            echo "$NOTE" >> "$GITHUB_STEP_SUMMARY"
           fi
 
           for c in $COMPONENTS; do
@@ -633,7 +679,7 @@ jobs:
             while IFS= read -r t; do
               name="${t##*:}"
               if [ "$MOVE_LATEST" = no ] && { [ "$name" = latest ] || [[ "$name" == *-latest ]]; }; then
-                echo "Not moving ${t}: this commit is not the tip of ${DEFAULT_BRANCH}."
+                echo "Not moving ${t}: ${WHY}."
                 continue
               fi
               [ -n "$t" ] && ARGS+=(-t "$t")
@@ -644,7 +690,7 @@ jobs:
           if [ "$MOVE_LATEST" = yes ]; then
             echo "### All five components tagged" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "### Sha tags attached; the *-latest tags were not moved (this commit is not the tip of ${DEFAULT_BRANCH})" >> "$GITHUB_STEP_SUMMARY"
+            echo "### Sha tags attached; the *-latest tags were not moved (${WHY})" >> "$GITHUB_STEP_SUMMARY"
           fi
 
   # Dry run of the Docker Hub OIDC connection (workflow_dispatch with `rehearsal`, main only). It does
@@ -811,6 +857,14 @@ jobs:
           source scripts/ci/registry_digest.sh
           IMAGE="docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}"
           TAG="rehearsal-${GITHUB_RUN_ID}"
+          # Proves the live wording of a missing tag: registry_digest.sh must read it as absent (status 1), not as
+          # an error, or 310 and find_release_image.sh would stop on every tag that does not exist yet.
+          rc=0
+          registry_digest "${IMAGE}:${TAG}" > /dev/null || rc=$?
+          if [ "$rc" -ne 1 ]; then
+            echo "::error::A tag that does not exist gave status ${rc}, not 1 (the registry's message is above): its wording no longer matches scripts/ci/registry_digest.sh."
+            exit 1
+          fi
           docker buildx imagetools create -t "${IMAGE}:${TAG}" "${IMAGE}@${DIGEST}"
           READ="$(registry_digest "${IMAGE}:${TAG}")"
           if [ "$READ" != "$DIGEST" ]; then

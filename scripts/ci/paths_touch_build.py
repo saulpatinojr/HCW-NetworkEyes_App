@@ -5,8 +5,9 @@
 
 Reads file names (one per line) on stdin and the `on.push.paths` list of the given workflow, prints each file that
 matches one of the patterns and exits 1 if there is any (0 and no output when none does). 310-release-version.yml
-uses it to accept a tagged commit that changed nothing 200 builds from (documentation, or the manifest commit every
-successful 200 ends with) and to refuse one that did.
+(through find_release_image.sh) uses it to accept a tagged commit that changed nothing 200 builds from (documentation,
+tests, another workflow) and to refuse one that did; 200's tag-images job uses it to decide whether a newer commit
+leaves the *-latest tags to this run. The pattern list is always the workflow's own: there is no second copy.
 
 Only the Python standard library is used: the runner's system Python has no PyYAML, and the `paths:` list is a flat
 block of `- pattern` lines. GitHub's glob rules for path filters are followed: `*` matches within one path segment,

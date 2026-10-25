@@ -20,6 +20,9 @@
 # below is about the GitHub ref of this run, and its one Image Push scope on the repository covers all five tags
 # (the release job has no other registry credential than that login). Every tag is checked before any is created,
 # and an existing tag with another digest stops the release (fail closed); a re-run skips tags already correct.
+# Small known gap: between that check and the creation another writer could create the same tag with another digest;
+# the post-check then fails the job, but the tag has been moved. Docker Hub's immutable tags, if the plan offers
+# them, would close it; that was not checked.
 #
 # WHICH COMMIT TO TAG. A commit that changes only documentation, tests or another workflow touches nothing 200 builds
 # from, so the path filter gives it no 200 run. The search therefore walks back from the tagged commit to the nearest
