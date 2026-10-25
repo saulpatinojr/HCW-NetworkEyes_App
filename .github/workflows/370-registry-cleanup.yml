@@ -16,6 +16,18 @@ name: "370 · Docker Hub Registry Cleanup"
 # digest, so the pin could stop resolving. Only the CLI image has a release tag, and the 310 release notes list
 # the digests of all five images. A consumer that needs an older web, api, worker or migrator image should copy it
 # to its own registry at the time it adopts it, or raise KEEP_COUNT here (the cost is Docker Hub storage).
+#
+# A `<component>-sha-<7>` tag is also KEPT when an image of it is shared with a tag outside the SHA patterns. A
+# release tag (`1.2.3`, from 310, which tags the very index 200 built) and every `*-latest` tag are such tags, and so
+# is any future `<component>-<version>` tag. The comparison uses the digests Docker Hub lists for each tag (the
+# tag's own `digest` and every `images[].digest`); a SHA tag that lists no digest at all is kept too, because
+# sharing cannot be ruled out. So deleting a SHA tag can never be what removes the manifest of a release.
+#
+# Not verified: Docker Hub's semantics of `DELETE .../tags/<tag>/` when another tag points at the same manifest. The
+# current Hub API reference (https://docs.docker.com/reference/api/hub/latest/, OpenAPI file
+# https://docs.docker.com/reference/api/hub/latest.yaml) documents no tag deletion at all, and documents no top-level
+# `digest` on a tag, only `images[].digest`; the delete call below was confirmed against the live API by this
+# workflow's author, and the rule above is there so that nothing depends on the answer.
 
 on:
   workflow_dispatch:
@@ -157,7 +169,8 @@ jobs:
               exit 1
             fi
 
-            jq -c '[.results[] | {name: .name, last_updated: .last_updated}]' <<<"$PAGE" > /tmp/page.json
+            # `digests` = the tag's own digest (the index, when Hub reports it) and every image digest listed for it.
+            jq -c '[.results[] | {name: .name, last_updated: .last_updated, digests: (([.digest] + [(.images // [])[].digest]) | map(select(. != null and . != "")) | unique)}]' <<<"$PAGE" > /tmp/page.json
             jq -s '.[0] + .[1]' "$ALL_TAGS_JSON" /tmp/page.json > /tmp/merged.json
             mv /tmp/merged.json "$ALL_TAGS_JSON"
             URL=$(jq -r '.next // empty' <<<"$PAGE")
@@ -166,21 +179,34 @@ jobs:
           TOTAL=$(jq 'length' "$ALL_TAGS_JSON")
           echo "Fetched $TOTAL total tags from Docker Hub."
 
+          # Every digest that a tag OUTSIDE the SHA patterns points to (release tags, *-latest, signature
+          # referrer tags, any future <component>-<version> tag).
+          PATTERNS_JSON=$(printf '%s\n' "${COMPONENT_PATTERNS[@]}" | jq -R . | jq -sc .)
+          PERMANENT_JSON=$(jq -c --argjson pats "$PATTERNS_JSON" \
+            '[.[] | select((.name as $n | any($pats[]; . as $p | $n | test($p))) | not) | .digests[]] | unique' \
+            "$ALL_TAGS_JSON")
+
           DELETED=0
           FAILED=0
           KEPT=0
+          KEPT_SHARED=0
 
           for component in "${!COMPONENT_PATTERNS[@]}"; do
             pattern="${COMPONENT_PATTERNS[$component]}"
-            # Newest-first list of tag names matching this component's SHA pattern.
-            mapfile -t tags < <(jq -r --arg pat "$pattern" \
-              '[.[] | select(.name | test($pat))] | sort_by(.last_updated) | reverse | .[].name' \
+            # Newest-first rows "<tag><TAB><own|shared|unknown>" for this component's SHA pattern: `shared` when one
+            # of the tag's digests is also a digest of a tag outside the patterns, `unknown` when Hub lists none.
+            mapfile -t rows < <(jq -r --arg pat "$pattern" --argjson perm "$PERMANENT_JSON" \
+              '[.[] | select(.name | test($pat))] | sort_by(.last_updated) | reverse | .[]
+               | [.name, (if (.digests | length) == 0 then "unknown" elif (.digests | any(. as $d | $perm | index($d) != null)) then "shared" else "own" end)]
+               | @tsv' \
               "$ALL_TAGS_JSON")
 
-            echo "--- $component: ${#tags[@]} SHA-tagged images ---"
+            echo "--- $component: ${#rows[@]} SHA-tagged images ---"
             i=0
-            for tag in "${tags[@]}"; do
+            for row in "${rows[@]}"; do
               i=$((i + 1))
+              tag="${row%%$'\t'*}"
+              sharing="${row#*$'\t'}"
               protected=false
               for p in $PROTECTED_RAW; do
                 [ "$tag" = "$p" ] && protected=true && break
@@ -188,6 +214,13 @@ jobs:
 
               if [ "$protected" = true ] || [ "$i" -le "$KEEP" ]; then
                 KEPT=$((KEPT + 1))
+                continue
+              fi
+
+              if [ "$sharing" != "own" ]; then
+                echo "keeping: $tag (${sharing}: a tag outside the SHA patterns lists the same image, or Docker Hub lists no digest for it)"
+                KEPT=$((KEPT + 1))
+                KEPT_SHARED=$((KEPT_SHARED + 1))
                 continue
               fi
 
@@ -211,7 +244,7 @@ jobs:
           done
 
           echo ""
-          echo "Summary: kept $KEPT, $([ "$DRY_RUN" = "true" ] && echo "would delete" || echo "deleted") $DELETED (retention: last $KEEP per component + *-latest)."
+          echo "Summary: kept $KEPT ($KEPT_SHARED of them because a release or other non-SHA tag shares their image), $([ "$DRY_RUN" = "true" ] && echo "would delete" || echo "deleted") $DELETED (retention: last $KEEP per component + *-latest)."
           if [ "$FAILED" -gt 0 ]; then
             echo "::error::$FAILED tag(s) could not be deleted; the summary above counts only confirmed deletions."
             exit 1

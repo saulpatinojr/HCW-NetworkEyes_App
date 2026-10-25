@@ -189,6 +189,30 @@ Reference** explains each value in full.
 
 ---
 
+## Verifying images
+
+Every published digest is signed (cosign, keyless) and carries a SLSA provenance attestation made by `200-build-images.yml`
+on `main`. Resolve a tag to a digest, then verify that exact digest before you run it. A digest that does not verify must
+not be deployed.
+
+```bash
+IMAGE=docker.io/hybridcloudworks/img-ne-appliance-app@sha256:<64 hex>
+ID=https://github.com/saulpatinojr/HCW-NetworkEyes_App/.github/workflows/200-build-images.yml@refs/heads/main
+ISS=https://token.actions.githubusercontent.com
+cosign verify "$IMAGE" --certificate-identity "$ID" --certificate-oidc-issuer "$ISS"
+cosign verify-attestation "$IMAGE" --type slsaprovenance02 --certificate-identity "$ID" --certificate-oidc-issuer "$ISS"
+```
+
+Pass `--use-signed-timestamps` if you want the signed timestamp from the timestamp authority; without it cosign 3 uses the
+transparency-log time. The attestation's `predicate.builder.id` begins with
+`https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/runs/`. The identity string must match exactly: renaming or
+transferring the repository, or renaming the workflow file or the default branch, changes it (the change is announced in the
+release notes). `scripts/ci/verify_signed_digest.sh` does the same checks and also binds the digest to a commit. The five
+digests of each build are in the step summary of its `200-build-images.yml` run, and those of a release are in its release
+notes.
+
+---
+
 ## Repository conventions
 
 - **Four documents plus `CLAUDE.md`, one wiki.** `README.md`, `CHANGELOG.md`, `REVIEW.md`,

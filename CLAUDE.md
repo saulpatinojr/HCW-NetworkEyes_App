@@ -60,7 +60,10 @@ or record a `TODO.md` item naming them — never leave one side implied.
    build manifest. A consumer pulls by digest (tag for people and for the web tier's image-update
    check, digest as the authoritative pull); floating `*-latest` tags are never deployed.
    `370-registry-cleanup.yml` keeps the newest 10 `<component>-sha-<7>` tags per component, the
-   `*-latest` tags and every release tag; see its header for what that does not protect.
+   `*-latest` tags, every release tag and any sha tag whose image a release tag shares; see its header for
+   what that does not protect. Tagging is not atomic: if `tag-images` stops part-way, the table shows
+   "tagging in progress" without the closing line, and the recovery is to re-run that job (it verifies
+   every digest again; re-creating a tag with the digest it already has is not an error).
 3. **No push notification.** `200-build-images.yml` calls nothing outside this repository and its
    Docker Hub repository: it sends no dispatch event and reads no variable naming another
    repository.
