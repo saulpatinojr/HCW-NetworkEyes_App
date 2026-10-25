@@ -1,0 +1,109 @@
+name: Bug report
+description: Something in the web app, the API, the worker, the cna package, the engine package, the images or the CI does not work as expected.
+title: "[Bug]: "
+labels:
+  - bug
+  - product:networkeyes
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting this. Please search the existing issues first, and do not paste credentials, tokens,
+        customer data, tenant or subscription identifiers or real network topology.
+        A security problem is not a bug report: use the private route in
+        [SECURITY.md](https://github.com/saulpatinojr/HCW-NetworkEyes_App/blob/main/.github/SECURITY.md).
+
+  - type: checkboxes
+    id: duplicate_check
+    attributes:
+      label: Duplicate check
+      options:
+        - label: I searched the existing issues and did not find a duplicate.
+          required: true
+
+  - type: input
+    id: summary
+    attributes:
+      label: Bug summary
+      description: One sentence on what is broken.
+      placeholder: "The encyclopedia report fails to render when ..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component
+      description: Choose the closest one.
+      options:
+        - Web app (apps/cna-web)
+        - API (apps/cna-api)
+        - Worker (apps/cna-worker)
+        - CLI and analysis engine (cna package)
+        - Azure network engine package (packages/cna-azure-network-engine)
+        - Container images and the image build
+        - CI and repository policy (.github)
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment_kind
+    attributes:
+      label: Where did you see it
+      options:
+        - Azure appliance
+        - AWS appliance
+        - Local development
+        - CI
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened
+      description: Say what you did and what went wrong, in plain words. Include the exact error text when you have it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: What you expected to happen
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps_to_reproduce
+    attributes:
+      label: Steps to reproduce
+      description: One action per line, with the exact command or page.
+      placeholder: |
+        1. Sign in as ...
+        2. Open ...
+        3. See the failure
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The image tag (for example `web-sha-1a2b3c4`), the release, or the commit. In the web app it is shown under Admin, Updates.
+      placeholder: "web-sha-1a2b3c4"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Output or logs
+      description: Paste the error text. Remove anything private first.
+      render: shell
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact and workaround
+      description: Who or what is affected, and anything that works around it.

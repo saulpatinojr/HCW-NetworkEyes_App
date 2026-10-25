@@ -93,6 +93,10 @@ RUN uv export --locked --no-default-groups --no-emit-project --no-emit-workspace
 # is available "inside the Docker container", which is made true here.
 FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS drawio-fetch
 
+# bash with pipefail: the checksum step below is a pipe (`echo | sha256sum -c -`), and a failure on the left
+# of a pipe must fail the build (hadolint DL4006). The default /bin/sh would hide it.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 ARG DRAWIO_VERSION=31.3.2
 ARG DRAWIO_SHA256=725453f32ef7f2f63f8b50b374857a5c312e2aaabcf221cb0600332741ae1094
 
@@ -110,7 +114,9 @@ COPY --from=builder-lab /install-lab /usr/local
 RUN python -m pip uninstall -y pip \
  && groupadd --gid 1001 cna \
  && useradd --uid 1001 --gid cna --no-create-home --shell /usr/sbin/nologin cna
-USER cna
+# Numeric uid: an orchestrator can prove a numeric user is not root, a name it cannot (hadolint DL3066).
+# 1001 is the `cna` user created above; Docker takes its group from /etc/passwd.
+USER 1001
 ENV CNA_EDITION=lab
 # Exit 0 when azure is NOT importable and no identity variable is set; exit 1 otherwise.
 CMD ["python", "-m", "cna_azure_network_engine.edition"]
@@ -168,11 +174,13 @@ RUN python -m pip uninstall -y pip
 ARG CNA_BUILD_SHA=
 ENV CNA_BUILD_SHA=${CNA_BUILD_SHA}
 
-USER cna
+# Numeric uid, see the lab stage (hadolint DL3066).
+USER 1001
 ENV CNA_EDITION=appliance
 
+# Exec form (hadolint DL3025): no shell between Docker and the process.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD cna --help > /dev/null 2>&1 || exit 1
+    CMD ["cna", "--help"]
 
 ENTRYPOINT ["cna"]
 CMD ["--help"]
@@ -180,4 +188,7 @@ CMD ["--help"]
 # ---- the edition that was asked for ----
 # `docker build .` is the appliance image exactly as before; `--build-arg EDITION=lab`
 # selects the build-only lab target. Any other value fails at builder-lab.
+# DL3006 cannot see through `final-${EDITION}`: it is one of the two stages named above (final-lab,
+# final-appliance), both pinned by digest, and any other value fails at builder-lab. Ignored on this line only.
+# hadolint ignore=DL3006
 FROM final-${EDITION}

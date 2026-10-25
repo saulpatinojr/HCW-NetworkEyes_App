@@ -1,0 +1,18 @@
+# GitHub reads this file from .github/ISSUE_TEMPLATE/config.yml.
+
+# Structured forms are the default. Set this to true only when the maintainers
+# intentionally accept unstructured issue reports.
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/saulpatinojr/HCW-NetworkEyes_App/security/advisories/new
+    about: Report a vulnerability privately, as the security policy describes. Never in a public issue.
+  - name: Problems deploying or running the appliance (Azure)
+    url: https://github.com/saulpatino-cbts/Work-Cloud_Network_Azure_Appliance/issues/new/choose
+    about: This repository builds the images; the Azure appliance repository deploys and operates them.
+  - name: Problems deploying or running the appliance (AWS)
+    url: https://github.com/saulpatino-cbts/Work-Cloud_Network_AWS_Appliance/issues/new/choose
+    about: This repository builds the images; the AWS appliance repository deploys and operates them.
+  - name: Questions about the lab edition
+    url: https://github.com/saulpatinojr/HCW-NetworkEyes_AddOn/issues/new/choose
+    about: The free upload-only lab edition lives in its own repository.

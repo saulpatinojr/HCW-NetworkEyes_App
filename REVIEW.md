@@ -33,6 +33,7 @@ Anything an engineer can solve without external input belongs in [`TODO.md`](TOD
 | [R-021](#r-021--byo-api-mode-scope-for-10) | Ship 1.0 `saas`-only or complete R-011 first | Product owner / Security | Open |
 | [R-022](#r-022--version-100-release-identity) | Version 1.0.0 identity: withdrawn `[1.0.0]` heading, version strings, first tag | Repository owner | Open — before the first `v*` tag |
 | [R-025](#r-025--the-drawio-mcp-route-is-internal-only) | Is `/api/drawio-mcp` public or internal only? | Repository owner | Decided 2026-10-24 — internal only; implemented (ticket #245) |
+| [R-026](#r-026--owner-steps-after-the-governance-and-ci-hygiene-change) | Add three new checks to the `Protect main` ruleset; confirm private vulnerability reporting; the `370` token | Repository owner | Open — raised with the governance and CI hygiene pull request (tickets #247, #252, #253) |
 
 ---
 
@@ -908,3 +909,12 @@ A customer cannot tell what "1.0" they run; a new `[1.0.0]` heading would collid
   setting. This adds no new setting. Not chosen: `public-exempt` (an intentional open route).
 - **Raised:** 2026-10-24, ticket #245.
 - **Status:** Decided and implemented in the pull request linked from the ticket; the appliance follow-up check is `TODO.md` T-735
+
+## R-026 — Owner steps after the governance and CI hygiene change
+
+- **What changed:** the pull request for tickets #247, #252 and #253 added `.github/SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `PULL_REQUEST_TEMPLATE.md`, three issue forms, and three jobs in `300-test-codebase.yml`. It did not change a repository setting, the ruleset, a secret or a variable.
+- **Step 1 — make the new checks required (ruleset).** Open <https://github.com/saulpatinojr/HCW-NetworkEyes_App/settings/rules>, choose `Protect main`, find `Require status checks to pass`, and add these three, exactly as written, keeping the seven that are already there: `Dockerfile Lint (hadolint)`, `Workflow Lint (actionlint)`, `Dependency Review`. Add them only after the pull request has merged and each has run once, otherwise GitHub offers no name to pick. `Dependency Review` is skipped on a push or a manual run and counts as passed there.
+- **Step 2 — confirm private vulnerability reporting.** A read-only check on 2026-10-25 returned `enabled: true`. Open <https://github.com/saulpatinojr/HCW-NetworkEyes_App/security> and confirm that `Report a vulnerability` is shown; `.github/SECURITY.md` sends reporters there.
+- **Step 3 — the `370` registry token (ticket #252, unchanged).** `370-registry-cleanup.yml` still uses the personal access token `DOCKERHUB_PERSONAL_TOKEN`; Docker Hub's OIDC connection does not replace it for deleting tags. The decision to keep it or to change how tags are removed is still open.
+- **Raised:** 2026-10-25.
+- **Status:** Open

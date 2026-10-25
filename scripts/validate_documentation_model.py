@@ -12,7 +12,11 @@ AI coding agent must not infer wrongly (the core ↔ appliance contract above
 all), and two temporary working documents with a planned retirement,
 CNA-0.90-updates.md and REFACTOR_APP.md. That makes seven root documents at
 most. Vendored agent configuration (.claude/, .agents/, .codex/, .kiro/) is
-excluded. Platform-required documents under .github/ are permitted.
+excluded. The community-health files GitHub reads from .github/ are permitted, and only where
+GitHub reads them: SECURITY.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md, PULL_REQUEST_TEMPLATE.md,
+SUPPORT.md and FUNDING.md directly in .github/, and markdown files directly in .github/ISSUE_TEMPLATE/
+and .github/PULL_REQUEST_TEMPLATE/ (issue forms are .yml, which is not a document suffix). The same
+name anywhere else, or any other markdown under .github/, is a violation (ticket #247).
 
 The required four are enforced in both directions: a missing required document
 is a violation, not just an extra one (T-605).
@@ -96,8 +100,8 @@ EXCLUDED_DIRS = {
     "venv",
 }
 
-# Platform-required documents GitHub reads from these paths. None exist
-# today; the allowance is here so adding one later does not break CI.
+# Community-health documents GitHub reads from `.github/<name>`. Compared case-folded, like the root documents
+# (GitHub itself accepts pull_request_template.md and PULL_REQUEST_TEMPLATE.md).
 ALLOWED_GITHUB_DOCUMENTS = {
     "PULL_REQUEST_TEMPLATE.md",
     "SECURITY.md",
@@ -106,6 +110,12 @@ ALLOWED_GITHUB_DOCUMENTS = {
     "SUPPORT.md",
     "FUNDING.md",
 }
+
+_ALLOWED_GITHUB_LOWER = {name.lower() for name in ALLOWED_GITHUB_DOCUMENTS}
+
+# Directories GitHub reads template collections from: `.github/ISSUE_TEMPLATE/<file>` and
+# `.github/PULL_REQUEST_TEMPLATE/<file>`. One level only.
+GITHUB_TEMPLATE_DIRECTORIES = {"ISSUE_TEMPLATE", "PULL_REQUEST_TEMPLATE"}
 
 
 def is_excluded(relative: Path) -> bool:
@@ -120,10 +130,10 @@ def is_allowed(relative: Path) -> bool:
     if len(relative.parts) == 1:
         return relative.name.lower() in _ALLOWED_ROOT_LOWER
     if relative.parts[0] == ".github":
-        if relative.name in ALLOWED_GITHUB_DOCUMENTS:
-            return True
-        # Issue/PR template collections, e.g. .github/ISSUE_TEMPLATE/bug.md
-        return "ISSUE_TEMPLATE" in relative.parts or "PULL_REQUEST_TEMPLATE" in relative.parts
+        if len(relative.parts) == 2:
+            return relative.name.lower() in _ALLOWED_GITHUB_LOWER
+        # Issue/PR template collections, e.g. .github/ISSUE_TEMPLATE/bug.md (exactly one level down)
+        return len(relative.parts) == 3 and relative.parts[1] in GITHUB_TEMPLATE_DIRECTORIES
     return False
 
 
@@ -193,7 +203,15 @@ def validate() -> bool:
             file=sys.stderr,
         )
         print(
-            "temporary CNA-0.90-updates.md and REFACTOR_APP.md (optional).",
+            "temporary CNA-0.90-updates.md and REFACTOR_APP.md (optional), plus the GitHub community files in",
+            file=sys.stderr,
+        )
+        print(
+            ".github/ (SECURITY.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md, PULL_REQUEST_TEMPLATE.md, SUPPORT.md,",
+            file=sys.stderr,
+        )
+        print(
+            "FUNDING.md and the files in .github/ISSUE_TEMPLATE/).",
             file=sys.stderr,
         )
         print("Long-form documentation belongs in the GitHub Wiki.", file=sys.stderr)

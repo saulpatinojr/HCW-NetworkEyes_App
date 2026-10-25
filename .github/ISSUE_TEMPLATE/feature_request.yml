@@ -1,0 +1,61 @@
+name: Feature request
+description: Suggest an improvement or a new capability.
+title: "[Feature]: "
+labels:
+  - enhancement
+  - product:networkeyes
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for the idea. Please search the existing issues first, and do not paste credentials, customer data,
+        tenant or subscription identifiers or real network topology.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem you want solved
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like to see
+      description: Describe the change in plain words. A sketch is fine.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Which part would change
+      options:
+        - Web app (apps/cna-web)
+        - API (apps/cna-api)
+        - Worker (apps/cna-worker)
+        - CLI and analysis engine (cna package)
+        - Azure network engine package (packages/cna-azure-network-engine)
+        - Container images and the image build
+        - CI and repository policy (.github)
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Other ways you considered
+
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Boundaries
+      description: These are rules of this repository; a request that needs one of them to change is a decision for the owner.
+      options:
+        - label: This request does not change how the images are tagged, the build manifest, or the runtime settings the appliances inject, or I say below why it must.
+          required: true
+        - label: This request does not ask this repository to deploy anything. Deployment belongs to the appliance repositories.
+          required: true

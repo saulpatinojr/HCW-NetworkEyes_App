@@ -58,3 +58,6 @@ apps/cna-web/lib/site-packages/
 apps/cna-web/scripts/*.exe
 scripts/*.exe
 PACS/
+
+# Scratch directory of scripts/ci/local-container-checks.sh trivy-image (the exported image tar)
+.trivy-image-scratch/

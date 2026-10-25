@@ -159,6 +159,84 @@ class TestDocumentationModel:
         result = run_script(DOC_MODEL_SCRIPT, fixture_repo)
         assert result.returncode == 0, result.stderr
 
+    @pytest.mark.parametrize(
+        "community_file",
+        [
+            ".github/SECURITY.md",
+            ".github/CONTRIBUTING.md",
+            ".github/CODE_OF_CONDUCT.md",
+            ".github/PULL_REQUEST_TEMPLATE.md",
+            ".github/pull_request_template.md",
+            ".github/SUPPORT.md",
+            ".github/FUNDING.md",
+            ".github/ISSUE_TEMPLATE/bug.md",
+            ".github/PULL_REQUEST_TEMPLATE/release.md",
+        ],
+    )
+    def test_allows_each_community_health_file_where_github_reads_it(
+        self, fixture_repo: Path, community_file: str
+    ) -> None:
+        """Ticket #247: the community files live in `.github/`, not at the root, and the guard allows exactly those."""
+        target = fixture_repo / community_file
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("# community file\n")
+        commit_all(fixture_repo)
+
+        result = run_script(DOC_MODEL_SCRIPT, fixture_repo)
+        assert result.returncode == 0, result.stderr
+
+    def test_issue_forms_are_yaml_and_are_not_documents(self, fixture_repo: Path) -> None:
+        forms = fixture_repo / ".github" / "ISSUE_TEMPLATE"
+        forms.mkdir(parents=True)
+        for name in ("bug_report.yml", "feature_request.yml", "config.yml"):
+            (forms / name).write_text("name: form\n")
+        commit_all(fixture_repo)
+
+        result = run_script(DOC_MODEL_SCRIPT, fixture_repo)
+        assert result.returncode == 0, result.stderr
+
+    @pytest.mark.parametrize(
+        "misplaced",
+        [
+            # The same names are only community files when they sit directly in .github/.
+            "SECURITY.md",
+            "CONTRIBUTING.md",
+            "CODE_OF_CONDUCT.md",
+            "PULL_REQUEST_TEMPLATE.md",
+            "docs/SECURITY.md",
+            ".github/docs/SECURITY.md",
+            ".github/workflows/SECURITY.md",
+            # Any other markdown under .github/ is still documentation sprawl.
+            ".github/copilot-instructions.md",
+            ".github/README.md",
+            ".github/skills/review/SKILL.md",
+            ".github/ISSUE_TEMPLATE/nested/bug.md",
+            "ISSUE_TEMPLATE/bug.md",
+            "docs/ISSUE_TEMPLATE/bug.md",
+        ],
+    )
+    def test_rejects_community_names_and_github_markdown_in_other_places(
+        self, fixture_repo: Path, misplaced: str
+    ) -> None:
+        target = fixture_repo / misplaced
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("# misplaced\n")
+        commit_all(fixture_repo)
+
+        result = run_script(DOC_MODEL_SCRIPT, fixture_repo)
+        assert result.returncode == 1
+        assert misplaced in result.stderr.replace("\\", "/")
+
+    def test_failure_message_names_the_github_community_files(self, fixture_repo: Path) -> None:
+        (fixture_repo / "docs").mkdir()
+        (fixture_repo / "docs" / "GUIDE.md").write_text("# guide\n")
+        commit_all(fixture_repo)
+
+        result = run_script(DOC_MODEL_SCRIPT, fixture_repo)
+        assert result.returncode == 1
+        assert ".github/ISSUE_TEMPLATE/" in result.stderr
+        assert "CODE_OF_CONDUCT.md" in result.stderr
+
     def test_reports_failures_on_stderr(self, fixture_repo: Path) -> None:
         """T-607: failures went to stdout while the sibling shape-catalog guard used stderr."""
         (fixture_repo / "docs").mkdir()

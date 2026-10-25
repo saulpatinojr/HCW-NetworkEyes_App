@@ -35,7 +35,8 @@ managed edge, backed by PostgreSQL and authenticated via Microsoft Entra ID.
 This repository keeps four required documents plus `CLAUDE.md`, and two *optional* temporary
 working documents that are removed when their work ships (`REFACTOR_APP.md`, the refactoring plan, and
 `CNA-0.90-updates.md`). That makes seven root documents at most; `scripts/validate_documentation_model.py`
-enforces the list. Everything else lives in the
+enforces the list. The community files GitHub reads (`SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, the pull request template and the issue forms) live in
+[`.github/`](.github), not at the root, and the validator allows exactly those. Everything else lives in the
 [GitHub Wiki](https://github.com/saulpatinojr/HCW-NetworkEyes_App/wiki).
 
 | Document | Contains |
@@ -193,7 +194,8 @@ Reference** explains each value in full.
 
 - **Four documents plus `CLAUDE.md`, one wiki.** `README.md`, `CHANGELOG.md`, `REVIEW.md`,
   `TODO.md`, and `CLAUDE.md` (agent instructions) are the only markdown files in the repository, apart
-  from the two optional temporary documents named in "Documentation map" (`REFACTOR_APP.md`, `CNA-0.90-updates.md`).
+  from the two optional temporary documents named in "Documentation map" (`REFACTOR_APP.md`, `CNA-0.90-updates.md`) and the
+  community files in `.github/`.
   Long-form documentation goes to the Wiki. Content determines destination, not filename.
 - **The appliance contract is mirrored, never implied.** Any change to the image tag scheme, the
   build manifest, the `cna-image-published` dispatch, or the runtime environment contract

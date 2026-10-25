@@ -10,6 +10,9 @@
 #   - Job timeout-minutes set on every job (prevent runaway billing)
 #   - uv.lock consistency gate + pip-audit of the locked resolution (T-702)
 #   - Explicit permissions block (principle of least privilege)
+#   - hadolint, actionlint and dependency review as jobs (TODO.md T-736, tickets #247 and #252); the tools run
+#     as digest-pinned containers, the action as a SHA-pinned step. Existing job names are required checks of
+#     the "Protect main" ruleset and are never renamed; the new names are listed in CHANGELOG.md.
 name: "300 · Test Codebase"
 
 # Runs on GitHub-hosted runners (ubuntu-latest): every job is self-contained
@@ -259,7 +262,7 @@ jobs:
         # is then already satisfied (REFACTOR_APP.md change set C).
         run: |
           pip install -e packages/cna-azure-network-engine
-          pip install -e .[dev,enrichment,api,aws]
+          pip install -e ".[dev,enrichment,api,aws]"
       - name: Run tests with coverage
         # --cov=apps counts the API/router code the TestClient tests now exercise
         # in the same gate as the cna package (TEST-001).
@@ -307,7 +310,7 @@ jobs:
         with:
           path: ~/.cache/pip
           key: guardrails-${{ hashFiles('pyproject.toml') }}
-      - run: pip install pyyaml
+      - run: pip install "pyyaml==6.0.3"  # same version as uv.lock; move both together
       - name: Validate module.yaml dependency graph
         run: python3 scripts/validate_module_deps.py
       - name: Validate draw.io shape catalog
@@ -452,7 +455,7 @@ jobs:
           path: ~/.cache/pip
           key: pip-audit-${{ hashFiles('pyproject.toml', 'uv.lock') }}
       - name: Install pip-audit and uv
-        run: pip install pip-audit "uv==0.13.0"
+        run: pip install "pip-audit==2.10.1" "uv==0.13.0"  # pip-audit 2.10.1 is the newest release (2026-06-10); move the pin deliberately
       - name: Audit the locked resolution
         # Audits exactly what the images ship (TODO.md T-702): the lock exported
         # with every extra, so the api/enrichment/dev sets are covered in one
@@ -467,3 +470,77 @@ jobs:
           uv export --locked --no-emit-project --no-emit-workspace --no-default-groups \
             --extra api --extra enrichment --extra dev --extra aws -o /tmp/locked.txt
           pip-audit --strict --require-hashes -r /tmp/locked.txt
+
+  # ------------------------------------------------------------------
+  # 8. Dockerfile lint — hadolint (TODO.md T-736, ticket #252)
+  # ------------------------------------------------------------------
+  # hadolint reads every Dockerfile the repository tracks and fails on any finding the reviewed
+  # `.hadolint.yaml` does not ignore (that file holds the written reason for each ignored rule). It runs as a
+  # container pinned by version and digest, like the gitleaks image above: v2.15.1 is the newest stable release
+  # (2026-07-31, github.com/hadolint/hadolint/releases). The linter parses text only, so it gets no network and a
+  # read-only copy of the checkout. Move the pin by hand: Dependabot reads Dockerfiles, not workflow files.
+  # `scripts/ci/local-container-checks.sh` runs the same image locally and tests/unit/test_ci_hygiene.py keeps
+  # the two pins identical.
+  dockerfile-lint:
+    name: Dockerfile Lint (hadolint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Lint every tracked Dockerfile
+        run: |
+          set -euo pipefail
+          mapfile -t dockerfiles < <(git ls-files -- 'Dockerfile' '*/Dockerfile')
+          test "${#dockerfiles[@]}" -gt 0 || { echo "::error::no Dockerfile found"; exit 1; }
+          printf 'hadolint: %s\n' "${dockerfiles[@]}"
+          docker run --rm --read-only --network none -v "$PWD:/work:ro" -w /work \
+            ghcr.io/hadolint/hadolint:v2.15.1@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d \
+            hadolint --config .hadolint.yaml --no-color "${dockerfiles[@]}"
+
+  # ------------------------------------------------------------------
+  # 9. Workflow lint — actionlint (TODO.md T-736, ticket #252)
+  # ------------------------------------------------------------------
+  # actionlint checks workflow syntax, expressions, `needs:` references and (through the shellcheck and pyflakes it
+  # ships with) the scripts inside `run:` steps. Newest stable release: 1.7.12 (2026-03-30,
+  # github.com/rhysd/actionlint/releases); the image is pinned by digest. Files are listed explicitly because
+  # that is what the local command in scripts/ci/local-container-checks.sh does too. No network, read-only checkout.
+  workflow-lint:
+    name: Workflow Lint (actionlint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: actionlint over every workflow
+        run: |
+          set -euo pipefail
+          docker run --rm --read-only --network none -v "$PWD:/repo:ro" -w /repo \
+            rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 \
+            -color=false .github/workflows/*.yml
+
+  # ------------------------------------------------------------------
+  # 10. Dependency review (TODO.md T-736, ticket #247)
+  # ------------------------------------------------------------------
+  # On a pull request, compares the dependencies the change adds or bumps (uv.lock, package-lock.json, the
+  # Actions in .github/) against GitHub's advisory database and fails on a new high or critical advisory. It
+  # needs the dependency graph, which is on for public repositories. It reads the pull request's diff, so it
+  # has nothing to compare on a push or a manual run and is skipped there (a skipped required check counts as
+  # passed). Read-only token and no pull request comment: the result is in the job summary.
+  dependency-review:
+    name: Dependency Review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Review the dependency changes
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294  # v5.0.0
+        with:
+          fail-on-severity: high

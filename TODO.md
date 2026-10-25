@@ -17,7 +17,7 @@ in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG
 | [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-419 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements + appliance migration | T-501 – T-509 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
-| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-735 |
+| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-737 |
 
 ---
 
@@ -2442,3 +2442,21 @@ unless they point `CNA_DRAWIO_MCP_URL` at the web tier. Open, in both `saulpatin
 `saulpatinojr/Work-Cloud_Network_AWS_Appliance`: check whether `CNA_DRAWIO_MCP_URL` is set for the api container and, if it is, that the
 same container receives `CNA_API_TOKEN` (the api already refuses to start without it in appliance mode) and that the web container's
 `CNA_API_TOKEN` is the same value. Record the result here; no change to those repositories is made from this repository.
+
+### T-736 — Keep the pinned CI tools current
+`300-test-codebase.yml` runs hadolint 2.15.1 and actionlint 1.7.12 as containers pinned by digest, `pip-audit`, `ruff`, `pre-commit`, `uv` and `pyyaml` are pinned to exact versions, and `scripts/ci/local-container-checks.sh` pins the same two digests plus Trivy 0.76.1. Dependabot reads `FROM` lines and action references, not an image named in a `run:` step or a version in a `pip install`, so none of these pins moves by itself. Open: when a new release appears, pull the new tag, copy the digest Docker prints, and change the workflow and the script together (`tests/unit/test_ci_hygiene.py` fails when they differ). Consider moving the two images into a small Dockerfile that Dependabot's docker ecosystem can read, or into a scheduled job that opens an issue when a newer release exists. The apt and apk version pins that `.hadolint.yaml` ignores (DL3008, DL3018) are worth revisiting if the images ever move to a Debian snapshot mirror. `320-release-engine.yml` still runs an unpinned `uv pip install pytest`.
+
+### T-737 — Clear the development-only npm advisories Trivy reports, and the migrator image's development tree
+`scripts/ci/local-container-checks.sh trivy-fs` (2026-10-25, Trivy 0.76.1, advisory database of that day) finds nothing in `uv.lock` and nothing
+in the production dependencies of `apps/cna-web/package-lock.json`, but with development dependencies included it reports 7 rows for four
+advisories, all in packages flagged `dev` in the lock: `brace-expansion` 1.1.18 and 5.0.9 (CVE-2026-102276 and CVE-2026-102278, High;
+CVE-2026-102277, Medium; fixed in 1.1.19 to 1.1.21 and 5.0.10 to 5.0.12) and `postcss-selector-parser` 6.0.10 (CVE-2026-104844, Medium; fixed in
+7.1.6). The two `brace-expansion` versions are held by the `overrides` entries in `apps/cna-web/package.json`. A scan of the built web image
+(runner target) shows no operating-system or library finding, so the development tree is not in it; but the migrator image copies the whole
+`node_modules` tree from the builder stage and the same scan of it reports 19 High findings: 4 for `brace-expansion` (fix available) and 15 in the Go
+standard library and `golang.org/x/text` compiled into `@typescript/typescript-linux-x64/lib/tsc`, the native TypeScript compiler (most with a fix in
+a newer Go toolchain, so in a newer `@typescript/native`). Open: raise the two overrides to 1.1.21 and 5.0.12, find what holds
+`postcss-selector-parser` 6, run `npm run lint`, `npm run typecheck`, `npm test` and the image build, then rerun `trivy-fs`. Separately decide
+whether the migrator needs the compiler at all (`prisma migrate deploy` does not); copying only the Prisma tree, or running `npm prune --omit=dev`
+in the builder before the copy, would take the 19 findings out of that image. Docker Scout in `200-build-images.yml` already gates the migrator on
+fixable critical and high findings, so check why it passes before changing anything.

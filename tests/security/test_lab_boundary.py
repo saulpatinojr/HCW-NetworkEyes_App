@@ -98,7 +98,8 @@ class TestDockerfile:
         assert "apps/" not in body and "COPY cna/" not in body and "COPY . ." not in body
         assert "uvicorn" not in body and "EXPOSE" not in body and "HEALTHCHECK" not in body
         assert "pip uninstall -y pip" in body
-        assert "--uid 1001" in body and "USER cna" in body
+        # Numeric USER (hadolint DL3066): uid 1001 is the `cna` user created two lines earlier.
+        assert "--uid 1001" in body and "USER 1001" in body and "USER cna" not in body
         assert "ENV CNA_EDITION=lab" in body
         assert 'CMD ["python", "-m", "cna_azure_network_engine.edition"]' in body
 

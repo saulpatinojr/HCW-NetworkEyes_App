@@ -115,7 +115,9 @@ or record a `TODO.md` item naming them — never leave one side implied.
 
 - **Documents:** `README.md`, `CHANGELOG.md`, `REVIEW.md`, `TODO.md`, and this
   `CLAUDE.md` are the only markdown files (plus at most one temporary
-  release-push document). `scripts/validate_documentation_model.py` enforces
+  release-push document, and the community files GitHub reads from `.github/`:
+  `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `PULL_REQUEST_TEMPLATE.md` and `ISSUE_TEMPLATE/`; never at the root).
+  `scripts/validate_documentation_model.py` enforces
   this in CI. Long-form docs go to the GitHub Wiki. Content determines
   destination, not filename.
 - **Never hardcode a value at a call site.** Declare it (`DiscoveryOptions`
@@ -144,6 +146,10 @@ or record a `TODO.md` item naming them — never leave one side implied.
   both appliances; never renumber, reference by filename. The core owns `200`,
   `300`, `310`, `320`, `370` and the one exception `390`; every other number belongs to
   the appliances.
+- **Job names in `300-test-codebase.yml` are required checks.** The `Protect main` ruleset matches them by name. Add a job, never rename one; list
+  new job names in the pull request so the owner can add them to the ruleset. Dockerfiles must pass hadolint (`.hadolint.yaml` lists the only
+  ignored rules, each with a written reason) and workflows must pass actionlint; run both with
+  `bash scripts/ci/local-container-checks.sh hadolint actionlint`.
 - **Every GitHub Action is pinned to a SHA digest.** `detect-secrets` fails the
   build on any finding not in `.secrets.baseline`; `gitleaks` is advisory.
 - **Secrets** travel as GitHub secrets → OIDC / Key Vault / Secrets Manager →
