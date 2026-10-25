@@ -135,12 +135,15 @@ IMAGE=docker.io/hybridcloudworks/img-ne-appliance-app@sha256:<64 hex>
 ID=https://github.com/saulpatinojr/HCW-NetworkEyes_App/.github/workflows/200-build-images.yml@refs/heads/main
 ISS=https://token.actions.githubusercontent.com
 cosign verify "$IMAGE" --certificate-identity "$ID" --certificate-oidc-issuer "$ISS"
-cosign verify-attestation "$IMAGE" --type slsaprovenance02 --certificate-identity "$ID" --certificate-oidc-issuer "$ISS"
+cosign verify-attestation "$IMAGE" --type slsaprovenance02 --certificate-identity "$ID" --certificate-oidc-issuer "$ISS"   | jq -r '.payload | @base64d | fromjson | .predicate.builder.id'
 ```
 
+The last command prints the attestation's `predicate.builder.id`, which must begin with
+`https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/runs/` (a run of this repository). `cosign verify-attestation`
+alone does not check it; `scripts/ci/verify_signed_digest.sh` does.
+
 Pass `--use-signed-timestamps` if you want the signed timestamp from the timestamp authority; without it cosign 3 uses the
-transparency-log time. The attestation's `predicate.builder.id` begins with
-`https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/runs/`. The identity string must match exactly: renaming or
+transparency-log time. The identity string must match exactly: renaming or
 transferring the repository, or renaming the workflow file or the default branch, changes it (the change is announced in the
 release notes). `scripts/ci/verify_signed_digest.sh` does the same checks and also binds the digest to a commit. The five
 digests of each build are in the step summary of its `200-build-images.yml` run, and those of a release are in its release
@@ -203,7 +206,8 @@ Configuration comes from three places, in this order of authority:
    `DOCKERHUB_ENABLED` (the publishing switch) for `200` and `310`; `DOCKERHUB_PERSONAL_USERNAME` (variable) and
    `DOCKERHUB_PERSONAL_TOKEN` (secret) for the registry cleanup `370`; `PYPI_PUBLISH_ENABLED` for the engine release
    `320`; and, for the owner-approved `390` only, the credentials of the `admin-ops` environment (`APP_CLIENT_ID`,
-   `APP_PRIVATE_KEY`, `PROJECT_TOKEN`). `TODO.md` T-728 and `REVIEW.md` R-026 have the steps. Deployment secrets and
+   `APP_PRIVATE_KEY`, `PROJECT_TOKEN`). The build, release and registry-cleanup workflows use no GitHub App and notify
+   no other repository; the App credentials in `admin-ops` belong to the separate `390-repository-admin.yml` only. `TODO.md` T-728 and `REVIEW.md` R-026 have the steps. Deployment secrets and
    variables belong to whoever deploys the images.
 2. **The deployment's vault** (Azure Key Vault / AWS Secrets Manager) — runtime secrets for a deployed environment,
    injected by whoever deploys the images.
