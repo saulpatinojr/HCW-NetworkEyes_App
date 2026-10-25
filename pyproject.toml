@@ -27,7 +27,7 @@ dependencies = [
     "azure-mgmt-resourcegraph>=8.0.0,<9",  # Resource Graph discovery (change set D) [VERIFY] bound
     "azure-mgmt-subscription>=3.1.1",
     "azure-storage-blob>=12.31.0",       # Phase F: Azure Blob Storage deployer
-    "openai>=3.28.0",
+    "openai>=3.36.1",
     "anthropic>=2.1.0",                  # bring-your-own Claude engine (CNA_AI_MODE=byo-api)
     # Reads the AES-256-GCM credential blobs the web tier writes (BYO AI keys).
     # Was only ever a transitive dependency of azure-identity; declared so a
@@ -44,7 +44,7 @@ dependencies = [
     # merge_diagrams() parses diagram XML that arrives from the database
     # via the API; defusedxml is the hardened stdlib drop-in for that.
     "defusedxml>=0.7.1",
-    "pandas>=3.0.3",
+    "pandas>=3.1.0",
     "pydantic>=2.14.0",
     "python-dotenv>=1.2.4",
     "pyyaml>=6.0.3",
@@ -102,7 +102,7 @@ enrichment = [
 # exercises at discovery time and must be present in the image; the rest of the
 # enrichment extra remains optional.
 api = [
-    "fastapi>=0.156.8",
+    "fastapi>=0.159.1",
     "uvicorn[standard]>=0.54.0",
     "psycopg2-binary>=2.9",
     # Entra bearer validation on the internal routes (change set H): signature via
