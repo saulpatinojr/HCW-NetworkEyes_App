@@ -18,7 +18,11 @@ ignored:
   # such as `libcairo2=1.18.4-1` stops installing the day the distribution ships a security update, and nothing
   # in this repository moves it forward: Dependabot's docker ecosystem reads FROM lines, not apt or apk pins.
   # The result would be an image build that fails without a code change, or a pin that someone loosens under
-  # pressure. The reproducibility the rule is meant to give comes from the base image instead:
+  # pressure.
+  #
+  # What this means, stated plainly: the base image is fixed by digest, but the packages installed on top are
+  # NOT. A rebuild on another day installs that day's versions of them, so two builds of one commit can differ in
+  # those packages; this file does not make the images reproducible. What bounds the risk instead:
   #   * every FROM is pinned by sha256 digest (tests/unit/test_ci_hygiene.py checks this), and Dependabot opens
   #     a pull request for each new digest every Monday;
   #   * the packages installed on top are few and named in the Dockerfiles (graphviz and the cairo/pango
@@ -26,8 +30,9 @@ ignored:
   #     no `apk upgrade`);
   #   * Python and npm dependencies are not covered by this rule and are locked with hashes (uv.lock,
   #     package-lock.json);
-  #   * 200-build-images.yml scans each pushed digest with Docker Scout and refuses fixable critical or high
-  #     findings, and scripts/ci/local-container-checks.sh runs a Trivy scan with the same intent.
+  #   * THE real control: 200-build-images.yml scans each pushed digest with Docker Scout and refuses fixable
+  #     critical or high findings before any tag moves, and scripts/ci/local-container-checks.sh runs a Trivy
+  #     scan with the same intent.
   # Revisit if the images move to a Debian snapshot mirror (then the pins would be stable and checkable).
   - DL3008
   - DL3018

@@ -1,23 +1,39 @@
 # Release workflow
-# Triggered when a version tag v*.*.* is pushed.
-# PROMOTES the image 200-build-images.yml already built, scanned (Docker Scout) and signed for the
-# tagged commit: it finds that image's digest by its `sha-<7>` tag, verifies the cosign signature and
-# SLSA provenance against 200's identity (scripts/ci/verify_signed_digest.sh), and only then adds the
-# `<version>` tag to the same digest (`imagetools create`: no rebuild, no new layers). Then it creates
-# a GitHub Release with an auto-generated changelog from PRs merged since the last tag.
+# Triggered when a version tag v*.*.* is pushed (and, as a DRY RUN only, by Run workflow; see below).
+# PROMOTES the image 200-build-images.yml already built, scanned (Docker Scout) and signed: it finds that image's
+# digest by its `sha-<7>` tag (scripts/ci/find_release_image.sh), verifies its cosign signature, its SLSA
+# provenance and its revision label (scripts/ci/verify_signed_digest.sh), and only then adds the `<version>` tag to
+# the same digest (`imagetools create`: no rebuild, no new layers). Then it creates a GitHub Release with an
+# auto-generated changelog from PRs merged since the last tag.
 #
-# Why promote and not build again: a second build of the same commit has no scan gate and is a
-# different digest from the one the appliances verify; and a `latest` tag pushed from here could move
-# ahead of the scan that 200 applies before it moves `latest`. So this workflow never builds, never
-# pushes layers and never touches `latest` (200 owns it, after the scan). If no 200 build exists for
-# the tagged commit, or its image was not tagged (scan failed, publishing off, tag pruned by 370),
-# the release fails with a message that says which; tag a commit 200 built, or run 200 from
-# *Run workflow* on that commit's branch first.
+# Why promote and not build again: a second build of the same commit has no scan gate and is a different digest
+# from the one the appliances verify; and a `latest` tag pushed from here could move ahead of the scan that 200
+# applies before it moves `latest`. So this workflow never builds, never pushes layers and never touches `latest`
+# (200 owns it, after the scan).
 #
-# Required repository variables (no secret): DOCKERHUB_NAMESPACE, DOCKERHUB_CONNECTION
-# (the Docker Hub OIDC connection id) and DOCKERHUB_ENABLED == 'true'. The OIDC connection needs a
-# subject-claim rule for tags (`refs/tags/*`) with image pull and push on the repository, besides
-# the one for `refs/heads/main` that 200 uses (TODO.md T-728).
+# WHICH COMMIT TO TAG. Every successful 200 ends with a squash commit that only changes
+# .deployment-catalog/latest-build.json, a path 200 does not build from, so the head of main right after a build
+# has no 200 run of its own. The search therefore walks back from the tagged commit to the nearest commit whose 200
+# run left a `sha-<7>` tag, and accepts the tagged commit when nothing changed between the two in a file 200 builds
+# from (its `on.push.paths`): documentation, or the manifest commit. If the tagged commit changed such a file, the
+# release fails and names it; tag the commit recorded as `commit` in .deployment-catalog/latest-build.json instead.
+# If no 200 build is found at all, the release fails with that same advice.
+#
+# DRY RUN. Actions, 310 · Release CLI Tool, Run workflow, branch main, `dry_run` ticked (the default): runs the
+# search and the verification against the head of main, prints which digest it would promote, and stops. It never
+# logs in for write, never creates a tag and never makes a release, so the cosign, jq and path logic is proven
+# before any tag exists. It needs a published image (so after the first real 200 build) and a public repository
+# (it reads anonymously). It does not need DOCKERHUB_ENABLED. Run with `dry_run` unticked, the workflow does nothing.
+#
+# Required repository variables (no secret): DOCKERHUB_NAMESPACE, DOCKERHUB_CONNECTION (the Docker Hub OIDC
+# connection id) and DOCKERHUB_ENABLED == 'true' (a pushed tag only). The tag run's OIDC subject is
+# `repo:<owner>@<id>/<repo>@<id>:ref:refs/tags/vX.Y.Z`, which the connection's ruleset for main does not match: add a
+# SECOND RULESET to the same connection with subject `...:ref:refs/tags/v*`, resource img-ne-appliance-app and the
+# scope Image Push (Image Pull is not needed: the repository is public). TODO.md T-728 has the steps.
+#
+# IF THE POST-CHECK FAILS ("resolves to ... expected ..."): the version tag now exists with a digest other than the
+# one that was verified. Do not re-run first: the re-run refuses to move an existing tag. Delete the tag on Docker
+# Hub (Repository, Tags), find out why (a concurrent push of the same tag), then re-run this workflow.
 #
 # Required repository settings:
 #   Actions > General > Workflow permissions: Read and write
@@ -32,6 +48,14 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: >-
+          Dry run (the only thing Run workflow does): find and verify the image of the most recent 200 build and print
+          what a release would promote. Never logs in for write, never creates a tag or a release.
+        type: boolean
+        default: true
 
 permissions:
   contents: write    # create GitHub Release
@@ -57,7 +81,11 @@ jobs:
   release:
     name: Build, Push, Release
     runs-on: ubuntu-latest
-    if: vars.DOCKERHUB_ENABLED == 'true'
+    # A pushed tag needs publishing switched on; the dry run does not, and runs from main only.
+    if: >-
+      (github.event_name == 'push' && vars.DOCKERHUB_ENABLED == 'true') ||
+      (github.event_name == 'workflow_dispatch' && inputs.dry_run &&
+       github.ref == format('refs/heads/{0}', github.event.repository.default_branch))
     # Includes the wait for an in-flight 200 build of the tagged commit (up to 25 minutes).
     timeout-minutes: 40
     env:
@@ -72,6 +100,7 @@ jobs:
       # Extract version from tag
       - name: Extract version
         id: version
+        if: github.event_name == 'push'
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
       - name: Validate Docker Hub namespace
@@ -81,21 +110,6 @@ jobs:
             exit 1
           fi
 
-      # Log in to Docker Hub
-      - name: Log in to Docker Hub
-        # Docker Hub's OIDC connection (REFACTOR_APP.md change set J): the action
-        # exchanges this job's id-token for a short-lived registry credential, so no
-        # long-lived access token is stored. [VERIFY] the env variable names and the
-        # minimum login-action version against the Docker Hub OIDC documentation.
-        # The subject of this run is the tag (refs/tags/v…), not main: the connection needs its own rule.
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
-        env:
-          DOCKERHUB_OIDC_CONNECTIONID: ${{ vars.DOCKERHUB_CONNECTION }}
-          DOCKERHUB_OIDC_EXPIREIN: '900'
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ vars.DOCKERHUB_NAMESPACE }}
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
@@ -104,73 +118,111 @@ jobs:
         with:
           cosign-release: ${{ env.COSIGN_VERSION }}
 
-      # The digest 200 built, scanned and tagged `sha-<7>` for this very commit. 200 attaches that tag
-      # only after every image passed Docker Scout, so its existence is the scan gate.
+      # The digest 200 built, scanned and tagged `sha-<7>` for the tagged commit, or for the nearest earlier
+      # commit it built when nothing 200 builds from changed since (see the header). 200 attaches that tag only
+      # after every image passed Docker Scout, so its existence is the scan gate. Anonymous reads: the repository
+      # is public, and no write credential exists yet at this point.
       - name: Find the scanned image built from this commit
         id: scanned
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          IMAGE="${REGISTRY}/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}"
-          SHA_TAG="sha-${GITHUB_SHA:0:7}"
-          DEADLINE=$((SECONDS + 1500))
-          while :; do
-            if DIGEST=$(docker buildx imagetools inspect "${IMAGE}:${SHA_TAG}" --format '{{.Manifest.Digest}}' 2>/dev/null) \
-               && [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-              break
-            fi
-            RUNS=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow 200-build-images.yml --commit "$GITHUB_SHA" --limit 20 --json status,url)
-            if [ "$(jq 'length' <<< "$RUNS")" -eq 0 ]; then
-              echo "::error::No run of 200-build-images.yml exists for commit ${GITHUB_SHA}, so there is no scanned image to release. 200 builds only when a Dockerfile, the code or its own file changes: tag a commit it built, or run 200 on this commit first."
-              exit 1
-            fi
-            if [ "$(jq '[.[] | select(.status != "completed")] | length' <<< "$RUNS")" -eq 0 ]; then
-              echo "::error::200-build-images.yml finished for commit ${GITHUB_SHA} but ${IMAGE}:${SHA_TAG} does not exist: its scan or build failed, publishing was off, or 370 pruned the tag. Runs: $(jq -r '[.[].url] | join(" ")' <<< "$RUNS")"
-              exit 1
-            fi
-            if [ "$SECONDS" -ge "$DEADLINE" ]; then
-              echo "::error::Waited 25 minutes for 200-build-images.yml to tag ${IMAGE}:${SHA_TAG}; re-run this release when it has finished."
-              exit 1
-            fi
-            echo "200-build-images.yml is still building ${GITHUB_SHA:0:7}; waiting 30 s for ${IMAGE}:${SHA_TAG}"
-            sleep 30
-          done
-          echo "Found ${IMAGE}:${SHA_TAG} = ${DIGEST}"
-          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+        run: bash scripts/ci/find_release_image.sh
 
-      # Do not weaken: a digest 200 did not sign is not promoted, whatever its tag says.
+      # Do not weaken: a digest 200 did not sign, did not build from that commit, or that no 200 run of it
+      # produced is not promoted, whatever its tag says. This step has no `||` and no continue-on-error; the
+      # tests pin that.
       - name: Verify the signature and provenance of that digest
         env:
           DIGEST: ${{ steps.scanned.outputs.digest }}
-        run: scripts/ci/verify_signed_digest.sh "${REGISTRY}/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}@${DIGEST}"
+          EXPECTED_REVISION: ${{ steps.scanned.outputs.build_commit }}
+          EXPECTED_RUN_IDS: ${{ steps.scanned.outputs.run_ids }}
+        run: bash scripts/ci/verify_signed_digest.sh "${REGISTRY}/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}@${DIGEST}"
+
+      - name: Report what a release would promote (dry run)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          DIGEST: ${{ steps.scanned.outputs.digest }}
+          BUILD_COMMIT: ${{ steps.scanned.outputs.build_commit }}
+          SHA_TAG: ${{ steps.scanned.outputs.tag }}
+        run: |
+          {
+            echo "### 310 dry run: nothing was logged in, tagged or released"
+            echo ""
+            echo "- head of main: \`${GITHUB_SHA}\`"
+            echo "- image found: \`${REGISTRY}/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}:${SHA_TAG}\`"
+            echo "- digest: \`${DIGEST}\`"
+            echo "- built from commit: \`${BUILD_COMMIT}\`"
+            echo "- signature, provenance and revision label: verified"
+            echo "- a pushed \`vX.Y.Z\` tag would add the tag \`X.Y.Z\` to that digest"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Log in to Docker Hub, just before the only step that writes to it.
+      - name: Log in to Docker Hub
+        id: login
+        if: github.event_name == 'push'
+        # Docker Hub's OIDC connection (REFACTOR_APP.md change set J): the action
+        # exchanges this job's id-token for a short-lived registry credential, so no
+        # long-lived access token is stored.
+        # The subject of this run is the tag (refs/tags/v…), not main: the connection needs its own ruleset.
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
+        env:
+          DOCKERHUB_OIDC_CONNECTIONID: ${{ vars.DOCKERHUB_CONNECTION }}
+          DOCKERHUB_OIDC_EXPIREIN: '900'
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ vars.DOCKERHUB_NAMESPACE }}
 
       - name: Promote the digest to the release tag
+        id: promote
+        if: github.event_name == 'push'
         env:
           VERSION: ${{ steps.version.outputs.VERSION }}
           DIGEST: ${{ steps.scanned.outputs.digest }}
         run: |
           set -euo pipefail
+          # shellcheck source=scripts/ci/registry_digest.sh
+          source scripts/ci/registry_digest.sh
           IMAGE="${REGISTRY}/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}"
-          # A release tag is immutable: refuse to move it to another digest.
-          if EXISTING=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{.Manifest.Digest}}' 2>/dev/null); then
-            if [ "$EXISTING" = "$DIGEST" ]; then
-              echo "${IMAGE}:${VERSION} already points at ${DIGEST}; nothing to do."
-              exit 0
-            fi
-            echo "::error::${IMAGE}:${VERSION} already exists with digest ${EXISTING}, not ${DIGEST}; a release tag is never moved."
-            exit 1
-          fi
+          # A release tag is immutable: refuse to move it to another digest. "Not found" and "could not ask" are
+          # different answers: only the first lets the tag be created.
+          rc=0
+          EXISTING="$(registry_digest "${IMAGE}:${VERSION}")" || rc=$?
+          case "$rc" in
+            0)
+              if [ "$EXISTING" = "$DIGEST" ]; then
+                echo "${IMAGE}:${VERSION} already points at ${DIGEST}; nothing to do."
+                exit 0
+              fi
+              echo "::error::${IMAGE}:${VERSION} already exists with digest ${EXISTING}, not ${DIGEST}; a release tag is never moved."
+              exit 1
+              ;;
+            1) ;;
+            *)
+              echo "::error::Could not check whether ${IMAGE}:${VERSION} exists (the registry's message is above); refusing to create a release tag blind."
+              exit 1
+              ;;
+          esac
           docker buildx imagetools create -t "${IMAGE}:${VERSION}" "${IMAGE}@${DIGEST}"
-          AFTER=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{.Manifest.Digest}}')
-          if [ "$AFTER" != "$DIGEST" ]; then
-            echo "::error::${IMAGE}:${VERSION} resolves to ${AFTER}, expected ${DIGEST}."
+          rc=0
+          AFTER="$(registry_digest "${IMAGE}:${VERSION}")" || rc=$?
+          if [ "$rc" -ne 0 ] || [ "$AFTER" != "$DIGEST" ]; then
+            echo "::error::After creating it, ${IMAGE}:${VERSION} resolves to '${AFTER:-nothing}' (check status ${rc}), expected ${DIGEST}. Delete that tag on Docker Hub (Repository, Tags) before re-running: a re-run refuses to move an existing tag."
             exit 1
           fi
           echo "Promoted ${IMAGE}@${DIGEST} to ${IMAGE}:${VERSION}"
 
+      - name: What to check if the Docker Hub login or the promotion failed
+        if: failure() && (steps.login.outcome == 'failure' || steps.promote.outcome == 'failure')
+        run: |
+          echo "::error::The Docker Hub step of the release failed. The three most likely causes:"
+          echo "::error::1. The connection has no ruleset for tags. This run's subject is repo:<owner>@<id>/<repo>@<id>:ref:refs/tags/${GITHUB_REF_NAME}; the ruleset for main does not match it. Add a SECOND RULESET to the same connection with the subject ...:ref:refs/tags/v* (immutable owner and repository ids, not the mutable names)."
+          echo "::error::2. That ruleset does not cover the repository ${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}, or the connection belongs to another organisation than DOCKERHUB_NAMESPACE."
+          echo "::error::3. The scope is missing: the tag ruleset needs Image Push on ${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY} (a failed login is cause 1 or 2, a failed tag creation is cause 3)."
+          echo "::error::Docker's guide: https://docs.docker.com/security/authentication/oidc-connections/troubleshoot . The connection's Failures tab in Docker Home (Identity & auth, OIDC connections) shows the claims Docker received and why the exchange was refused."
+
       # GitHub Release with auto-generated changelog
       - name: Create GitHub Release
+        if: github.event_name == 'push'
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3.0.3
         with:
           generate_release_notes: true
@@ -178,7 +230,7 @@ jobs:
             ## CNA Platform ${{ github.ref_name }}
 
             Docker image: `${{ env.REGISTRY }}/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}:${{ steps.version.outputs.VERSION }}`
-            (digest `${{ steps.scanned.outputs.digest }}`: the image `200-build-images.yml` built, scanned and signed for this commit)
+            (digest `${{ steps.scanned.outputs.digest }}`: the image `200-build-images.yml` built, scanned and signed from commit `${{ steps.scanned.outputs.build_commit }}`)
 
             ```bash
             docker pull ${{ env.REGISTRY }}/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}:${{ steps.version.outputs.VERSION }}

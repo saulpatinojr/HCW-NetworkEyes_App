@@ -57,7 +57,7 @@ services:
 
   # Web_Service fallback path (Requirement 7.2): run the Next.js front end
   # locally without the cloud. Builds the runner stage of the web image, which
-  # ships as non-root (USER nextjs) with its own HEALTHCHECK.
+  # ships as non-root (USER 1001, the `nextjs` user) with its own HEALTHCHECK.
   cna-web:
     build:
       context: ./apps/cna-web

@@ -92,12 +92,10 @@ jobs:
           MANIFEST_PREFIX="docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}:"
           PROTECTED_DEPLOYED=""
           if [ -f .deployment-catalog/latest-build.json ]; then
-            PROTECTED_DEPLOYED=$(jq -r --arg prefix "$MANIFEST_PREFIX" \
-              '.images | to_entries[] | .value | select(startswith($prefix)) | ltrimstr($prefix)' \
-              .deployment-catalog/latest-build.json)
-            FOREIGN=$(jq -r --arg prefix "$MANIFEST_PREFIX" \
-              '[.images | to_entries[] | .value | select(startswith($prefix) | not)] | length' \
-              .deployment-catalog/latest-build.json)
+            # The jq filters live in a script so tests/security/test_manifest_and_release_scripts.py can run them
+            # against stub manifests.
+            PROTECTED_DEPLOYED=$(bash scripts/ci/manifest_tags.sh protected "$MANIFEST_PREFIX" < .deployment-catalog/latest-build.json)
+            FOREIGN=$(bash scripts/ci/manifest_tags.sh foreign "$MANIFEST_PREFIX" < .deployment-catalog/latest-build.json)
             if [ "$FOREIGN" -gt 0 ]; then
               echo "::notice::${FOREIGN} manifest image(s) name a repository other than ${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}; they protect no tag here. The next 200-build-images.yml run rewrites the manifest."
             fi

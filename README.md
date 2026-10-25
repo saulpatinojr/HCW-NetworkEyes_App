@@ -102,7 +102,10 @@ once the required checks pass, because `main` is protected) and sends a `reposit
 `APPLIANCE_OWNER` (the appliances do not live under this repository's owner); each
 appliance also polls the manifest. An appliance auto-deploys new images to `dev` and opens an
 "update available" issue for `prod`, which a human approves through its deploy workflow's
-approval gate. Every image goes to one Docker Hub repository, `<namespace>/img-ne-appliance-app`
+approval gate. Releases (`v*.*.*` tags, `310-release-version.yml`) add a version tag to the image `200` already built
+and signed for that commit, or for the last build before it when only documentation or the manifest changed since;
+a tag on a commit that changed a file `200` builds from fails and names it (tag the `commit` recorded in
+`.deployment-catalog/latest-build.json`). Every image goes to one public Docker Hub repository, `<namespace>/img-ne-appliance-app`
 (the owner's `img-<short name>-<job>-<type>` convention; the tags inside it are unchanged). The full
 contract is in [`CLAUDE.md`](CLAUDE.md).
 

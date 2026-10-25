@@ -504,6 +504,9 @@ jobs:
     name: Dockerfile Lint (hadolint)
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Checkout only: the workflow-level `pull-requests: read` is not needed here.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -514,7 +517,9 @@ jobs:
           mapfile -t dockerfiles < <(git ls-files -- 'Dockerfile' '*/Dockerfile')
           test "${#dockerfiles[@]}" -gt 0 || { echo "::error::no Dockerfile found"; exit 1; }
           printf 'hadolint: %s\n' "${dockerfiles[@]}"
-          docker run --rm --read-only --network none -v "$PWD:/work:ro" -w /work \
+          # The same hardening flags as the local run: scripts/ci/harden-flags.sh defines HARDEN once.
+          source ./scripts/ci/harden-flags.sh
+          docker run "${HARDEN[@]}" --network none -v "$PWD:/work:ro" -w /work \
             ghcr.io/hadolint/hadolint:v2.15.1@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d \
             hadolint --config .hadolint.yaml --no-color "${dockerfiles[@]}"
 
@@ -529,6 +534,9 @@ jobs:
     name: Workflow Lint (actionlint)
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Checkout only: the workflow-level `pull-requests: read` is not needed here.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -536,7 +544,9 @@ jobs:
       - name: actionlint over every workflow
         run: |
           set -euo pipefail
-          docker run --rm --read-only --network none -v "$PWD:/repo:ro" -w /repo \
+          # The same hardening flags as the local run: scripts/ci/harden-flags.sh defines HARDEN once.
+          source ./scripts/ci/harden-flags.sh
+          docker run "${HARDEN[@]}" --network none -v "$PWD:/repo:ro" -w /repo \
             rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 \
             -color=false .github/workflows/*.yml
 

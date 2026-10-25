@@ -132,59 +132,166 @@ class TestNotifyAppliances:
         assert "%{http_code}" in script and "::warning::" in script
 
 
+def _code(text: str) -> str:
+    """The text without whole-line comments (a comment can say what the code must not do)."""
+    return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+
+
+#: Registry writers other than the one promotion step, and anything that could mint or move a tag by other means.
+FORBIDDEN_IN_RELEASE = re.compile(
+    r"\b(crane|gcrane|regctl|skopeo|oras|cosign\s+(sign|attest|copy|tag))\b"
+    r"|\bdocker\s+(tag|push|build|commit)\b"
+    r"|\bbuildx\s+build\b"
+    r"|(?<![\w-])latest\b"
+)
+
+
 class TestReleasePromotesTheScannedDigest:
     def setup_method(self):
         self.text = RELEASE.read_text(encoding="utf-8")
-        self.job = _load(RELEASE)["jobs"]["release"]
+        self.doc = _load(RELEASE)
+        self.job = self.doc["jobs"]["release"]
+
+    def _step(self, needle: str) -> dict:
+        return _steps(self.job)[_index_of(self.job, needle)]
 
     def test_it_never_builds_or_pushes_layers(self):
         assert "build-push-action" not in self.text
-        assert not re.search(r"docker (build|push)\b(?!x)", self.text)
+        assert not re.search(r"docker (build|push)\b(?!x)", _code(self.text))
 
-    def test_it_never_moves_latest(self):
-        # `latest` is the CLI tag; 200 moves it, and only after the scan.
-        assert ":latest" not in self.text
-        tags = re.findall(r"^\s*docker buildx imagetools create\b[^\n]*", self.text, re.MULTILINE)
-        assert len(tags) == 1 and re.search(r'-t "\$\{IMAGE\}:\$\{VERSION\}"', tags[0])
-        assert "latest" not in tags[0]
+    def test_nothing_in_it_can_tag_or_move_latest_by_another_route(self):
+        # Mutation guard: a `crane tag ... latest`, `skopeo copy`, `docker tag` or `oras tag` appended to any
+        # step, or the word latest used as a tag, fails here. Only the promotion step may write, and only a version.
+        found = FORBIDDEN_IN_RELEASE.search(_code(self.text))
+        assert found is None, f"310 must not contain {found.group(0)!r}"
+        writers = re.findall(
+            r"^\s*docker buildx imagetools create\b[^\n]*", _code(self.text), re.MULTILINE
+        )
+        assert writers == [
+            '          docker buildx imagetools create -t "${IMAGE}:${VERSION}" "${IMAGE}@${DIGEST}"'
+        ]
 
     def test_it_promotes_a_digest_and_only_after_verifying_it(self):
         find = _index_of(self.job, "Find the scanned image")
         verify = _index_of(self.job, "Verify the signature")
+        login = _login_index(self.job)
         promote = _index_of(self.job, "Promote the digest")
-        assert _login_index(self.job) < find < verify < promote
-        assert 'imagetools create -t "${IMAGE}:${VERSION}" "${IMAGE}@${DIGEST}"' in self.text
-        assert "scripts/ci/verify_signed_digest.sh" in _steps(self.job)[verify]["run"]
+        assert find < verify < login < promote, (
+            "the write credential is minted after the checks, just before use"
+        )
+        assert login == promote - 1, "the login is the step right before the promotion"
         assert "sigstore/cosign-installer@" in self.text
 
-    def test_it_finds_the_image_by_the_commit_and_fails_clearly_without_one(self):
-        script = _steps(self.job)[_index_of(self.job, "Find the scanned image")]["run"]
-        assert 'SHA_TAG="sha-${GITHUB_SHA:0:7}"' in script
-        assert "--workflow 200-build-images.yml" in script and '--commit "$GITHUB_SHA"' in script
-        assert script.count("::error::") >= 3 and "exit 1" in script
+    def test_the_verification_cannot_be_made_non_gating(self):
+        # Mutation guard: `|| true`, continue-on-error, an `if:` or a `set +e` on the verify step all fail here.
+        step = self._step("Verify the signature")
+        assert set(step) <= {"name", "env", "run"}, (
+            f"unexpected keys on the verify step: {sorted(step)}"
+        )
+        assert "||" not in step["run"] and ";" not in step["run"] and "&" not in step["run"]
+        assert "set +e" not in step["run"]
+        assert step["run"].startswith("bash scripts/ci/verify_signed_digest.sh ")
+        assert step["env"]["EXPECTED_REVISION"] == "${{ steps.scanned.outputs.build_commit }}"
+        assert step["env"]["EXPECTED_RUN_IDS"] == "${{ steps.scanned.outputs.run_ids }}"
+        assert "continue-on-error" not in yaml.safe_dump(self.job)
 
-    def test_a_release_tag_is_never_moved(self):
-        script = _steps(self.job)[_index_of(self.job, "Promote the digest")]["run"]
+    def test_the_search_is_the_script_and_it_is_not_made_optional(self):
+        step = self._step("Find the scanned image")
+        assert step["run"] == "bash scripts/ci/find_release_image.sh"
+        assert set(step) <= {"name", "id", "env", "run"}
+
+    def test_a_release_tag_is_never_moved_and_a_failed_check_is_not_an_absent_tag(self):
+        script = self._step("Promote the digest")["run"]
         assert "a release tag is never moved" in script
+        assert "registry_digest" in script and 'case "$rc" in' in script
+        # The branch that lets the tag be created is the "not found" one only (return status 1).
+        assert re.search(r"^\s*1\) ;;\s*$", script, re.MULTILINE)
+        assert "refusing to create a release tag blind" in script
+        assert (
+            "Delete that tag on Docker Hub" in script
+        )  # the runbook line for the post-check failure
+        assert "2>/dev/null" not in script, "an inspect failure must not be silenced into 'absent'"
+
+    def test_the_login_hint_names_the_second_ruleset_and_the_troubleshooting_page(self):
+        hint = self._step("What to check if the Docker Hub login")
+        assert (
+            "steps.login.outcome == 'failure'" in hint["if"]
+            and "steps.promote.outcome == 'failure'" in hint["if"]
+        )
+        assert hint["if"].startswith("failure()")
+        for needle in (
+            "https://docs.docker.com/security/authentication/oidc-connections/troubleshoot",
+            "SECOND RULESET",
+            "refs/tags/v*",
+            "Image Push",
+            "Failures",
+        ):
+            assert needle in hint["run"], needle
+        assert "Image Pull" not in hint["run"]
 
     def test_it_may_read_the_workflow_runs_it_waits_for(self):
-        assert _load(RELEASE)["permissions"].get("actions") == "read"
+        assert self.doc["permissions"].get("actions") == "read"
+
+    def test_the_header_states_the_ruleset_and_the_first_release_flow(self):
+        header = self.text.split("name:", 1)[0]
+        assert "SECOND RULESET" in header and "refs/tags/v*" in header and "Image Push" in header
+        assert "Image Pull is not needed" in header
+        assert "latest-build.json" in header and "commit" in header
+        assert "DRY RUN" in header and "POST-CHECK" in header.upper()
 
 
-class TestVerifyScript:
+class TestReleaseDryRun:
+    """Run workflow on 310 proves the find / verify path before any tag exists, without writing anything."""
+
     def setup_method(self):
-        self.text = VERIFY_SCRIPT.read_text(encoding="utf-8")
+        self.doc = _load(RELEASE)
+        self.job = self.doc["jobs"]["release"]
+        self.steps = _steps(self.job)
 
-    def test_it_checks_signature_and_provenance_under_the_200_identity(self):
-        assert "200-build-images.yml@refs/heads/main" in self.text
-        assert "https://token.actions.githubusercontent.com" in self.text
-        assert re.search(r"\bverify\b", self.text) and "verify-attestation" in self.text
-        assert "--type slsaprovenance02" in self.text
+    def test_there_is_a_dry_run_input_that_defaults_to_true(self):
+        trigger = self.doc.get("on", self.doc.get(True))
+        assert trigger["workflow_dispatch"]["inputs"]["dry_run"]["default"] is True
+        assert trigger["workflow_dispatch"]["inputs"]["dry_run"]["type"] == "boolean"
+        assert trigger["push"]["tags"] == ["v*.*.*"]
 
-    def test_it_demands_the_exact_digest_and_the_configured_repository(self):
-        assert '"docker-manifest-digest"' in self.text
-        assert "/${IMAGE_REPOSITORY}@sha256:" in self.text
-        assert "${IMAGE_REPOSITORY:-}" in self.text
+    def test_a_dispatch_runs_only_as_a_dry_run_from_main_and_needs_no_publishing_switch(self):
+        condition = " ".join(str(self.job["if"]).split())
+        dispatch = condition.split("||")[1]
+        assert (
+            "github.event_name == 'workflow_dispatch'" in dispatch and "inputs.dry_run" in dispatch
+        )
+        assert "default_branch" in dispatch
+        assert "DOCKERHUB_ENABLED" not in dispatch
+        assert "DOCKERHUB_ENABLED == 'true'" in condition.split("||")[0], (
+            "a pushed tag still needs publishing on"
+        )
+
+    def test_every_step_that_writes_runs_only_for_a_pushed_tag(self):
+        writers = (
+            "Extract version",
+            "Log in to Docker Hub",
+            "Promote the digest",
+            "Create GitHub Release",
+        )
+        for name in writers:
+            step = next(s for s in self.steps if name in s.get("name", ""))
+            assert step["if"] == "github.event_name == 'push'", name
+
+    def test_the_dry_run_still_finds_and_verifies_and_reports(self):
+        by_name = {s.get("name", ""): s for s in self.steps}
+        for name in (
+            "Find the scanned image built from this commit",
+            "Verify the signature and provenance of that digest",
+        ):
+            assert "if" not in by_name[name], f"{name} must run in the dry run"
+        report = by_name["Report what a release would promote (dry run)"]
+        assert report["if"] == "github.event_name == 'workflow_dispatch'"
+        assert "nothing was logged in, tagged or released" in report["run"]
+
+    def test_the_dry_run_never_has_a_write_credential(self):
+        # The only login step is for a pushed tag, and it comes after the verification.
+        login = next(s for s in self.steps if str(s.get("uses", "")).startswith(LOGIN_ACTION))
+        assert login["if"] == "github.event_name == 'push'"
 
 
 class TestDockerLoginRehearsal:
@@ -204,7 +311,7 @@ class TestDockerLoginRehearsal:
 
     def test_it_does_not_depend_on_publishing_being_enabled(self):
         assert "DOCKERHUB_ENABLED" not in self.job["if"]
-        assert "DOCKERHUB_ENABLED" not in yaml.safe_dump(self.job)
+        assert not any("DOCKERHUB_ENABLED" in str(s.get("if", "")) for s in self.steps)
         # ... while every real publishing job stays off for a rehearsal run.
         for name in ("build-images", "build-web", "tag-images", "publish-build-manifest"):
             assert "!inputs.rehearsal" in self.doc["jobs"][name]["if"], name
@@ -257,7 +364,9 @@ class TestDockerLoginRehearsal:
             and "rehearsal=" in definition
             and "GITHUB_RUN_ID" in definition
         )
-        assert not re.search(r"\n(RUN|COPY|ADD)", definition)
+        # One tiny COPY layer, so a registry that rejects zero-layer images cannot be misread as a scope error.
+        assert definition.count("COPY rehearsal.txt /rehearsal.txt") == 1
+        assert not re.search(r"\\n(RUN|ADD)\b", definition)
 
     def test_it_reads_the_digest_back(self):
         script = self.steps[_index_of(self.job, "Read the pushed digest back")]["run"]
@@ -284,7 +393,9 @@ class TestDockerLoginRehearsal:
             assert forbidden not in text, forbidden
 
     def test_it_explains_a_failure_and_logs_out_at_the_end(self):
-        hint = next(s for s in self.steps if s.get("if") == "failure()")
+        hint = next(
+            s for s in self.steps if s.get("if") == "failure() && steps.scout.outcome != 'failure'"
+        )
         assert (
             "https://docs.docker.com/security/authentication/oidc-connections/troubleshoot"
             in hint["run"]
@@ -294,3 +405,87 @@ class TestDockerLoginRehearsal:
         )
         last = self.steps[-1]
         assert last["if"] == "always()" and "docker logout" in last["run"]
+
+    def test_scout_is_rehearsed_with_the_call_the_real_build_makes(self):
+        scout = next(s for s in self.steps if s.get("id") == "scout")
+        real = next(
+            s
+            for s in _steps(self.doc["jobs"]["build-web"])
+            if str(s.get("uses", "")).startswith("docker/scout-action@")
+        )
+        assert scout["uses"] == real["uses"], "the same pinned Scout action as the real jobs"
+        for key in ("command", "only-severities", "only-fixed", "exit-code"):
+            assert scout["with"][key] == real["with"][key], key
+        assert scout["with"]["image"].endswith("@${{ steps.push.outputs.digest }}")
+        assert _index_of(self.job, "Docker Scout analyses") > _index_of(
+            self.job, "Read the pushed digest back"
+        )
+
+    def test_a_scout_failure_gets_its_own_hint_naming_the_token_decision(self):
+        hint = next(
+            s for s in self.steps if "What to check if Docker Scout failed" in s.get("name", "")
+        )
+        assert hint["if"] == "failure() && steps.scout.outcome == 'failure'"
+        assert (
+            "personal access token" in hint["run"]
+            and "DOCKERHUB_ENABLED" in hint["run"]
+            and "T-728" in hint["run"]
+        )
+        general = next(s for s in self.steps if s.get("name") == "What to check if this failed")
+        assert general["if"] == "failure() && steps.scout.outcome != 'failure'"
+
+    def test_it_claims_nothing_about_docker_hub_deleting_untagged_images(self):
+        text = BUILD.read_text(encoding="utf-8")
+        assert "garbage-collect" not in text and "garbage collect" not in text
+
+
+class TestVerifyScript:
+    """Static pins. scripts/ci tests in test_release_scripts_behaviour.py run the script against stubs."""
+
+    def setup_method(self):
+        self.text = VERIFY_SCRIPT.read_text(encoding="utf-8")
+        self.code = _code(self.text)
+
+    def test_the_identity_is_assigned_to_the_200_workflow_and_main(self):
+        # Mutation guard: changing the identity while the old string stays in a comment fails here, because
+        # the assertion is on the code of the IDENTITY= assignment, not on the file text.
+        assignments = re.findall(r"^IDENTITY=(.*)$", self.code, re.MULTILINE)
+        assert assignments == [
+            '"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/.github/workflows/200-build-images.yml@refs/heads/main"'
+        ]
+        assert re.findall(r"^ISSUER=(.*)$", self.code, re.MULTILINE) == [
+            '"https://token.actions.githubusercontent.com"'
+        ]
+
+    def test_every_cosign_call_is_pinned_to_that_identity_and_issuer(self):
+        calls = re.findall(
+            r"cosign_with_either_timestamp \"[^\"]+\" (verify(?:-attestation)?)\b(.*?)(?:\n\n|\Z)",
+            self.code,
+            re.S,
+        )
+        assert [name for name, _ in calls] == ["verify", "verify-attestation"]
+        for name, rest in calls:
+            assert '--certificate-identity "$IDENTITY"' in rest, name
+            assert '--certificate-oidc-issuer "$ISSUER"' in rest, name
+        assert "--type slsaprovenance02" in self.code
+        assert "--insecure" not in self.code and "--allow-insecure" not in self.code
+        assert "--certificate-identity-regexp" not in self.code, "an exact identity, not a pattern"
+
+    def test_no_check_can_be_turned_into_a_pass(self):
+        assert "|| true" not in self.code and "set +e" not in self.code
+        for line in self.code.splitlines():
+            assert not re.search(r"\|\|\s*(true|:)\b", line), line
+        # Each failure branch ends the script.
+        for match in re.finditer(r"echo \"::error::[^\n]*\n(\s*)(\w+)", self.code):
+            assert match.group(2) in {"exit", "return", "echo", "cat"}, match.group(0)
+
+    def test_it_checks_the_subject_the_builder_and_the_revision_like_the_appliances_do(self):
+        assert 'predicateType == "https://slsa.dev/provenance/v0.2"' in self.code
+        assert ".digest.sha256" in self.code and "predicate.builder.id" in self.code
+        assert "startswith($p)" in self.code
+        assert "org.opencontainers.image.revision" in self.code
+        assert '"docker-manifest-digest"' in self.code
+
+    def test_it_demands_the_exact_digest_and_the_configured_repository(self):
+        assert "/${IMAGE_REPOSITORY}@sha256:" in self.text
+        assert "${IMAGE_REPOSITORY:-}" in self.text

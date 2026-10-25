@@ -14,7 +14,8 @@
 #   2. Builder stage: installs deps only, not full source (smaller final layer)
 #   3. Non-root user (cna:cna uid/gid 1001) — CI smoke test verifies this
 #   4. COPY --chown so files are owned by non-root user
-#   5. Build arg CNA_VERSION injected at release time
+#   5. Build arg CNA_VERSION (default `dev`): only a local `docker build --build-arg CNA_VERSION=...` sets it;
+#      the images 200-build-images.yml publishes (and 310 promotes) are built without it
 #   6. HEALTHCHECK added (required for ECS/AKS task definitions)
 #   7. .dockerignore referenced — see .dockerignore in repo root
 
@@ -131,10 +132,11 @@ LABEL org.opencontainers.image.title="CNA Platform" \
       org.opencontainers.image.source="https://github.com/saulpatinojr/HCW-NetworkEyes_App" \
       org.opencontainers.image.licenses="Proprietary"
 
-# System deps for diagram generation (runtime only). No `apt-get upgrade`:
-# the image must be the pinned base digest plus these packages, nothing that
-# depends on the day it was built. When Docker Scout fails on a base-image
-# deb, the fix is the Dependabot digest bump, not a rebuild (TODO.md T-702).
+# System deps for diagram generation (runtime only). No `apt-get upgrade`: the base is pinned by digest, but
+# these packages are installed unpinned (hadolint DL3008 is ignored with a reason in .hadolint.yaml), so a rebuild
+# on another day gets that day's package versions on top of the same base. The control that matters is the Docker
+# Scout gate in 200-build-images.yml, which refuses fixable critical and high findings at every build. When it
+# fails on a base-image deb, the fix is the Dependabot digest bump, not a rebuild (TODO.md T-702).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     graphviz libcairo2 libpango-1.0-0 \
     libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 \
