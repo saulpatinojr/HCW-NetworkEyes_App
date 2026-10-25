@@ -116,6 +116,51 @@ USER 1001
 
 CMD ["./prisma/migrate.sh"]
 
+# ── Stage 4b: drawio-webapp ──────────────────────────────────────────────────
+# The diagram editor, served by this image under /drawio/ so that no customer topology leaves the deployment for
+# the public draw.io embed service (REVIEW.md R-019). This is the draw.io web app, released by jgraph/drawio under
+# Apache-2.0 as `draw.war` (a zip of static files; no Java is run). It is pinned by version AND sha256: to move to a
+# newer release, change both ARGs together (the checksum is on the release page,
+# https://github.com/jgraph/drawio/releases) and run the web tests; tests/security/test_drawio_self_hosted.py fails
+# if either is missing or malformed. Dependabot cannot track a release asset, so a bump is a deliberate change.
+#
+# Local development (`next dev`) has no /drawio/ unless you put the files there (the folder is git-ignored). From the
+# repository root, in bash or PowerShell:
+#   docker build -f apps/cna-web/Dockerfile --target drawio-webapp -t cna-drawio-webapp apps/cna-web
+#   docker create --name cna-drawio-webapp cna-drawio-webapp
+#   docker cp cna-drawio-webapp:/out/. apps/cna-web/public/drawio
+#   docker rm cna-drawio-webapp
+#
+# The build fails if the checksum differs. Everything the embedded editor does not use is deleted before the files
+# can reach the runner: the Java and OAuth server side (WEB-INF), the viewer and integration bundles, the template
+# gallery, the math renderer, source maps and every language file but English. What remains is about 65 MB.
+FROM node:24-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS drawio-webapp
+
+# ash with pipefail: the checksum step is a pipe (`echo | sha256sum -c -`) and a failure on its left must fail the
+# build (hadolint DL4006).
+SHELL ["/bin/ash", "-o", "pipefail", "-c"]
+
+ARG DRAWIO_WEBAPP_VERSION=32.6.1
+ARG DRAWIO_WEBAPP_SHA256=44dd56958c8408963457dc98f04d2228408ac145c7aa1d8e6895d9c88d5e42aa
+
+RUN wget -q -O /tmp/draw.war "https://github.com/jgraph/drawio/releases/download/v${DRAWIO_WEBAPP_VERSION}/draw.war" \
+ && echo "${DRAWIO_WEBAPP_SHA256}  /tmp/draw.war" | sha256sum -c - \
+ && mkdir /out \
+ && unzip -q /tmp/draw.war -d /out \
+ && rm -f /tmp/draw.war
+
+WORKDIR /out
+
+RUN rm -rf WEB-INF META-INF templates connect math4 \
+ && rm -f js/viewer.min.js js/viewer-static.min.js js/integrate.min.js js/export.js js/embed.dev.js js/open.js js/clear.js \
+          export3.html onedrive3.html open.html clear.html teams.html vsdxImporter.html monday-app-association.json \
+ && find . -name '*.map' -delete \
+ && find resources -name 'dia_*.txt' ! -name 'dia_en.txt' -delete \
+ && test -f index.html && test -f js/app.min.js && test -f resources/dia.txt && test -f mxgraph/css/common.css
+
+# Apache-2.0 asks that the licence travels with the files (the war carries none of its own at the top level).
+COPY third-party/drawio/LICENSE /out/LICENSE
+
 # ── Stage 5: runner ──────────────────────────────────────────────────────────
 FROM node:24-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS runner
 WORKDIR /app
@@ -143,6 +188,10 @@ RUN addgroup --system --gid 1001 nodejs \
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/public          ./app/public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static    ./app/.next/static
+
+# The self-hosted diagram editor (stage drawio-webapp). Served by Next.js as static files under /drawio/; its
+# Content-Security-Policy and framing headers come from next.config.ts.
+COPY --from=drawio-webapp --chown=nextjs:nodejs /out ./app/public/drawio
 
 # Prisma runtime only — @prisma/client + generated query engine.
 # The Prisma CLI is intentionally excluded; migrations run from the

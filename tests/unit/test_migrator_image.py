@@ -112,7 +112,15 @@ def version_tuple(version: str) -> tuple[int, ...]:
 
 
 def test_the_web_dockerfile_has_the_expected_stage_graph() -> None:
-    assert list(stages(DOCKERFILE)) == ["deps", "builder", "migrator-deps", "migrator", "runner"]
+    # `drawio-webapp` is the self-hosted diagram editor (REVIEW.md R-019, tests/security/test_drawio_self_hosted.py).
+    assert list(stages(DOCKERFILE)) == [
+        "deps",
+        "builder",
+        "migrator-deps",
+        "migrator",
+        "drawio-webapp",
+        "runner",
+    ]
 
 
 def test_migrator_copies_nothing_from_the_builder() -> None:

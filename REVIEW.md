@@ -28,7 +28,7 @@ Anything an engineer can solve without external input belongs in [`TODO.md`](TOD
 | [R-016](#r-016--retire-appscna-worker-and-its-image-and-service) | Retire `apps/cna-worker` — placeholder that runs as an always-on service in a deployment | Repository owner | Open — v1.0 review finding IMG-003 / ARCH-101 |
 | [R-017](#r-017--stop-publishing-the-cli-image-on-every-push) | Stop building/publishing the CLI image `sha-<7>` (nothing in this repository pulls it except the release) | Repository owner | Open — not blocking |
 | [R-018](#r-018--remove-cnareview-from-the-shipped-package) | Move `cna/review/**` out of the shipped package and API image | Repository owner | Open — not blocking |
-| [R-019](#r-019--diagram-editor-sends-customer-topology-to-embeddiagramsnet) | Diagram editor posts customer topology XML to public `embed.diagrams.net`; no offline path | Product owner / Security | Open — data-governance decision |
+| [R-019](#r-019--diagram-editor-sends-customer-topology-to-embeddiagramsnet) | Diagram editor posts customer topology XML to public `embed.diagrams.net`; no offline path | Product owner / Security | Decided 2026-10-25 — self-host; implemented (ticket #248) |
 | [R-020](#r-020--aeonik-font-licence-and-oci-licence-label) | Aeonik typeface licence coverage; OCI label `Proprietary` vs Apache-2.0 `LICENSE` | Legal / brand | Open — [VERIFY] |
 | [R-021](#r-021--byo-api-mode-scope-for-10) | Ship 1.0 `saas`-only or complete R-011 first | Product owner / Security | Open |
 | [R-022](#r-022--version-100-release-identity) | Version 1.0.0 identity: withdrawn `[1.0.0]` heading, version strings, first tag | Repository owner | Open — before the first `v*` tag |
@@ -702,9 +702,34 @@ Product owner (feature) and Security (data governance).
 Choose: self-host draw.io (static bundle served by the web tier, or a container), or document the
 dependency as a customer opt-in with a data-handling statement.
 
+**Decision (2026-10-25, ticket #248, taken under the owner's instruction to close the open issues): `self-host`.**
+The editor is the draw.io web app (`draw.war` of the jgraph/drawio release, Apache-2.0, pinned by version and sha256 in
+the `drawio-webapp` stage of `apps/cna-web/Dockerfile`), served by the web image under `/drawio/`. Not chosen: a customer
+opt-in to the public service (a data-handling statement does not make a customer's network layout leave the
+appliance) and disabling the Diagram page (the page is the product's editor).
+
+**What now applies**
+- The iframe loads `/drawio/index.html?embed=1&proto=json&offline=1&stealth=1&...` from the same deployment. No request
+  goes to a draw.io or diagrams.net host, and the page needs no internet egress from the analyst's browser.
+- The editor's files carry their own Content-Security-Policy (`next.config.ts`, values in `lib/drawio-embed.ts`):
+  `default-src 'none'`, `connect-src 'self'`, no inline script. Even a hostile diagram cannot make the browser send data to
+  another host. The application's own CSP now has `frame-src 'self'` only.
+- The iframe is sandboxed without `allow-same-origin`, so the editor's scripts get an opaque origin and cannot read the
+  application's cookies, storage or same-origin responses. The price is that the host page answers the editor with
+  `postMessage(..., "*")` (the only target an opaque origin accepts) to the one window it created, and `/drawio/*` is sent
+  with `Access-Control-Allow-Origin: *` (public static files).
+- The "Launch draw.io" link to the public site on the Diagram page is gone, and the MCP `create_diagram` result returns
+  the same-origin path instead of the public viewer.
+- Guards: `apps/cna-web/lib/drawio-embed.test.ts` (embed URL has no host, CSP names no host and allows `connect-src
+  'self'` only, sandbox keeps no `allow-same-origin`, no web source file names a public host) and
+  `tests/security/test_drawio_self_hosted.py` (pin, checksum-before-unzip, licence, no live file names a public host).
+- Known limits: the draw.io project calls its Docker image "a test version" and sells a supported production edition;
+  the Apache-2.0 code is free to use as done here, but support and security fixes come from bumping the pin (change both
+  ARGs, run the web tests). Dependabot cannot track a release asset. The editor files add about 65 MB to the web image.
+  Local development has no `/drawio/` until the files are copied in (comment on the Dockerfile stage).
+
 **Impact if unresolved**
-Customers with restricted egress cannot use the Diagram page; customer data-handling questions
-have no answer.
+Resolved: no customer topology leaves the deployment through the editor.
 
 **References**
 - v1.0 review findings UI-002, ARCH-012

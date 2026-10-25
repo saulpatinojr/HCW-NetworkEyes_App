@@ -82,7 +82,7 @@ def test_create_diagram_round_trips_xml():
         "tool": "create_diagram",
         "xml": xml,
         "name": "demo",
-        "embedUrl": "https://viewer.diagrams.net/?embed=1",
+        "embedUrl": "/drawio/index.html?embed=1&proto=json",
     }
     with patch("cna.ai_engine.mcp_client.drawio_mcp_client.httpx.post") as m:
         m.return_value = _fake_response(payload)
@@ -90,7 +90,7 @@ def test_create_diagram_round_trips_xml():
         out = client.create_diagram(xml, name="demo")
     assert out is not None
     assert out.name == "demo"
-    assert out.embed_url.startswith("https://viewer.diagrams.net/")
+    assert out.embed_url.startswith("/drawio/")
 
 
 def test_health_handles_failure_gracefully():

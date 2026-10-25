@@ -1,16 +1,27 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import {
+  DRAWIO_EMBED_SRC,
+  DRAWIO_IFRAME_SANDBOX,
+  DRAWIO_MESSAGE_ORIGIN,
+  parseDrawioMessage,
+} from "@/lib/drawio-embed";
 
-const DRAWIO_ORIGIN = "https://embed.diagrams.net";
+// The editor is the draw.io web app served by this deployment (lib/drawio-embed.ts), loaded into a sandboxed
+// iframe with an opaque origin. Its messages therefore arrive with the origin "null", and a reply cannot name a
+// target origin: "*" is the only value postMessage accepts for it. The reply is safe because it goes to
+// `frameRef.current.contentWindow`, the one window this component created, and because the editor's CSP lets it
+// send nothing to any other host.
+const REPLY_TARGET = "*";
 
 /**
  * Embedded draw.io editor with the proto=json handshake completed.
  *
- * With proto=json, embed.diagrams.net shows its spinner and waits for the
- * host page to answer its "init" postMessage with a "load" action carrying
- * diagram XML. Without that reply the editor spins forever — which is
- * exactly what the previous bare <iframe> did.
+ * With proto=json, the editor shows its spinner and waits for the host page
+ * to answer its "init" postMessage with a "load" action carrying diagram
+ * XML. Without that reply the editor spins forever — which is exactly what
+ * the previous bare <iframe> did.
  *
  * The editor's Save button (and Ctrl+S) posts an "save" event carrying the
  * current XML; when `onSave` is provided we forward the XML to it and answer
@@ -33,25 +44,20 @@ export function DrawioEmbed({
 
   useEffect(() => {
     function onMessage(event: MessageEvent) {
-      if (event.origin !== DRAWIO_ORIGIN) return;
       if (event.source !== frameRef.current?.contentWindow) return;
+      if (event.origin !== DRAWIO_MESSAGE_ORIGIN) return;
 
-      let msg: { event?: string; xml?: string } | null = null;
-      try {
-        msg = JSON.parse(event.data as string) as { event?: string; xml?: string };
-      } catch {
-        return;
-      }
+      const msg = parseDrawioMessage(event.data);
       if (msg?.event === "init") {
         frameRef.current?.contentWindow?.postMessage(
           JSON.stringify({ action: "load", xml: initialXml, autosave: 0 }),
-          DRAWIO_ORIGIN,
+          REPLY_TARGET,
         );
       } else if (msg?.event === "save" && typeof msg.xml === "string") {
         onSaveRef.current?.(msg.xml);
         frameRef.current?.contentWindow?.postMessage(
           JSON.stringify({ action: "status", message: "Saved to engagement", modified: false }),
-          DRAWIO_ORIGIN,
+          REPLY_TARGET,
         );
       }
     }
@@ -63,7 +69,8 @@ export function DrawioEmbed({
     <iframe
       ref={frameRef}
       title="draw.io editor"
-      src={`${DRAWIO_ORIGIN}/?embed=1&ui=min&spin=1&proto=json&libraries=1&noExitBtn=1`}
+      src={DRAWIO_EMBED_SRC}
+      sandbox={DRAWIO_IFRAME_SANDBOX}
       className="h-[560px] w-full"
     />
   );

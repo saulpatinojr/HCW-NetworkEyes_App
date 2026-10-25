@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import path from "path";
+import { DRAWIO_BASE_PATH, DRAWIO_HEADERS } from "./lib/drawio-embed";
 
 const securityHeaders = [
   // Prevent clickjacking
@@ -35,6 +36,12 @@ const nextConfig: NextConfig = {
         // Override X-Frame-Options for the print/presentation route (still blocked by CSP frame-ancestors)
         source: "/engagements/:id/presentation/(.*)",
         headers: [{ key: "X-Frame-Options", value: "SAMEORIGIN" }],
+      },
+      {
+        // The self-hosted draw.io editor (R-019): its own CSP (nothing but this origin), SAMEORIGIN framing and CORS
+        // for the sandboxed iframe. The middleware does not match this path, so there is exactly one CSP.
+        source: `${DRAWIO_BASE_PATH}:path*`,
+        headers: [...DRAWIO_HEADERS],
       },
     ];
   },
