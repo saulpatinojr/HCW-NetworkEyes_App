@@ -1,0 +1,93 @@
+name: "380 · draw.io Editor Pin Check"
+# The diagram editor is the draw.io web app, pinned by version and sha256 in apps/cna-web/Dockerfile (REVIEW.md R-019).
+# Dependabot cannot track a release asset, so this workflow is the reminder: once a week it compares the pinned
+# DRAWIO_WEBAPP_VERSION with the newest jgraph/drawio release and lists the repository security advisories published
+# since the pinned release. When the pin is behind or an advisory is newer than it, it opens ONE issue titled
+# "draw.io editor pin is out of date" (or updates that issue if it is already open); when the pin is current it
+# closes that issue. It changes no file, builds nothing and uses no secret: the token is the run's own, with
+# contents: read and issues: write, and it reads public data of another repository.
+#
+# Not verified by this workflow: that the advisories apply to the pinned version (the list is "published since the
+# pinned release", which a human reads), and that a newer release is safe to adopt (a bump is a reviewed change of
+# both ARG lines, with the web tests and the browser check).
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 6 * * 1'  # weekly, Monday 06:30 UTC
+
+permissions:
+  contents: read
+
+concurrency:
+  group: drawio-pin-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Compare the pin with the newest release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Compare, then open, update or close the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE_TITLE: draw.io editor pin is out of date
+        run: |
+          set -euo pipefail
+          pinned="$(sed -n 's/^ARG DRAWIO_WEBAPP_VERSION=\([0-9][0-9.]*\)$/\1/p' apps/cna-web/Dockerfile)"
+          test -n "$pinned" || { echo "::error::no 'ARG DRAWIO_WEBAPP_VERSION=x.y.z' line in apps/cna-web/Dockerfile"; exit 1; }
+
+          latest_tag="$(gh api repos/jgraph/drawio/releases/latest --jq .tag_name)"
+          latest="${latest_tag#v}"
+          test -n "$latest" || { echo "::error::no latest release returned"; exit 1; }
+          since="$(gh api "repos/jgraph/drawio/releases/tags/v${pinned}" --jq .published_at)"
+          test -n "$since" || { echo "::error::pinned release v${pinned} not found"; exit 1; }
+
+          # Advisories published after the pinned release (a human decides whether they apply).
+          advisories="$(gh api repos/jgraph/drawio/security-advisories --jq '.' | jq --arg since "$since" \
+            '[.[] | select(.published_at > $since) | {ghsa_id, severity, summary, html_url}]')"
+          advisory_count="$(jq length <<<"$advisories")"
+
+          behind=false
+          if [ "$pinned" != "$latest" ] && [ "$(printf '%s\n%s\n' "$pinned" "$latest" | sort -V | head -n 1)" = "$pinned" ]; then
+            behind=true
+          fi
+          echo "pinned=${pinned} latest=${latest} behind=${behind} advisories_since_pin=${advisory_count}"
+
+          existing="$(gh issue list -R "$REPO" --state open --search "in:title \"${ISSUE_TITLE}\"" --json number,title \
+            --jq "[.[] | select(.title == \"${ISSUE_TITLE}\")][0].number // empty")"
+
+          if [ "$behind" = true ] || [ "$advisory_count" -gt 0 ]; then
+            body="$(mktemp)"
+            {
+              echo "The draw.io editor that the web image serves (REVIEW.md R-019, stage \`drawio-webapp\` of \`apps/cna-web/Dockerfile\`) is pinned to **${pinned}**; the newest jgraph/drawio release is **${latest}** ([release notes](https://github.com/jgraph/drawio/releases/tag/${latest_tag}))."
+              echo
+              echo "Checked by [380 · draw.io Editor Pin Check](https://github.com/${REPO}/actions/workflows/380-drawio-pin-check.yml) on $(date -u +%F)."
+              echo
+              if [ "$advisory_count" -gt 0 ]; then
+                echo "Security advisories of jgraph/drawio published after the pinned release (read them to see whether ${pinned} is affected):"
+                jq -r '.[] | "- [\(.ghsa_id)](\(.html_url)) (\(.severity)): \(.summary)"' <<<"$advisories"
+              else
+                echo "No security advisory of jgraph/drawio was published after the pinned release. All advisories: https://github.com/jgraph/drawio/security/advisories"
+              fi
+              echo
+              echo "To update: change \`ARG DRAWIO_WEBAPP_VERSION\` and \`ARG DRAWIO_WEBAPP_SHA256\` together at the top of \`apps/cna-web/Dockerfile\` (the checksum is shown with the \`draw.war\` asset of the release; \`sha256sum draw.war\` gives the same value), run the web tests and the browser check, add a \`CHANGELOG.md\` line. Review cadence and owner: REVIEW.md R-019. This issue is updated by the workflow and closed when the pin is current."
+            } > "$body"
+            if [ -n "$existing" ]; then
+              gh issue edit "$existing" -R "$REPO" --body-file "$body"
+              echo "Updated issue #${existing}."
+            else
+              gh issue create -R "$REPO" --title "$ISSUE_TITLE" --body-file "$body"
+            fi
+          elif [ -n "$existing" ]; then
+            gh issue close "$existing" -R "$REPO" --reason completed \
+              --comment "The pin (${pinned}) is the newest release and no newer advisory is published. Closed by the weekly check."
+          fi

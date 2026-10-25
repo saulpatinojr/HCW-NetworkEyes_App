@@ -27,3 +27,6 @@ out
 .vscode
 .idea
 *.log
+
+# The editor is added by the drawio-webapp stage, not from the host copy used for local development.
+public/drawio
