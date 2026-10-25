@@ -23,6 +23,10 @@ on:
         description: "Tick to really make the change. Leave unticked for a dry run that only prints what would change."
         type: boolean
         default: false
+      allow_weakening:
+        description: "Only with apply ticked. Allow the update to remove or weaken something the live ruleset has: a rule, a required check, a bypass actor, a ref pattern, a lower approval count, a protection switched off. Leave unticked: such an update is refused."
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -55,7 +59,10 @@ jobs:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           TASK: ${{ inputs.task }}
           APPLY: ${{ inputs.apply }}
-          REQUIRED_CHECKS: '["Lint & Format","Unit Tests (Python 3.14)","Web lint, typecheck & tests","Python Lockfile Consistency","Python Dependency Audit (pip-audit)","Secret Scanning (detect-secrets, gating)","Repository Guardrails"]'
+          ALLOW_WEAKENING: ${{ inputs.allow_weakening }}
+          # Must equal the required checks of the live "Protect main" ruleset, and every name must be a job name in 300-test-codebase.yml.
+          # tests/unit/test_repository_admin_required_checks.py pins both. Change the live ruleset and this list together.
+          REQUIRED_CHECKS: '["Lint & Format","Unit Tests (Python 3.14)","Web lint, typecheck & tests","Python Lockfile Consistency","Python Dependency Audit (pip-audit)","Secret Scanning (detect-secrets, gating)","Repository Guardrails","Dockerfile Lint (hadolint)","Workflow Lint (actionlint)","Dependency Review","Image Scan (Trivy)"]'
           KEEP_REGEX: '^(main|master|develop|gh-pages|release/.*)$'
         run: |
           set -euo pipefail
@@ -65,17 +72,105 @@ jobs:
           if [ "$APPLY" = "true" ]; then mode="APPLY, changes are made"; fi
           say "## $TASK on $REPO ($mode)"
 
-          # Create the ruleset if it does not exist, otherwise update it in place.
+          # A ruleset update (PUT) replaces the whole live ruleset with the payload built below. So anything the live
+          # ruleset has that the payload lacks or lowers (a rule, a required check, a bypass actor, a ref pattern, an
+          # approval count, a switch that is on) is dropped without a word. These helpers read the live ruleset first,
+          # print the difference, and refuse to apply a removal or a weakening unless "allow_weakening" is ticked.
+          # shellcheck disable=SC2016  # jq text: nothing in it is a shell expansion
+          DIFF='def facets:
+              [ ((.rules // [])[] | "rule: " + .type),
+                ((.rules // [])[] | select(.type == "required_status_checks") | (.parameters.required_status_checks // [])[]
+                  | "check: " + .context + (if .integration_id then " (integration " + (.integration_id | tostring) + ")" else "" end)),
+                ((.bypass_actors // [])[] | "bypass: " + .actor_type + " " + ((.actor_id // "-") | tostring) + " (" + (.bypass_mode // "always") + ")"),
+                ((.conditions.ref_name.include // [])[] | "include: " + .),
+                ((.conditions.ref_name.exclude // [])[] | "exclude: " + .)
+              ] | unique;
+            def params:
+              [ (.rules // [])[] | .type as $t | (.parameters // {}) | to_entries[]
+                | select(.key != "required_status_checks")
+                | { t: $t, k: .key, v: .value } ];
+            def weaker($k; $lv; $nv):
+              if ($lv | type) == "boolean" then
+                (if $k == "do_not_enforce_on_create" then ($lv == false and $nv == true) else ($lv == true and $nv != true) end)
+              elif ($lv | type) == "number" then (($nv | type) != "number" or $nv < $lv)
+              elif ($lv | type) == "array" then ((($lv - ($nv // [])) | length) > 0)
+              else $lv != $nv end;
+            def pname: .t + "." + .k;
+            ($live | params) as $lp | ($new | params) as $np
+            | [ $lp[] | . as $p | ([ $np[] | select(.t == $p.t and .k == $p.k) ] | first) as $q
+                | (if $q == null then null else $q.v end) as $nv
+                | select(weaker($p.k; $p.v; $nv))
+                | "param: " + ($p | pname) + ": live " + ($p.v | tojson) + ", payload " + (if $q == null then "not set" else ($nv | tojson) end) ] as $weaker
+            | [ $np[] | . as $q | ([ $lp[] | select(.t == $q.t and .k == $q.k) ] | first) as $p
+                | select($p == null or $p.v != $q.v)
+                | select($p == null or (weaker($q.k; $p.v; $q.v) | not))
+                | "param: " + ($q | pname) + (if $p == null then " = " + ($q.v | tojson) else ": live " + ($p.v | tojson) + " -> payload " + ($q.v | tojson) end) ] as $changed
+            | { removed: ((($live | facets) - ($new | facets)) + $weaker),
+                added: ((($new | facets) - ($live | facets)) + $changed) }'
+          removed=""
+          added=""
+          live_id=""
+
+          # The id of the live ruleset with this name, or nothing.
+          ruleset_id() {
+            api --paginate "repos/$REPO/rulesets" | jq -r --arg n "$1" '.[] | select(.name == $n) | .id' | head -n1
+          }
+
+          # Reads the live ruleset called $1, compares it with payload $2, prints the difference and sets
+          # $live_id (empty when there is no such ruleset), $removed (what the update would remove or weaken) and $added.
+          compare_ruleset() {
+            local name="$1" payload="$2" live_json result
+            removed=""
+            added=""
+            live_id=$(ruleset_id "$name")
+            if [ -z "$live_id" ]; then
+              say "No live ruleset named '$name' exists, so an update removes nothing."
+              return 0
+            fi
+            live_json=$(api "repos/$REPO/rulesets/$live_id")
+            result=$(jq -nc --argjson live "$live_json" --argjson new "$payload" "$DIFF")
+            removed=$(jq -r '.removed[]' <<<"$result")
+            added=$(jq -r '.added[]' <<<"$result")
+            say "Live ruleset '$name' (id $live_id) compared with the payload above:"
+            if [ -n "$removed" ]; then
+              say "The update would REMOVE or WEAKEN these (they are live and the payload lacks or lowers them):"
+              while IFS= read -r line; do say "- $line"; done <<<"$removed"
+            else
+              say "The update removes and weakens nothing that is live."
+            fi
+            if [ -n "$added" ]; then
+              say "The update would ADD or CHANGE these (not weaker):"
+              while IFS= read -r line; do say "- $line"; done <<<"$added"
+            else
+              say "The update adds and changes nothing."
+            fi
+          }
+
+          # Create the ruleset if it does not exist, otherwise update it in place. Refuses to apply a removal or weakening that was not asked for.
           upsert_ruleset() {
             local name="$1" payload="$2" id
             say "Ruleset payload for '$name':"
             say '```json'
             say "$payload"
             say '```'
-            id=$(api "repos/$REPO/rulesets" | jq -r --arg n "$name" '.[] | select(.name == $n) | .id' | head -n1)
+            compare_ruleset "$name" "$payload"
+            id="$live_id"
             if [ "$APPLY" != "true" ]; then
+              if [ -n "$removed" ]; then
+                echo "::warning title=Apply would be refused::The update of '$name' would remove or weaken live settings. Apply refuses unless allow_weakening is ticked."
+                say "Apply would be REFUSED unless allow_weakening is also ticked."
+              fi
               if [ -n "$id" ]; then say "Would UPDATE the existing ruleset (id $id)."; else say "Would CREATE this ruleset."; fi
               return 0
+            fi
+            if [ -n "$removed" ]; then
+              if [ "${ALLOW_WEAKENING:-false}" != "true" ]; then
+                say "REFUSED: applying this would remove or weaken the settings listed above in the live ruleset '$name'. Nothing was changed."
+                say "If that is intended, run again with apply and allow_weakening both ticked. Otherwise correct this workflow so the payload keeps them (for the required checks, REQUIRED_CHECKS above), and run again."
+                echo "::error title=Refusing to weaken a live ruleset::The update of '$name' would remove or weaken settings that are live. Nothing was changed."
+                exit 1
+              fi
+              say "allow_weakening is ticked: the settings listed above will be removed or weakened."
             fi
             if [ -n "$id" ]; then
               api -X PUT "repos/$REPO/rulesets/$id" --input - <<<"$payload" > /dev/null
@@ -86,6 +181,46 @@ jobs:
             fi
           }
 
+          # The payload each ruleset task sends. show-plan builds the same ones to show what a task would remove.
+          main_payload() {
+            if ! jq -e 'type == "array" and length > 0 and all(.[]; type == "string" and length > 0) and (unique | length) == length' <<<"$REQUIRED_CHECKS" > /dev/null; then
+              say "REQUIRED_CHECKS must be a JSON array of unique, non-empty check names." >&2
+              exit 1
+            fi
+            jq -n --argjson checks "$REQUIRED_CHECKS" '{
+              name: "Protect main",
+              target: "branch",
+              enforcement: "active",
+              conditions: { ref_name: { include: ["~DEFAULT_BRANCH"], exclude: [] } },
+              bypass_actors: [ { actor_id: 5, actor_type: "RepositoryRole", bypass_mode: "pull_request" } ],
+              rules: [
+                { type: "deletion" },
+                { type: "non_fast_forward" },
+                { type: "pull_request", parameters: {
+                    required_approving_review_count: 1,
+                    dismiss_stale_reviews_on_push: true,
+                    required_reviewers: [],
+                    require_code_owner_review: true,
+                    require_last_push_approval: true,
+                    required_review_thread_resolution: true,
+                    require_extra_approval_for_unattributed_changes: true,
+                    allowed_merge_methods: ["merge", "squash", "rebase"] } },
+                { type: "required_status_checks", parameters: {
+                    strict_required_status_checks_policy: false,
+                    do_not_enforce_on_create: false,
+                    required_status_checks: ($checks | map({ context: . })) } }
+              ] }'
+          }
+          tags_payload() {
+            jq -n '{
+              name: "Protect release tags",
+              target: "tag",
+              enforcement: "active",
+              conditions: { ref_name: { include: ["refs/tags/v*"], exclude: [] } },
+              bypass_actors: [ { actor_id: 5, actor_type: "RepositoryRole", bypass_mode: "always" } ],
+              rules: [ { type: "deletion" }, { type: "non_fast_forward" }, { type: "update" }, { type: "creation" } ] }'
+          }
+
           case "$TASK" in
             show-plan)
               say "Existing rulesets:"
@@ -93,37 +228,19 @@ jobs:
               say "Branches:"
               api --paginate "repos/$REPO/branches" --jq '.[] | "- \(.name)"' | tee -a "$GITHUB_STEP_SUMMARY"
               say "Required checks that protect-main would use: $REQUIRED_CHECKS"
+              payload=$(main_payload)
+              say "What protect-main would change in the live ruleset:"
+              compare_ruleset "Protect main" "$payload"
+              payload=$(tags_payload)
+              say "What protect-release-tags would change in the live ruleset:"
+              compare_ruleset "Protect release tags" "$payload"
               ;;
             protect-main)
-              payload=$(jq -n --argjson checks "$REQUIRED_CHECKS" '{
-                name: "Protect main",
-                target: "branch",
-                enforcement: "active",
-                conditions: { ref_name: { include: ["~DEFAULT_BRANCH"], exclude: [] } },
-                bypass_actors: [ { actor_id: 5, actor_type: "RepositoryRole", bypass_mode: "pull_request" } ],
-                rules: [
-                  { type: "deletion" },
-                  { type: "non_fast_forward" },
-                  { type: "pull_request", parameters: {
-                      required_approving_review_count: 0,
-                      dismiss_stale_reviews_on_push: false,
-                      require_code_owner_review: false,
-                      require_last_push_approval: false,
-                      required_review_thread_resolution: false } },
-                  { type: "required_status_checks", parameters: {
-                      strict_required_status_checks_policy: false,
-                      required_status_checks: ($checks | map({ context: . })) } }
-                ] }')
+              payload=$(main_payload)  # an assignment, so a failure here stops the script before any update
               upsert_ruleset "Protect main" "$payload"
               ;;
             protect-release-tags)
-              payload=$(jq -n '{
-                name: "Protect release tags",
-                target: "tag",
-                enforcement: "active",
-                conditions: { ref_name: { include: ["refs/tags/v*"], exclude: [] } },
-                bypass_actors: [],
-                rules: [ { type: "deletion" }, { type: "non_fast_forward" }, { type: "update" } ] }')
+              payload=$(tags_payload)
               upsert_ruleset "Protect release tags" "$payload"
               ;;
             delete-merged-branches)

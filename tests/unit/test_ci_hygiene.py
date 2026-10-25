@@ -42,7 +42,8 @@ REQUIRED_CHECK_JOB_NAMES = {
     "Secret Scanning (detect-secrets, gating)",
     "Repository Guardrails",
 }
-# Jobs this change added. The owner adds them to the ruleset's required checks.
+# Jobs this change added. They are required checks of the ruleset now; `test_repository_admin_required_checks.py`
+# pins the full list against `390-repository-admin.yml`.
 NEW_JOB_NAMES = {
     "dockerfile-lint": "Dockerfile Lint (hadolint)",
     "workflow-lint": "Workflow Lint (actionlint)",
