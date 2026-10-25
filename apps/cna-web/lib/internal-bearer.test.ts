@@ -32,6 +32,7 @@ describe("hasValidInternalBearer", () => {
     expect(hasValidInternalBearer(request(`Basic ${TOKEN}`))).toBe(false);
     expect(hasValidInternalBearer(request("Bearer wrong-token"))).toBe(false);
     expect(hasValidInternalBearer(request(`Bearer ${TOKEN}x`))).toBe(false);
+    expect(hasValidInternalBearer(request(`Bearer ${TOKEN.slice(0, -1)}`))).toBe(false);
     expect(hasValidInternalBearer(request("Bearer "))).toBe(false);
   });
 

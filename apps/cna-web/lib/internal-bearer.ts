@@ -7,23 +7,28 @@
 // container nothing can match, so every request is refused. The token is never
 // logged and never echoed.
 
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { timingSafeEqual } from "node:crypto";
 
-// A random key, new for every process, so the digests below mean nothing outside this process.
-// The token is a high-entropy shared secret, not a user password, and nothing here is stored:
-// the keyed digest only makes both sides the same length for `timingSafeEqual`. (A plain SHA-256
-// of the token also works, but static analysis rightly reads "token hashed with a fast hash" as
-// password storage, CodeQL js/insufficient-password-hash.)
-const COMPARE_KEY = randomBytes(32);
-
-function digest(value: string): Buffer {
-  return createHmac("sha256", COMPARE_KEY).update(value, "utf8").digest();
+// Constant-time equality of two strings. Both are copied into zero-filled buffers of the longer length so
+// `timingSafeEqual` (which needs equal lengths) can compare every byte whatever the lengths are; the lengths
+// themselves are compared last. No hash is involved: the token is a shared secret that is compared, never
+// stored, and hashing it (even with a key) is what CodeQL reads as password hashing
+// (js/insufficient-password-hash, alert 1).
+function sameSecret(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided, "utf8");
+  const b = Buffer.from(expected, "utf8");
+  const length = Math.max(a.length, b.length, 1);
+  const paddedA = Buffer.alloc(length);
+  const paddedB = Buffer.alloc(length);
+  a.copy(paddedA);
+  b.copy(paddedB);
+  return timingSafeEqual(paddedA, paddedB) && a.length === b.length;
 }
 
 /**
  * True when the request carries `Authorization: Bearer <CNA_API_TOKEN>`.
- * Both sides are digested first so the comparison takes the same time whatever
- * the lengths are, then compared with `timingSafeEqual`.
+ * The comparison takes the same time for every wrong value of the same length and does not stop at the
+ * first differing byte.
  */
 export function hasValidInternalBearer(req: Request): boolean {
   const expected = process.env.CNA_API_TOKEN;
@@ -33,5 +38,5 @@ export function hasValidInternalBearer(req: Request): boolean {
   const space = header.indexOf(" ");
   if (space < 0 || header.slice(0, space).toLowerCase() !== "bearer") return false;
 
-  return timingSafeEqual(digest(header.slice(space + 1)), digest(expected));
+  return sameSecret(header.slice(space + 1), expected);
 }
