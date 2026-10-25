@@ -520,7 +520,7 @@ class TestDockerLoginRehearsal:
 
     def test_the_image_has_the_provenance_the_sbom_and_the_revision_label_the_real_build_has(self):
         push = next(s for s in self.steps if s.get("id") == "push")
-        assert push["with"]["provenance"] is True and push["with"]["sbom"] is True
+        assert push["with"]["provenance"] == PINNED_PROVENANCE and push["with"]["sbom"] is True
         assert "org.opencontainers.image.revision=${{ github.sha }}" in push["with"]["labels"]
 
     def test_it_explains_a_failure_and_logs_out_at_the_end(self):
@@ -875,3 +875,48 @@ class TestVerifyScript:
     def test_it_demands_the_exact_digest_and_the_configured_repository(self):
         assert "/${IMAGE_REPOSITORY}@sha256:" in self.text
         assert "${IMAGE_REPOSITORY:-}" in self.text
+
+
+SIGN_SCRIPT = REPO_ROOT / "scripts" / "ci" / "sign_image.sh"
+#: The schema every signing and verifying consumer reads (``slsaprovenance02``, ``predicate.builder.id``).
+PINNED_PROVENANCE = "mode=max,version=v0.2"
+
+
+class TestProvenanceSchemaIsPinned:
+    """The first rehearsal (run 40238480162) failed because BuildKit wrote SLSA v1 provenance.
+
+    ``provenance: true`` leaves the schema version to the BuildKit on the runner. That BuildKit now writes v1
+    (``runDetails.builder.id``), while ``sign_image.sh``, ``verify_signed_digest.sh``, ``310`` and the README
+    read v0.2 (``predicate.builder.id``, cosign type ``slsaprovenance02``), so ``sign_image.sh`` found an empty
+    builder id and refused to attest. Every build step now names the schema, so a runner upgrade cannot move
+    it, and the signing script says so when it sees v1.
+    """
+
+    def _build_steps(self) -> list[dict]:
+        found = []
+        for job in _load(BUILD)["jobs"].values():
+            for step in _steps(job):
+                if str(step.get("uses", "")).startswith("docker/build-push-action@"):
+                    found.append(step)
+        return found
+
+    def test_there_are_build_steps_to_check(self):
+        # Four: the three product builds and the rehearsal's throwaway image.
+        assert len(self._build_steps()) >= 4
+
+    def test_every_build_step_pins_the_provenance_schema(self):
+        for step in self._build_steps():
+            assert step["with"].get("provenance") == PINNED_PROVENANCE, step.get("name")
+
+    def test_the_pin_matches_what_the_consumers_read(self):
+        sign = SIGN_SCRIPT.read_text(encoding="utf-8")
+        verify = VERIFY_SCRIPT.read_text(encoding="utf-8")
+        assert "--type slsaprovenance02" in sign and "--type slsaprovenance02" in verify
+        assert "version=v0.2" in PINNED_PROVENANCE
+        assert ".builder.id" in sign and "predicate.builder.id" in verify
+
+    def test_the_signing_script_names_a_v1_statement_instead_of_an_empty_builder_id(self):
+        sign = SIGN_SCRIPT.read_text(encoding="utf-8")
+        assert 'has("buildDefinition")' in sign
+        assert sign.index('has("buildDefinition")') < sign.index("BUILDER_ID=")
+        assert "version=v0.2" in sign
