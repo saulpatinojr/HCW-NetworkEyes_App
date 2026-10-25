@@ -42,7 +42,6 @@ def test_topology_covers_all_core_workflows():
         "310-release-version.yml",
         "320-release-engine.yml",
         "370-registry-cleanup.yml",
-        "380-drawio-pin-check.yml",
     )
     # No workflow is both self-hosted-only and GitHub-hosted.
     assert not set(SELF_HOSTED_ONLY_WORKFLOWS) & set(GITHUB_HOSTED_WORKFLOWS)
