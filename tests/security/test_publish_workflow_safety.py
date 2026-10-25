@@ -145,7 +145,7 @@ class TestReleasePromotesTheScannedDigest:
             r"^\s*docker buildx imagetools create\b[^\n]*", _code(self.text), re.MULTILINE
         )
         assert writers == [
-            '          docker buildx imagetools create -t "${IMAGE}:${VERSION}" "${IMAGE}@${DIGEST}"'
+            '            docker buildx imagetools create -t "${IMAGE}:${TAGS[$c]}" "${IMAGE}@${DIGESTS[$c]}"'
         ]
 
     def test_it_promotes_a_digest_and_only_after_verifying_it(self):
@@ -157,7 +157,7 @@ class TestReleasePromotesTheScannedDigest:
         # The write credential is minted in a later job, after the checks, just before use.
         assert self.release["needs"] == "verify"
         login = _login_index(self.release)
-        promote = _index_of(self.release, "Promote the digest")
+        promote = _index_of(self.release, "Promote the digests")
         assert login == promote - 1, "the login is the step right before the promotion"
         assert "sigstore/cosign-installer@" in self.text
 
@@ -181,11 +181,11 @@ class TestReleasePromotesTheScannedDigest:
         assert set(step) <= {"name", "id", "env", "run"}
 
     def test_a_release_tag_is_never_moved_and_a_failed_check_is_not_an_absent_tag(self):
-        script = self._step("Promote the digest")["run"]
+        script = self._step("Promote the digests")["run"]
         assert "a release tag is never moved" in script
         assert "registry_digest" in script and 'case "$rc" in' in script
         # The branch that lets the tag be created is the "not found" one only (return status 1).
-        assert re.search(r"^\s*1\) ;;\s*$", script, re.MULTILINE)
+        assert re.search(r"^\s*1\) MISSING\[\$c\]=yes ;;\s*$", script, re.MULTILINE)
         assert "refusing to create a release tag blind" in script
         assert (
             "Delete that tag on Docker Hub" in script
@@ -236,17 +236,44 @@ class TestReleasePromotesTheScannedDigest:
         ]
         for key, value in outputs.items():
             assert re.fullmatch(r"\$\{\{ steps\.(scanned|others)\.outputs\.\w+ \}\}", value), key
-        promote = self._step("Promote the digest")
-        assert promote["env"]["DIGEST"] == "${{ needs.verify.outputs.digest }}"
+        promote = self._step("Promote the digests")
+        assert promote["env"] == {
+            "VERSION": "${{ steps.version.outputs.VERSION }}",
+            "DIGEST_CLI": "${{ needs.verify.outputs.digest }}",
+            "DIGEST_API": "${{ needs.verify.outputs.digest_api }}",
+            "DIGEST_WORKER": "${{ needs.verify.outputs.digest_worker }}",
+            "DIGEST_WEB": "${{ needs.verify.outputs.digest_web }}",
+            "DIGEST_MIGRATOR": "${{ needs.verify.outputs.digest_migrator }}",
+        }
         # No script in the release job interpolates an expression: they are all env-fed.
         for step in _steps(self.release):
             assert "${{" not in str(step.get("run", "")), step.get("name")
+
+    def test_the_release_job_holds_no_registry_credential_but_the_one_oidc_login(self):
+        # Image Push comes from the single OIDC login of the tag-ref ruleset; no stored token, no other login.
+        logins = [
+            s for s in _steps(self.release) if str(s.get("uses", "")).startswith(LOGIN_ACTION)
+        ]
+        assert len(logins) == 1
+        text = yaml.safe_dump(self.release)
+        for needle in (
+            "secrets.",
+            "DOCKERHUB_PERSONAL",
+            "DOCKERHUB_TOKEN",
+            "docker login",
+            "--password",
+        ):
+            assert needle not in text, needle
+        assert "refs/tags/v*" in self.text.split("name:", 1)[0]
 
     def test_the_header_states_the_ruleset_and_the_first_release_flow(self):
         header = self.text.split("name:", 1)[0]
         assert "SECOND RULESET" in header and "refs/tags/v*" in header and "Image Push" in header
         assert "Image Pull is not needed" in header
         assert "WHICH COMMIT TO TAG" in header and "THE FIVE DIGESTS" in header
+        for tag in ("`api-X.Y.Z`", "`worker-X.Y.Z`", "`web-X.Y.Z`", "`migrator-X.Y.Z`"):
+            assert tag in header, tag
+        assert "Only the CLI image gets" not in self.text
         assert "DRY RUN" in header and "POST-CHECK" in header.upper()
 
 
@@ -339,6 +366,12 @@ class TestDockerLoginRehearsal:
     def test_it_holds_only_the_permissions_the_login_needs_and_no_environment(self):
         assert self.job["permissions"] == {"contents": "read", "id-token": "write"}
         assert "environment" not in self.job
+
+    def test_it_never_prints_the_connection_id(self):
+        check = self.steps[_index_of(self.job, "Validate Docker Hub namespace")]["run"]
+        errors = [line for line in check.splitlines() if "::error::" in line]
+        assert errors and not any("${CONNECTION}" in line for line in errors)
+        assert any("${#CONNECTION}" in line for line in errors), "it says how long the value is"
 
     def test_it_checks_the_connection_id_and_the_namespace_before_logging_in(self):
         check = _index_of(self.job, "Validate Docker Hub namespace")
@@ -569,6 +602,55 @@ class TestBuildWorkflowStandsAlone:
         for name in ("build-images", "build-web", "tag-images", "rehearse-docker-login"):
             assert guard in str(self.doc["jobs"][name]["if"]), name
 
+    def test_a_rehearsal_has_a_concurrency_group_of_its_own(self):
+        group = self.doc["concurrency"]["group"]
+        assert group == (
+            "${{ github.workflow }}-${{ github.ref }}-${{ inputs.rehearsal && 'rehearsal' || 'build' }}"
+        )
+        assert self.doc["concurrency"]["cancel-in-progress"] is False
+
+    def test_the_rehearsal_input_describes_what_the_job_really_does(self):
+        trigger = self.doc.get("on", self.doc.get(True))
+        text = " ".join(trigger["workflow_dispatch"]["inputs"]["rehearsal"]["description"].split())
+        for needle in (
+            "SIGNED and ATTESTED and VERIFIED",
+            "rehearsal-<run id>",
+            "transparency logs",
+            "cannot be removed",
+            "nothing is deleted",
+        ):
+            assert needle in text, needle
+        assert "nothing is tagged or signed" not in text.lower()
+
+    def test_the_rehearsal_comment_states_the_residual_facts(self):
+        text = self.text
+        for needle in (
+            "indistinguishable from a real one by identity alone",
+            "rehearsal=true",
+            "cannot be removed",
+            "EXPECTED_RUN_IDS",
+            "its own concurrency group",
+        ):
+            assert needle in " ".join(text.split()), needle
+        finder = (REPO_ROOT / "scripts" / "ci" / "find_release_image.sh").read_text(
+            encoding="utf-8"
+        )
+        assert "rehearsal run" in finder and "revision label" in finder
+
+    def test_tag_images_may_move_latest_only_from_the_tip_of_the_default_branch(self):
+        job = self.doc["jobs"]["tag-images"]
+        step = _steps(job)[_index_of(job, "Verify, tag and record")]
+        assert step["env"]["GH_TOKEN"] == "${{ github.token }}"
+        assert step["env"]["DEFAULT_BRANCH"] == "${{ github.event.repository.default_branch }}"
+        script = step["run"]
+        tip = script.index(
+            'gh api "repos/${GITHUB_REPOSITORY}/commits/${DEFAULT_BRANCH}" --jq .sha'
+        )
+        assert tip < script.index('write_table "Verified') < script.index("imagetools create")
+        assert job["permissions"] == {"contents": "read", "id-token": "write"}
+        header = self.text.split("\non:\n", 1)[0]
+        assert "only ever move to the tip of the default branch" in " ".join(header.split())
+
     def test_tag_images_asks_for_the_longest_token_too(self):
         job = self.doc["jobs"]["tag-images"]
         assert int(_steps(job)[_login_index(job)]["env"]["DOCKERHUB_OIDC_EXPIREIN"]) == EXPIRE_MAX
@@ -687,6 +769,15 @@ class TestReleaseListsTheFiveDigests:
             "needs.verify.outputs.build_commit",
         ):
             assert "${{ " + expression + " }}" in body, expression
+        for tag in (
+            "`${{ steps.version.outputs.VERSION }}`",
+            "`api-${{ steps.version.outputs.VERSION }}`",
+            "`worker-${{ steps.version.outputs.VERSION }}`",
+            "`web-${{ steps.version.outputs.VERSION }}`",
+            "`migrator-${{ steps.version.outputs.VERSION }}`",
+        ):
+            assert tag in body, tag
+        assert "Only the CLI image" not in body
         assert "cosign verify " in body and "cosign verify-attestation" in body
         assert "--certificate-identity" in body and "--certificate-oidc-issuer" in body
         assert "/.github/workflows/200-build-images.yml@refs/heads/main" in body

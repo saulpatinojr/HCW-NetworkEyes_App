@@ -828,7 +828,7 @@ COMPONENT_TAGS = {
 class TestTagImagesStep:
     """The step is run as bash with stubs for docker and for the verification script it calls."""
 
-    def _run(self, tmp_path, *, bad=None, digests=None, fail_tag_call=0):
+    def _run(self, tmp_path, *, bad=None, digests=None, fail_tag_call=0, tip="f" * 40):
         digests = digests or {c: f"sha256:{str(i) * 64}" for i, c in enumerate(COMPONENT_TAGS, 1)}
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
@@ -838,6 +838,12 @@ class TestTagImagesStep:
             "docker",
             'echo "$*" >> "$DOCKER_LOG"\n'
             '[ "$(wc -l < "$DOCKER_LOG")" -ne "${STUB_FAIL_CALL:-0}" ] || { echo "toomanyrequests" >&2; exit 1; }',
+        )
+        # `gh api repos/<repo>/commits/<branch> --jq .sha` answers STUB_TIP; an empty STUB_TIP is a failed call.
+        _stub(
+            bin_dir,
+            "gh",
+            'echo "$*" >> "$GH_LOG"\n[ -n "${STUB_TIP:-}" ] || { echo "HTTP 502" >&2; exit 1; }\necho "$STUB_TIP"',
         )
         verify = tmp_path / "scripts" / "ci" / "verify_signed_digest.sh"
         verify.parent.mkdir(parents=True)
@@ -855,6 +861,11 @@ class TestTagImagesStep:
             VERIFY_LOG=str(tmp_path / "verify.log"),
             STUB_BAD=digests[bad] if bad else "",
             STUB_FAIL_CALL=str(fail_tag_call),
+            STUB_TIP=tip,
+            GH_LOG=str(tmp_path / "gh.log"),
+            GH_TOKEN="x",
+            GITHUB_REPOSITORY="o/r",
+            DEFAULT_BRANCH="main",
             GITHUB_STEP_SUMMARY=str(summary),
             GITHUB_SHA="f" * 40,
             GITHUB_RUN_ID="4242",
@@ -919,6 +930,39 @@ class TestTagImagesStep:
         assert "### All five components tagged" not in summary
         rows = [line for line in summary if line.startswith("| ") and line.endswith("| yes |")]
         assert len(rows) == 5, "the table was written before the first tag moved"
+
+    def test_a_commit_that_is_not_the_tip_gets_its_sha_tags_and_no_latest_tag(self, tmp_path):
+        result, docker_log, verify_log, summary, digests = self._run(tmp_path, tip="a" * 40)
+        assert result.returncode == 0, result.stderr + result.stdout
+        assert len(docker_log) == 5, "every component still gets its immutable sha tag"
+        for line in docker_log:
+            assert "-latest" not in line and f"{IMAGE}:latest" not in line, line
+            assert "sha-abc1234" in line
+        text = "\n".join(summary)
+        assert "The *-latest tags will NOT be moved" in text
+        assert summary[-1].startswith("### Sha tags attached; the *-latest tags were not moved")
+        assert "### All five components tagged" not in summary
+        assert "not the tip of main" in result.stdout + result.stderr
+
+    def test_the_tip_commit_moves_the_latest_tags_too(self, tmp_path):
+        result, docker_log, *_ = self._run(tmp_path)
+        assert result.returncode == 0
+        assert sum("-latest" in line or f"{IMAGE}:latest" in line for line in docker_log) == 5
+
+    def test_an_unreadable_tip_tags_nothing(self, tmp_path):
+        result, docker_log, verify_log, summary, _ = self._run(tmp_path, tip="")
+        assert result.returncode == 1 and docker_log == []
+        assert "refusing to tag anything" in result.stdout + result.stderr
+        assert not any("All five components tagged" in line for line in summary)
+
+    def test_the_tip_is_asked_of_the_default_branch_of_this_repository(self, tmp_path):
+        self._run(tmp_path)
+        assert (tmp_path / "gh.log").read_text(encoding="utf-8").split() == [
+            "api",
+            "repos/o/r/commits/main",
+            "--jq",
+            ".sha",
+        ]
 
     def test_a_rerun_after_that_failure_tags_everything_again_without_error(self, tmp_path):
         # imagetools create is idempotent: the second run repeats the verification and all five creates.
@@ -1062,6 +1106,53 @@ class TestPruneStep:
         assert not {"latest", "1.0.0"} & set(deleted)
         assert not any(name.startswith("sha256-") for name in deleted)
 
+    def test_a_component_version_tag_protects_the_sha_tag_of_its_release(self, tmp_path):
+        # 310 tags api-X.Y.Z on the digest of the released api image. Its old api-sha tag must survive 370.
+        tags = [
+            *self._tags(),
+            _hub_tag("api-sha-aaaaaaa", 0, "sha256:" + "a1" * 32),
+            _hub_tag("api-sha-bbbbbbb", 1, "sha256:" + "b2" * 32),
+            _hub_tag(
+                "api-sha-ccccccc", 2, "sha256:" + "c3" * 32, images=["sha256:" + "c4" * 32]
+            ),  # released
+            _hub_tag(
+                "api-sha-ddddddd", 3, "sha256:" + "d5" * 32, images=["sha256:" + "d6" * 32]
+            ),  # not released
+            _hub_tag("api-1.0.0", 9, "sha256:" + "c3" * 32, images=["sha256:" + "c4" * 32]),
+        ]
+        result, deleted = self._run(tmp_path, tags=tags)
+        assert result.returncode == 0, result.stderr + result.stdout
+        assert (
+            "api-sha-ccccccc" not in deleted
+            and "keeping: api-sha-ccccccc (shared:" in result.stdout
+        )
+        assert "api-sha-ddddddd" in deleted
+        assert "api-1.0.0" not in deleted
+
+    def test_thousands_of_tags_do_not_hit_the_argument_limit(self, tmp_path):
+        # cosign's referrer tags (sha256-<hex>) are never pruned and pile up; the permanent set also grows with every
+        # release. Passed as one jq argument, the set passes 128 KiB (Linux) or 32 KiB (Windows) and the job ends with
+        # "Argument list too long". It is read from a file, and referrer tags are not in it.
+        referrers = [
+            _hub_tag("sha256-" + f"{n:064x}", 9, "sha256:" + f"{n + 10**6:064x}")
+            for n in range(6000)
+        ]
+        releases = [
+            _hub_tag(f"1.{n}.0", 9, "sha256:" + f"{n + 2 * 10**6:064x}") for n in range(3000)
+        ]
+        result, deleted = self._run(tmp_path, tags=[*self._tags(), *referrers, *releases])
+        assert result.returncode == 0, result.stderr + result.stdout
+        assert "Argument list too long" not in result.stdout + result.stderr
+        assert sorted(deleted) == ["sha-c3", "sha-e5"]
+        assert "Fetched 9012 total tags" in result.stdout
+
+    def test_a_referrer_tag_never_shields_a_sha_tag(self, tmp_path):
+        # A referrer tag that (impossibly) listed an image digest of a SHA tag must not keep it: they are excluded.
+        d = self.D
+        tags = [*self._tags(), _hub_tag("sha256-" + "c" * 64, 9, d[3])]
+        _, deleted = self._run(tmp_path, tags=tags)
+        assert "sha-c3" in deleted
+
     def test_a_dry_run_deletes_nothing_and_names_the_same_tags(self, tmp_path):
         result, deleted = self._run(tmp_path, dry_run="true")
         assert result.returncode == 0 and deleted == []
@@ -1072,3 +1163,141 @@ class TestPruneStep:
         result, deleted = self._run(tmp_path, delete_status="403")
         assert result.returncode == 1 and sorted(deleted) == ["sha-c3", "sha-e5"]
         assert "Could not delete sha-c3" in result.stdout + result.stderr
+
+
+# --- the "Promote the digests to the release tags" step of 310-release-version.yml ---
+
+RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "310-release-version.yml"
+
+#: `docker buildx imagetools inspect REF --format ...` answers from a registry file ("<ref> <digest>" lines);
+#: `docker buildx imagetools create -t TAG SRC@DIGEST` appends TAG with that digest (or STUB_CREATE_AS) and logs it.
+DOCKER_REGISTRY_STUB = r"""
+if [ "$3" = create ]; then
+  echo "$*" >> "$CREATE_LOG"
+  src="${6}"; digest="${STUB_CREATE_AS:-${src##*@}}"
+  echo "$5 $digest" >> "$STUB_REGISTRY"
+  exit 0
+fi
+ref="$4"
+if [ -n "${STUB_REGISTRY_ERROR:-}" ]; then echo "ERROR: $STUB_REGISTRY_ERROR" >&2; exit 1; fi
+line="$(grep -F "$ref " "$STUB_REGISTRY" | tail -n1 || true)"
+if [ -z "$line" ]; then echo "ERROR: $ref: not found" >&2; exit 1; fi
+echo "${line##* }"
+"""
+
+RELEASE_DIGESTS = {
+    "cli": "sha256:" + "1" * 64,
+    "api": "sha256:" + "2" * 64,
+    "worker": "sha256:" + "3" * 64,
+    "web": "sha256:" + "4" * 64,
+    "migrator": "sha256:" + "5" * 64,
+}
+RELEASE_TAGS = {
+    "cli": "1.2.3",
+    "api": "api-1.2.3",
+    "worker": "worker-1.2.3",
+    "web": "web-1.2.3",
+    "migrator": "migrator-1.2.3",
+}
+
+
+def _promote_script() -> str:
+    import yaml
+
+    doc = yaml.safe_load(RELEASE_WORKFLOW.read_text(encoding="utf-8"))
+    steps = doc["jobs"]["release"]["steps"]
+    return next(s for s in steps if "Promote the digests" in s.get("name", ""))["run"]
+
+
+@needs_tools
+class TestPromoteStep:
+    """The step is run as bash against a stub registry (docker) and the real registry_digest.sh."""
+
+    def _run(self, tmp_path, *, existing=None, registry_error="", create_as="", digests=None):
+        digests = digests or RELEASE_DIGESTS
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        _stub(bin_dir, "docker", DOCKER_REGISTRY_STUB)
+        helper = tmp_path / "scripts" / "ci" / "registry_digest.sh"
+        helper.parent.mkdir(parents=True)
+        helper.write_text(
+            (CI_DIR / "registry_digest.sh").read_text(encoding="utf-8"),
+            encoding="utf-8",
+            newline="\n",
+        )
+        registry = tmp_path / "registry.txt"
+        registry.write_text(
+            "".join(f"{IMAGE}:{tag} {digest}\n" for tag, digest in (existing or {}).items()),
+            encoding="utf-8",
+        )
+        env = _env(
+            bin_dir,
+            STUB_REGISTRY=str(registry),
+            STUB_REGISTRY_ERROR=registry_error,
+            STUB_CREATE_AS=create_as,
+            CREATE_LOG=str(tmp_path / "create.log"),
+            REGISTRY="docker.io",
+            DOCKERHUB_NAMESPACE=NAMESPACE,
+            IMAGE_REPOSITORY=REPOSITORY,
+            VERSION="1.2.3",
+            DIGEST_CLI=digests["cli"],
+            DIGEST_API=digests["api"],
+            DIGEST_WORKER=digests["worker"],
+            DIGEST_WEB=digests["web"],
+            DIGEST_MIGRATOR=digests["migrator"],
+        )
+        result = subprocess.run(
+            [BASH, "-c", _promote_script()], env=env, cwd=tmp_path, capture_output=True, text=True
+        )
+        log = tmp_path / "create.log"
+        creates = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
+        return result, creates, registry.read_text(encoding="utf-8").splitlines()
+
+    def test_all_five_release_tags_are_created_on_the_verified_digests(self, tmp_path):
+        result, creates, registry = self._run(tmp_path)
+        assert result.returncode == 0, result.stderr + result.stdout
+        assert len(creates) == 5
+        for component, tag in RELEASE_TAGS.items():
+            assert f"{IMAGE}:{tag} {RELEASE_DIGESTS[component]}" in registry, tag
+        assert creates[0].endswith(f"-t {IMAGE}:1.2.3 {IMAGE}@{RELEASE_DIGESTS['cli']}")
+
+    def test_a_rerun_after_a_partial_failure_creates_only_what_is_missing(self, tmp_path):
+        done = {RELEASE_TAGS[c]: RELEASE_DIGESTS[c] for c in ("cli", "api")}
+        result, creates, _ = self._run(tmp_path, existing=done)
+        assert result.returncode == 0, result.stderr + result.stdout
+        assert len(creates) == 3 and not any(
+            f"{IMAGE}:1.2.3 " in c or "api-1.2.3" in c for c in creates
+        )
+        assert "already points at" in result.stdout
+
+    def test_everything_already_tagged_is_a_no_op(self, tmp_path):
+        done = {RELEASE_TAGS[c]: RELEASE_DIGESTS[c] for c in RELEASE_TAGS}
+        result, creates, _ = self._run(tmp_path, existing=done)
+        assert result.returncode == 0 and creates == []
+
+    def test_an_existing_tag_with_another_digest_stops_the_release_before_any_tag_is_created(
+        self, tmp_path
+    ):
+        clash = {RELEASE_TAGS["worker"]: "sha256:" + "9" * 64}
+        result, creates, _ = self._run(tmp_path, existing=clash)
+        assert result.returncode == 1
+        assert creates == [], "phase 1 checks every tag before phase 2 writes any"
+        assert "worker-1.2.3 already exists" in result.stderr + result.stdout
+        assert "a release tag is never moved" in result.stderr + result.stdout
+
+    def test_a_registry_error_is_not_read_as_an_absent_tag(self, tmp_path):
+        result, creates, _ = self._run(tmp_path, registry_error="denied: requested access")
+        assert result.returncode == 1 and creates == []
+        assert "refusing to create a release tag blind" in result.stderr + result.stdout
+
+    def test_a_tag_that_resolves_to_another_digest_after_creation_fails(self, tmp_path):
+        result, creates, _ = self._run(tmp_path, create_as="sha256:" + "8" * 64)
+        assert result.returncode == 1 and len(creates) == 1, "it stops at the first bad read-back"
+        assert "expected" in result.stderr + result.stdout
+        assert "Delete that tag on Docker Hub" in result.stderr + result.stdout
+
+    def test_a_missing_or_malformed_digest_creates_nothing(self, tmp_path):
+        digests = {**RELEASE_DIGESTS, "web": ""}
+        result, creates, _ = self._run(tmp_path, digests=digests)
+        assert result.returncode == 1 and creates == []
+        assert "No valid digest for 'web'" in result.stderr + result.stdout
