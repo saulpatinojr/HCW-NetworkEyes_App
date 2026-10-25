@@ -7,6 +7,7 @@
 // ──────────────────────────────────────────────────────────────────────────────
 
 import { generateAiCompletion } from "@/lib/ai-engine";
+import { markdownCell } from "@/lib/markdown-cell";
 import type { DeliverableContext } from "@/lib/openai";
 import { fetchMsLearnContext, summarizeTopology } from "@/lib/openai";
 import {
@@ -117,8 +118,7 @@ function findingsRegister(findings: ReportFinding[]): string {
     "| # | Severity | Category | Finding | Recommendation |",
     "|---|----------|----------|---------|----------------|",
   ];
-  const clean = (s: string | null | undefined, max: number) =>
-    (s ?? "—").replace(/\|/g, "\\|").replace(/\s+/g, " ").slice(0, max);
+  const clean = markdownCell;
   rows.forEach((f, i) => {
     lines.push(
       `| ${i + 1} | ${f.severity} | ${clean(f.category, 40)} | ${clean(f.title, 90)} | ${clean(f.recommendation, 160)} |`,

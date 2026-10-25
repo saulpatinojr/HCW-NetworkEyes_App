@@ -7,7 +7,9 @@ can pick up work without rediscovering the findings.
 Items requiring external input — an approval, an account, a credential, an access grant — belong
 in [`REVIEW.md`](REVIEW.md), not here. Completed work is recorded in [`CHANGELOG.md`](CHANGELOG.md).
 
-**Last reviewed:** 2026-09-23 (full pass). Rows checked since: T-728 and T-730 on 2026-10-24.
+**Last reviewed:** 2026-09-23 (last full pass; the rows below were not all re-read since, so the date is kept rather than
+claimed anew). Rows checked since: T-728 and T-730 on 2026-10-24; T-721, T-722, T-724, T-726 (bounds only), T-728 and T-729 on
+2026-10-25, where each `[VERIFY]` marker was resolved against vendor documentation or given a recorded reason to stay.
 
 | Phase | Theme | Items |
 |---|---|---|
@@ -2083,9 +2085,11 @@ member (`CHANGELOG.md` `[Unreleased]`). Open:
   appliance's public surface needs them, add them there, never to the engine.
 - `requires-python` moved to `>=3.14` for the monorepo (plan section 11) and CI tests 3.14 only;
   `uv.lock` dropped the 3.11–3.13 wheel entries. A developer on 3.13 runs `uv python install 3.14`.
-- `[VERIFY]` The three Dockerfiles and the lockfile CI job were edited for the workspace member
-  (`--no-emit-workspace`, install from the tree) but no image was built in the session that made the
-  change (no Docker daemon); the first `200-build-images` run on `main` is the check.
+- Checked 2026-10-25: the three Dockerfiles and the lockfile CI job that were edited for the workspace member
+  (`--no-emit-workspace`, install from the tree) build. The `Docker Build Smoke Test`, `Lab Boundary Image`,
+  `Image Scan (Trivy)` and `Python Lockfile Consistency` jobs of `300-test-codebase.yml` are green on `main`
+  (https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/runs/40238173093). A published image from
+  `200-build-images` is still pending the Docker Hub bring-up (`REVIEW.md` R-013).
 - Keep the monorepo's re-export shims (`cna.core.topology.azure` / `.common`,
   `cna.ai_engine.observed_state_enforcer`, `cna.modules.network.analysis.topology_classifier`) until change
   set K removes `topology_schema` (T-719); then import the engine directly where it is cheaper.
@@ -2095,8 +2099,11 @@ member (`CHANGELOG.md` `[Unreleased]`). Open:
 ### T-722 — Least-privilege roles: verify the actions, assign them in the deployment (change set F)
 `docs/roles/cna-network-bgp-reader.json`, `cna/modules/network/module.yaml`, `.env.example` and the help
 modal now carry the roles table of `REFACTOR_APP.md` section 13 (`CHANGELOG.md` `[Unreleased]`). Open:
-- `[VERIFY actions]` Every action string in the custom role and in `module.yaml` is to be checked against
-  the current `Microsoft.Network` provider operations before the role is created:
+- Checked 2026-10-25: every action string in the custom role and in `module.yaml` is listed in the Microsoft Learn
+  Azure permissions reference (networking, management-and-governance, monitor and security pages under
+  https://learn.microsoft.com/azure/role-based-access-control/permissions/); `Microsoft.Network/*/read` is a wildcard
+  and is the read part of the built-in Reader role. `tests/unit/test_role_docs.py` pins the six names. Still to do by
+  whoever creates the role, against their own tenant:
   `az provider operation show --namespace Microsoft.Network -o json | ConvertFrom-Json` (PowerShell) and
   look for each of the six names; then `az role definition create --role-definition
   '@docs/roles/cna-network-bgp-reader.json'` from a checkout of `main` that carries the file.
@@ -2141,9 +2148,11 @@ container at a time (`CHANGELOG.md` `[Unreleased]`; `tests/unit/test_cna_api_aut
   and `CNA_ENTRA_AUDIENCE` on the web container; once both are in place it may drop `CNA_API_TOKEN` from
   both containers (the api refuses to start with neither). An AWS deployment has no Entra
   tenant and keeps the shared token.
-- `[VERIFY]` The accepted issuers (`https://login.microsoftonline.com/<tenant>/v2.0` and
-  `https://sts.windows.net/<tenant>/`) against a real token for the `api://` audience; the app
-  registration's `accessTokenAcceptedVersion` decides which one arrives.
+- Checked 2026-10-25: the two accepted issuers (`https://login.microsoftonline.com/<tenant>/v2.0` for v2.0 tokens and
+  `https://sts.windows.net/<tenant>/` for v1.0 tokens) are the ones Microsoft Learn documents ("Access tokens in the
+  Microsoft identity platform", its example v1.0 token carries the trailing slash). The app registration's
+  `requestedAccessTokenVersion` decides which one arrives, and accepting both is correct either way, so no real token
+  is needed to settle this.
 - `[REVIEW REQUIRED]` Keeping the shared token as a second accepted bearer while Entra is configured, and
   the role name `Discovery.Run`; the plan's end state is Entra only.
 - The plan's public read routes (`/api/health`, `/api/rules`, `/api/assessments/current/*`, section 8) do
@@ -2176,7 +2185,9 @@ old loop for one release (`CHANGELOG.md` `[Unreleased]`). Open:
   and `properties.resourceDetails.{Id,ResourceType}`; `ResourceContainers`
   `properties.managementGroupAncestorsChain[]` and `properties.details.parent.id`; VM `plan` column and
   `properties.networkProfile.networkInterfaces[].id`; NIC `properties.enableIPForwarding`.
-- `[VERIFY]` Every bound in the package's `[azure]` extra (`packages/cna-azure-network-engine/pyproject.toml`).
+- Every bound in the package's `[azure]` extra (`packages/cna-azure-network-engine/pyproject.toml`): checked against PyPI on
+  2026-10-25 (each lower bound is the newest release, no next major exists); that the SDK calls behave as coded stays open
+  until the acceptance run above, which needs a tenant and so cannot be done from an agent session.
 - The live collector bodies still live in `cna/modules/network/discovery/azure_discovery.py` and run from
   `_run_live_collectors`; the plan's `discovery/live_bgp.py`, `live_metrics.py`, `live_diagnostics.py`,
   `live_cost.py` and `live_law.py` in the package are the next move (they need `with_retry` and
@@ -2338,9 +2349,11 @@ Nothing publishes until the owner flips the variables below. Open, in order:
   https://github.com/saulpatinojr/HCW-NetworkEyes_App/pull/299 makes the `protect-release-tags` payload of
   `390-repository-admin.yml` equal this live ruleset (it would otherwise drop `creation` and the bypass actor on apply);
   until it merges, do not run that task with `apply` ticked.
-- `[VERIFY]` `DOCKERHUB_OIDC_CONNECTIONID` / `DOCKERHUB_OIDC_EXPIREIN` and the minimum `docker/login-action`
-  release that reads them, against Docker's documentation at the time of enabling; `actionlint` over
-  `.github/workflows/` on the first pull request (not installed where this was written).
+- Checked 2026-10-25: `DOCKERHUB_OIDC_CONNECTIONID` and the `id-token: write` permission are in Docker's OIDC connection
+  guide (https://docs.docker.com/security/authentication/oidc-connections/create-manage/), which asks for
+  `docker/login-action` 4.5.0 or later (the pin is 4.6.0); `DOCKERHUB_OIDC_EXPIREIN` is in the action's README
+  (default 300; the README on the default branch allows up to 21600, the workflows stay at or under 3600, which
+  `tests/security/test_publish_workflow_safety.py` pins). `actionlint` runs in CI (`Workflow Lint (actionlint)`).
 - **First engine release: done (checked 2026-10-24).** `engine-v0.1.0` was published on 2026-10-12 by
   `320-release-engine.yml` (run 38205653284, success). The GitHub Release carries
   `cna_azure_network_engine-0.1.0-py3-none-any.whl` (sha256 `a609b80059fca7b22057b464a0c41895b324e21dc3e28d569a6e0894e94bd1ba`)
@@ -2368,8 +2381,12 @@ Nothing publishes until the owner flips the variables below. Open, in order:
 - Deployment note (outside this repository): the published images carry the extra, so nothing changes for an AWS
   deployment; a future Azure-only image (`--extra api` without `--extra aws`) is the moment an Azure deployment stops
   shipping boto3.
-- `[VERIFY]` `cna/modules/network/module.aws.yaml` against the IAM actions the collectors call; the
-  AWS read-only policy of a deployment is built from it.
+- Checked 2026-10-25: `cna/modules/network/module.aws.yaml` now lists exactly the IAM actions the network collector
+  calls (it had missed the security group, network ACL, region, Network Firewall and WAFv2 calls and listed five
+  actions nothing calls), and each name exists in the AWS Service Authorization Reference.
+  `tests/unit/test_aws_permissions_match_collector.py` keeps the two in step. The AWS read-only policy of a
+  deployment is built from this file, so a deployer should re-read it. The other AWS modules (`aws_security.py`, the
+  S3 deployer, the Bedrock client) have no permission manifest yet.
 - Keep `tests/conftest.py`'s skip in step with the marker: an `@pytest.mark.aws` test that runs green
   without `boto3` is not testing the AWS path.
 - The change-set-A shims (`cna/core/topology_schema.py` and the five analysis shims, T-719) and the `arm`
@@ -2452,8 +2469,10 @@ builder, so it did not change. The two `brace-expansion` `overrides` are gone an
 High. The pull-request job `Image Scan (Trivy)` in `300-test-codebase.yml` builds the migrator and runner targets, checks the migrator tree inside the
 image and scans both with the digest-pinned Trivy for fixable HIGH and CRITICAL findings and secrets (one narrow suppression in `.trivyignore.yaml`:
 the public Azurite key the Azure SDK bundles into the web build); `tests/unit/test_migrator_image.py` and `tests/unit/test_ci_hygiene.py` pin the rest.
-Open: (1) `postcss-selector-parser` 6 (Moderate, held by `@tailwindcss/typography`; `npm audit fix` offers only a downgrade) and the other Moderate
-advisory in that chain; (2) the owner adds `Image Scan (Trivy)` to the `Protect main` required checks (`REVIEW.md` R-026 lists the other three);
+Done 2026-10-25: (1) `postcss-selector-parser` (Dependabot alert 46, CVE-2026-104844): an `overrides` entry under `@tailwindcss/typography` lifts it
+from 6.0.10 to 7.1.7, a Tailwind compile of a `prose` fixture is byte-identical before and after, `npm audit` (development dependencies included)
+reports 0, and `lib/npm-overrides.test.ts` fails if the lockfile resolves an older one; (2) `Image Scan (Trivy)` is among the required checks of the
+live `Protect main` ruleset (read back 2026-10-25). Still open:
 (3) the first real run of the Docker Scout step in `200-build-images.yml` is the only place Scout itself is exercised, and it cannot be run
 without Docker credentials, so Trivy is the proxy; (4) findings in the base image that have no fix are not covered (`--ignore-unfixed`, like the
 Scout gate's `only-fixed`) and move with the pinned `node:24-alpine` digest.

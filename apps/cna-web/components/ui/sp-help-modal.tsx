@@ -243,7 +243,8 @@ export function SpHelpModal() {
   }
 
 // ── Roles (REFACTOR_APP.md section 13, the single source for this table) ─────
-// [REVIEW REQUIRED] role decisions; the custom role's actions are [VERIFY actions].
+// [REVIEW REQUIRED] role decisions. The custom role's actions were checked against the
+// Microsoft Learn Azure permissions reference on 2026-10-25.
 
 const ROLES = [
   { role: "Reader", kind: "built-in", purpose: "Every export rule and Resource Graph discovery" },

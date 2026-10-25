@@ -12,24 +12,27 @@ required_permissions:
   # Azure: the scan is read-only. Reader on each assessed scope covers every list/read
   # call; the optional built-in reader roles cover Defender, cost and Log Analytics; the
   # six POST actions that return BGP state without changing anything are the custom role
-  # docs/roles/cna-network-bgp-reader.json ("CNA Network BGP Reader"). Every action name
-  # below is [VERIFY actions] against the current Microsoft.Network provider operations
+  # docs/roles/cna-network-bgp-reader.json ("CNA Network BGP Reader"). Checked 2026-10-25:
+  # every action name below is listed in the Microsoft Learn Azure permissions reference
+  # (https://learn.microsoft.com/azure/role-based-access-control/permissions/networking,
+  # .../management-and-governance, .../monitor and .../security); `Microsoft.Network/*/read`
+  # is a wildcard and so is not listed there, it is the read part of the built-in Reader role
   # (REFACTOR_APP.md change set F, section 13). [REVIEW REQUIRED] role decisions.
   azure:
-    - Microsoft.Resources/subscriptions/resourceGroups/read  # [VERIFY actions] Reader
-    - Microsoft.ResourceGraph/resources/read  # [VERIFY actions] Reader
-    - Microsoft.Network/*/read  # [VERIFY actions] Reader
-    - Microsoft.Insights/diagnosticSettings/read  # [VERIFY actions] Reader
-    - Microsoft.Insights/Metrics/read  # [VERIFY actions] Reader
-    - Microsoft.Security/assessments/read  # [VERIFY actions] Security Reader
-    - Microsoft.CostManagement/query/action  # [VERIFY actions] Cost Management Reader
-    - Microsoft.OperationalInsights/workspaces/query/read  # [VERIFY actions] Log Analytics Reader
-    - Microsoft.Network/virtualNetworkGateways/getBgpPeerStatus/action  # [VERIFY actions] CNA Network BGP Reader
-    - Microsoft.Network/virtualNetworkGateways/getLearnedRoutes/action  # [VERIFY actions] CNA Network BGP Reader
-    - Microsoft.Network/virtualNetworkGateways/getAdvertisedRoutes/action  # [VERIFY actions] CNA Network BGP Reader
-    - Microsoft.Network/virtualHubs/bgpConnections/learnedRoutes/action  # [VERIFY actions] CNA Network BGP Reader
-    - Microsoft.Network/virtualHubs/bgpConnections/advertisedRoutes/action  # [VERIFY actions] CNA Network BGP Reader
-    - Microsoft.Network/expressRouteCircuits/peerings/routeTables/read  # [VERIFY actions] CNA Network BGP Reader
+    - Microsoft.Resources/subscriptions/resourceGroups/read  # Reader
+    - Microsoft.ResourceGraph/resources/read  # Reader
+    - Microsoft.Network/*/read  # Reader
+    - Microsoft.Insights/diagnosticSettings/read  # Reader
+    - Microsoft.Insights/Metrics/read  # Reader
+    - Microsoft.Security/assessments/read  # Security Reader
+    - Microsoft.CostManagement/query/action  # Cost Management Reader
+    - Microsoft.OperationalInsights/workspaces/query/read  # Log Analytics Reader
+    - Microsoft.Network/virtualNetworkGateways/getBgpPeerStatus/action  # CNA Network BGP Reader
+    - Microsoft.Network/virtualNetworkGateways/getLearnedRoutes/action  # CNA Network BGP Reader
+    - Microsoft.Network/virtualNetworkGateways/getAdvertisedRoutes/action  # CNA Network BGP Reader
+    - Microsoft.Network/virtualHubs/bgpConnections/learnedRoutes/action  # CNA Network BGP Reader
+    - Microsoft.Network/virtualHubs/bgpConnections/advertisedRoutes/action  # CNA Network BGP Reader
+    - Microsoft.Network/expressRouteCircuits/peerings/routeTables/read  # CNA Network BGP Reader
 ai_recommendations_enabled: true
 framework_mappings:
   - name: AWS Well-Architected Framework

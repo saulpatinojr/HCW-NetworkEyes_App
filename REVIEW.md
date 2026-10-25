@@ -33,8 +33,9 @@ Anything an engineer can solve without external input belongs in [`TODO.md`](TOD
 | [R-021](#r-021--byo-api-mode-scope-for-10) | Ship 1.0 `saas`-only or complete R-011 first | Product owner / Security | Open |
 | [R-022](#r-022--version-100-release-identity) | Version 1.0.0 identity: withdrawn `[1.0.0]` heading, version strings, first tag | Repository owner | Open — before the first `v*` tag |
 | [R-025](#r-025--the-drawio-mcp-route-is-internal-only) | Is `/api/drawio-mcp` public or internal only? | Repository owner | Decided 2026-10-24 — internal only; implemented (ticket #245) |
-| [R-026](#r-026--owner-steps-after-the-governance-and-ci-hygiene-change) | Add three new checks to the `Protect main` ruleset; confirm private vulnerability reporting; the `370` token | Repository owner | Open — raised with the governance and CI hygiene pull request (tickets #247, #252, #253) |
+| [R-026](#r-026--owner-steps-after-the-governance-and-ci-hygiene-change) | Add three new checks to the `Protect main` ruleset; confirm private vulnerability reporting; the `370` token | Repository owner | Step 1 done; steps 2 and 3 open (tickets #247, #252, #253) |
 | [R-027](#r-027--remove-the-orphaned-cloud-trust-entries-of-the-earlier-repository-name) | Remove the cloud trust entries (Azure federated credentials, AWS role trust) that name this repository by its earlier name | Repository owner / cloud account owners | Open — not blocking |
+| [R-028](#r-028--should-the-default-model-ids-of-the-bring-your-own-engines-follow-the-vendors-current-models) | Should the default model ids of the bring-your-own engines follow the vendors' current models? | Product owner | Open — not blocking |
 
 ---
 
@@ -829,7 +830,7 @@ A customer cannot tell what "1.0" they run; a new `[1.0.0]` heading would collid
 ## R-026 — Owner steps after the governance and CI hygiene change
 
 - **What changed:** the pull request for tickets #247, #252 and #253 added `.github/SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `PULL_REQUEST_TEMPLATE.md`, three issue forms, and three jobs in `300-test-codebase.yml`. It did not change a repository setting, the ruleset, a secret or a variable.
-- **Step 1 — make the new checks required (ruleset).** Open <https://github.com/saulpatinojr/HCW-NetworkEyes_App/settings/rules>, choose `Protect main`, find `Require status checks to pass`, and add these three, exactly as written, keeping the seven that are already there: `Dockerfile Lint (hadolint)`, `Workflow Lint (actionlint)`, `Dependency Review`. Add them only after the pull request has merged and each has run once, otherwise GitHub offers no name to pick. `Dependency Review` is skipped on a push or a manual run and counts as passed there.
+- **Step 1 — make the new checks required (ruleset). Done:** a read-back of the live ruleset on 2026-10-25 (<https://github.com/saulpatinojr/HCW-NetworkEyes_App/rules/25778319>) lists `Dockerfile Lint (hadolint)`, `Workflow Lint (actionlint)`, `Dependency Review` and `Image Scan (Trivy)` among its required checks. The original instruction follows for the record. Open <https://github.com/saulpatinojr/HCW-NetworkEyes_App/settings/rules>, choose `Protect main`, find `Require status checks to pass`, and add these three, exactly as written, keeping the seven that are already there: `Dockerfile Lint (hadolint)`, `Workflow Lint (actionlint)`, `Dependency Review`. Add them only after the pull request has merged and each has run once, otherwise GitHub offers no name to pick. `Dependency Review` is skipped on a push or a manual run and counts as passed there.
 - **Step 2 — confirm private vulnerability reporting.** A read-only check on 2026-10-25 returned `enabled: true`. Open <https://github.com/saulpatinojr/HCW-NetworkEyes_App/security> and confirm that `Report a vulnerability` is shown; `.github/SECURITY.md` sends reporters there.
 - **Step 3 — the `370` registry token (ticket #252, unchanged).** `370-registry-cleanup.yml` still uses the personal access token `DOCKERHUB_PERSONAL_TOKEN`; Docker Hub's OIDC connection does not replace it for deleting tags. The decision to keep it or to change how tags are removed is still open.
 - **Raised:** 2026-10-25.
@@ -841,5 +842,15 @@ A customer cannot tell what "1.0" they run; a new `[1.0.0]` heading would collid
 - **Where to look.** Azure: Microsoft Entra admin center → App registrations → each application used for GitHub deployments → Certificates & secrets → Federated credentials; the subject looks like `repo:saulpatinojr/<name>:ref:refs/heads/main` or `...:environment:<name>`. AWS: IAM → Roles → the GitHub deploy role → Trust relationships; the condition on `token.actions.githubusercontent.com:sub`. Documentation: <https://learn.microsoft.com/entra/workload-id/workload-identity-federation-create-trust> and <https://docs.github.com/actions/security-for-github-actions/security-hardening-your-deployments/about-security-hardening-with-openid-connect>.
 - **What to do.** Delete every entry whose repository part is not a repository you still deploy from. Keep entries for `HCW-NetworkEyes_App` and for the other current repositories. If you keep a subject for this repository, use the immutable form with the owner and repository ids (as `TODO.md` T-728 does for Docker Hub) so a rename never leaves a stale entry again.
 - **Impact if unresolved:** none today; a standing, unused grant.
+- **Raised:** 2026-10-25.
+- **Status:** Open — not blocking
+
+## R-028 — Should the default model ids of the bring-your-own engines follow the vendors' current models?
+
+- **Why this is here:** the code defaults are `claude-opus-5` and `gpt-5.4` (`cna/ai_engine/chat_agent.py`, `apps/cna-web/lib/ai-engine.ts`; `.env.example` explains the override variables). The `.env.example` note asked someone to verify they are current. Checked 2026-10-25: both are still available. Anthropic lists Claude Opus 5 as a legacy model that is still available; the current Opus is `claude-opus-5-5` (<https://platform.claude.com/docs/en/models/overview>). OpenAI's deprecations page lists no retirement for `gpt-5.4`, whose flagship successors are `gpt-6-astra` and `gpt-6.1-sol` (<https://developers.openai.com/api/docs/deprecations>, <https://developers.openai.com/api/docs/models>). Nothing is broken, so nothing was changed.
+- **The decision:** keep the two defaults, or move them to the current models. A move changes the price per assessment and the wording customers see, which is why it is yours to decide, not an engineer's.
+- **Recommendation:** keep the defaults until Anthropic or OpenAI announces a retirement date for them, because customers who set no override would otherwise see answers change on the day of an upgrade.
+- **How to answer:** reply "keep" or "move to current" on the issue or pull request that links this entry. If "move", an engineer changes the constants in both files together (they are pinned by one shared vector table, see `CLAUDE.md`, "AI engine rules") and updates `.env.example`.
+- **Impact if unresolved:** none today; a retirement notice from either vendor would turn it into an urgent change.
 - **Raised:** 2026-10-25.
 - **Status:** Open — not blocking
