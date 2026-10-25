@@ -36,6 +36,7 @@ Anything an engineer can solve without external input belongs in [`TODO.md`](TOD
 | [R-026](#r-026--owner-steps-after-the-governance-and-ci-hygiene-change) | Add three new checks to the `Protect main` ruleset; confirm private vulnerability reporting; the `370` token | Repository owner | Step 1 done; steps 2 and 3 open (tickets #247, #252, #253) |
 | [R-027](#r-027--remove-the-orphaned-cloud-trust-entries-of-the-earlier-repository-name) | Remove the cloud trust entries (Azure federated credentials, AWS role trust) that name this repository by its earlier name | Repository owner / cloud account owners | Open — not blocking |
 | [R-028](#r-028--should-the-default-model-ids-of-the-bring-your-own-engines-follow-the-vendors-current-models) | Should the default model ids of the bring-your-own engines follow the vendors' current models? | Product owner | Open — not blocking |
+| [R-029](#r-029--the-appliance-and-core-repositories-are-out-of-board-scope) | The two appliance repositories and the earlier core repository (the other owner's, named on ticket #249): their state, and whether they belong on the HCW Field Applications board | Repository owner | Decided 2026-10-25 — out of board scope; nothing is written there |
 
 ---
 
@@ -837,3 +838,12 @@ A customer cannot tell what "1.0" they run; a new `[1.0.0]` heading would collid
 - **Impact if unresolved:** none today; a retirement notice from either vendor would turn it into an urgent change.
 - **Raised:** 2026-10-25.
 - **Status:** Open — not blocking
+
+## R-029 — The appliance and core repositories are out of board scope
+
+- **What this is:** ticket #249 asked for the state of the repositories this one used to feed or follow: the two appliance repositories that deploy images, the earlier core repository, and the lab edition `HCW-NetworkEyes_AddOn`. A review session could not read the first three. The ticket: <https://github.com/saulpatinojr/HCW-NetworkEyes_App/issues/249>.
+- **State, read with `gh repo view` on 2026-10-25:** the two appliance repositories and the core repository each exist and are not archived. The lab edition <https://github.com/saulpatinojr/HCW-NetworkEyes_AddOn> exists, is public and is not archived (last push 2026-10-25). The three that belong to the other owner are named on the ticket, not here: this repository's live documents may not name them (`tests/security/test_standalone_boundary.py`).
+- **Decision (owner, 2026-10-25):** the three repositories of the other owner are **out of scope of the HCW Field Applications board** (<https://github.com/users/saulpatinojr/projects/7>). This repository does not track them and no pull request is opened in them from here. That agrees with `CLAUDE.md` ("NetworkEyes stands alone"; the earlier core repository is reference only). The lab edition stays in scope as the downstream edition and keeps its own work items; this repository still tells it what changed (`CLAUDE.md`, "Tell the lab edition what changed").
+- **What the ticket's security point becomes:** it asked that image signing and digest checks agree across the repositories. This repository now signs its own images under its own identity (`CLAUDE.md`, image contract item 5) and whoever deploys them verifies that signature by digest. Whether another party's deployment repositories do so is theirs to confirm.
+- **Raised:** 2026-10-25, ticket #249.
+- **Status:** Decided 2026-10-25 — nothing further is open here.
