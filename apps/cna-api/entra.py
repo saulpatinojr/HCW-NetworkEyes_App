@@ -5,7 +5,7 @@ web tier only. With a shared secret (``CNA_API_TOKEN``) every caller that holds 
 secret is equal; with Entra the caller is the web tier's own managed identity, the
 token is short-lived, signed by the tenant, scoped to this API's app registration
 (``CNA_ENTRA_AUDIENCE``, its ``api://`` identifier URI) and carries the app role
-``Discovery.Run`` that the appliance Terraform assigns to that identity.
+``Discovery.Run`` that the deployment assigns to that identity.
 
 Configuration (all read once at start-up):
 

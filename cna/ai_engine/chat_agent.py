@@ -61,7 +61,7 @@ ENGINE_ANTHROPIC = "anthropic"
 ENGINE_OPENAI = "openai"
 VALID_ENGINES = {ENGINE_AZURE_OPENAI, ENGINE_BEDROCK, ENGINE_ANTHROPIC, ENGINE_OPENAI}
 
-# Deploy-time AI mode + appliance cloud (env contract set by Terraform)
+# Deploy-time AI mode + appliance cloud (env contract set by the deployment)
 MODE_SAAS = "saas"
 MODE_BYO_API = "byo-api"
 CLOUD_AZURE = "azure"
@@ -557,7 +557,7 @@ class GroundedChatAgent:
     def _complete_bedrock(self, system_prompt: str, turns: list[dict]) -> str:
         """Bedrock Converse via the appliance's task role (boto3 default chain).
         An inference profile ARN takes precedence over a bare model id, matching
-        the aws/ai Terraform module which bills through the profile."""
+        how a deployment bills through the profile."""
         model_id = _clean(os.environ.get(BEDROCK_PROFILE_ENV)) or _clean(
             os.environ.get(BEDROCK_MODEL_ENV)
         )

@@ -1,26 +1,24 @@
 /**
  * Image-update check — the I/O half of `image-update-rules.ts`.
  *
- * Reads the deployment's identity from the runtime environment contract the
- * appliance's Terraform injects, asks the registry what the newest build of
- * the same component is, and caches the answer in-process for the configured
- * interval. Every deployed appliance runs this on its own against the
- * registry it already pulls from, with the pull-only credential it already
- * holds; the core repository is never contacted.
+ * Reads the deployment's identity from the runtime environment (set by
+ * whoever deploys the image), asks the registry what the newest build of the
+ * same component is, and caches the answer in-process for the configured
+ * interval. Every deployment runs this on its own against the registry it
+ * already pulls from, with the pull-only credential it already holds. The
+ * registry's OCI distribution API (and its token endpoint) is the only
+ * service contacted.
  *
  * Runtime contract (all optional — a missing value degrades to "unknown",
  * never to a false "up to date"):
  *   CNA_BUILD_SHA                          commit the image was built from (baked at build time)
- *   CNA_WEB_IMAGE                          image reference Terraform deployed (repository + tag)
- *   CNA_IMAGE_REGISTRY_USERNAME            pull-only registry credential
- *   CNA_IMAGE_REGISTRY_TOKEN               pull-only registry credential (secret)
+ *   CNA_WEB_IMAGE                          image reference the deployment runs (repository + tag); set by whoever deploys the image
+ *   CNA_IMAGE_REGISTRY_USERNAME            pull-only registry credential; set by whoever deploys the image
+ *   CNA_IMAGE_REGISTRY_TOKEN               pull-only registry credential (secret); set by whoever deploys the image
  *   CNA_IMAGE_UPDATE_CHECK_INTERVAL_MINUTES  cache interval; 0 disables the check
- *   CNA_APPLIANCE_REPO                     owner/repo of the appliance that deployed this instance
- *   CNA_GITHUB_SERVER_URL                  GitHub base URL (GHES), default https://github.com
  */
 
 import {
-  applianceLinks,
   clean,
   compareBuilds,
   componentOfTag,
@@ -51,8 +49,6 @@ export type { UpdateVerdict };
 export const DEFAULT_CHECK_INTERVAL_MINUTES = 60;
 /** Per-request timeout; the registry is a small, fast dependency. */
 export const REGISTRY_REQUEST_TIMEOUT_MS = 10_000;
-/** Public GitHub; overridable for GitHub Enterprise Server deployments. */
-export const DEFAULT_GITHUB_SERVER_URL = "https://github.com";
 
 export type ImageUpdateState = {
   /** False when the check is switched off or the deployment has no image reference. */
@@ -63,7 +59,7 @@ export type ImageUpdateState = {
     buildSha: string;
     /** Immutable tag the running build corresponds to (`web-sha-<7>`), when derivable. */
     shaTag: string;
-    /** The reference Terraform deployed, as recorded in the environment. */
+    /** The image reference the deployment runs, as recorded in the environment. */
     image: string;
   };
   published: {
@@ -83,7 +79,6 @@ export type ImageUpdateState = {
   error: string;
   /** Whether this answer came from the registry or from the in-process cache. */
   source: "registry" | "cache" | "disabled";
-  appliance: ReturnType<typeof applianceLinks>;
 };
 
 type Cached = { state: ImageUpdateState; expiresAt: number };
@@ -113,13 +108,6 @@ function registryCredentials(): { username: string; token: string } | null {
   const username = clean(process.env.CNA_IMAGE_REGISTRY_USERNAME);
   const token = clean(process.env.CNA_IMAGE_REGISTRY_TOKEN);
   return username && token ? { username, token } : null;
-}
-
-function applianceLinksFromEnv() {
-  return applianceLinks(
-    process.env.CNA_APPLIANCE_REPO,
-    clean(process.env.CNA_GITHUB_SERVER_URL) || DEFAULT_GITHUB_SERVER_URL,
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -232,8 +220,8 @@ function baseState(): ImageUpdateState {
   const buildSha = getRunningBuildSha();
   const ref = parseImageReference(image);
   const component = ref ? componentOfTag(ref.tag) : "web";
-  // The baked build SHA is authoritative (220-fast-redeploy swaps images
-  // without touching env); the deployed tag is the fallback for older images.
+  // The baked build SHA is authoritative (an image swap by the
+  // deployer does not touch env); the deployed tag is the fallback for older images.
   const runningShort = shortSha(buildSha) || (ref ? shaOfTag(ref.tag) : "");
   return {
     enabled: false,
@@ -248,7 +236,6 @@ function baseState(): ImageUpdateState {
     checkedAt: "",
     error: "",
     source: "disabled",
-    appliance: applianceLinksFromEnv(),
   };
 }
 
@@ -271,7 +258,7 @@ export async function getImageUpdateState(options: { force?: boolean } = {}): Pr
 
   const now = Date.now();
   if (!options.force && cache && cache.expiresAt > now) {
-    return { ...cache.state, source: "cache", appliance: state.appliance };
+    return { ...cache.state, source: "cache" };
   }
 
   try {

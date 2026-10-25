@@ -93,7 +93,7 @@ from routers.diagrams import router as diagrams_router  # noqa: E402
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 # Shared bearer secret the web tier must present (SEC-001). Empty in local dev.
 CNA_API_TOKEN = os.environ.get("CNA_API_TOKEN", "")
-# Set by the appliance Terraform ("azure" | "aws"); empty means local dev.
+# Set by the deployment ("azure" | "aws"); empty means local dev.
 CNA_APPLIANCE_CLOUD = os.environ.get("CNA_APPLIANCE_CLOUD", "")
 
 # A RUNNING job whose updatedAt (bumped by every progress line — see _log) is
@@ -174,13 +174,13 @@ def _validate_startup_config(env: Mapping[str, str]) -> None:
     if appliance and not database_url:
         raise SystemExit(
             "DATABASE_URL is not set but CNA_APPLIANCE_CLOUD is — refusing to start. "
-            "The appliance Terraform must inject DATABASE_URL as a container secret."
+            "The deployment must supply DATABASE_URL as a container secret."
         )
     if appliance and not token and entra is None:
         raise SystemExit(
             "Neither CNA_API_TOKEN nor CNA_ENTRA_TENANT_ID/CNA_ENTRA_AUDIENCE is set but "
-            "CNA_APPLIANCE_CLOUD is — refusing to start. The appliance Terraform must "
-            "inject CNA_API_TOKEN as a container secret on both the api and the web "
+            "CNA_APPLIANCE_CLOUD is — refusing to start. The deployment must "
+            "supply CNA_API_TOKEN as a container secret on both the api and the web "
             "containers, or configure Entra bearer validation for the web identity."
         )
     if not token and entra is None and not appliance:

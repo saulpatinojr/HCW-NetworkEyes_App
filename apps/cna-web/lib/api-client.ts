@@ -1,9 +1,9 @@
 // Server-side helper for calling the internal cna-api (CNA_API_INTERNAL_URL).
 // Every web→api request must carry a bearer when one is configured (SEC-001 /
 // ARCH-002): the api enforces `Authorization: Bearer <CNA_API_TOKEN>` on every
-// path except /health and /ready. The token is a runtime secret injected by the
-// appliances' Terraform onto both containers; it is never logged and never
-// returned to a client.
+// path except /health and /ready. The token is a runtime secret supplied by the
+// deployment to both containers; it is never logged and never returned to a
+// client.
 //
 // The internal routes (/discovery/*, /intake, /publish) additionally accept an
 // Entra access token for the api's app registration (change set H): when
@@ -38,8 +38,8 @@ let cachedToken: (AcquiredToken & { audience: string }) | null = null;
 async function acquireEntraToken(scope: string): Promise<AcquiredToken> {
   const { DefaultAzureCredential, ManagedIdentityCredential } = await import("@azure/identity");
   const clientId = process.env.AZURE_CLIENT_ID;
-  // In the appliance the identity is the user-assigned one Terraform attached;
-  // locally `az login` through the default chain stands in for it.
+  // In a deployment the identity is the user-assigned one attached to the
+  // container; locally `az login` through the default chain stands in for it.
   const credential = clientId
     ? new ManagedIdentityCredential(clientId)
     : new DefaultAzureCredential();

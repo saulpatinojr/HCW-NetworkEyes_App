@@ -86,7 +86,7 @@ function hostOnly(value: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Mode / cloud (env contract set by Terraform from the deploy `ai_mode` input)
+// Mode / cloud (env contract: CNA_AI_MODE and CNA_APPLIANCE_CLOUD, set by the deployment)
 // ---------------------------------------------------------------------------
 
 export function getAiMode(): AiMode {
@@ -175,7 +175,7 @@ export function getAiEngineStatuses(
         id: "azure-openai",
         label: "Azure OpenAI",
         description:
-          "SaaS engine on the Azure appliance. Terraform provisions the deployment, private networking, RBAC, and env vars; the app authenticates with its managed identity.",
+          "SaaS engine on the Azure edition. The deployment settings supply the model deployment, private networking, RBAC, and env vars; the app authenticates with its managed identity.",
         configured: configured.has("azure-openai"),
         active: activeEngine === "azure-openai",
         details: [
@@ -194,7 +194,7 @@ export function getAiEngineStatuses(
         id: "bedrock",
         label: "Amazon Bedrock",
         description:
-          "SaaS engine on the AWS appliance. Terraform grants the task role bedrock:InvokeModel and provisions the inference profile; the app authenticates with the task role.",
+          "SaaS engine on the AWS edition. The deployment settings grant the task role bedrock:InvokeModel and supply the inference profile; the app authenticates with the task role.",
         configured: configured.has("bedrock"),
         active: activeEngine === "bedrock",
         details: [

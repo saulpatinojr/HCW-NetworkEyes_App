@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  applianceLinks,
   compareBuilds,
   componentOfTag,
   distributionApiHost,
@@ -32,7 +31,7 @@ describe("parseImageReference", () => {
     });
   });
 
-  it("parses the appliances' pinned tag@digest form and keeps the component tag", () => {
+  it("parses the pinned tag@digest form and keeps the component tag", () => {
     const digest = "sha256:" + "ab".repeat(32);
     expect(parseImageReference(`docker.io/acme/img-ne-appliance-app:web-sha-abc1234@${digest}`)).toEqual({
       registry: "docker.io",
@@ -183,20 +182,7 @@ describe("registry auth", () => {
   });
 });
 
-describe("appliance links and interval", () => {
-  it("builds the workflow and issue links for a valid owner/repo", () => {
-    const links = applianceLinks("acme/Work-Cloud_Network_Azure_Appliance", "https://github.com/");
-    expect(links?.imageUpdateWorkflow).toBe(
-      "https://github.com/acme/Work-Cloud_Network_Azure_Appliance/actions/workflows/230-image-update.yml",
-    );
-    expect(links?.deployWorkflow).toBe(
-      "https://github.com/acme/Work-Cloud_Network_Azure_Appliance/actions/workflows/210-deploy.yml",
-    );
-    expect(links?.updateIssues).toContain("label%3Aupdate-available");
-    expect(applianceLinks("not a repo", "https://github.com")).toBeNull();
-    expect(applianceLinks("", "https://github.com")).toBeNull();
-  });
-
+describe("check interval", () => {
   it("parses the interval and falls back on garbage, keeping 0 as off", () => {
     expect(parseIntervalMinutes("30", 60)).toBe(30);
     expect(parseIntervalMinutes("0", 60)).toBe(0);
