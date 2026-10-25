@@ -227,7 +227,9 @@ class TestScriptsReadTheName:
     def test_every_signing_call_passes_a_reference_built_from_the_variable(self):
         text = BUILD_WORKFLOW.read_text(encoding="utf-8")
         calls = re.findall(r"scripts/ci/sign_image\.sh \"([^\"]+)\"", text)
-        assert len(calls) == 3
+        assert (
+            len(calls) == 4
+        )  # build-images, build-web (two), and the rehearsal's throwaway digest
         for ref in calls:
             assert ref.startswith("docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}@"), ref
 
@@ -238,8 +240,8 @@ class TestTheDigestTableAndTheCleanupUseOnlyTheConfiguredRepository:
     def test_the_images_tag_images_verifies_and_tags_are_built_from_the_variable(self):
         text = BUILD_WORKFLOW.read_text(encoding="utf-8")
         assert (
-            text.count('IMAGE="docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}"') == 1
-        )  # tag-images
+            text.count('IMAGE="docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}"') == 2
+        )  # tag-images and the rehearsal's retag
         steps = _workflow(BUILD_WORKFLOW)["jobs"]["tag-images"]["steps"]
         script = next(s for s in steps if "Verify, tag and record" in s.get("name", ""))["run"]
         assert 'bash scripts/ci/verify_signed_digest.sh "${IMAGE}@${DIGESTS[$c]}"' in script

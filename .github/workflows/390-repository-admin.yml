@@ -4,6 +4,12 @@ name: repository-admin
 # Every run is a dry run unless "apply" is ticked. The admin-ops environment holds the credentials (main branch only).
 # It uses a short-lived GitHub App token (HCW Portfolio Admin), limited to this repository.
 # The default token below stays read-only. No secrets are stored in this file.
+#
+# This is the ONLY workflow that mints the App token or reads the credentials of the environment `admin-ops`
+# (the variable APP_CLIENT_ID and the secrets APP_PRIVATE_KEY and PROJECT_TOKEN). They are NOT leftovers of the
+# removed manifest publishing: keep them. Only the two repository-level secrets of the App that 200 used to dispatch
+# to other repositories (named in the CHANGELOG entry that removed that job) are deletable.
+# tests/security/test_standalone_boundary.py keeps every other workflow away from these credentials.
 
 on:
   workflow_dispatch:

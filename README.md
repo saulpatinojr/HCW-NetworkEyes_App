@@ -21,7 +21,7 @@ is the NetworkEyes App of the HCW App-to-AddOn initiative: `REFACTOR_APP.md` is 
 plan and [`HCW-NetworkEyes_AddOn`](https://github.com/saulpatinojr/HCW-NetworkEyes_AddOn) is
 its lab edition. It stands alone: it builds, signs and publishes its own container images to Docker Hub
 (`docker.io/hybridcloudworks/img-ne-appliance-app`), deploys nothing and notifies no one; see
-[Publishing and verifying the images](#publishing-and-verifying-the-images).
+[Publishing the images](#publishing-the-images).
 
 A CNA-branded, multi-user web platform for cloud network assessments across AWS and Azure.
 Analysts run network discoveries, AI-powered analysis, and generate presentation-ready
@@ -82,7 +82,7 @@ local/agent-config/   Vendored agent configuration — gitignored, not project s
 
 ---
 
-## Publishing and verifying the images
+## Publishing the images
 
 NetworkEyes stands alone (owner decision 2026-10-25): this repository builds, scans, signs and publishes its own
 images and depends on nothing but itself and its own Docker Hub repository. It deploys nothing, calls no other
@@ -108,11 +108,6 @@ repository and notifies no one. Whoever runs the images (a person or a separate 
   commit. Bash or PowerShell, in a clone of this repository (use the commit shown in the summary for `<sha>`):
   `git tag vX.Y.Z <sha>` then `git push origin vX.Y.Z`. (3) The tag run adds the version tag and creates the GitHub
   Release. `TODO.md` T-728 has the one-time Docker Hub steps and what to do when a run fails.
-- **Verifying an image before you run it.** Take a digest from the release notes (or the step summary of a `200` run) and
-  check the signature, then the provenance, with [cosign](https://docs.sigstore.dev/cosign/verifying/verify/):
-  `cosign verify docker.io/hybridcloudworks/img-ne-appliance-app@sha256:<digest> --certificate-identity https://github.com/saulpatinojr/HCW-NetworkEyes_App/.github/workflows/200-build-images.yml@refs/heads/main --certificate-oidc-issuer https://token.actions.githubusercontent.com`,
-  and the same with `cosign verify-attestation --type slsaprovenance02`. `scripts/ci/verify_signed_digest.sh` is the
-  exact check the release makes (it accepts either of cosign's two proofs of signing time, `--use-signed-timestamps` or the transparency log's). The full contract is in [`CLAUDE.md`](CLAUDE.md).
 
 The project started as a single repository that held the core until 2026-09-18. Its full history is imported here
 (`TODO.md` → T-509), so commit references in `CHANGELOG.md` still resolve; this repository is that original, renamed
@@ -123,6 +118,28 @@ The AI provider family is chosen at deploy time by `CNA_AI_MODE`: `saas` (Azure 
 authenticated with the workload identity) or `byo-api` (no cloud AI resources; an admin pastes an Anthropic and/or
 OpenAI API key on the **AI Engine** admin page — the only secrets ever entered in the app, stored encrypted in the
 database).
+
+### Verifying images
+
+Every published digest is signed (cosign, keyless) and carries a SLSA provenance attestation made by `200-build-images.yml`
+on `main`. Resolve a tag to a digest, then verify that exact digest before you run it. A digest that does not verify must
+not be deployed.
+
+```bash
+IMAGE=docker.io/hybridcloudworks/img-ne-appliance-app@sha256:<64 hex>
+ID=https://github.com/saulpatinojr/HCW-NetworkEyes_App/.github/workflows/200-build-images.yml@refs/heads/main
+ISS=https://token.actions.githubusercontent.com
+cosign verify "$IMAGE" --certificate-identity "$ID" --certificate-oidc-issuer "$ISS"
+cosign verify-attestation "$IMAGE" --type slsaprovenance02 --certificate-identity "$ID" --certificate-oidc-issuer "$ISS"
+```
+
+Pass `--use-signed-timestamps` if you want the signed timestamp from the timestamp authority; without it cosign 3 uses the
+transparency-log time. The attestation's `predicate.builder.id` begins with
+`https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/runs/`. The identity string must match exactly: renaming or
+transferring the repository, or renaming the workflow file or the default branch, changes it (the change is announced in the
+release notes). `scripts/ci/verify_signed_digest.sh` does the same checks and also binds the digest to a commit. The five
+digests of each build are in the step summary of its `200-build-images.yml` run, and those of a release are in its release
+notes.
 
 ---
 
@@ -167,7 +184,7 @@ committed in `uv.lock` with hash checking. After changing a dependency in `pypro
 ### Deploying an environment
 
 Deployment does not happen from this repository, which only publishes the images. Run them with your own process: pull
-by digest, verify the signature (see [Publishing and verifying the images](#publishing-and-verifying-the-images)) and
+by digest, verify the signature (see [Publishing the images](#publishing-the-images)) and
 supply the runtime settings listed in `.env.example`.
 
 ---

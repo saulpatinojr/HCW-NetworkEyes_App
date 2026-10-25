@@ -1914,7 +1914,7 @@ Dockerfiles, and drop `apt-get -y upgrade` from the final stages once Dependabot
   timestamp (`--use-signed-timestamps`, what Rekor v2 requires) or Rekor v1's integrated
   timestamp — so it keeps verifying when Sigstore's signing config moves to Rekor v2. Shared cosign release
   `v3.1.3`, installer `sigstore/cosign-installer@6f9f177` (v4.1.2), in `200` and `310`. Anyone who deploys the
-  images should make the same checks (README, *Publishing and verifying the images*). Digests signed before this
+  images should make the same checks (README, *Verifying images*). Digests signed before this
   change, rollback targets included, do not verify.
 - **Original description:** `200` emits unsigned BuildKit SBOM/provenance attestations; nothing verifies them. Sign every
 published digest (cosign keyless with the workflow OIDC identity) and have `210` verify the

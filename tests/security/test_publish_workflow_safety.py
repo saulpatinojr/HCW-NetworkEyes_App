@@ -122,10 +122,15 @@ class TestReleasePromotesTheScannedDigest:
     def setup_method(self):
         self.text = RELEASE.read_text(encoding="utf-8")
         self.doc = _load(RELEASE)
-        self.job = self.doc["jobs"]["release"]
+        self.job = self.doc["jobs"]["verify"]  # find and verify: read-only
+        self.release = self.doc["jobs"]["release"]  # login, promote, Release: the only writer
 
     def _step(self, needle: str) -> dict:
-        return _steps(self.job)[_index_of(self.job, needle)]
+        for job in (self.job, self.release):
+            for step in _steps(job):
+                if needle in step.get("name", "") or needle in str(step.get("run", "")):
+                    return step
+        raise AssertionError(f"no step mentions {needle!r}")
 
     def test_it_never_builds_or_pushes_layers(self):
         assert "build-push-action" not in self.text
@@ -146,11 +151,13 @@ class TestReleasePromotesTheScannedDigest:
     def test_it_promotes_a_digest_and_only_after_verifying_it(self):
         find = _index_of(self.job, "Find the scanned image")
         verify = _index_of(self.job, "Verify the signature")
-        login = _login_index(self.job)
-        promote = _index_of(self.job, "Promote the digest")
-        assert find < verify < login < promote, (
-            "the write credential is minted after the checks, just before use"
-        )
+        others = _index_of(self.job, "Find and verify the other images")
+        assert find < verify < others
+        assert _login_index(self.job) is None, "the verify job has no registry credential"
+        # The write credential is minted in a later job, after the checks, just before use.
+        assert self.release["needs"] == "verify"
+        login = _login_index(self.release)
+        promote = _index_of(self.release, "Promote the digest")
         assert login == promote - 1, "the login is the step right before the promotion"
         assert "sigstore/cosign-installer@" in self.text
 
@@ -166,6 +173,7 @@ class TestReleasePromotesTheScannedDigest:
         assert step["env"]["EXPECTED_REVISION"] == "${{ steps.scanned.outputs.build_commit }}"
         assert step["env"]["EXPECTED_RUN_IDS"] == "${{ steps.scanned.outputs.run_ids }}"
         assert "continue-on-error" not in yaml.safe_dump(self.job)
+        assert "continue-on-error" not in yaml.safe_dump(self.release)
 
     def test_the_search_is_the_script_and_it_is_not_made_optional(self):
         step = self._step("Find the scanned image")
@@ -201,8 +209,38 @@ class TestReleasePromotesTheScannedDigest:
             assert needle in hint["run"], needle
         assert "Image Pull" not in hint["run"]
 
-    def test_it_may_read_the_workflow_runs_it_waits_for(self):
-        assert self.doc["permissions"].get("actions") == "read"
+    def test_permissions_are_split_between_a_read_only_job_and_the_one_writer(self):
+        assert self.doc["permissions"] == {}, "nothing is granted workflow-wide"
+        # verify: reads the workflow runs it waits for (actions: read) and checks out; no write, no OIDC token.
+        assert self.job["permissions"] == {"contents": "read", "actions": "read"}
+        assert self.release["permissions"] == {"contents": "write", "id-token": "write"}
+
+    def test_both_jobs_check_out_without_persisting_a_credential(self):
+        for job in (self.job, self.release):
+            checkout = next(
+                s for s in _steps(job) if str(s.get("uses", "")).startswith("actions/checkout@")
+            )
+            assert checkout["with"]["persist-credentials"] is False
+
+    def test_the_digests_pass_between_jobs_as_outputs_and_reach_scripts_through_env(self):
+        outputs = self.job["outputs"]
+        assert sorted(outputs) == [
+            "build_commit",
+            "digest",
+            "digest_api",
+            "digest_migrator",
+            "digest_web",
+            "digest_worker",
+            "run_ids",
+            "tag",
+        ]
+        for key, value in outputs.items():
+            assert re.fullmatch(r"\$\{\{ steps\.(scanned|others)\.outputs\.\w+ \}\}", value), key
+        promote = self._step("Promote the digest")
+        assert promote["env"]["DIGEST"] == "${{ needs.verify.outputs.digest }}"
+        # No script in the release job interpolates an expression: they are all env-fed.
+        for step in _steps(self.release):
+            assert "${{" not in str(step.get("run", "")), step.get("name")
 
     def test_the_header_states_the_ruleset_and_the_first_release_flow(self):
         header = self.text.split("name:", 1)[0]
@@ -217,7 +255,8 @@ class TestReleaseDryRun:
 
     def setup_method(self):
         self.doc = _load(RELEASE)
-        self.job = self.doc["jobs"]["release"]
+        self.job = self.doc["jobs"]["verify"]
+        self.release = self.doc["jobs"]["release"]
         self.steps = _steps(self.job)
 
     def test_there_is_a_dry_run_input_that_defaults_to_true(self):
@@ -238,16 +277,24 @@ class TestReleaseDryRun:
             "a pushed tag still needs publishing on"
         )
 
-    def test_every_step_that_writes_runs_only_for_a_pushed_tag(self):
+    def test_everything_that_writes_is_in_a_job_that_only_a_pushed_tag_reaches(self):
+        assert " ".join(str(self.release["if"]).split()) == (
+            "github.event_name == 'push' && vars.DOCKERHUB_ENABLED == 'true'"
+        )
+        assert self.release["needs"] == "verify"
         writers = (
             "Extract version",
             "Log in to Docker Hub",
             "Promote the digest",
             "Create GitHub Release",
         )
+        names = [s.get("name", "") for s in _steps(self.release)]
         for name in writers:
-            step = next(s for s in self.steps if name in s.get("name", ""))
-            assert step["if"] == "github.event_name == 'push'", name
+            assert any(name in n for n in names), name
+        # ... and none of them is in the job a dry run does reach.
+        for name in writers:
+            assert not any(name in s.get("name", "") for s in self.steps), name
+        assert "imagetools create" not in yaml.safe_dump(self.job)
 
     def test_the_dry_run_still_finds_and_verifies_and_reports(self):
         by_name = {s.get("name", ""): s for s in self.steps}
@@ -260,10 +307,11 @@ class TestReleaseDryRun:
         assert report["if"] == "github.event_name == 'workflow_dispatch'"
         assert "nothing was logged in, tagged or released" in report["run"]
 
-    def test_the_dry_run_never_has_a_write_credential(self):
-        # The only login step is for a pushed tag, and it comes after the verification.
-        login = next(s for s in self.steps if str(s.get("uses", "")).startswith(LOGIN_ACTION))
-        assert login["if"] == "github.event_name == 'push'"
+    def test_the_dry_run_needs_neither_a_write_scope_nor_an_oidc_token(self):
+        assert _login_index(self.job) is None
+        assert self.doc["permissions"] == {}
+        assert set(self.job["permissions"]) == {"contents", "actions"}
+        assert set(self.job["permissions"].values()) == {"read"}
 
 
 class TestDockerLoginRehearsal:
@@ -345,15 +393,14 @@ class TestDockerLoginRehearsal:
         assert "docker buildx imagetools inspect" in script and "@${DIGEST}" in script
         assert 'READ" != "$DIGEST"' in script
 
-    def test_it_never_signs_tags_writes_the_manifest_or_reaches_latest(self):
+    def test_it_never_reaches_latest_a_sha_tag_or_the_repository_and_creates_one_rehearsal_tag(
+        self,
+    ):
         text = yaml.safe_dump(
             {**self.job, "runs-on": "runner"}
         )  # ubuntu-latest is a runner label, not a tag
         assert "latest" not in text
         for forbidden in (
-            "cosign",
-            "sign_image",
-            "imagetools create",
             "docker tag",
             "docker push",
             "latest-build.json",
@@ -361,13 +408,78 @@ class TestDockerLoginRehearsal:
             "metadata-action",
             "type=raw",
             "type=sha",
+            "sha-",
         ):
             assert forbidden not in text, forbidden
+        retag = next(s for s in self.steps if s.get("id") == "retag")["run"]
+        assert retag.count("imagetools create") == 1
+        assert 'imagetools create -t "${IMAGE}:${TAG}" "${IMAGE}@${DIGEST}"' in retag
+        assert 'TAG="rehearsal-${GITHUB_RUN_ID}"' in retag
+        assert (
+            sum(s.get("run", "").count("docker buildx imagetools create") for s in self.steps) == 1
+        )
+
+    def test_it_deletes_nothing(self):
+        text = yaml.safe_dump(self.job)
+        for needle in (
+            "DELETE",
+            " rm ",
+            "docker rmi",
+            "delete",
+            "cosign clean",
+            "imagetools rm",
+        ):
+            assert needle not in text, needle
+
+    def test_it_signs_attests_and_verifies_with_the_scripts_the_real_jobs_use(self):
+        names = [s.get("name", "") for s in self.steps]
+        order = [
+            _index_of(self.job, "Push the rehearsal image by digest"),
+            _index_of(self.job, "Docker Scout analyses"),
+            _index_of(self.job, "Sign and attest the rehearsal digest"),
+            _index_of(self.job, "Verify the rehearsal digest"),
+            _index_of(self.job, "Give the digest one rehearsal tag"),
+        ]
+        assert order == sorted(order), names
+        sign = self.steps[order[2]]
+        assert sign["run"] == (
+            'scripts/ci/sign_image.sh "docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}@${DIGEST}"'
+        )
+        verify = self.steps[order[3]]
+        assert verify["run"] == (
+            'bash scripts/ci/verify_signed_digest.sh "docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}@${DIGEST}"'
+        )
+        assert verify["env"]["EXPECTED_REVISION"] == "${{ github.sha }}"
+        assert verify["env"]["EXPECTED_RUN_IDS"] == "${{ github.run_id }}"
+        assert (
+            sign["env"]["DIGEST"] == verify["env"]["DIGEST"] == "${{ steps.push.outputs.digest }}"
+        )
+        assert "||" not in sign["run"] and "||" not in verify["run"]
+        assert "continue-on-error" not in yaml.safe_dump(self.job)
+
+    def test_it_has_what_those_scripts_need(self):
+        uses = [str(s.get("uses", "")) for s in self.steps]
+        assert any(u.startswith("actions/checkout@") for u in uses)
+        cosign = next(s for s in self.steps if str(s.get("uses", "")).startswith("sigstore/"))
+        real = next(
+            s
+            for s in _steps(self.doc["jobs"]["tag-images"])
+            if str(s.get("uses", "")).startswith("sigstore/")
+        )
+        assert cosign["uses"] == real["uses"]
+        assert cosign["with"] == real["with"] == {"cosign-release": "${{ env.COSIGN_VERSION }}"}
+        checkout = next(
+            s for s in self.steps if str(s.get("uses", "")).startswith("actions/checkout@")
+        )
+        assert checkout["with"] == {"persist-credentials": False}
+
+    def test_the_image_has_the_provenance_the_sbom_and_the_revision_label_the_real_build_has(self):
+        push = next(s for s in self.steps if s.get("id") == "push")
+        assert push["with"]["provenance"] is True and push["with"]["sbom"] is True
+        assert "org.opencontainers.image.revision=${{ github.sha }}" in push["with"]["labels"]
 
     def test_it_explains_a_failure_and_logs_out_at_the_end(self):
-        hint = next(
-            s for s in self.steps if s.get("if") == "failure() && steps.scout.outcome != 'failure'"
-        )
+        hint = next(s for s in self.steps if s.get("name") == "What to check if this failed")
         assert (
             "https://docs.docker.com/security/authentication/oidc-connections/troubleshoot"
             in hint["run"]
@@ -404,7 +516,18 @@ class TestDockerLoginRehearsal:
             and "T-728" in hint["run"]
         )
         general = next(s for s in self.steps if s.get("name") == "What to check if this failed")
-        assert general["if"] == "failure() && steps.scout.outcome != 'failure'"
+        assert general["if"] == (
+            "failure() && steps.scout.outcome != 'failure' && steps.sign.outcome != 'failure'"
+            " && steps.verify.outcome != 'failure' && steps.retag.outcome != 'failure'"
+        )
+        crypto = next(
+            s for s in self.steps if "signing, verifying or tagging failed" in s.get("name", "")
+        )
+        assert crypto["if"] == (
+            "failure() && (steps.sign.outcome == 'failure' || steps.verify.outcome == 'failure'"
+            " || steps.retag.outcome == 'failure')"
+        )
+        assert "DOCKERHUB_ENABLED" in crypto["run"] and "Referrers" in crypto["run"]
 
     def test_it_claims_nothing_about_docker_hub_deleting_untagged_images(self):
         text = BUILD.read_text(encoding="utf-8")
@@ -440,6 +563,25 @@ class TestBuildWorkflowStandsAlone:
             assert "outputs" not in job or all(
                 key.startswith(("digest_", "tags_")) for key in job["outputs"]
             ), name
+
+    def test_every_job_that_publishes_or_rehearses_runs_on_the_default_branch_only(self):
+        guard = "github.ref == format('refs/heads/{0}', github.event.repository.default_branch)"
+        for name in ("build-images", "build-web", "tag-images", "rehearse-docker-login"):
+            assert guard in str(self.doc["jobs"][name]["if"]), name
+
+    def test_tag_images_asks_for_the_longest_token_too(self):
+        job = self.doc["jobs"]["tag-images"]
+        assert int(_steps(job)[_login_index(job)]["env"]["DOCKERHUB_OIDC_EXPIREIN"]) == EXPIRE_MAX
+
+    def test_the_header_documents_that_tagging_is_not_atomic_and_how_to_recover(self):
+        header = self.text.split("\non:\n", 1)[0]
+        assert "Tagging is NOT atomic" in header and "Re-run failed jobs" in header
+        assert "imagetools create" in header and "idempotent" not in header.replace(
+            "gives a tag the digest it already has", ""
+        )
+        concurrency = self.text.split("concurrency:", 1)[0].rsplit("# Never cancel", 1)[1]
+        assert "not\n# atomic" in concurrency or "is not\n# atomic" in concurrency
+        assert "all-or-nothing" not in self.text
 
     def test_it_reads_no_secret_and_only_the_docker_hub_variables(self):
         assert "secrets." not in self.text.replace("secrets.GITHUB_TOKEN", "")
@@ -505,17 +647,24 @@ class TestReleaseListsTheFiveDigests:
     def setup_method(self):
         self.text = RELEASE.read_text(encoding="utf-8")
         self.doc = _load(RELEASE)
-        self.job = self.doc["jobs"]["release"]
+        self.job = self.doc["jobs"]["verify"]
+        self.release = self.doc["jobs"]["release"]
 
     def _step(self, needle: str) -> dict:
-        return _steps(self.job)[_index_of(self.job, needle)]
+        for job in (self.job, self.release):
+            for step in _steps(job):
+                if needle in step.get("name", ""):
+                    return step
+        raise AssertionError(f"no step named like {needle!r}")
 
     def test_the_other_four_images_are_found_and_verified_before_any_write(self):
         find = _index_of(self.job, "Find the scanned image")
         verify = _index_of(self.job, "Verify the signature")
         others = _index_of(self.job, "Find and verify the other images")
         report = _index_of(self.job, "Report what a release would promote")
-        assert find < verify < others < report < _login_index(self.job)
+        assert find < verify < others < report
+        assert _login_index(self.job) is None and _login_index(self.release) is not None
+        assert self.release["needs"] == "verify"
 
     def test_that_step_is_the_script_and_cannot_be_made_optional(self):
         step = self._step("Find and verify the other images")
@@ -530,11 +679,12 @@ class TestReleaseListsTheFiveDigests:
     def test_the_release_notes_carry_all_five_digests_and_the_verification_command(self):
         body = self._step("Create GitHub Release")["with"]["body"]
         for expression in (
-            "steps.scanned.outputs.digest",
-            "steps.others.outputs.digest_api",
-            "steps.others.outputs.digest_worker",
-            "steps.others.outputs.digest_web",
-            "steps.others.outputs.digest_migrator",
+            "needs.verify.outputs.digest",
+            "needs.verify.outputs.digest_api",
+            "needs.verify.outputs.digest_worker",
+            "needs.verify.outputs.digest_web",
+            "needs.verify.outputs.digest_migrator",
+            "needs.verify.outputs.build_commit",
         ):
             assert "${{ " + expression + " }}" in body, expression
         assert "cosign verify " in body and "cosign verify-attestation" in body

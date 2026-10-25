@@ -14,8 +14,9 @@ container images (`200-build-images.yml` → Docker Hub `<namespace>/img-ne-appl
 Customers consume the images, not this repository. **NetworkEyes stands alone** (owner decision 2026-10-25): this
 repository builds, scans, signs and publishes its own images and depends on nothing but itself and its own Docker Hub
 repository, `docker.io/hybridcloudworks/img-ne-appliance-app`. No workflow, script, Dockerfile, application code,
-template or live document here names, calls, dispatches to or reads a setting from another repository, and no GitHub
-App is used. `tests/security/test_standalone_boundary.py` (the repository) and
+template or live document here names, calls, dispatches to or reads a setting from another repository, and no build,
+release or cleanup workflow uses a GitHub App (only the owner-approved `390-repository-admin.yml` does, see
+`ADMIN_WORKFLOWS` in the boundary test). `tests/security/test_standalone_boundary.py` (the repository) and
 `apps/cna-web/lib/standalone-boundary.test.ts` (the web tier) fail when that comes back. Whoever deploys the images (a
 person or a separate project) pulls them from Docker Hub by digest and verifies the cosign signature; this repository
 does not know who that is and notifies no one.
@@ -56,7 +57,10 @@ change under `Changed` in `CHANGELOG.md` (and in the release notes) where a cons
    build manifest and no `.deployment-catalog/` directory. A consumer pulls by digest (tag for people and for the web
    tier's image-update check, digest as the authoritative pull); floating `*-latest` tags are never deployed.
    `370-registry-cleanup.yml` keeps the newest 10 `<component>-sha-<7>` tags per component, the
-   `*-latest` tags and every release tag; see its header for what that does not protect.
+   `*-latest` tags, every release tag and any sha tag whose image a release tag shares; see its header for
+   what that does not protect. Tagging is not atomic: if `tag-images` stops part-way, the table shows
+   "tagging in progress" without the closing line, and the recovery is to re-run that job (it verifies
+   every digest again; re-creating a tag with the digest it already has is not an error).
 3. **No push notification.** `200-build-images.yml` calls nothing outside this repository and its
    Docker Hub repository: it sends no dispatch event and reads no variable naming another
    repository.

@@ -468,6 +468,7 @@ class TestVerifySignedDigest:
         ref=None,
         repository=REPOSITORY,
         image=None,
+        signatures=None,
     ):
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
@@ -476,13 +477,17 @@ class TestVerifySignedDigest:
             bin_dir,
             "cosign",
             'echo "$*" >> "$COSIGN_LOG"\n'
+            # cosign 3 warns on stderr when --output is used; the script keeps stdout and stderr apart.
+            'echo "WARNING: --output is deprecated with the new bundle format" >&2\n'
             '[ -z "${STUB_COSIGN_FAIL:-}" ] || { echo "no matching signatures" >&2; exit 1; }\n'
             'case "$1" in verify) cat "$STUB_SIG" ;; verify-attestation) cat "$STUB_ATTEST" ;; esac',
         )
         _stub(bin_dir, "docker", DOCKER_STUB)
         (tmp_path / "sig.json").write_text(
             json.dumps(
-                [{"critical": {"image": {"docker-manifest-digest": f"sha256:{sig_digest}"}}}]
+                signatures
+                if signatures is not None
+                else [{"critical": {"image": {"docker-manifest-digest": f"sha256:{sig_digest}"}}}]
             ),
             encoding="utf-8",
         )
@@ -535,6 +540,49 @@ class TestVerifySignedDigest:
     def test_cosign_failing_fails_the_script(self, tmp_path):
         result, _ = self._verify(tmp_path, cosign_fails=True)
         assert result.returncode != 0 and "not signed by" in result.stderr
+
+    def test_the_cosign_3_new_bundle_output_shape_is_accepted(self, tmp_path):
+        # cosign 3.1.3, cmd/cosign/cli/verify/verify.go transformOutput: with the new bundle format `verify
+        # --output json` prints one SimpleContainerImage per bundle found on the image (the signature bundle and
+        # the attestation bundle), whose docker-manifest-digest is "<alg>:<hex>" taken from the in-toto subject and
+        # whose critical.type is the predicate type.
+        entry = {
+            "critical": {
+                "identity": {"docker-reference": f"index.docker.io/{NAMESPACE}/{REPOSITORY}"},
+                "image": {"docker-manifest-digest": f"sha256:{HEX}"},
+                "type": "https://sigstore.dev/cosign/sign/v1",
+            },
+            "optional": None,
+        }
+        attestation = {
+            **entry,
+            "critical": {**entry["critical"], "type": "https://slsa.dev/provenance/v0.2"},
+        }
+        result, _ = self._verify(tmp_path, signatures=[entry, attestation])
+        assert result.returncode == 0, result.stderr
+
+    def test_output_that_is_not_an_array_of_entries_is_refused(self, tmp_path):
+        # cosign prints an array (one entry per signature or bundle); a lone object, or an empty array, proves nothing.
+        lone = {"critical": {"image": {"docker-manifest-digest": f"sha256:{HEX}"}}}
+        for shape in (lone, []):
+            sub = tmp_path / type(shape).__name__
+            sub.mkdir()
+            result, _ = self._verify(sub, signatures=shape)
+            assert result.returncode != 0 and "no signature on exactly" in result.stderr
+
+    def test_one_bundle_naming_another_digest_fails_even_when_the_others_match(self, tmp_path):
+        good = {"critical": {"image": {"docker-manifest-digest": f"sha256:{HEX}"}}}
+        other = {"critical": {"image": {"docker-manifest-digest": f"sha256:{OTHER_HEX}"}}}
+        result, _ = self._verify(tmp_path, signatures=[good, other])
+        assert result.returncode != 0 and "no signature on exactly" in result.stderr
+
+    def test_an_untransformed_dsse_envelope_in_the_output_is_refused(self, tmp_path):
+        # If cosign could not transform a bundle it prints the raw envelope: that is not proof of a signature.
+        result, _ = self._verify(
+            tmp_path,
+            signatures=[{"payloadType": "application/vnd.in-toto+json", "payload": "e30="}],
+        )
+        assert result.returncode != 0 and "no signature on exactly" in result.stderr
 
     def test_a_signature_on_another_digest_fails(self, tmp_path):
         result, _ = self._verify(tmp_path, sig_digest=OTHER_HEX)
@@ -780,11 +828,17 @@ COMPONENT_TAGS = {
 class TestTagImagesStep:
     """The step is run as bash with stubs for docker and for the verification script it calls."""
 
-    def _run(self, tmp_path, *, bad=None, digests=None):
+    def _run(self, tmp_path, *, bad=None, digests=None, fail_tag_call=0):
         digests = digests or {c: f"sha256:{str(i) * 64}" for i, c in enumerate(COMPONENT_TAGS, 1)}
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
-        _stub(bin_dir, "docker", 'echo "$*" >> "$DOCKER_LOG"')
+        # `docker` records each call; the Nth call (fail_tag_call) fails, as a Docker Hub error part-way would.
+        _stub(
+            bin_dir,
+            "docker",
+            'echo "$*" >> "$DOCKER_LOG"\n'
+            '[ "$(wc -l < "$DOCKER_LOG")" -ne "${STUB_FAIL_CALL:-0}" ] || { echo "toomanyrequests" >&2; exit 1; }',
+        )
         verify = tmp_path / "scripts" / "ci" / "verify_signed_digest.sh"
         verify.parent.mkdir(parents=True)
         verify.write_text(
@@ -800,6 +854,7 @@ class TestTagImagesStep:
             DOCKER_LOG=str(tmp_path / "docker.log"),
             VERIFY_LOG=str(tmp_path / "verify.log"),
             STUB_BAD=digests[bad] if bad else "",
+            STUB_FAIL_CALL=str(fail_tag_call),
             GITHUB_STEP_SUMMARY=str(summary),
             GITHUB_SHA="f" * 40,
             GITHUB_RUN_ID="4242",
@@ -835,7 +890,8 @@ class TestTagImagesStep:
         assert [line.split()[-1] for line in docker_log] == [
             f"{IMAGE}@{digests[c]}" for c in COMPONENT_TAGS
         ]
-        assert "### Published images" in summary
+        assert summary[0].startswith("### Verified; tagging in progress")
+        assert summary[-1] == "### All five components tagged"
         rows = [line for line in summary if line.startswith("| ") and "Component" not in line]
         rows = [line for line in rows if not line.startswith("| ---")]
         assert len(rows) == 5
@@ -853,9 +909,166 @@ class TestTagImagesStep:
         assert sum(line.endswith("| yes |") for line in summary) == 4
         assert "refusing to tag anything" in result.stdout + result.stderr
 
+    def test_a_failure_part_way_through_tagging_still_leaves_the_record_and_no_closing_line(
+        self, tmp_path
+    ):
+        result, docker_log, verify_log, summary, digests = self._run(tmp_path, fail_tag_call=3)
+        assert result.returncode != 0
+        assert len(docker_log) == 3, "two components were tagged and the third failed"
+        assert summary[0].startswith("### Verified; tagging in progress")
+        assert "### All five components tagged" not in summary
+        rows = [line for line in summary if line.startswith("| ") and line.endswith("| yes |")]
+        assert len(rows) == 5, "the table was written before the first tag moved"
+
+    def test_a_rerun_after_that_failure_tags_everything_again_without_error(self, tmp_path):
+        # imagetools create is idempotent: the second run repeats the verification and all five creates.
+        (tmp_path / "first").mkdir()
+        (tmp_path / "second").mkdir()
+        first = self._run(tmp_path / "first", fail_tag_call=3)
+        second = self._run(tmp_path / "second")
+        assert first[0].returncode != 0
+        assert second[0].returncode == 0 and len(second[1]) == 5 and len(second[2]) == 5
+        assert second[3][-1] == "### All five components tagged"
+
     def test_a_missing_digest_fails_before_anything_is_verified_or_tagged(self, tmp_path):
         digests = {c: f"sha256:{str(i) * 64}" for i, c in enumerate(COMPONENT_TAGS, 1)}
         digests["worker"] = ""
         result, docker_log, verify_log, summary, _ = self._run(tmp_path, digests=digests)
         assert result.returncode == 1 and docker_log == [] and verify_log == [] and summary == []
         assert "No valid digest for 'worker'" in result.stdout + result.stderr
+
+
+# --- the "Prune stale SHA-tagged images" step of 370-registry-cleanup.yml ---
+
+CLEANUP_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "370-registry-cleanup.yml"
+
+
+def _prune_script() -> str:
+    import yaml
+
+    doc = yaml.safe_load(CLEANUP_WORKFLOW.read_text(encoding="utf-8"))
+    steps = doc["jobs"]["cleanup"]["steps"]
+    return next(s for s in steps if "Prune stale SHA-tagged images" in s.get("name", ""))["run"]
+
+
+CURL_FOR_HUB = r"""
+method=GET; url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -X) method="$2"; shift ;;
+    -s|-o|-w|-H|-d) case "$1" in -o|-w|-H|-d) shift ;; esac ;;
+    *) url="$1" ;;
+  esac
+  shift
+done
+if [ "$method" = DELETE ]; then
+  echo "$url" >> "$DELETE_LOG"
+  printf '%s' "${STUB_DELETE_STATUS:-204}"
+elif [ "$method" = POST ]; then
+  printf '{"access_token":"t"}\n200'
+else
+  cat "$STUB_TAGS"; printf '\n200'
+fi
+"""
+
+
+def _hub_tag(name, minute, digest=None, images=()):
+    return {
+        "name": name,
+        "last_updated": f"2026-10-25T10:{59 - minute:02d}:00Z",
+        "digest": digest,
+        "images": [{"digest": d} for d in images],
+    }
+
+
+@needs_tools
+class TestPruneStep:
+    """The step is run as bash with a stub `curl` that serves a Docker Hub tag list and records DELETE calls."""
+
+    D = {n: "sha256:" + str(n) * 64 for n in range(1, 10)}
+
+    def _tags(self):
+        d = self.D
+        return [
+            # cli: newest first. KEEP_COUNT=2 keeps sha-a1 and sha-b2.
+            _hub_tag("sha-a1", 0, d[1]),
+            _hub_tag("sha-b2", 1, d[2]),
+            _hub_tag("sha-c3", 2, d[3], images=[d[7]]),  # own: pruned
+            _hub_tag(
+                "sha-d4", 3, d[4], images=[d[8]]
+            ),  # shares its index with the release tag: kept
+            _hub_tag("sha-e5", 4, d[5], images=[d[9]]),  # own: pruned
+            _hub_tag(
+                "sha-f6", 5, d[6], images=[d[3] + "x"]
+            ),  # shares only a platform image digest: kept
+            _hub_tag("web-sha-1111111", 0, d[1]),
+            _hub_tag("web-sha-2222222", 1, d[2]),
+            _hub_tag("web-sha-3333333", 2, None),  # Hub lists no digest at all: kept
+            _hub_tag("latest", 0, d[1]),
+            _hub_tag("1.0.0", 9, d[4], images=[d[8], d[3] + "x"]),  # the release tag
+            _hub_tag(
+                "sha256-" + "a" * 64 + ".sig", 9, "sha256:" + "f" * 64
+            ),  # a signature artifact, not a SHA tag
+        ]
+
+    def _run(self, tmp_path, *, dry_run="false", delete_status="204", tags=None):
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        _stub(bin_dir, "curl", CURL_FOR_HUB)
+        page = tmp_path / "tags.json"
+        page.write_text(
+            json.dumps({"results": tags or self._tags(), "next": None}), encoding="utf-8"
+        )
+        env = _env(
+            bin_dir,
+            STUB_TAGS=str(page),
+            DELETE_LOG=str(tmp_path / "delete.log"),
+            STUB_DELETE_STATUS=delete_status,
+            DOCKERHUB_NAMESPACE=NAMESPACE,
+            IMAGE_REPOSITORY=REPOSITORY,
+            KEEP_COUNT="2",
+            DOCKERHUB_PERSONAL_USERNAME="u",
+            DOCKERHUB_PERSONAL_TOKEN="t",
+            DRY_RUN=dry_run,
+        )
+        result = subprocess.run(
+            [BASH, "-c", _prune_script()], env=env, cwd=tmp_path, capture_output=True, text=True
+        )
+        log = tmp_path / "delete.log"
+        deleted = [
+            line.rstrip("/").rsplit("/", 1)[-1]
+            for line in (log.read_text(encoding="utf-8").splitlines() if log.exists() else [])
+        ]
+        return result, deleted
+
+    def test_only_old_unshared_sha_tags_are_deleted(self, tmp_path):
+        result, deleted = self._run(tmp_path)
+        assert result.returncode == 0, result.stderr + result.stdout
+        assert sorted(deleted) == ["sha-c3", "sha-e5"]
+
+    def test_a_sha_tag_sharing_the_release_tags_index_or_an_image_is_kept_and_said_so(
+        self, tmp_path
+    ):
+        result, deleted = self._run(tmp_path)
+        for kept in ("sha-d4", "sha-f6", "web-sha-3333333"):
+            assert kept not in deleted
+            assert f"keeping: {kept} (" in result.stdout, kept
+        assert "keeping: sha-d4 (shared:" in result.stdout
+        assert "keeping: web-sha-3333333 (unknown:" in result.stdout
+        assert "kept 7 (3 of them because" in result.stdout
+
+    def test_release_and_latest_tags_and_signature_artifacts_are_never_candidates(self, tmp_path):
+        _, deleted = self._run(tmp_path)
+        assert not {"latest", "1.0.0"} & set(deleted)
+        assert not any(name.startswith("sha256-") for name in deleted)
+
+    def test_a_dry_run_deletes_nothing_and_names_the_same_tags(self, tmp_path):
+        result, deleted = self._run(tmp_path, dry_run="true")
+        assert result.returncode == 0 and deleted == []
+        assert "would delete: sha-c3" in result.stdout and "would delete: sha-e5" in result.stdout
+        assert "would delete: sha-d4" not in result.stdout
+
+    def test_a_refused_delete_fails_the_job(self, tmp_path):
+        result, deleted = self._run(tmp_path, delete_status="403")
+        assert result.returncode == 1 and sorted(deleted) == ["sha-c3", "sha-e5"]
+        assert "Could not delete sha-c3" in result.stdout + result.stderr

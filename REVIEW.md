@@ -788,7 +788,7 @@ A customer cannot tell what "1.0" they run; a new `[1.0.0]` heading would collid
 - **Decision (2026-10-25):** nothing to decide. Images are signed under this repository's own identity,
   `https://github.com/saulpatinojr/HCW-NetworkEyes_App/.github/workflows/200-build-images.yml@refs/heads/main`, and no
   other repository's configuration is changed from here. Whoever verifies the images uses that identity (README,
-  *Publishing and verifying the images*). Renaming or moving this repository, that workflow file or the default
+  *Publishing the images* and *Verifying images*). Renaming or moving this repository, that workflow file or the default
   branch changes the identity and must be announced in `CHANGELOG.md` and the release notes.
 - **Raised:** 2026-10-10.
 - **Status:** Superseded 2026-10-25
