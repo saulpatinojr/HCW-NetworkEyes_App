@@ -1,0 +1,23 @@
+# Trivy suppressions for the image scan job in .github/workflows/300-test-codebase.yml and for
+# `scripts/ci/local-container-checks.sh trivy-image`. Read with `--ignorefile`.
+#
+# House rule: an entry names one rule id, the narrowest path glob that covers it, and a written reason; nothing is
+# disabled globally and nothing is suppressed by CVE id here (a fixable HIGH or CRITICAL vulnerability is fixed,
+# like the Docker Scout gate in 200-build-images.yml requires). tests/unit/test_ci_hygiene.py checks the shape.
+secrets:
+  # The Azure Storage emulator (Azurite) key.
+  #
+  # Why suppressed: apps/cna-web/lib/blob.ts imports @azure/storage-blob, whose connection-string parser inlines the
+  # documented, public development-storage connection string of the local Azurite emulator (account name
+  # devstoreaccount1, blob endpoint http://127.0.0.1:10000/devstoreaccount1; Microsoft's Azurite documentation
+  # publishes the whole string). It is not a credential for any real account and it appears nowhere in this
+  # repository's own source. Minified into the server chunks of the Next.js build, it makes Trivy's
+  # `azure-storage-account-key` rule report the web image (the migrator has no Next.js output and is unaffected).
+  # Both findings (2026-10-25, trivy 0.76.1) are in /app/app/.next/server/chunks/ and contain the `devstoreaccount1`
+  # account name; the glob is limited to that directory and the rule id to this one rule, so a real storage key in
+  # any other file, or any other secret rule in these files, still fails the scan.
+  # Trivy matches the path as the image holds it, with the leading slash.
+  - id: azure-storage-account-key
+    paths:
+      - "/app/app/.next/server/chunks/**/*.js"
+    statement: "Public Azurite development-storage key bundled by the Azure SDK; not a real credential."

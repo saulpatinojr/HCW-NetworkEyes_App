@@ -59,6 +59,10 @@ That runs hadolint (Dockerfiles), actionlint (workflows) and two Trivy scans (co
 script header explains the options and where the tool versions come from. CI runs the hadolint and actionlint parts
 as the jobs `Dockerfile Lint (hadolint)` and `Workflow Lint (actionlint)`.
 
+To scan an image you built (for example `docker build --target migrator -t cna:migrator apps/cna-web`), run
+`bash scripts/ci/local-container-checks.sh trivy-image cna:migrator`. CI builds and scans the web `migrator` and `runner`
+images in every pull request as the job `Image Scan (Trivy)`; `.trivyignore.yaml` lists the one suppression, with its reason.
+
 ## Rules that are easy to get wrong
 
 - **Dependencies are locked.** After you change `pyproject.toml`, run `uv lock` and commit `uv.lock` with it. Never

@@ -17,6 +17,7 @@
 # Settings (environment variables):
 #   TRIVY_SEVERITY   severities Trivy reports (default HIGH,CRITICAL)
 #   TRIVY_EXIT_CODE  exit code Trivy returns when it finds something (default 1; use 0 to only report)
+#   TRIVY_IGNORE_UNFIXED  trivy-image reports only findings that have a fix (default 1, like CI); 0 lists all
 #   CNA_CHECKS_ANY_CONTEXT=1   allow a Docker context other than desktop-linux or default (see below)
 #
 # How it stays safe: every tool runs in a disposable container (--rm) with all capabilities dropped, no privilege
@@ -131,8 +132,14 @@ run_trivy_image() {
   mkdir -p "$SCRATCH_DIR"
   trap 'rm -rf "$SCRATCH_DIR"' EXIT
   docker save "$image" -o "$SCRATCH_DIR/image.tar"
-  trivy -v "$REPO/$SCRATCH_DIR:/scan:ro" "$TRIVY_IMAGE" \
-    image --no-progress --input /scan/image.tar --severity "$TRIVY_SEVERITY" --exit-code "$TRIVY_EXIT_CODE" || code=$?
+  # The same policy as the `Image Scan (Trivy)` job of 300-test-codebase.yml and the Docker Scout gate of
+  # 200-build-images.yml: fixable findings only, and the narrow suppressions of .trivyignore.yaml (each has its
+  # reason there). Set TRIVY_IGNORE_UNFIXED=0 to list the findings that have no fix as well.
+  local unfixed=()
+  [ "${TRIVY_IGNORE_UNFIXED:-1}" = "0" ] || unfixed=(--ignore-unfixed)
+  trivy -v "$REPO/$SCRATCH_DIR:/scan:ro" -v "$REPO:/work:ro" "$TRIVY_IMAGE" \
+    image --no-progress --input /scan/image.tar --severity "$TRIVY_SEVERITY" ${unfixed[@]+"${unfixed[@]}"} \
+    --ignorefile /work/.trivyignore.yaml --exit-code "$TRIVY_EXIT_CODE" || code=$?
   rm -rf "$SCRATCH_DIR"
   record "trivy image $image" "$code"
 }
