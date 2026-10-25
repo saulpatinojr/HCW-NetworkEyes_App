@@ -160,7 +160,7 @@ jobs:
             key: cli
             file: Dockerfile
             raw_tag: latest
-            sha_prefix: ""
+            sha_prefix: sha-  # not "": an empty prefix gave the bare tag 3762d27 (first real build)
           - name: API
             key: api
             file: apps/cna-api/Dockerfile
