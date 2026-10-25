@@ -28,7 +28,7 @@ dependencies = [
     "azure-mgmt-subscription>=3.1.1",
     "azure-storage-blob>=12.31.0",       # Phase F: Azure Blob Storage deployer
     "openai>=3.28.0",
-    "anthropic>=1.17.0",                  # bring-your-own Claude engine (CNA_AI_MODE=byo-api)
+    "anthropic>=2.1.0",                  # bring-your-own Claude engine (CNA_AI_MODE=byo-api)
     # Reads the AES-256-GCM credential blobs the web tier writes (BYO AI keys).
     # Was only ever a transitive dependency of azure-identity; declared so a
     # future azure-identity bump cannot silently drop it.
