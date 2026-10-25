@@ -43,7 +43,9 @@ jobs:
     # 200-build-images.yml) is unaffected, which is why builds always work
     # fine from the VPS but this API-only job doesn't.
     runs-on: ubuntu-latest
-    if: vars.DOCKERHUB_ENABLED == 'true' # owner step: Docker Hub OIDC connection + variables (REFACTOR_APP.md change set J)
+    # A dry run lists and deletes nothing, so it may run before publishing is switched on; it proves the
+    # credential, the Docker Hub listing and the retention rule. A real prune still needs DOCKERHUB_ENABLED.
+    if: vars.DOCKERHUB_ENABLED == 'true' || inputs.dry_run == 'true' # owner step: Docker Hub OIDC connection + variables (REFACTOR_APP.md change set J)
     timeout-minutes: 15
     steps:
       - name: Checkout
