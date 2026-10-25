@@ -161,6 +161,7 @@ jobs:
           echo "Fetched $TOTAL total tags from Docker Hub."
 
           DELETED=0
+          FAILED=0
           KEPT=0
 
           for component in "${!COMPONENT_PATTERNS[@]}"; do
@@ -186,15 +187,26 @@ jobs:
 
               if [ "$DRY_RUN" = "true" ]; then
                 echo "would delete: $tag"
+                DELETED=$((DELETED + 1))
               else
                 echo "deleting: $tag"
-                curl -s -o /dev/null -w "  -> HTTP %{http_code}\n" -X DELETE \
+                # Count only what Docker Hub confirmed. The API token lasts 10 minutes, so a long
+                # run can start getting 401s; those must fail the job, not read as "deleted".
+                STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
                   -H "Authorization: Bearer ${TOKEN}" \
-                  "https://hub.docker.com/v2/repositories/${DOCKERHUB_NAMESPACE}/${REPO}/tags/${tag}/"
+                  "https://hub.docker.com/v2/repositories/${DOCKERHUB_NAMESPACE}/${REPO}/tags/${tag}/" || echo 000)
+                case "$STATUS" in
+                  200|202|204) echo "  -> HTTP $STATUS"; DELETED=$((DELETED + 1)) ;;
+                  404) echo "  -> HTTP 404 (already gone)" ;;
+                  *) echo "::error::Could not delete ${tag} (HTTP ${STATUS})."; FAILED=$((FAILED + 1)) ;;
+                esac
               fi
-              DELETED=$((DELETED + 1))
             done
           done
 
           echo ""
           echo "Summary: kept $KEPT, $([ "$DRY_RUN" = "true" ] && echo "would delete" || echo "deleted") $DELETED (retention: last $KEEP per component + *-latest + currently-deployed)."
+          if [ "$FAILED" -gt 0 ]; then
+            echo "::error::$FAILED tag(s) could not be deleted; the summary above counts only confirmed deletions."
+            exit 1
+          fi
