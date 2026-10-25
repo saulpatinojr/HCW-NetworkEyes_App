@@ -1396,7 +1396,7 @@ def load_balancer_basic_sku(
             fact=f"Load balancer {lb.name} ({lb.lb_type}) in {lb.location} has sku_name=Basic.",
             evidence_ref=f"discovery:azure_{sub_id}.load_balancers[id={lb.id}].sku_name",
             description="The Basic SKU has no SLA, no zone redundancy and no HTTPS health probes, "
-            "and Microsoft has announced its retirement [VERIFY date].",
+            "and Microsoft retired it on 30 September 2025 (Microsoft Learn, read 2026-10-25).",
             recommendation="Upgrade to the Standard SKU, which is secure by default (closed without "
             "an NSG), supports zone redundancy and HA ports.",
         )
@@ -1435,7 +1435,7 @@ def public_ip_basic_sku(
             f"to {attached}.",
             evidence_ref=f"discovery:azure_{sub_id}.public_ips[id={pip.id}].sku_name",
             description="Basic public IPs are open by default, not zone-redundant, and Microsoft "
-            "has announced their retirement [VERIFY date].",
+            "retired them on 30 September 2025 (Microsoft Learn, read 2026-10-25).",
             recommendation="Upgrade the public IP to the Standard SKU, which requires an NSG for "
             "inbound traffic and supports availability zones.",
         )
@@ -1513,7 +1513,7 @@ def vpn_gateway_generation1(
             fact=f"VPN gateway {gw.name} (SKU: {gw.sku_name}) reports generation={gw.generation}.",
             evidence_ref=f"discovery:azure_{sub_id}.virtual_network_gateways[id={gw.id}].generation",
             description="Generation 1 SKUs top out at 1.25 Gbps aggregate throughput; Generation 2 "
-            "SKUs reach 10 Gbps and more [VERIFY].",
+            "SKUs reach 10 Gbps (VpnGw5; Microsoft Learn SKU table, read 2026-10-25).",
             recommendation="Resize to a Generation 2 SKU (VpnGw2 to VpnGw5, or their AZ variants) "
             "in a maintenance window.",
         )

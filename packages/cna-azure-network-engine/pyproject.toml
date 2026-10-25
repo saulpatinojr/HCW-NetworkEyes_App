@@ -18,16 +18,18 @@ dependencies = [
 [project.optional-dependencies]
 # Live discovery (change set D). Lower bounds are the versions the code was written
 # against; upper bounds follow the monorepo's `enrichment` extra (TODO.md T-413, T-414),
-# whose majors renamed or removed the APIs used. Every bound is [VERIFY] until the
-# acceptance run against a Reader-only identity (TODO.md T-726).
+# whose majors renamed or removed the APIs used. Checked against PyPI on 2026-10-25: each
+# lower bound below is the newest release of that package and no next major exists yet.
+# That the SDK calls behave as coded is open until the acceptance run against a Reader-only
+# identity (TODO.md T-726); no agent session may call live Azure.
 azure = [
-    "azure-identity>=1.26.0",                 # [VERIFY] credential chain
-    "azure-mgmt-resourcegraph>=8.0.0,<9",     # [VERIFY] QueryRequest/QueryRequestOptions, skip_token
-    "azure-mgmt-network>=33.1.0",             # [VERIFY] BGP begin_get_* actions (live only)
-    "azure-mgmt-monitor>=7.0.0,<8",           # [VERIFY] diagnostic settings, alert counts
-    "azure-monitor-query>=2.0.0,<3",          # [VERIFY] metrics, Traffic Analytics
-    "azure-mgmt-costmanagement>=5.0.0,<6",    # [VERIFY] AZ-COST live reads
-    "azure-mgmt-loganalytics>=14.0.0,<15",    # [VERIFY] workspace lookup
+    "azure-identity>=1.26.0",                 # credential chain
+    "azure-mgmt-resourcegraph>=8.0.0,<9",     # QueryRequest/QueryRequestOptions, skip_token
+    "azure-mgmt-network>=33.1.0",             # BGP begin_get_* actions (live only)
+    "azure-mgmt-monitor>=7.0.0,<8",           # diagnostic settings, alert counts
+    "azure-monitor-query>=2.0.0,<3",          # metrics, Traffic Analytics
+    "azure-mgmt-costmanagement>=5.0.0,<6",    # AZ-COST live reads
+    "azure-mgmt-loganalytics>=14.0.0,<15",    # workspace lookup
 ]
 # Not needed any more: Defender assessments and NVAs come from Resource Graph
 # (SecurityResources, Resources), so azure-mgmt-security and azure-mgmt-compute are gone.

@@ -195,7 +195,7 @@ Rule mapping (ids, severities and evidence as the AddOn design table B.4; the Co
 | `AZ-NET-023` BGP route propagation disabled | `_check_route_tables` | INFORMATIONAL | |
 | `AZ-NET-024` VNet uses custom DNS servers | `_check_vnet` (216) | INFORMATIONAL | |
 | `AZ-NET-025` App Gateway WAF in Detection mode | `_check_app_gateways` (468) | MEDIUM | |
-| `AZ-NET-026` Load balancer Basic SKU | `_check_load_balancers` (524) | MEDIUM | retirement date `[VERIFY]` |
+| `AZ-NET-026` Load balancer Basic SKU | `_check_load_balancers` (524) | MEDIUM | retired 30 September 2025 (Microsoft Learn, checked 2026-10-25) |
 | `AZ-NET-027` Public IP Basic SKU | `_check_public_ips` (612) | MEDIUM | one finding per IP, not per subscription |
 | `AZ-NET-028` VPN gateway Basic SKU | `_check_gateway_skus` (703) | HIGH | |
 | `AZ-NET-029` VPN gateway Generation1 | `_check_gateway_skus` | LOW | |
@@ -336,7 +336,7 @@ class AnalysisEngine:
 
 **Required behavior.** One role table (section 13), repeated verbatim in all four places and in the appliance Terraform.
 
-**Exact change.** New `docs/roles/cna-network-bgp-reader.json` (every action name `[VERIFY]` against the Microsoft.Network provider operations list before `az role definition create`; `AssignableScopes` is rewritten by the appliance Terraform to the real scopes):
+**Exact change.** New `docs/roles/cna-network-bgp-reader.json` (every action name checked on 2026-10-25 against the Microsoft Learn Azure permissions reference; re-check against the tenant with the Microsoft.Network provider operations list before `az role definition create`; `AssignableScopes` is set to the real scopes by whoever creates the role):
 
 ```json
 {
@@ -358,7 +358,7 @@ class AnalysisEngine:
 
 - `sp-help-modal.tsx`: replace the four passages with the table; Step 4 becomes "Assign Reader (and the optional reader roles)"; the amber callout becomes "Why not Network Contributor?" stating the scan is read-only and the only non-read calls are the BGP actions in the custom role. After change set G this modal describes the managed identity instead of a service principal.
 - `main.py:1146`: "Assign the Reader role at the subscription scope. For BGP state, also assign the custom role CNA Network BGP Reader."
-- `module.yaml:27-35`: `Microsoft.Resources/subscriptions/resourceGroups/read`, `Microsoft.ResourceGraph/resources/read`, `Microsoft.Network/*/read`, `Microsoft.Insights/diagnosticSettings/read`, `Microsoft.Insights/Metrics/read`, `Microsoft.Security/assessments/read`, `Microsoft.CostManagement/query/action`, `Microsoft.OperationalInsights/workspaces/query/read`, plus the six custom-role actions, each `[VERIFY]`.
+- `module.yaml:27-35`: `Microsoft.Resources/subscriptions/resourceGroups/read`, `Microsoft.ResourceGraph/resources/read`, `Microsoft.Network/*/read`, `Microsoft.Insights/diagnosticSettings/read`, `Microsoft.Insights/Metrics/read`, `Microsoft.Security/assessments/read`, `Microsoft.CostManagement/query/action`, `Microsoft.OperationalInsights/workspaces/query/read`, plus the six custom-role actions, each checked against Microsoft Learn on 2026-10-25.
 - `.env.example:73`: "Required RBAC: Reader on each assessed scope; optional Security Reader, Cost Management Reader, Log Analytics Reader, CNA Network BGP Reader (docs/roles/cna-network-bgp-reader.json)."
 
 - **Components affected.** Web modal, API finding text, module manifest, env template, appliance Terraform (`azurerm_role_definition` plus assignments).
@@ -654,7 +654,7 @@ Roles table (the single source for 7.F, section 12 and the appliance docs):
 | Security Reader | built-in | `Microsoft.Security/*/read` | Defender assessments |
 | Cost Management Reader | built-in | `Microsoft.CostManagement/*/read`, `query/action` | `AZ-COST-002/003/005` |
 | Log Analytics Reader | built-in | `workspaces/query/read`, shared keys excluded | Traffic Analytics (`AZ-NET-014` live form) |
-| CNA Network BGP Reader | custom (`docs/roles/cna-network-bgp-reader.json`) | six actions, all `[VERIFY]` | BGP peer status, learned and advertised routes |
+| CNA Network BGP Reader | custom (`docs/roles/cna-network-bgp-reader.json`) | six actions, all checked against Microsoft Learn on 2026-10-25 | BGP peer status, learned and advertised routes |
 | Management Group Reader | built-in | `Microsoft.Management/managementGroups/read` | Management-group tree (optional) |
 
 Unchanged by this document and still open: R-011 (BYO AI key path and egress review) and the deploy service principal's least-privilege gaps recorded in `CNA-0.90-updates.md` section 5.
@@ -822,7 +822,7 @@ Live acceptance (R-008), bash, after `az login` as an identity holding only Read
 
 1. `[REVIEW REQUIRED]` **Relicensing.** The Core has no `license` field in `pyproject.toml` and labels its images `org.opencontainers.image.licenses="Proprietary"` (`Dockerfile:50`). The AddOn is MIT. The interim port and the future wheel both need an owner decision on the engine package's licence and the copyright holder (HCW or CBTS). Until decided, the AddOn's `PROVENANCE.md` makes the ported set removable and the wheel is not published.
 2. `[REVIEW REQUIRED]` **PyPI name and trusted publishing.** `cna-azure-network-engine` must be registered on PyPI with a trusted publisher for `saulpatinojr/HCW-NetworkEyes_App` and the `320-release-engine.yml` workflow; `vars.PYPI_PUBLISH_ENABLED` stays unset until then, and the wheel is attached to the GitHub Release instead.
-3. `[VERIFY]` **Custom role action names.** The six actions in `docs/roles/cna-network-bgp-reader.json` are to be checked against the current `Microsoft.Network` provider operations before `az role definition create`.
+3. **Custom role action names.** Checked on 2026-10-25: the six actions in `docs/roles/cna-network-bgp-reader.json` are listed in the Microsoft Learn Azure permissions reference. Whoever creates the role still re-checks them against their tenant with the `Microsoft.Network` provider operations before `az role definition create`.
 4. `[REVIEW REQUIRED]` **Graph and Entra permissions.** The app registration for the bearer audience (7.H) and any Microsoft Graph permission the web tier needs to acquire tokens with its identity are tenant-admin steps.
 5. `[REVIEW REQUIRED]` **Compliance-framework references** (WAF, CIS, PCI-DSS, ISO 27001, HIPAA, FedRAMP, CISA ZTMM) carried as rule data from `analysis_engine.py` are claims shown to customers; every control reference is `[VERIFY]` and the set needs legal or compliance review before the appliance's anonymous public surface exposes them.
 6. **Rule numbering.** Zone-redundancy checks are numbered `AZ-BCDR-006/007` rather than `AZ-NET-02x`, and `AZ-NET-032/033` severities are lowered from Engine B's; both are flagged for the owner, and the AddOn already uses them.
@@ -839,5 +839,5 @@ Live acceptance (R-008), bash, after `az login` as an identity holding only Read
 | A-4 | Container Apps Consumption `min_replicas = 1` cost is on the order of US$5 to 15 per month `[VERIFY]` | Owner may choose scale-to-zero with a persisted snapshot |
 | A-5 | Whoever deploys the appliance applies the Terraform additions of section 12 | This document records the contract and the deployer implements it |
 | A-6 | The web tier can obtain a token for the API audience with its user-assigned identity | Fall back to a federated app credential; never a client secret |
-| A-7 | Basic Load Balancer and Basic Public IP retirement dates used in rule text are checked `[VERIFY]` | Text and severity adjusted; ids unchanged |
+| A-7 | Basic Load Balancer and Basic Public IP retirement dates used in rule text are checked: both retired on 30 September 2025 (Microsoft Learn, 2026-10-25) | Text and severity adjusted; ids unchanged |
 | A-8 | The AddOn's `lab-1.0.0` model is a strict subset of the engine's `1.3.0` Azure classes | The AddOn's `core-update` PR records the field differences and adapts the normalizer |
