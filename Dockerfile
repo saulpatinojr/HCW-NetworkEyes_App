@@ -130,7 +130,7 @@ LABEL org.opencontainers.image.title="CNA Platform" \
       org.opencontainers.image.description="Cloud Network Assessment CLI" \
       org.opencontainers.image.version="${CNA_VERSION}" \
       org.opencontainers.image.source="https://github.com/saulpatinojr/HCW-NetworkEyes_App" \
-      org.opencontainers.image.licenses="Proprietary"
+      org.opencontainers.image.licenses="Apache-2.0"
 
 # System deps for diagram generation (runtime only). No `apt-get upgrade`: the base is pinned by digest, but
 # these packages are installed unpinned (hadolint DL3008 is ignored with a reason in .hadolint.yaml), so a rebuild
