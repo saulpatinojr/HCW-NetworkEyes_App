@@ -24,6 +24,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_300 = REPO_ROOT / ".github" / "workflows" / "300-test-codebase.yml"
 LOCAL_CHECKS = REPO_ROOT / "scripts" / "ci" / "local-container-checks.sh"
+HARDEN_FLAGS = REPO_ROOT / "scripts" / "ci" / "harden-flags.sh"
 HADOLINT_CONFIG = REPO_ROOT / ".hadolint.yaml"
 
 # Job names that exist today and are required checks of the "Protect main" ruleset (read 2026-10-25).
@@ -154,6 +155,7 @@ def test_hadolint_job_uses_the_digest_pinned_image_and_the_reviewed_config() -> 
         "hadolint must find Dockerfiles from git, not from a list that goes stale"
     )
     assert "--network none" in run
+    assert_hardened(run)
 
 
 def test_actionlint_job_uses_the_digest_pinned_image() -> None:
@@ -163,6 +165,31 @@ def test_actionlint_job_uses_the_digest_pinned_image() -> None:
     )
     assert ".github/workflows/*.yml" in run
     assert "--network none" in run
+    assert_hardened(run)
+
+
+def assert_hardened(run: str) -> None:
+    """A CI tool container gets the shared hardening flags, not a copy of them."""
+    assert "source ./scripts/ci/harden-flags.sh" in run
+    assert re.search(r'docker run "\$\{HARDEN\[@\]\}"', run), (
+        "docker run must use the shared HARDEN flags"
+    )
+    assert not re.search(r"docker run[^\n]*--(?:rm|read-only|cap-drop|security-opt)", run), (
+        "the hardening flags are written once, in scripts/ci/harden-flags.sh"
+    )
+
+
+@pytest.mark.parametrize("job_id", ("dockerfile-lint", "workflow-lint"))
+def test_the_lint_jobs_hold_only_the_checkout_permission(job_id: str) -> None:
+    # The workflow grants `pull-requests: read` for other jobs; these two only check out and run a container.
+    assert workflow()["jobs"][job_id]["permissions"] == {"contents": "read"}
+
+
+def test_the_shared_hardening_flags_are_the_complete_set() -> None:
+    text = HARDEN_FLAGS.read_text(encoding="utf-8")
+    assert "HARDEN=(--rm --read-only --cap-drop ALL --security-opt no-new-privileges)" in text
+    assert "source ./scripts/ci/harden-flags.sh" in script_text()
+    assert "HARDEN=(" not in script_text(), "local-container-checks.sh must not define its own copy"
 
 
 @pytest.mark.parametrize("variable", ("HADOLINT_IMAGE", "ACTIONLINT_IMAGE", "TRIVY_IMAGE"))
@@ -223,8 +250,11 @@ def test_local_script_never_logs_in_pushes_or_widens_the_sandbox() -> None:
         "--ipc host",
     ):
         assert forbidden not in text, forbidden
-    # Every tool container is disposable and runs with the hardening flags.
-    assert "--rm --read-only --cap-drop ALL --security-opt no-new-privileges" in text
+    # Every tool container is disposable and runs with the shared hardening flags.
+    assert 'docker run "${HARDEN[@]}"' in text
+    assert text.count("docker run ") == text.count('docker run "${HARDEN[@]}"'), (
+        "every docker run is hardened"
+    )
 
 
 def test_local_script_with_no_check_named_stops_with_exit_code_2() -> None:
@@ -338,6 +368,22 @@ class TestDockerfileHygiene:
         for number, value in users:
             assert re.fullmatch(r"\d+(:\d+)?", value), f"line {number}: USER {value} is not numeric"
             assert not value.startswith("0"), f"line {number}: USER {value} is root"
+
+    def test_each_numeric_user_is_the_uid_its_stage_created(self, path: Path) -> None:
+        # `USER 1001` is only meaningful if that uid is the account the same stage made with --uid.
+        stage_uids: set[str] = set()
+        for number, keyword, arguments in instructions(path):
+            if keyword == "FROM":
+                stage_uids = set()
+            elif keyword == "RUN":
+                for command in re.finditer(r"\b(?:useradd|adduser)\b([^&|;]*)", arguments):
+                    stage_uids.update(re.findall(r"--uid\s+(\d+)", command.group(1)))
+            elif keyword == "USER":
+                uid = arguments.split(":")[0]
+                assert uid in stage_uids, (
+                    f"line {number}: USER {arguments} is not the --uid of a useradd/adduser in the same stage "
+                    f"(found {sorted(stage_uids) or 'none'})"
+                )
 
     def test_cmd_entrypoint_and_healthcheck_use_the_exec_form(self, path: Path) -> None:
         for number, keyword, arguments in instructions(path):

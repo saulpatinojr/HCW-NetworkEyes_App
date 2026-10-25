@@ -71,8 +71,9 @@ if [ "${CNA_CHECKS_ANY_CONTEXT:-0}" != "1" ]; then
 fi
 docker info >/dev/null 2>&1 || fail "the Docker engine does not answer. Start Docker Desktop and try again."
 
-# Flags every tool container gets.
-HARDEN=(--rm --read-only --cap-drop ALL --security-opt no-new-privileges)
+# Flags every tool container gets: one definition, shared with the CI jobs (scripts/ci/harden-flags.sh).
+# shellcheck source=scripts/ci/harden-flags.sh
+source ./scripts/ci/harden-flags.sh
 
 results=()
 overall=0

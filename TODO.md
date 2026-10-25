@@ -2317,11 +2317,15 @@ Nothing publishes until the owner flips the variables below. Open, in order:
      immutable form (GitHub's owner and repository ids, so a rename never breaks it):
      `repo:saulpatinojr@34853639/HCW-NetworkEyes_App@1173847343:ref:refs/heads/main` (for `200-build-images.yml`),
      with the scope **Image Push** on `hybridcloudworks/img-ne-appliance-app` plus **Read public repositories**
-     (**Image Pull** is optional while the repository is public). Add no tag rule yet. `310-release-version.yml` now promotes the image `200` built
-     instead of building one, and its run is a tag (`refs/tags/v…`), so before the first release add a second
-     rule `repo:saulpatinojr@34853639/HCW-NetworkEyes_App@1173847343:ref:refs/tags/*` with the same two scopes on
-     the same repository (it only pushes a `<version>` tag onto a digest `200` scanned and signed). Copy the
-     connection id it shows.
+     (**Image Pull** is optional: the repository is public). The owner has done this. Add no tag ruleset until the
+     first release. `310-release-version.yml` promotes the image `200` built instead of building one, and its
+     run is a tag, so its OIDC subject is `repo:saulpatinojr@34853639/HCW-NetworkEyes_App@1173847343:ref:refs/tags/vX.Y.Z`,
+     which the ruleset for main does not match. Before the first release add a SECOND RULESET (not a second rule in
+     the first) to the same connection: subject claim
+     `repo:saulpatinojr@34853639/HCW-NetworkEyes_App@1173847343:ref:refs/tags/v*`, resource
+     `hybridcloudworks/img-ne-appliance-app`, scope **Image Push** only (Image Pull is not needed: the repository is
+     public and `310` reads it anonymously). It only lets a pushed `v*` tag add a `<version>` tag to a digest `200`
+     scanned and signed. Copy the connection id it shows.
   3. PowerShell, which reads the id from the prompt so nothing is retyped into the command:
 
   ```powershell
@@ -2347,13 +2351,44 @@ Nothing publishes until the owner flips the variables below. Open, in order:
   and auto-merge) and `rehearse-docker-login`. Success for the Docker job looks like: `Log in to Docker Hub` green
   (the subject claim matches the ruleset), `Push the rehearsal image by digest` green (the Image Push scope), and
   `Read the pushed digest back` printing `Docker Hub accepted the login and the push`. The pushed image is untagged
-  and empty, and Docker Hub garbage-collects it; nothing is tagged, signed or written to the manifest, and the real
-  build jobs stay skipped. If it fails, the failing step prints the three likely causes (mutable instead of immutable
+  and carries one tiny layer; no tag resolves to it, and whether and when Docker Hub deletes it was not checked
+  against Docker's documentation, so remove the digest by hand if you want it gone. Nothing is tagged, signed or
+  written to the manifest, and the real build jobs stay skipped. The job also has Docker Scout analyse the digest
+  with the same call the real build makes. If it fails, the failing step prints the three likely causes (mutable instead of immutable
   `sub`, the ruleset missing the repository, the scope missing); open the connection's **Failures** tab in Docker
   Home for the claims Docker received. Docker's guide:
   <https://docs.docker.com/security/authentication/oidc-connections/troubleshoot>. Then close the tickets that
   waited on the connection and set `DOCKERHUB_ENABLED`. The dry run does not prove `tag-images` (it retags a digest
   in the same repository) or cosign signing; the first real build does.
+- `[DECISION]` **Docker Scout and the OIDC credential.** The real build jobs call `docker/scout-action` after the
+  OIDC login with no extra credential. Whether Scout accepts that credential is unknown until the dry run above
+  (its `Docker Scout analyses the rehearsal digest` step is the rehearsal). If it fails, the step says so: Scout
+  then needs a Docker Hub personal access token (the action's `dockerhub-user` / `dockerhub-password`, from a
+  secret), which must be created, stored and wired into `200` BEFORE `DOCKERHUB_ENABLED` is set, or every real
+  build fails at its first Scout step.
+- `[DECISION]` **The release image is `linux/amd64` only.** `310` used to build and push `linux/amd64,linux/arm64`;
+  it now promotes the image `200` built, which has no `platforms:` setting and so is whatever the runner builds,
+  amd64. If an arm64 release image matters, add `platforms: linux/amd64,linux/arm64` to the build steps of `200`
+  (the Scout, signing and smoke steps then need to follow) and decide it deliberately; nothing else restores it.
+- **Releasing, once `DOCKERHUB_ENABLED` is set and `200` has built.** (1) Optional: Actions, **310 · Release CLI
+  Tool**, **Run workflow**, branch `main`, `dry_run` ticked: it finds and verifies the image of the latest build and
+  prints what it would promote; it logs in for nothing and creates nothing. (2) Tag the head of `main` or the
+  commit recorded as `commit` in `.deployment-catalog/latest-build.json` (`git tag vX.Y.Z <sha>`, `git push origin
+  vX.Y.Z`). Every successful `200` ends with a manifest-only commit; `310` accepts a tag on it, or on a
+  documentation-only commit after a build, because nothing `200` builds from changed since. A tag on a commit that
+  changed a file in `200`'s `on.push.paths` after the last build fails with the file names: tag the recorded commit
+  instead. (3) If the run fails after `Promote the digest` created the tag but the post-check disagrees ("resolves to
+  ... expected ..."), the version tag exists with the wrong digest: delete that tag on Docker Hub (Repository, Tags)
+  and re-run; a re-run refuses to move an existing tag, and so does it if the tag was created by something else.
+- **Who can mint the Docker token through a tag.** The ruleset "Protect release tags"
+  (<https://github.com/saulpatinojr/HCW-NetworkEyes_App/rules/25778333>, read 2026-10-25: target tags, include
+  `refs/tags/v*`, enforcement active, rules `deletion`, `non_fast_forward`, `update`, no bypass actors) has no
+  `creation` restriction. Anyone with write access to the repository can therefore push a `v*` tag; the run uses the
+  workflow file at the tagged commit, and its OIDC subject `...:ref:refs/tags/vX.Y.Z` matches the tag ruleset once
+  that exists. The credential it obtains can push to `img-ne-appliance-app`; `310` as written only adds a version
+  tag to a digest it verified, but a tag on a commit whose workflow file was edited could do more. Nothing in this
+  change alters the ruleset (an owner decision); adding a `creation` rule limited to the owner, or an environment
+  with required reviewers on the release job, would close it.
 - `[VERIFY]` `DOCKERHUB_OIDC_CONNECTIONID` / `DOCKERHUB_OIDC_EXPIREIN` and the minimum `docker/login-action`
   release that reads them, against Docker's documentation at the time of enabling; `actionlint` over
   `.github/workflows/` on the first pull request (not installed where this was written).

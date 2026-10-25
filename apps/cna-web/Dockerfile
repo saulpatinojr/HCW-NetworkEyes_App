@@ -36,9 +36,11 @@ RUN npm run build
 FROM node:24-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS migrator
 WORKDIR /app
 
-# No `apk upgrade`: the image is the pinned base digest plus libc6-compat,
-# nothing that depends on the day it was built. Dependabot's docker ecosystem
-# bumps the digest; a Scout finding on a base apk is fixed there (TODO.md T-702).
+# No `apk upgrade`: the base is pinned by digest, but libc6-compat is installed unpinned (hadolint DL3018 is
+# ignored with a reason in .hadolint.yaml), so a rebuild on another day gets that day's package version on the
+# same base. The control that matters is the Docker Scout gate in 200-build-images.yml (fixable critical and high
+# findings fail the build). Dependabot's docker ecosystem bumps the digest; a Scout finding on a base apk is
+# fixed there (TODO.md T-702).
 #
 # The bundled npm CLI is unused here (prisma is invoked directly via
 # node_modules/.bin) and periodically carries fixable CVEs in its own

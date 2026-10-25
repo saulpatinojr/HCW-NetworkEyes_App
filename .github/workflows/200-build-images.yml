@@ -15,8 +15,9 @@ name: "200 · Build Container Images"
 # digest only** (no tag), scanned by Docker Scout at that digest, and only when
 # all five images have passed does the `tag-images` job attach the immutable
 # `*-sha-<7>` and floating `*-latest` tags. A failed scan therefore never moves
-# a tag; the untagged digest it leaves behind is inert (nothing resolves to it)
-# and Docker Hub garbage-collects it. The tag names, the `latest-build.json`
+# a tag; the untagged digest it leaves behind is inert (no tag resolves to it;
+# whether and when Docker Hub deletes such a manifest was not checked against its
+# documentation, so it may stay until removed by hand). The tag names, the `latest-build.json`
 # fields and the `cna-image-published` payload are unchanged; the manifest
 # additionally records `digests{}` so the appliances can pin by digest.
 #
@@ -52,8 +53,9 @@ on:
           the manifest pull request (proves the GitHub App, auto-merge and the required checks;
           the pull request is closed again) and the Docker Hub login (proves the OIDC
           connection's ruleset and its Image Push scope by pushing an empty labelled image BY
-          DIGEST ONLY, main branch only). No product image is built, nothing is tagged, signed
-          or written to the manifest.
+          DIGEST ONLY, main branch only, then has Docker Scout analyse it with the same call the
+          real build uses). No product image is built, nothing is tagged, signed or written to
+          the manifest.
         type: boolean
         default: false
       merge:
@@ -769,10 +771,17 @@ jobs:
   # not need DOCKERHUB_ENABLED, so it can prove the connection before publishing is switched on:
   #   1. the login alone proves the run's OIDC subject (`repo:…:ref:refs/heads/main`) matches the
   #      connection's ruleset;
-  #   2. an image with no layers (`FROM scratch` plus two labels) pushed by digest only, with no tag,
-  #      proves the Image Push scope on the repository; an untagged digest is inert and Docker Hub
-  #      garbage-collects it;
-  #   3. reading the digest back proves the image is there.
+  #   2. an image with one tiny layer (`FROM scratch`, one COPY, two labels) pushed by digest only, with
+  #      no tag, proves the Image Push scope on the repository. The layer is there so a registry that
+  #      rejects an image with no layers cannot be misread as a missing scope. No tag resolves to an
+  #      untagged digest; whether and when Docker Hub deletes it was not checked against its
+  #      documentation, so remove it by hand (Repository, Tags and images) if you want it gone;
+  #   3. reading the digest back proves the image is there;
+  #   4. Docker Scout analyses that digest with the same action and arguments as the real build jobs, so
+  #      Scout's acceptance of the OIDC credential is rehearsed too. If Scout refuses it, the failure
+  #      hint says so: the fix is a Docker Hub personal access token for Scout (the action's
+  #      `dockerhub-user` / `dockerhub-password` inputs), and TODO.md T-728 records that this must be
+  #      settled before DOCKERHUB_ENABLED is set.
   # It never signs, never tags (so never touches `latest`), never writes the manifest, and logs out.
   # The real build jobs above stay skipped: they need DOCKERHUB_ENABLED == 'true' and `!inputs.rehearsal`.
   rehearse-docker-login:
@@ -817,11 +826,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "${RUNNER_TEMP}/rehearsal-image"
-          printf 'FROM scratch\nLABEL rehearsal="true" run_id="%s"\n' "$GITHUB_RUN_ID" > "${RUNNER_TEMP}/rehearsal-image/Dockerfile"
+          printf 'rehearsal run %s\n' "$GITHUB_RUN_ID" > "${RUNNER_TEMP}/rehearsal-image/rehearsal.txt"
+          printf 'FROM scratch\nCOPY rehearsal.txt /rehearsal.txt\nLABEL rehearsal="true" run_id="%s"\n' "$GITHUB_RUN_ID" > "${RUNNER_TEMP}/rehearsal-image/Dockerfile"
           cat "${RUNNER_TEMP}/rehearsal-image/Dockerfile"
 
       # Push by digest only (`push-by-digest=true`, no `tags:`), as the real build does; no provenance
-      # or SBOM, so the pushed image is the config and nothing else.
+      # or SBOM, so the pushed image is its one layer, its config and nothing else.
       - name: Push the rehearsal image by digest
         id: push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
@@ -846,10 +856,26 @@ jobs:
             exit 1
           fi
           echo "Docker Hub accepted the login and the push, and returns ${DIGEST} for docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}."
-          echo "The image is untagged and inert; Docker Hub garbage-collects it. Nothing was tagged, signed or written to the manifest."
+          echo "The image is untagged and no tag resolves to it. Nothing was tagged, signed or written to the manifest. Remove the digest by hand on Docker Hub if you do not want it kept."
+
+      # The same action, version and arguments as the real build jobs use on every digest they push.
+      - name: Docker Scout analyses the rehearsal digest
+        id: scout
+        uses: docker/scout-action@a4119c5a8c5076236a54e4ce99531f7e4dd2ef84  # v1.27.0
+        with:
+          command: cves
+          image: docker.io/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}@${{ steps.push.outputs.digest }}
+          only-severities: critical,high
+          only-fixed: true
+          exit-code: true
+
+      - name: What to check if Docker Scout failed
+        if: failure() && steps.scout.outcome == 'failure'
+        run: |
+          echo "::error::Docker Scout could not analyse the rehearsal digest although the login and the push worked. Scout may not accept the OIDC credential: it may need a Docker Hub personal access token (the docker/scout-action inputs dockerhub-user and dockerhub-password, from a secret). If so, record that in TODO.md T-728 and settle it BEFORE DOCKERHUB_ENABLED is set, because the real build jobs call Scout the same way and would fail the same way."
 
       - name: What to check if this failed
-        if: failure()
+        if: failure() && steps.scout.outcome != 'failure'
         run: |
           echo "::error::The Docker Hub rehearsal failed. The three most likely causes:"
           echo "::error::1. The ruleset's subject claim does not match this run. Use the immutable form repo:<owner>@<owner id>/<repository>@<repository id>:ref:refs/heads/main, not the mutable name form (or the reverse of what the connection was created with)."

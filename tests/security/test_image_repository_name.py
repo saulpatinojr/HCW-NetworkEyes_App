@@ -250,7 +250,15 @@ class TestCleanupAgreesWithTheManifest:
     def test_cleanup_protects_the_tags_of_the_repository_it_prunes(self):
         text = (WORKFLOWS / "370-registry-cleanup.yml").read_text(encoding="utf-8")
         assert 'MANIFEST_PREFIX="docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}:"' in text
-        assert "select(startswith($prefix)) | ltrimstr($prefix)" in text
+        # The filters themselves are in the script (and run against stub manifests in
+        # test_release_scripts_behaviour.py); 370 must call it with that prefix, on the committed manifest.
+        assert (
+            'bash scripts/ci/manifest_tags.sh protected "$MANIFEST_PREFIX" < .deployment-catalog/latest-build.json'
+            in text
+        )
+        assert "select(startswith($prefix)) | ltrimstr($prefix)" in (
+            REPO_ROOT / "scripts" / "ci" / "manifest_tags.sh"
+        ).read_text(encoding="utf-8")
         # It lists and deletes tags in that same repository, never another.
         assert text.count("/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}/tags") == 2
         assert "${REPO}" not in text and 'REPO="' not in text
