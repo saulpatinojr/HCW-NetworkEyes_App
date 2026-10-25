@@ -95,7 +95,8 @@ CNA is delivered as one internal **core** repository (this one) and two customer
 The two appliances are structurally identical — same file names, workflow numbers, inputs,
 catalog schema, scripts, and documents — differing only in the cloud-specific parts each README
 enumerates. **Features ship once, here, in the images.** When `200-build-images.yml` publishes a
-new image set it commits `.deployment-catalog/latest-build.json` and sends a `repository_dispatch`
+new image set it opens a pull request that updates `.deployment-catalog/latest-build.json` (it merges itself
+once the required checks pass, because `main` is protected) and sends a `repository_dispatch`
 (`cna-image-published`) to every repository named in the `APPLIANCE_REPOS` variable; each
 appliance also polls the manifest. An appliance auto-deploys new images to `dev` and opens an
 "update available" issue for `prod`, which a human approves through its deploy workflow's

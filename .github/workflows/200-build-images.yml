@@ -2,8 +2,8 @@ name: "200 · Build Container Images"
 
 # Runs on GitHub-hosted runners (ubuntu-latest). Nothing here needs a private
 # network or cloud credentials: images build with buildx (GitHub Actions cache),
-# push to Docker Hub through its OIDC connection (no stored token), and the manifest commit and
-# appliance dispatch use GitHub tokens. The self-hosted runner the original
+# push to Docker Hub through its OIDC connection (no stored token), and the manifest pull request and
+# appliance dispatch use a short-lived GitHub App token. The self-hosted runner the original
 # repository used is retired; a fresh clone of this repository needs no runner.
 #
 # First build in a new repository (REVIEW.md R-013 step 4): GitHub registers a
@@ -45,6 +45,18 @@ on:
       - uv.lock  # every Python image installs from it (TODO.md T-702)
       - .github/workflows/200-build-images.yml
   workflow_dispatch:
+    inputs:
+      rehearsal:
+        description: >-
+          Rehearse the manifest pull request only: no image is built, nothing is pushed to
+          Docker Hub, and the pull request is closed again. Proves the GitHub App, auto-merge
+          and the required checks work before DOCKERHUB_ENABLED is switched on.
+        type: boolean
+        default: false
+      merge:
+        description: "Rehearsal only: really merge a harmless file (.github/rehearsal.txt) instead of closing the pull request."
+        type: boolean
+        default: false
 
 # Never cancel an in-flight build. Tags are created all-or-nothing in the final
 # `tag-images` job, but a cancellation while that job is mid-loop would still
@@ -83,7 +95,7 @@ jobs:
   build-images:
     runs-on: ubuntu-latest
     # Pushing needs the Docker Hub OIDC connection; the variable is the owner's switch.
-    if: vars.DOCKERHUB_ENABLED == 'true'
+    if: vars.DOCKERHUB_ENABLED == 'true' && !inputs.rehearsal
     timeout-minutes: 45
     permissions:
       contents: read
@@ -222,7 +234,7 @@ jobs:
   build-web:
     runs-on: ubuntu-latest
     # Pushing needs the Docker Hub OIDC connection; the variable is the owner's switch.
-    if: vars.DOCKERHUB_ENABLED == 'true'
+    if: vars.DOCKERHUB_ENABLED == 'true' && !inputs.rehearsal
     timeout-minutes: 45
     permissions:
       contents: read
@@ -430,7 +442,7 @@ jobs:
   # (with its attestations) without rebuilding or re-pushing layers.
   tag-images:
     runs-on: ubuntu-latest
-    if: vars.DOCKERHUB_ENABLED == 'true' # owner step: Docker Hub OIDC connection + variables (REFACTOR_APP.md change set J)
+    if: vars.DOCKERHUB_ENABLED == 'true' && !inputs.rehearsal # owner step: Docker Hub OIDC connection + variables (REFACTOR_APP.md change set J)
     timeout-minutes: 10
     needs: [build-images, build-web]
     permissions:
@@ -509,13 +521,22 @@ jobs:
 
   publish-build-manifest:
     runs-on: ubuntu-latest
-    if: vars.DOCKERHUB_ENABLED == 'true' # owner step: Docker Hub OIDC connection + variables (REFACTOR_APP.md change set J)
-    timeout-minutes: 10
+    # Only the default branch may open the manifest pull request: the branch name is shared,
+    # so a build dispatched from a feature branch could overwrite a main build's manifest.
+    if: vars.DOCKERHUB_ENABLED == 'true' && !inputs.rehearsal && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) # owner step: Docker Hub OIDC connection + variables (REFACTOR_APP.md change set J)
+    # Includes the wait for the manifest pull request to merge (the last step).
+    timeout-minutes: 40
     # tag-images gates this job; build-images / build-web are listed as direct
     # dependencies only so their digest outputs are reachable via `needs`.
     needs: [build-images, build-web, tag-images]
+    # HCW Portfolio Admin is the routine pull-request bot (owner decision); its key lives in this
+    # environment, which only the default branch may use.
+    environment: admin-ops
+    # Read-only: main is protected by a ruleset that requires a pull request, so
+    # the manifest reaches it through a pull request opened with a GitHub App
+    # token, never by a push (and GITHUB_TOKEN may not open pull requests here).
     permissions:
-      contents: write
+      contents: read
     env:
       DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
       DIGEST_CLI: ${{ needs.build-images.outputs.digest_cli }}
@@ -524,15 +545,16 @@ jobs:
       DIGEST_WEB: ${{ needs.build-web.outputs.digest_web }}
       DIGEST_MIGRATOR: ${{ needs.build-web.outputs.digest_migrator }}
     # The manifest is handed to notify-appliances as a job output so that job
-    # does not have to re-checkout main and race the push below.
+    # does not have to wait for the pull request below to reach main.
     outputs:
       manifest: ${{ steps.manifest.outputs.json }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          # Need write access to push the manifest commit back to main
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # create-pull-request pushes with its own token; a persisted checkout
+          # header beside it makes git send two and GitHub answers 400.
+          persist-credentials: false
 
       # `images{}` keeps the tag form the appliances already read. `digests{}`
       # is additive (same keys, `name@sha256:…` form) so an appliance can pin
@@ -579,19 +601,39 @@ jobs:
           echo "Manifest written:"
           cat .deployment-catalog/latest-build.json
           echo "json=$(jq -c . .deployment-catalog/latest-build.json)" >> "$GITHUB_OUTPUT"
+          echo "sha_tag=${SHA_TAG}" >> "$GITHUB_OUTPUT"
 
-      - name: Commit and push manifest
+      # Lands the manifest on main through a self-merging pull request: main is
+      # protected by a ruleset that requires one, and the push this job used to
+      # make is refused for `github-actions`. The credential is the GitHub App
+      # HCW Portfolio Admin (APP_CLIENT_ID / APP_PRIVATE_KEY in the admin-ops
+      # environment), installed here with Contents and Pull requests read and
+      # write; the `rehearsal` run of this workflow checks it without a build.
+      # The wait holds `notify-appliances` until the manifest is on
+      # main. If it does not get there (a required check fails, auto-merge cannot
+      # be enabled, the wait times out) the job FAILS on purpose: the images are
+      # already tagged, but a build whose manifest is not on main must not be
+      # announced, or the appliances' poll of main and the dispatch would disagree.
+      - name: Open the manifest pull request and wait for the merge
+        id: manifest-pr
+        uses: ./.github/actions/self-merging-pr
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          branch: build/latest-manifest
+          add-paths: .deployment-catalog/latest-build.json
+          title: "chore(build): update latest-build manifest to ${{ steps.manifest.outputs.sha_tag }}"
+          body: |
+            Automated by `200-build-images.yml` (run ${{ github.run_id }}) after every image passed the
+            vulnerability gate. Only `.deployment-catalog/latest-build.json` changes. It merges itself
+            (squash) once the required checks pass; nothing here needs a review.
+      - name: Fail loudly if the manifest did not reach main
+        if: steps.manifest-pr.outputs.merged != 'true'
+        env:
+          PR_NUMBER: ${{ steps.manifest-pr.outputs.pull-request-number }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .deployment-catalog/latest-build.json
-          git diff --cached --quiet && echo "No changes to commit" && exit 0
-          git commit -m "chore(build): update latest-build manifest to sha-$(echo '${{ github.sha }}' | cut -c1-7) [skip ci]"
-          # Pull rebase in case main moved while builds were running (common in parallel jobs).
-          # -X theirs: during conflicts, prefer our new manifest over whatever is on remote.
-          git pull --rebase --autostash -X theirs origin main
-          git push
-
+          echo "::error::The manifest pull request (#${PR_NUMBER:-none}) did not merge, so notify-appliances is skipped. The images are built, scanned and tagged; fix the pull request, merge it, then re-run this job to announce the build."
+          exit 1
   # Tell each appliance repository that a new image set exists so it can
   # auto-update dev and open the prod update request (its 230-image-update
   # workflow). This is the push-based fast path; the appliances also poll the
@@ -648,3 +690,36 @@ jobs:
               cat /tmp/dispatch.out 2>/dev/null || true
             fi
           done
+
+  # Rehearsal of the manifest pull request (workflow_dispatch with `rehearsal`).
+  # Runs the same composite action as `publish-build-manifest` against a harmless
+  # file, so the GitHub App, the pull request, auto-merge and the required checks
+  # can be proven before DOCKERHUB_ENABLED is switched on. Nothing is built or
+  # pushed to Docker Hub. By default the pull request is closed again; with
+  # `merge` it really merges `.github/rehearsal.txt`, once, as the end-to-end proof.
+  rehearse-manifest-pr:
+    runs-on: ubuntu-latest
+    if: inputs.rehearsal
+    timeout-minutes: 45
+    environment: admin-ops
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Write the rehearsal file
+        run: |
+          mkdir -p .github
+          printf 'Rehearsal of the self-merging pull request, run %s at %s.\n' "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .github/rehearsal.txt
+      - name: Rehearse
+        uses: ./.github/actions/self-merging-pr
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          branch: rehearsal/self-merging-pr
+          add-paths: .github/rehearsal.txt
+          title: "chore(rehearsal): self-merging pull request"
+          body: Rehearsal run ${{ github.run_id }} of the self-merging pull request. Safe to close.
+          rehearsal: ${{ inputs.merge && 'false' || 'true' }}

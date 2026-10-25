@@ -47,8 +47,12 @@ or record a `TODO.md` item naming them — never leave one side implied.
 2. **`.deployment-catalog/latest-build.json`** — fields `sha_tag`, `commit`,
    `built_at`, `run_id`, `images{cli,api,worker,web,migrator}` (immutable tags)
    and `digests{cli,api,worker,web,migrator}` (`docker.io/<ns>/cna@sha256:<64>`).
-   Written and committed by `200-build-images.yml` after every image passed the
-   vulnerability gate; read by the appliances' image-update workflow, which
+   Written by `200-build-images.yml` after every image passed the vulnerability
+   gate and landed on `main` through a self-merging pull request (branch
+   `build/latest-manifest`, opened with the GitHub App token because `main` is
+   protected, via `.github/actions/self-merging-pr`; the job fails, and the
+   dispatch below is skipped, if the manifest does not merge within 30 minutes);
+   read by the appliances' image-update workflow, which
    deploys the combined form `docker.io/<ns>/cna:<role>-sha-<7>@sha256:<64>` —
    tag for people and for the web tier's image-update check, digest as the
    authoritative pull. Floating `*-latest` tags are never deployed.
