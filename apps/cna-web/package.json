@@ -32,7 +32,7 @@
     "@azure/msal-node": "^7.1.1"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.137.0",
+    "@anthropic-ai/sdk": "1.1.0",
     "@auth/prisma-adapter": "^2.11.2",
     "@aws-sdk/client-bedrock-runtime": "3.1154.0",
     "@azure/identity": "^4.14.0",
