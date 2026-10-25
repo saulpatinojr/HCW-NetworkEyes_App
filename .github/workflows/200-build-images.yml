@@ -53,13 +53,6 @@ on:
           and the required checks work before DOCKERHUB_ENABLED is switched on.
         type: boolean
         default: false
-      credential:
-        description: "Rehearsal only: which GitHub App credential to try."
-        type: choice
-        options:
-          - dispatch-app
-          - admin-app
-        default: dispatch-app
       merge:
         description: "Rehearsal only: really merge a harmless file (.github/rehearsal.txt) instead of closing the pull request."
         type: boolean
@@ -536,6 +529,9 @@ jobs:
     # tag-images gates this job; build-images / build-web are listed as direct
     # dependencies only so their digest outputs are reachable via `needs`.
     needs: [build-images, build-web, tag-images]
+    # HCW Portfolio Admin is the routine pull-request bot (owner decision); its key lives in this
+    # environment, which only the default branch may use.
+    environment: admin-ops
     # Read-only: main is protected by a ruleset that requires a pull request, so
     # the manifest reaches it through a pull request opened with a GitHub App
     # token, never by a push (and GITHUB_TOKEN may not open pull requests here).
@@ -610,10 +606,10 @@ jobs:
       # Lands the manifest on main through a self-merging pull request: main is
       # protected by a ruleset that requires one, and the push this job used to
       # make is refused for `github-actions`. The credential is the GitHub App
-      # behind GH_APP_ID / GH_APP_PRIVATE_KEY; it must be installed on this
-      # repository with Contents and Pull requests set to read and write (owner
-      # step; the `rehearsal` run of this workflow checks it before the first
-      # real build). The wait holds `notify-appliances` until the manifest is on
+      # HCW Portfolio Admin (APP_CLIENT_ID / APP_PRIVATE_KEY in the admin-ops
+      # environment), installed here with Contents and Pull requests read and
+      # write; the `rehearsal` run of this workflow checks it without a build.
+      # The wait holds `notify-appliances` until the manifest is on
       # main. If it does not get there (a required check fails, auto-merge cannot
       # be enabled, the wait times out) the job FAILS on purpose: the images are
       # already tagged, but a build whose manifest is not on main must not be
@@ -622,8 +618,8 @@ jobs:
         id: manifest-pr
         uses: ./.github/actions/self-merging-pr
         with:
-          client-id: ${{ secrets.GH_APP_ID }}
-          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
           branch: build/latest-manifest
           add-paths: .deployment-catalog/latest-build.json
           title: "chore(build): update latest-build manifest to ${{ steps.manifest.outputs.sha_tag }}"
@@ -701,38 +697,9 @@ jobs:
   # can be proven before DOCKERHUB_ENABLED is switched on. Nothing is built or
   # pushed to Docker Hub. By default the pull request is closed again; with
   # `merge` it really merges `.github/rehearsal.txt`, once, as the end-to-end proof.
-  rehearse-dispatch-app:
+  rehearse-manifest-pr:
     runs-on: ubuntu-latest
-    if: inputs.rehearsal && inputs.credential == 'dispatch-app'
-    timeout-minutes: 45
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Write the rehearsal file
-        run: |
-          mkdir -p .github
-          printf 'Rehearsal of the self-merging pull request, run %s at %s.\n' "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .github/rehearsal.txt
-      - name: Rehearse
-        uses: ./.github/actions/self-merging-pr
-        with:
-          client-id: ${{ secrets.GH_APP_ID }}
-          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
-          branch: rehearsal/self-merging-pr
-          add-paths: .github/rehearsal.txt
-          title: "chore(rehearsal): self-merging pull request"
-          body: Rehearsal run ${{ github.run_id }} of the self-merging pull request. Safe to close.
-          rehearsal: ${{ inputs.merge && 'false' || 'true' }}
-
-  # Same rehearsal with the repository-admin App (HCW Portfolio Admin), whose key
-  # is held by the `admin-ops` environment. It exists to find out whether that App
-  # can also open pull requests; it is not meant to be the long-term credential.
-  rehearse-admin-app:
-    runs-on: ubuntu-latest
-    if: inputs.rehearsal && inputs.credential == 'admin-app'
+    if: inputs.rehearsal
     timeout-minutes: 45
     environment: admin-ops
     permissions:
