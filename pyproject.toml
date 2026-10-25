@@ -61,7 +61,7 @@ cna = "cna.cli.main:cli"
 # Bedrock chat and the /discovery/*-aws routes. Every AWS module calls
 # cna.aws.require_aws_extra() before importing boto3.
 aws = [
-    "boto3>=1.43.117",
+    "boto3>=1.43.118",
 ]
 # Optional enrichment dependencies (TODO.md T-414).
 #
