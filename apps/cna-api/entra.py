@@ -116,8 +116,12 @@ class EntraConfig:
             tenant_id=tenant,
             audience=audience,
             jwks_url=jwks_url,
-            # v2.0 tokens carry the first form, v1.0 tokens the second. [VERIFY] against
-            # the tokens the web identity actually receives for the api:// audience.
+            # v2.0 tokens carry the first form, v1.0 tokens the second (Microsoft Learn,
+            # "Access tokens in the Microsoft identity platform", read 2026-10-25: the v1.0
+            # example token's iss is https://sts.windows.net/<tenant-id>/ with the trailing
+            # slash, the v2.0 one https://login.microsoftonline.com/<tenant-id>/v2.0). Which
+            # one a given API receives is set by its `requestedAccessTokenVersion`; accepting
+            # both stays correct whichever the app registration uses.
             issuers=(
                 f"https://login.microsoftonline.com/{tenant}/v2.0",
                 f"https://sts.windows.net/{tenant}/",

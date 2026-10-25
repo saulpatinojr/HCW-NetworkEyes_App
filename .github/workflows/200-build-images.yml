@@ -181,8 +181,10 @@ jobs:
       - name: Log in to Docker Hub
         # Docker Hub's OIDC connection (REFACTOR_APP.md change set J): the action
         # exchanges this job's id-token for a short-lived registry credential, so no
-        # long-lived access token is stored. [VERIFY] the env variable names and the
-        # minimum login-action version against the Docker Hub OIDC documentation.
+        # long-lived access token is stored. Checked 2026-10-25 against Docker's OIDC
+        # connection guide (docs.docker.com/security/authentication/oidc-connections/create-manage/):
+        # the variable is DOCKERHUB_OIDC_CONNECTIONID, the job needs `id-token: write`, the
+        # minimum docker/login-action is 4.5.0 (this pin is 4.6.0).
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
         env:
           DOCKERHUB_OIDC_CONNECTIONID: ${{ vars.DOCKERHUB_CONNECTION }}
@@ -302,8 +304,10 @@ jobs:
       - name: Log in to Docker Hub
         # Docker Hub's OIDC connection (REFACTOR_APP.md change set J): the action
         # exchanges this job's id-token for a short-lived registry credential, so no
-        # long-lived access token is stored. [VERIFY] the env variable names and the
-        # minimum login-action version against the Docker Hub OIDC documentation.
+        # long-lived access token is stored. Checked 2026-10-25 against Docker's OIDC
+        # connection guide (docs.docker.com/security/authentication/oidc-connections/create-manage/):
+        # the variable is DOCKERHUB_OIDC_CONNECTIONID, the job needs `id-token: write`, the
+        # minimum docker/login-action is 4.5.0 (this pin is 4.6.0).
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
         env:
           DOCKERHUB_OIDC_CONNECTIONID: ${{ vars.DOCKERHUB_CONNECTION }}
@@ -520,8 +524,10 @@ jobs:
       - name: Log in to Docker Hub
         # Docker Hub's OIDC connection (REFACTOR_APP.md change set J): the action
         # exchanges this job's id-token for a short-lived registry credential, so no
-        # long-lived access token is stored. [VERIFY] the env variable names and the
-        # minimum login-action version against the Docker Hub OIDC documentation.
+        # long-lived access token is stored. Checked 2026-10-25 against Docker's OIDC
+        # connection guide (docs.docker.com/security/authentication/oidc-connections/create-manage/):
+        # the variable is DOCKERHUB_OIDC_CONNECTIONID, the job needs `id-token: write`, the
+        # minimum docker/login-action is 4.5.0 (this pin is 4.6.0).
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
         env:
           DOCKERHUB_OIDC_CONNECTIONID: ${{ vars.DOCKERHUB_CONNECTION }}
