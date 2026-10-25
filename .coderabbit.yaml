@@ -1,0 +1,68 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# CodeRabbit for this repository. The owner now requires one approving review
+# on main (the "Protect main" ruleset, decision B1 in
+# https://github.com/saulpatinojr/HCW-HybridCloudWorks/issues/1373), and
+# CodeRabbit's approval is that review. With request_changes_workflow on,
+# CodeRabbit asks for changes while any of its findings is open and approves
+# the head once every thread is resolved and its pre-merge checks pass.
+# Reference: https://docs.coderabbit.ai/reference/configuration
+#
+# The file is complete on its own. It follows the sibling repositories
+# (HCW-CloudCrawler_App and HCW-HybridCloudWorks) and keeps only the settings
+# that do not depend on this repository's contents.
+language: en-US
+tone_instructions: >-
+  Put security, correctness and data integrity first. Skip style points a
+  formatter or linter already enforces. Name the failure, the input that
+  causes it, and the fix.
+
+reviews:
+  profile: chill
+  high_level_summary: false
+  high_level_summary_in_walkthrough: true
+  poem: false
+  sequence_diagrams: false
+  suggested_labels: false
+  review_status: true
+  collapse_walkthrough: true
+  # The author cannot clear CodeRabbit's own findings, so a pull request's
+  # author (a session working as the owner's account) cannot approve it.
+  allow_author_approval: false
+  # CodeRabbit's approval is the ruleset's required review, so its review must
+  # be a request for changes while a finding is open. This needs the app to
+  # hold "Pull requests: Read and write".
+  request_changes_workflow: true
+
+  auto_review:
+    enabled: true
+    drafts: false
+    # One review on the opening push, then pause after two reviewed commits;
+    # every later push would otherwise spend one review from the hourly
+    # allowance. Ask with "@coderabbitai review" when the branch is ready.
+    # Public repositories under 10 stars are reviewed only when asked.
+    auto_incremental_review: true
+    auto_pause_after_reviewed_commits: 2
+    ignore_usernames:
+      - "dependabot[bot]"
+    ignore_title_keywords:
+      - WIP
+
+  # Lockfiles, build output and the changelog, which a review cannot improve.
+  path_filters:
+    - "!**/node_modules/**"
+    - "!**/dist/**"
+    - "!**/build/**"
+    - "!**/coverage/**"
+    - "!**/*.min.*"
+    - "!**/package-lock.json"
+    - "!**/*.lock"
+    - "!CHANGELOG.md"
+
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+    title:
+      mode: warning
+    description:
+      mode: warning
