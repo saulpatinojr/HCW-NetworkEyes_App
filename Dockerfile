@@ -130,7 +130,7 @@ LABEL org.opencontainers.image.title="CNA Platform" \
       org.opencontainers.image.description="Cloud Network Assessment CLI" \
       org.opencontainers.image.version="${CNA_VERSION}" \
       org.opencontainers.image.source="https://github.com/saulpatinojr/HCW-NetworkEyes_App" \
-      org.opencontainers.image.licenses="Proprietary"
+      org.opencontainers.image.licenses="Apache-2.0"
 
 # System deps for diagram generation (runtime only). No `apt-get upgrade`: the base is pinned by digest, but
 # these packages are installed unpinned (hadolint DL3008 is ignored with a reason in .hadolint.yaml), so a rebuild
@@ -168,7 +168,12 @@ RUN mkdir -p /app/engagements /app/output && chown -R cna:cna /app/engagements /
 # setuptools (declared in its own pip/_vendor/bom.cdx.json) that no
 # `pip install` can replace — strip it from the shipped image, the same
 # reasoning the web image uses to strip npm.
-RUN python -m pip uninstall -y pip
+# virtualenv arrives through diagrams -> pre-commit -> virtualenv, and ships its own SBOM
+# (virtualenv-*.dist-info/sboms/virtualenv.cdx.json) naming the pip wheels it embeds and
+# THEIR vendored certifi, urllib3, msgpack and setuptools. Docker Scout reads that SBOM and
+# fails the first real build on 1 critical and 11 high findings (run 40240474498). Nothing
+# here creates a virtual environment at runtime, so it goes with pip.
+RUN python -m pip uninstall -y pip virtualenv
 
 # Commit the image was built from (200-build-images passes github.sha). The web
 # tier compares it with the newest published build (Admin → Updates); empty
