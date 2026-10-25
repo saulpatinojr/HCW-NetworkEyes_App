@@ -58,8 +58,12 @@ change under `Changed` in `CHANGELOG.md` (and in the release notes) where a cons
    `tag-images` job**: one row per component (`cli`, `api`, `worker`, `web`, `migrator`) with its
    tags, its digest (`docker.io/<ns>/img-ne-appliance-app@sha256:<64>`) and whether it is signed
    (`tag-images` verifies each digest with `scripts/ci/verify_signed_digest.sh` before it moves
-   a tag). The `*-latest` tags move only when the built commit is the tip of the default branch; an older or re-run
-   commit gets its sha tags only, with a warning. The release notes of `310-release-version.yml` list the five version
+   a tag). The `*-latest` tags move only while the built commit is still current: it is the tip of the default branch, or an
+   ancestor of the tip with nothing between them that `200` builds from (GitHub's compare of the two commits, matched
+   against `200`'s own `on.push.paths`). Otherwise (the tip changed a build path, the commits diverged, or the
+   comparison may be truncated) the run attaches its sha tags only, with a warning; if the tip or the comparison cannot
+   be read, nothing is tagged. A re-run of `tag-images` is the recovery, and `*-latest` may legitimately stay unmoved
+   when a later commit changed a build path (that commit's run owns the tags). The release notes of `310-release-version.yml` list the five version
    tags, their build-time tags and the five digests of the released build. Nothing is committed to the repository and no pull request is opened: there is no
    build manifest and no `.deployment-catalog/` directory. A consumer pulls by digest (tag for people and for the web
    tier's image-update check, digest as the authoritative pull); floating `*-latest` tags are never deployed.

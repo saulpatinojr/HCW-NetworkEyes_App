@@ -90,8 +90,8 @@ repository and notifies no one. Whoever runs the images (a person or a separate 
 
 - **Where.** One public Docker Hub repository, `docker.io/hybridcloudworks/img-ne-appliance-app` (the owner's
   `img-<short name>-<job>-<type>` convention). Tags: `<component>-sha-<7>` for `api`, `worker`, `web` and `migrator`,
-  `sha-<7>` for the CLI image, floating `*-latest` (moved only by the tip of the default branch; an older or re-run
-  commit gets its sha tags only), and for a release the version tags `X.Y.Z` on the CLI image and `api-X.Y.Z`,
+  `sha-<7>` for the CLI image, floating `*-latest` (moved only while the built commit is still current: the tip of the default branch, or an
+  ancestor of it with nothing between them that `200` builds from; otherwise only the sha tags are attached), and for a release the version tags `X.Y.Z` on the CLI image and `api-X.Y.Z`,
   `worker-X.Y.Z`, `web-X.Y.Z` and `migrator-X.Y.Z` on the others.
 - **How an image is published.** `200-build-images.yml` pushes each image by digest, has Docker Scout scan it, signs it
   with cosign (keyless, under the workflow's own GitHub identity) and attaches the build provenance; only when all five

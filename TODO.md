@@ -2266,8 +2266,11 @@ Nothing publishes until the owner flips the variables below. Open, in order:
   `Read the pushed digest back` printing `Docker Hub accepted the login and the push`. The job goes further than the
   login: it pushes a one-layer image by digest with BuildKit provenance and the SBOM, has Docker Scout analyse it with
   the call the real build makes, signs and attests it with `scripts/ci/sign_image.sh`, verifies it with
-  `scripts/ci/verify_signed_digest.sh` exactly as `tag-images` and `310` do, gives it one tag, `rehearsal-<run id>`, and
-  reads that tag back. It deletes nothing. It leaves on Docker Hub the `rehearsal-<run id>` tag, the digest and
+  `scripts/ci/verify_signed_digest.sh` exactly as `tag-images` and `310` do, first checks that the not-yet-existing tag
+  `rehearsal-<run id>` is read as absent (`scripts/ci/registry_digest.sh` status 1), which proves the live wording of
+  Docker Hub's missing-tag error on the first run (if the wording differs, `310` and `find_release_image.sh` fail
+  closed with "could not ask" instead of treating a new tag as absent), then gives the digest that one tag and reads
+  it back. It deletes nothing. It leaves on Docker Hub the `rehearsal-<run id>` tag, the digest and
   cosign's signature and attestation artefacts, and in the public Sigstore transparency log the entries for that
   signature (public, and not removable); remove the Docker Hub objects by hand if you want them gone (whether and
   when Docker Hub deletes an untagged digest was not checked against Docker's documentation, and `370` does not match
@@ -2336,8 +2339,9 @@ Nothing publishes until the owner flips the variables below. Open, in order:
   `src/network_assessment` (its `PROVENANCE.md`). That adoption belongs in the AddOn (its
   `REFACTOR_APP.md` change set C) and is tracked in its `docs/whats-new-upstream.md`.
 - Consumers: the digests are in the step summary of `tag-images` (`200-build-images.yml`) and in the `310` release
-  notes (with each image's version tag); nothing is written to the repository. The `*-latest` tags move only for the
-  tip of the default branch. A consumer pins by digest and verifies the cosign signature.
+  notes (with each image's version tag); nothing is written to the repository. The `*-latest` tags move only while the built
+  commit is the tip of the default branch or an ancestor of it with nothing between them that `200` builds from; a
+  re-run of `tag-images` is the recovery, and they may legitimately stay unmoved when a later commit changed a build path. A consumer pins by digest and verifies the cosign signature.
 
 ### T-729 — AWS extra: move the AWS modules under `cna/aws/` with shims (change set K)
 `boto3` is the `[aws]` extra; the AWS paths are guarded by `cna.aws` (`CHANGELOG.md` `[Unreleased]`;
