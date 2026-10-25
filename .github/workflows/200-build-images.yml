@@ -47,6 +47,13 @@ name: "200 · Build Container Images"
 # should refuse to deploy a digest that does not verify against this
 # workflow's identity, so a tag re-pointed on Docker Hub, or an image pushed with
 # the registry credential from anywhere else, cannot be rolled out.
+#
+# The SLSA provenance schema is pinned: every build step says `provenance: mode=max,version=v0.2`, never a bare
+# `true`. The scripts that sign and verify (sign_image.sh, verify_signed_digest.sh, 310, the README) read the v0.2
+# shape (`predicate.builder.id`, cosign type `slsaprovenance02`). The BuildKit on the runners now writes SLSA v1
+# (`runDetails.builder.id`) when the version is left unset, which made the first rehearsal (run 40238480162) refuse
+# to attest: "Provenance builder.id '' does not name this run". Moving to v1 is a change to all those consumers
+# together (a new cosign type and predicate path), not to this file alone.
 
 on:
   push:
@@ -224,7 +231,7 @@ jobs:
             CNA_BUILD_SHA=${{ github.sha }}
           outputs: type=image,name=docker.io/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }},push-by-digest=true,name-canonical=true,push=true
           labels: ${{ steps.meta.outputs.labels }}
-          provenance: true
+          provenance: mode=max,version=v0.2
           sbom: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -364,7 +371,7 @@ jobs:
             CNA_BUILD_SHA=${{ github.sha }}
           outputs: type=image,name=docker.io/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }},push-by-digest=true,name-canonical=true,push=true
           labels: ${{ steps.meta_web.outputs.labels }}
-          provenance: true
+          provenance: mode=max,version=v0.2
           sbom: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -392,7 +399,7 @@ jobs:
             CNA_BUILD_SHA=${{ github.sha }}
           outputs: type=image,name=docker.io/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }},push-by-digest=true,name-canonical=true,push=true
           labels: ${{ steps.meta_migrator.outputs.labels }}
-          provenance: true
+          provenance: mode=max,version=v0.2
           sbom: true
           cache-from: type=gha
 
@@ -800,7 +807,7 @@ jobs:
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}
             rehearsal=true
-          provenance: true
+          provenance: mode=max,version=v0.2
           sbom: true
 
       - name: Read the pushed digest back
