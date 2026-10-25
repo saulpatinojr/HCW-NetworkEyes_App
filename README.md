@@ -221,6 +221,13 @@ Reference** explains each value in full.
 
 ---
 
+## Licence
+
+The code in this repository and the container images built from it are licensed under the
+[Apache License, Version 2.0](LICENSE). The image label `org.opencontainers.image.licenses` says `Apache-2.0`.
+The [`NOTICE`](NOTICE) file lists what the Apache licence does not cover: the Aeonik typeface, whose licence is still
+to be confirmed (`REVIEW.md`, R-020).
+
 ## Repository conventions
 
 - **Four documents plus `CLAUDE.md`, one wiki.** `README.md`, `CHANGELOG.md`, `REVIEW.md`,
