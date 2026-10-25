@@ -24,25 +24,23 @@ function installedVersion(name: string): string {
   return JSON.parse(readFileSync(file, "utf8")).version;
 }
 
-type Version = [number, number, number];
+// typescript-eslint evaluates peer ranges with the `semver` package it depends on, so ask that one: it handles caret
+// ranges and `||` alternatives, which a hand-written bound check would misread (and then never fire).
+const requireFromEslintConfigNext = createRequire(
+  new URL("../node_modules/eslint-config-next/package.json", import.meta.url),
+);
+const requireFromTypescriptEstree = createRequire(
+  requireFromEslintConfigNext.resolve("@typescript-eslint/typescript-estree/package.json", {
+    paths: [requireFromEslintConfigNext.resolve("typescript-eslint/package.json")],
+  }),
+);
+const semver = requireFromTypescriptEstree("semver") as {
+  satisfies(version: string, range: string, options?: { includePrerelease?: boolean }): boolean;
+};
 
-function parseVersion(text: string): Version {
-  const [major = "0", minor = "0", patch = "0"] = text.split(".");
-  return [Number(major), Number(minor), Number.parseInt(patch, 10) || 0];
-}
-
-function compare(a: Version, b: Version): number {
-  return a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
-}
-
-/** True when a peer range such as ">=4.8.4 <6.1.0" has no upper bound or one above `version`. */
-function rangeReaches(range: string, version: Version): boolean {
-  const bounds = [...range.matchAll(/(<=?)\s*(\d+(?:\.\d+){0,2})/g)];
-  if (bounds.length === 0) return true;
-  return bounds.every(([, operator, bound]) => {
-    const order = compare(parseVersion(bound), version);
-    return operator === "<=" ? order >= 0 : order > 0;
-  });
+/** True when the peer range accepts TypeScript 7.1.0, the first release with a programmatic API again. */
+function rangeReachesSeven(range: string): boolean {
+  return semver.satisfies("7.1.0", range, { includePrerelease: true });
 }
 
 describe("TypeScript 6 API and TypeScript 7 compiler side by side", () => {
@@ -85,24 +83,22 @@ describe("TypeScript 6 API and TypeScript 7 compiler side by side", () => {
   });
 
   it("knows the checker that decides when the TypeScript 6 package can go", () => {
-    expect(rangeReaches(">=4.8.4 <6.1.0", [7, 1, 0])).toBe(false);
-    expect(rangeReaches(">=4.8.4 <7.0.0", [7, 1, 0])).toBe(false);
-    expect(rangeReaches(">=4.8.4 <=7.1.0", [7, 1, 0])).toBe(true);
-    expect(rangeReaches(">=4.8.4 <7.2.0", [7, 1, 0])).toBe(true);
-    expect(rangeReaches(">=4.8.4", [7, 1, 0])).toBe(true);
+    for (const range of [">=4.8.4 <6.1.0", ">=4.8.4 <7.0.0", ">=4.8.4 <7.1.0", "^6.0.0", "~6.0.0"]) {
+      expect(rangeReachesSeven(range), range).toBe(false);
+    }
+    for (const range of [">=4.8.4 <=7.1.0", ">=4.8.4 <7.2.0", ">=4.8.4", "^7.1.0", "^6.0.0 || >=7.1.0 <8"]) {
+      expect(rangeReachesSeven(range), range).toBe(true);
+    }
   });
 
   it("is still needed: typescript-eslint has not admitted a TypeScript 7.1 peer yet", () => {
-    const fromEslintConfigNext = createRequire(
-      new URL("../node_modules/eslint-config-next/package.json", import.meta.url),
-    );
-    const manifest = fromEslintConfigNext("typescript-eslint/package.json") as {
+    const manifest = requireFromEslintConfigNext("typescript-eslint/package.json") as {
       version: string;
       peerDependencies: { typescript: string };
     };
     const range = manifest.peerDependencies.typescript;
     expect(
-      rangeReaches(range, [7, 1, 0]),
+      rangeReachesSeven(range),
       `typescript-eslint ${manifest.version} now accepts TypeScript 7.1 (peer range "${range}"), so the TypeScript 6 compatibility package is no longer needed. Finish TODO.md T-731: set "typescript" to the same 7.x as "@typescript/native", remove "@typescript/native", drop this file and the guard paragraph in CLAUDE.md, then run lint, typecheck, test and build.`,
     ).toBe(false);
   });
