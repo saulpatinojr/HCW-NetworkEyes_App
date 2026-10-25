@@ -11,35 +11,31 @@ source of application code — `apps/cna-web`, `apps/cna-api`, `apps/cna-worker`
 and the `cna` Python package — and the pipeline that builds and publishes their
 container images (`200-build-images.yml` → Docker Hub `<namespace>/img-ne-appliance-app`).
 
-Customers consume an appliance, not this repository. History: this repository was the
-original `Work-Cloud_Network_Assessment`; on 2026-09-18 it was retired in favour of
-`Work-Cloud_Network_Core`, and on 2026-10-10 the owner reversed that: the Core lineage was merged
-back here and this repository is the implementation target of `REFACTOR_APP.md` (the HCW
-App-to-AddOn plan; its lab edition is `saulpatinojr/HCW-NetworkEyes_AddOn`). **The Core is reference only: nothing
-for this repository is written there (owner, 2026-10-11)**; its wiki pages move here (`REVIEW.md` → R-023). Issue and
-pull-request numbers in the documents older than that date name threads of the original
-repository or of the Core.
+Customers consume the images, not this repository. **NetworkEyes stands alone** (owner decision 2026-10-25): this
+repository builds, scans, signs and publishes its own images and depends on nothing but itself and its own Docker Hub
+repository, `docker.io/hybridcloudworks/img-ne-appliance-app`. No workflow, script, Dockerfile, application code,
+template or live document here names, calls, dispatches to or reads a setting from another repository, and no GitHub
+App is used. `tests/security/test_standalone_boundary.py` (the repository) and
+`apps/cna-web/lib/standalone-boundary.test.ts` (the web tier) fail when that comes back. Whoever deploys the images (a
+person or a separate project) pulls them from Docker Hub by digest and verifies the cosign signature; this repository
+does not know who that is and notifies no one.
 
-Deployment is not this repository's job. Each cloud has its own customer-facing
-**appliance repository** that deploys and operates these images:
+History: this repository was the original Cloud Network Assessment repository. On 2026-09-18 its code moved to a
+separate core repository, and on 2026-10-10 the owner merged that lineage back here, so this repository is again the
+implementation target of `REFACTOR_APP.md` (the HCW App-to-AddOn plan; its lab edition is
+`saulpatinojr/HCW-NetworkEyes_AddOn`). **The earlier core repository is reference only: nothing for this repository is
+written there (owner, 2026-10-11)**; its wiki pages move here (`REVIEW.md` → R-023). Issue and pull-request numbers in
+the documents older than that date name threads of the original or the earlier core repository.
 
-- Azure: <https://github.com/saulpatinojr/Work-Cloud_Network_Azure_Appliance>
-- AWS: <https://github.com/saulpatinojr/Work-Cloud_Network_AWS_Appliance>
+Deployment is not this repository's job. There is no Terraform and no deploy workflow in this repository; it keeps
+only `200-build-images`, `300-test-codebase`, `310-release-version`, `320-release-engine` and `370-registry-cleanup`,
+plus one owner-approved exception, `390-repository-admin` (manual, dry-run by default, approved per run; it deploys
+nothing and holds no product code). A deployment fix belongs to whoever deploys, never here.
 
-The appliances contain only their cloud's Terraform and deploy/update workflows.
-They are structurally identical to each other; a feature lands **once, here**, in
-the images, and both appliances pick it up. There is no Terraform and no deploy
-workflow in this repository; it keeps only `200-build-images`,
-`300-test-codebase`, `310-release-version`, `320-release-engine` and `370-registry-cleanup`, plus one
-owner-approved exception, `390-repository-admin` (manual, dry-run by default,
-approved per run; it deploys nothing and holds no product code). A
-deployment fix belongs in the appliance (and its sibling), never here.
+## The image contract
 
-## The core ↔ appliance contract
-
-Changing any of the following changes both appliances. Mirror the change into
-**both** appliance repositories in the same change set (link the sibling PRs),
-or record a `TODO.md` item naming them — never leave one side implied.
+Changing any of the following changes what a consumer of the images can rely on. Nobody is notified, so record the
+change under `Changed` in `CHANGELOG.md` (and in the release notes) where a consumer will look, and in `TODO.md`.
 
 1. **Image repository and tag scheme** on Docker Hub: every image is published to the one
    repository `<namespace>/img-ne-appliance-app` (owner convention
@@ -50,28 +46,26 @@ or record a `TODO.md` item naming them — never leave one side implied.
    `tests/security/test_image_repository_name.py` fails if any workflow, script or contract
    names another repository. Tags inside it: `img-ne-appliance-app:{api,worker,web,migrator}-sha-<7>`
    immutable tags plus floating `*-latest`; the CLI image is `img-ne-appliance-app:sha-<7>` /
-   `img-ne-appliance-app:latest`.
+   `img-ne-appliance-app:latest`, and a release adds `img-ne-appliance-app:<version>` to the CLI image.
 2. **The record of a build is the digest table in the step summary of `200-build-images.yml`'s
    `tag-images` job**: one row per component (`cli`, `api`, `worker`, `web`, `migrator`) with its
    tags, its digest (`docker.io/<ns>/img-ne-appliance-app@sha256:<64>`) and whether it is signed
    (`tag-images` verifies each digest with `scripts/ci/verify_signed_digest.sh` before it moves
    a tag). The release notes of `310-release-version.yml` repeat the five digests of the released
    build. Nothing is committed to the repository and no pull request is opened: there is no
-   build manifest. A consumer pulls by digest (tag for people and for the web tier's image-update
-   check, digest as the authoritative pull); floating `*-latest` tags are never deployed.
+   build manifest and no `.deployment-catalog/` directory. A consumer pulls by digest (tag for people and for the web
+   tier's image-update check, digest as the authoritative pull); floating `*-latest` tags are never deployed.
    `370-registry-cleanup.yml` keeps the newest 10 `<component>-sha-<7>` tags per component, the
    `*-latest` tags and every release tag; see its header for what that does not protect.
 3. **No push notification.** `200-build-images.yml` calls nothing outside this repository and its
    Docker Hub repository: it sends no dispatch event and reads no variable naming another
    repository.
-4. **Runtime environment contract** the images read, injected by the appliances'
-   Terraform: `CNA_AI_MODE` (`saas` | `byo-api`), `CNA_APPLIANCE_CLOUD`
-   (`azure` | `aws`), `CNA_AI_ENGINE_DEFAULT`, the SaaS engine variables
+4. **Runtime environment contract** the images read, set by whoever deploys them: `CNA_AI_MODE` (`saas` |
+   `byo-api`), `CNA_APPLIANCE_CLOUD` (`azure` | `aws`), `CNA_AI_ENGINE_DEFAULT`, the SaaS engine variables
    (`AZURE_OPENAI_*` on Azure, `CNA_BEDROCK_*` on AWS), and
    `CREDENTIAL_ENCRYPTION_KEY` (web always; api in `byo-api`), and the image-update
    check inputs the web tier reads (`CNA_WEB_IMAGE`, `CNA_IMAGE_REGISTRY_USERNAME`,
-   `CNA_IMAGE_REGISTRY_TOKEN`, `CNA_APPLIANCE_REPO`, optional
-   `CNA_IMAGE_UPDATE_CHECK_INTERVAL_MINUTES`). `CNA_BUILD_SHA` is baked into every
+   `CNA_IMAGE_REGISTRY_TOKEN`, optional `CNA_IMAGE_UPDATE_CHECK_INTERVAL_MINUTES`). `CNA_BUILD_SHA` is baked into every
    image by `200-build-images.yml`, never injected. The authoritative inventory is
    `.env.example`.
 5. **Image signatures and provenance.** `200-build-images.yml` signs every
@@ -79,12 +73,19 @@ or record a `TODO.md` item naming them — never leave one side implied.
    `https://github.com/<owner>/<this repo>/.github/workflows/200-build-images.yml@refs/heads/main`
    (issuer `https://token.actions.githubusercontent.com`), and attaches
    BuildKit's SLSA v0.2 provenance as a cosign attestation (type
-   `slsaprovenance02`, `predicate.builder.id` = the run URL). Both appliances
-   verify all three — signature, attestation, builder — before any deploy
-   (`210`, `220`) against their `IMAGE_SIGNING_IDENTITY` variable. Renaming or
-   moving this repository, this workflow file, or its default branch changes
-   the identity and breaks every appliance until that variable is updated; the
-   cosign release (`COSIGN_VERSION`) is pinned identically in `200` and `310`.
+   `slsaprovenance02`, `predicate.builder.id` = the run URL). A consumer should verify all
+   three — signature, attestation, builder — before it runs an image; `scripts/ci/verify_signed_digest.sh` is the
+   check `310` makes and the README shows the commands. Renaming or moving this repository, this workflow file, or
+   its default branch changes the identity and breaks verification for everyone who pinned the old one, so say so in
+   `CHANGELOG.md` and the release notes; the cosign release (`COSIGN_VERSION`) is pinned identically in `200` and `310`.
+6. **Docker Hub is reached through its OIDC connection only** (the repository variable `DOCKERHUB_CONNECTION`; no
+   stored password). The connection has one ruleset for `main` (`200`) and a separate tag-only ruleset for
+   `refs/tags/v*` (`310`, scope Image Push); both are owner steps in `TODO.md` T-728. The one stored credential is the
+   personal access token `370-registry-cleanup.yml` uses to delete tags (`REVIEW.md` R-026 step 3).
+7. **Releases are cut by the owner**, dry run first: Actions, `310 · Release CLI Tool`, Run workflow, branch `main`,
+   `dry_run` ticked (the default); read the summary, which names the commit the image was built from; then tag that
+   commit (`git tag vX.Y.Z <sha>`, `git push origin vX.Y.Z`). The release notes list the digests of all five
+   images. Steps and failure cases: `TODO.md` T-728.
 
 ## AI engine rules
 
@@ -136,10 +137,8 @@ or record a `TODO.md` item naming them — never leave one side implied.
   `@tanstack/react-table` is on version 9 (`useTable` and `tableFeatures`, not `useReactTable`); do not use its
   deprecated `/legacy` entry point.
 - **Workflows are numbered in bands** (`000` bootstrap, `100` validation, `200`
-  build/deploy, `300` test/release/ops). Numbers are stable across core and
-  both appliances; never renumber, reference by filename. The core owns `200`,
-  `300`, `310`, `320`, `370` and the one exception `390`; every other number belongs to
-  the appliances.
+  build, `300` test/release/ops). Numbers are stable; never renumber, reference by
+  filename. This repository has `200`, `300`, `310`, `320`, `370` and the one exception `390`.
 - **Job names in `300-test-codebase.yml` are required checks.** The `Protect main` ruleset matches them by name. Add a job, never rename one; list
   new job names in the pull request so the owner can add them to the ruleset. Dockerfiles must pass hadolint (`.hadolint.yaml` lists the only
   ignored rules, each with a written reason) and workflows must pass actionlint; run both with
@@ -151,7 +150,7 @@ or record a `TODO.md` item naming them — never leave one side implied.
 - **Every GitHub Action is pinned to a SHA digest.** `detect-secrets` fails the
   build on any finding not in `.secrets.baseline`; `gitleaks` is advisory.
 - **Secrets** travel as GitHub secrets → OIDC / Key Vault / Secrets Manager →
-  container secrets (injected by the appliances' Terraform). Never on a command
+  container secrets (injected by whoever deploys the images). Never on a command
   line, never in a `workflow_dispatch` input, never committed.
 - **Vendored agent configuration** (`.claude/`, `.agents/`, `.codex/`, `.kiro/`) is kept out of
   version control under `local/agent-config/` (gitignored, TODO T-411); it is not project

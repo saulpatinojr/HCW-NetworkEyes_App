@@ -148,7 +148,7 @@ Each one actively misleads an engineer or a workflow run.
 - **Recommended action:** Reference the stored secret from `212-deploy-aws-split.yml` using
   `aws-actions/configure-aws-credentials` with `id-token: write`, matching the OIDC-only
   credential policy used on the Azure side. No long-lived AWS keys.
-- **Status:** Moved 2026-09-15 — tracked as the AWS appliance's `TODO.md` → T-104 (transferred under T-507; body kept here for history only, do not update it).
+- **Status:** Left this repository 2026-09-15 (T-507); not tracked here, body kept for history only, do not update it.
 - **Notes for future engineers:** The deploy role's trust `sub` condition is scoped to
   `repo:<owner>/<repo>:*`. If the workflow is ever moved to a reusable workflow in another
   repository, that condition must be widened deliberately — it is the only thing preventing
@@ -220,7 +220,7 @@ Each one actively misleads an engineer or a workflow run.
 - **Priority:** High
 - **Category:** Security / dependencies
 - **Description:** Pushing a branch during the 2026-08-17 review returned a GitHub advisory notice:
-  *"GitHub found 8 vulnerabilities on saulpatinojr/Work-Cloud_Network_Assessment's default branch
+  *"GitHub found 8 vulnerabilities on the original repository's default branch
   (7 high, 1 moderate)."* Nothing in `TODO.md` or `REVIEW.md` tracks dependency vulnerabilities, so
   these are currently unowned. The individual advisories were not readable from the review
   environment (no Dependabot access), so the affected packages and ecosystems are unconfirmed —
@@ -315,7 +315,7 @@ order; do not reorder it.
 - **Dependencies:** `REVIEW.md` → R-001, R-002. Blocks T-302.
 - **Recommended action:** `terraform init` with the four `-backend-config` values from R-002, plan,
   review, apply. Confirm all nine endpoints come up before proceeding.
-- **Status:** Moved 2026-09-15 — tracked as the AWS appliance's `TODO.md` → T-105 (transferred under T-507; body kept here for history only, do not update it).
+- **Status:** Left this repository 2026-09-15 (T-507); not tracked here, body kept for history only, do not update it.
 - **Notes for future engineers:** The nine endpoints and why each exists —
 
   | Endpoint | Type | Purpose |
@@ -343,7 +343,7 @@ order; do not reorder it.
 - **Recommended action:** Apply in this order:
   `identity → storage → database → observability → ai → runtime → compute → security`.
   The workload root reads platform outputs through variables populated from the platform state.
-- **Status:** Moved 2026-09-15 — tracked as the AWS appliance's `TODO.md` → T-106 (transferred under T-507; body kept here for history only, do not update it).
+- **Status:** Left this repository 2026-09-15 (T-507); not tracked here, body kept for history only, do not update it.
 - **Notes for future engineers:** The platform state and workload state are separate state files
   by design, mirroring the Azure split. Cross-state values move as explicit variables, not remote
   state data sources — keep it that way; it is what makes the two roots independently
@@ -358,7 +358,7 @@ order; do not reorder it.
   availability check reports a false negative).
 - **Recommended action:** After the opt-in, list available foundation models in the deploy region
   and reconcile against the module defaults. Adjust the variable rather than the module.
-- **Status:** Moved 2026-09-15 — tracked as the AWS appliance's `TODO.md` → T-107 (transferred under T-507; body kept here for history only, do not update it).
+- **Status:** Left this repository 2026-09-15 (T-507); not tracked here, body kept for history only, do not update it.
 - **Notes for future engineers:** If the platform keeps calling the external Azure OpenAI endpoint
   from AWS — as the superseded `migrate/` root does today — the `ai` module can be disabled
   entirely and the endpoint stays an environment variable. That is a fallback, not the target
@@ -377,7 +377,7 @@ order; do not reorder it.
   last check no environment was deployed, so this is a no-op for the initial rollout.
 - **Recommended action:** Follow the runbook below before the next apply in any affected
   environment. Run it **once per environment** (dev, then prod).
-- **Status:** Moved 2026-09-15 — tracked as the Azure appliance's `TODO.md` → T-103 (transferred under T-507; body kept here for history only, do not update it).
+- **Status:** Left this repository 2026-09-15 (T-507); not tracked here, body kept for history only, do not update it.
 - **Notes for future engineers:**
 
   **Why the workspace moved.** The workspace used to be created by the `compute` module, which
@@ -462,7 +462,7 @@ order; do not reorder it.
 - **Recommended action:** After the first successful workload apply, walk the parity matrix
   capability by capability and record the result. Demote any capability that does not hold in
   practice from "complete" to a Phase 5 item.
-- **Status:** Moved 2026-09-15 — tracked as the AWS appliance's `TODO.md` → T-108 (transferred under T-507; body kept here for history only, do not update it).
+- **Status:** Left this repository 2026-09-15 (T-507); not tracked here, body kept for history only, do not update it.
 - **Notes for future engineers:** The parity matrix as authored —
 
   | Capability | Azure | AWS |
@@ -1054,7 +1054,7 @@ order; do not reorder it.
   With a readable baseline, the first scan reports **446 findings across 325 files**, none ever
   triaged. 367 come from the vendored `.claude/` and `.agents/` packs — third-party security
   documentation full of example tokens — and the pre-commit hook already excludes those and
-  `.deployment-catalog/` (build manifests whose image digests trip the hex-entropy detector),
+  a since-removed build-manifest directory (its image digests tripped the hex-entropy detector),
   leaving **31 project findings**. By type across the whole scan: Secret Keyword 279, Hex High
   Entropy String 127, Basic Auth Credentials 16, AWS Access Key 16, JSON Web Token 3, Private Key
   2, IBM Cloud IAM Key 2, Slack Token 1.
@@ -1071,7 +1071,7 @@ order; do not reorder it.
   **One correction to the description above:** the hook did *not* exclude the vendored packs. Its
   only exclusion was `^\.env\.example$`, so all 8,480 vendored files were in scope. That is why
   the finding count was unmanageable. Excluding `.claude/`, `.agents/`, `.codex/`, and
-  `.deployment-catalog/` — the same directories `pyproject.toml` excludes from ruff and
+  the build-manifest directory — the same directories `pyproject.toml` excludes from ruff and
   `validate_documentation_model.py` excludes from the documentation model, on the same grounds —
   takes the count from **446 to 33**. `.env.example` is deliberately no longer excluded: excluding
   it meant a real credential pasted into the template would never be caught, so its placeholders
@@ -1337,7 +1337,7 @@ order; do not reorder it.
   "the least-proven infra" for unrelated reasons (the dev account was renamed `-aif2` after a
   soft-delete collision). Two independent signals pointing at the same untested path is the
   argument for closing this one properly rather than deleting the markers.
-- **Status:** Moved 2026-09-15 — tracked as the Azure appliance's `TODO.md` → T-104 (transferred under T-507; body kept here for history only, do not update it).### T-416 — A scheduled drift check failed daily for five weeks and nothing surfaced it
+- **Status:** Left this repository 2026-09-15 (T-507); not tracked here, body kept for history only, do not update it.### T-416 — A scheduled drift check failed daily for five weeks and nothing surfaced it
 
 - **Priority:** High
 - **Category:** Operational safety
@@ -1360,7 +1360,7 @@ order; do not reorder it.
   a distinct, louder failure — those mean very different things.
 - **Notes for future engineers:** Do not close this by muting the check or by making it tolerate
   a missing backend. The check was right; the delivery was missing.
-- **Status:** Moved 2026-09-15 — tracked as the both appliances appliance's `TODO.md` → T-110 (AWS) / T-105 (Azure) (transferred under T-507; body kept here for history only, do not update it).### T-417 — "Generate All Assessments" still runs four reports synchronously in the request
+- **Status:** Left this repository 2026-09-15 (T-507); not tracked here, body kept for history only, do not update it.### T-417 — "Generate All Assessments" still runs four reports synchronously in the request
 
 - **Priority:** Medium
 - **Category:** Web app reliability
@@ -1479,7 +1479,7 @@ order; do not reorder it.
 - **Recommended action:** Replace the guards job by job, keeping the input contract identical to
   211 so both clouds present one deploy interface. Reuse `scripts/ci/evaluate_deployment_evidence.py`
   for the verification gate rather than writing an AWS-specific evaluator.
-- **Status:** Moved — tracked as the AWS appliance's `TODO.md` → T-101 ("Implement `210-deploy` as a functional AWS release"); `212-deploy-aws-split.yml` no longer exists in the core.
+- **Status:** Left this repository; `212-deploy-aws-split.yml` no longer exists here.
 - **Notes for future engineers:** 211 does plan → apply → migrate → health verification and then
   syncs the Entra app home page URL and redirect URI to the current Front Door hostname. The AWS
   equivalent needs the same post-apply identity sync against the CloudFront domain — that step is
@@ -1496,59 +1496,34 @@ order; do not reorder it.
   first).
 - **Recommended action:** Add the validation flow behind a feature flag defaulting to off, so
   externally hosted DNS keeps the current input-ARN behaviour.
-- **Status:** Moved 2026-09-15 — tracked as the AWS appliance's `TODO.md` → T-109 (transferred under T-507; body kept here for history only, do not update it).
+- **Status:** Left this repository 2026-09-15 (T-507); not tracked here, body kept for history only, do not update it.
 - **Notes for future engineers:** The CloudFront viewer certificate must be in `us-east-1`
   regardless of deployment region — the repository already declares a `us-east-1` aliased provider
   for the CloudFront-scoped WAF; reuse it.
 
-### T-503 — Bring the two appliance repositories live (repository-owner steps)
+### T-503 — Bring the two appliance repositories live (withdrawn 2026-10-25)
 
-- **Priority:** High
-- **Description:** The core now publishes images and notifies appliances
-  (`200-build-images.yml` → `notify-appliances`), and `211`/`212` accept `workflow_call`. The
-  appliance repositories —
-  [`Work-Cloud_Network_Azure_Appliance`](https://github.com/saulpatinojr/Work-Cloud_Network_Azure_Appliance)
-  and [`Work-Cloud_Network_AWS_Appliance`](https://github.com/saulpatinojr/Work-Cloud_Network_AWS_Appliance)
-  — receive their contents as draft pull requests (Terraform, deploy/update/drift/teardown
-  workflows, `README.md`, `CLAUDE.md`, release catalog). `scripts/appliance-kit/build.sh azure|aws`
-  regenerates either tree from this checkout at any time (it clones the appliance repository,
-  assembles the tree on `claude/appliance-bootstrap`, and stages it). Everything below needs account
-  access the code cannot supply.
-- **Dependencies:** The appliance draft PRs merged to each `main`.
-- **Recommended action:**
-  1. Install the existing GitHub App on both appliance repositories.
-  2. In each appliance: secrets for the cloud OIDC identity (`AZURE_CLIENT_ID` / `AZURE_TENANT_ID`
-     / `AZURE_SUBSCRIPTION_ID`, or `AWS_DEPLOY_ROLE_ARN`), `GH_APP_ID`, `GH_APP_PRIVATE_KEY`,
-     `DOCKERHUB_TOKEN`, and the `CNA_*` runtime secrets `100-validate-prereqs` checks; variables
-     `CORE_REPO` (`saulpatinojr/Work-Cloud_Network_Assessment`), `DOCKERHUB_NAMESPACE`,
-     `AUTO_UPDATE_DEV` (`true`), and the region variables. Create the `dev`, `prod` and `hub`
-     environments with the same required reviewers the core uses.
-  3. In the core: variable `APPLIANCE_REPOS=Work-Cloud_Network_Azure_Appliance,Work-Cloud_Network_AWS_Appliance`.
-  4. Azure appliance: run `000-bootstrap-backend` (same backend as today — the state moves, no
-     resources change) and `100-validate-prereqs`, then one `210-deploy` in `saas` mode and confirm
-     the plan shows only the `moved` re-addressing plus in-place Container App env updates.
-  5. Publish one image from the core and confirm the Azure appliance auto-deploys `dev` and opens a
-     prod `update-available` issue.
-- **Status:** Open — blocked on the repository owner
-- **Notes for future engineers:** `git push --dry-run` against an appliance from a Claude Code
-  session fails with "not in this session's authorized repository set" until the repository is
-  added to the session's sources; it is a session-scope limit, not a GitHub permission problem.
+- **Priority:** None
+- **Description:** Withdrawn by the owner decision of 2026-10-25 (NetworkEyes stands alone). This repository no longer
+  notifies, mirrors to or depends on any repository that deploys its images, so there are no steps to take from here.
+  The Docker Hub steps that remain are T-728.
+- **Status:** Withdrawn — 2026-10-25.
 
 ### T-504 — Retire the deployment layer from the core once both appliances are live
 
 - **Priority:** Medium
 - **Description:** `infra/terraform/`, the per-cloud workflows (`000`, `100`, `211`, `212`, `220`,
-  `320`, `330`, `340`, `350`, `360`), and `.deployment-catalog/dev/` remained in the core as the
+  `320`, `330`, `340`, `350`, `360`), and the per-run release catalog remained in the core as the
   source the appliances were cut from. Two copies drift.
-- **Dependencies:** T-503 complete for both clouds.
+- **Dependencies:** None now (T-503, the appliance bring-up, was withdrawn 2026-10-25).
 - **Recommended action:** Remove them from the core in one change, drop the Terraform fmt/validate
-  jobs from workflow 300, keep `.deployment-catalog/latest-build.json` (it is the build manifest,
-  part of the contract), and reduce `README.md` → Repository layout / Deploying an environment to
-  point at the appliances.
+  jobs from workflow 300, keep the build manifest (it was part of the contract then; removed
+  2026-10-25), and reduce `README.md` → Repository layout / Deploying an environment to
+  say that deployment happens elsewhere.
 - **Status:** Done — removed on 2026-09-15, once both appliance repositories carried the trees on
   `claude/appliance-bootstrap` (Azure `ceafcec`, AWS `6f963c4`; T-506). Gone from the core:
   `infra/terraform/` (both providers, all eight roots), the ten deploy/operations workflows,
-  `.deployment-catalog/dev/` (the per-run release catalog — `latest-build.json` stays), the
+  the per-run release catalog (the build manifest stayed until 2026-10-25), the
   deploy-only scripts (`scripts/ci/*`, `bootstrap-runner.sh`, the three PowerShell scripts) and
   the generator `scripts/appliance-kit/` that had produced the appliance trees. Workflow 300 lost
   its `Terraform Format Check` job (the appliances' own `300-validate` runs fmt/validate on their
@@ -1557,20 +1532,20 @@ order; do not reorder it.
   all-pinned informational record, because the only two unpinned references lived in `211`/`212`.
   `.secrets.baseline` dropped the 18 audited entries that pointed at removed files. Recorded in
   [`CHANGELOG.md`](CHANGELOG.md) → Unreleased → Removed.
-- **Notes for future engineers:** The appliances are now the only source of the deployment layer.
+- **Notes for future engineers:** The deployment layer is no longer in this repository.
   If a tree ever needs regenerating, the retired generator is in the core's history at commit
   `8bb989d` (`scripts/appliance-kit/build.sh`). The review engine's `cicd`/`terraform-*` areas
   still describe the pre-split repository — see T-508.
 
-### T-505 — One project board across core and both appliances
+### T-505 — One project board for the owner's repositories
 
 - **Priority:** Low
-- **Description:** Work items span three repositories; a single GitHub Project (v2) at the owner
-  level can hold issues and pull requests from all of them, and an `add-to-project` workflow in each
-  repository keeps it populated (the appliances' `update-available` issues especially).
+- **Description:** Work items can be tracked on a single GitHub Project (v2) at the owner level, and an
+  `add-to-project` workflow in this repository keeps it populated. Other repositories do their own; this repository
+  adds nothing to them.
 - **Dependencies:** `REVIEW.md` → R-012 (the token decision).
 - **Recommended action:** Create the project, then add a SHA-pinned `actions/add-to-project`
-  workflow to all three repositories triggered on `issues: opened` and `pull_request: opened`, with
+  workflow here triggered on `issues: opened` and `pull_request: opened`, with
   the token from R-012.
 - **Status:** Blocked on R-012
 - **Notes for future engineers:** User-owned Projects v2 are not reachable with a GitHub App
@@ -1579,60 +1554,23 @@ order; do not reorder it.
 ### T-506 — Relay the parked appliance bootstrap branches and delete them
 
 - **Priority:** High
-- **Description:** The two appliance trees that T-503 expects as draft pull requests were built and
-  validated (`terraform fmt`/`validate` on every root, docs guard, `actionlint`, `detect-secrets`)
-  but could not be pushed to the appliance repositories from the authoring session (see T-503's
-  note on session scope). They are parked on this repository as two branches that carry the
-  appliance history, not the core's — each is the appliance's own "Initial commit" plus one
-  bootstrap commit:
-  `claude/appliance-azure-bootstrap` (`ceafcec`) and `claude/appliance-aws-bootstrap` (`6f963c4`).
-  No core workflow runs on them (`300` runs on `main`/`develop` and their pull requests, `200` on
-  `main`, `310` on tags).
-- **Dependencies:** Push access to both appliance repositories.
-- **Recommended action:** From any checkout with that access:
+- **Description:** History. On 2026-09-15 the deployment trees that T-504 removed from this repository were handed to
+  their new home outside this repository, and the temporary transport branches were deleted from here. Nothing
+  remains to do in this repository.
+- **Status:** Done — 2026-09-15.
+- **Notes for future engineers:** Deployment content must never be merged into or referenced from this repository's
+  `main`.
 
-  ```bash
-  git fetch origin claude/appliance-azure-bootstrap claude/appliance-aws-bootstrap
-  git push https://github.com/saulpatinojr/Work-Cloud_Network_Azure_Appliance.git \
-    origin/claude/appliance-azure-bootstrap:refs/heads/claude/appliance-bootstrap
-  git push https://github.com/saulpatinojr/Work-Cloud_Network_AWS_Appliance.git \
-    origin/claude/appliance-aws-bootstrap:refs/heads/claude/appliance-bootstrap
-  ```
-
-  Open a draft pull request in each appliance (`main` ← `claude/appliance-bootstrap`); its
-  `300-validate` workflow runs on the pull request. Then delete both parked branches here
-  (`git push origin --delete claude/appliance-azure-bootstrap claude/appliance-aws-bootstrap`).
-  The generator that produced the trees (`scripts/appliance-kit/`) was retired with T-504; it
-  remains in the core's history at commit `8bb989d` if a rebuild is ever needed.
-- **Status:** Done — 2026-09-15. Both appliance repositories carry `claude/appliance-bootstrap`
-  (Azure `f3718aa`, AWS `7c13b1d`, each the bootstrap commit plus T-507's transfer), draft pull
-  request #1 is open in each (`main` ← `claude/appliance-bootstrap`), and the parked transport
-  branches were deleted from this repository.
-- **Notes for future engineers:** The parked branches are a transport, not a home: the appliance
-  content must never be merged into or referenced from the core's `main`.
-
-### T-507 — Transfer the remaining deployment-side backlog to the appliance repositories
+### T-507 — Transfer the remaining deployment-side backlog out of this repository
 
 - **Priority:** Medium
-- **Description:** T-504 removed the deployment layer, but several backlog and review items that
-  belong to it have no counterpart in the appliance repositories yet, because the appliance trees
-  were generated before those items were reviewed. Until they are transferred they stay here,
-  each marked "appliance concern — transfer via T-507" in its Status line.
-- **Dependencies:** The appliance bootstrap pull requests merged (T-506), push access to both
-  appliance repositories.
-- **Recommended action:** Add to the **AWS appliance**: `TODO.md` items for T-201 (consume the
-  deploy-role ARN output), T-301/T-302 (apply the platform and workload roots), T-303 (Bedrock
-  model ids), T-305 (parity verification against a live deployment), T-502 (Route 53 + ACM
-  validation) and `REVIEW.md` R-006 (runtime secrets have no defaults). Add to the **Azure
-  appliance**: T-304 (the Log Analytics workspace state-migration runbook, also referenced by
-  R-009), T-415 (Foundry-path validation markers in the deploy manifest) and `REVIEW.md` R-008
-  (live Azure acceptance sign-off) and R-010 (dev-environment deletion protection). Add T-416
-  (drift-check failure visibility) to **both**. Then reduce each item here to a one-line pointer.
-  Keep the ids stable in the pointer so `CHANGELOG.md` references still resolve.
-- **Status:** Done — transferred 2026-09-15 in commits `7c13b1d` (AWS appliance: T-104 – T-110, R-008, plus T-111 with the 27 exported Terraform findings) and `f3718aa` (Azure appliance: T-103 – T-105, R-003, R-004, plus T-106 with the five exported Terraform findings), carried on the core's transport branches `claude/appliance-aws-bootstrap` / `claude/appliance-azure-bootstrap` for relay to `claude/appliance-bootstrap` in each appliance (T-506). Every moved item here is reduced to a pointer in its Status line; `REVIEW.md` R-006, R-008 and R-010 point at their appliance ids.
-- **Notes for future engineers:** Application-level items never move; `CLAUDE.md` in each
-  appliance says application work belongs here, and `REVIEW.md` here keeps R-009, R-011 and
-  R-012, which both appliances point back at.
+- **Description:** T-504 removed the deployment layer, but several backlog and review items that belong to it were
+  still listed here. They were handed to whoever owns the deployment layer on 2026-09-15 and are not tracked in this
+  repository: T-201, T-301/T-302, T-303, T-305, T-502 and `REVIEW.md` R-006 (the AWS side); T-304, T-415 and
+  `REVIEW.md` R-008 and R-010 (the Azure side); and T-416 (both).
+- **Status:** Done — 2026-09-15. Every moved item here is reduced to a pointer in its Status line ("Left this
+  repository 2026-09-15 (T-507)"), with the id kept stable so `CHANGELOG.md` references still resolve.
+- **Notes for future engineers:** Application-level items never move; `REVIEW.md` here keeps R-009, R-011 and R-012.
 
 ### T-508 — Re-scope the production-readiness review engine to the core
 
@@ -1652,42 +1590,28 @@ order; do not reorder it.
   appliances (each appliance reviewing its own Terraform) or are retired here; prune
   `SELF_HOSTED_ONLY_WORKFLOWS` to the four core workflows and re-derive the secret-location list
   from the current `.secrets.baseline`; update the pinned counts in the tests in the same change.
-- **Status:** Done — 2026-09-15. The `terraform-aws`/`terraform-azure` emitters and their tests were retired; each area is represented by one relocation record (`cna/review/areas/terraform_relocated.py`) so the closed nine-area set and Property 2 still hold, and the findings they carried were exported to the appliances (AWS T-111, Azure T-106). `SELF_HOSTED_ONLY_WORKFLOWS` names the three self-hosted core workflows, the documentation area describes the four-workflow tree and the appliance-owned deploy path, the security-secrets location list is regenerated from the current `.secrets.baseline` (12 files), and the R-003/R-006 escalations left with their subjects — `EXPECTED_ESCALATION_BLOCKERS` is now `{R-005, R-009}`. Recorded in [`CHANGELOG.md`](CHANGELOG.md) → Unreleased → Changed.
+- **Status:** Done — 2026-09-15. The `terraform-aws`/`terraform-azure` emitters and their tests were retired; each area is represented by one relocation record (`cna/review/areas/terraform_relocated.py`) so the closed nine-area set and Property 2 still hold, and the findings they carried left this repository with the Terraform. `SELF_HOSTED_ONLY_WORKFLOWS` names the three self-hosted core workflows, the documentation area describes the four-workflow tree and the appliance-owned deploy path, the security-secrets location list is regenerated from the current `.secrets.baseline` (12 files), and the R-003/R-006 escalations left with their subjects — `EXPECTED_ESCALATION_BLOCKERS` is now `{R-005, R-009}`. Recorded in [`CHANGELOG.md`](CHANGELOG.md) → Unreleased → Changed.
 - **Notes for future engineers:** `cna/review/blockers.py` parses `REVIEW.md`'s index table at
   runtime and `test_review_blockers.py` asserts that R-001 – R-010 are present and that only R-007
   is "Resolved" — keep every `R-0NN` row in the table (with a redirect in the Status cell) rather
   than deleting rows when transferring items under T-507.
 
-### T-509 — Move the core into the dedicated `Work-Cloud_Network_Core` repository
+### T-509 — Move the core into a dedicated core repository (history; reversed 2026-10-10)
 
 - **Priority:** High
-- **Description:** After T-504 – T-508 the original repository, `Work-Cloud_Network_Assessment`, held
-  only the core — application code, image builds, tests, releases — but still carried the original
-  tool's name, so the split read as "the original tool plus two appliances" rather than the intended
-  topology: **Cloud Network Core** (internal, maintained centrally, never customer-facing) and the
-  **Azure** and **AWS appliances** (the only customer-facing solutions, each consumed by the customers
-  on that cloud). Shared services, workers, images and every other common component are developed
-  once in the core and consumed by both appliances through the images.
-- **Dependencies:** T-504 (deployment layer out of the core), T-506 and T-507 (both appliances live).
-- **Recommended action:** Import the original repository's full history into the new one as a merge
-  (so every commit reference in `CHANGELOG.md` still resolves), update the repository-name references
-  (README badges and Wiki links, `CLAUDE.md`, the Dockerfile source label), repoint both appliances
-  (`CLAUDE.md`, `README.md`, the `CORE_REPO` variable) in linked pull requests, reduce the original
-  repository to a pointer, then archive it.
-- **Status:** Done (engineering side) — 2026-09-18. The original's `main` at `5d3b914` was merged
-  into `Work-Cloud_Network_Core` with `--allow-unrelated-histories` (the only file on the new side was the
-  `LICENSE`), followed by one rename commit; both appliances carry the mirrored repoint; the original
-  repository's pull request replaces its tree with a pointer `README.md`/`CLAUDE.md`. The
-  repository-owner steps — secrets and variables on this repository, the GitHub App installation,
-  the `CORE_REPO` flip in both appliances, the Wiki move and the archive — are
-  `REVIEW.md` R-013 and R-014, with the merge order that keeps the appliances' image updates working
-  throughout. The appliance repository names are R-015.
-- **Notes for future engineers:** The original repository is deleted, not archived (`REVIEW.md` →
-  R-014 records what was verified first). Issue and pull-request numbers of the form `#NNN` that
-  refer to it in `CHANGELOG.md`, `REVIEW.md`, `CNA-0.90-updates.md` and this file are historical
-  citations of threads that no longer exist; they were links and are now plain numbers. Nothing in the images, the tag scheme, the manifest,
-  the dispatch or the runtime contract changed — the appliances see a different `CORE_REPO`, nothing
-  else.
+- **Description:** After T-504 – T-508 this repository held only the core — application code, image builds, tests,
+  releases — under the original tool's name. The plan was to import its history into a separate core repository and
+  leave a pointer here.
+- **Dependencies:** T-504 (deployment layer out of the core), T-506 and T-507.
+- **Recommended action:** Import the original repository's full history into the new one as a merge (so every commit
+  reference in `CHANGELOG.md` still resolves), update the repository-name references, and reduce the original to a
+  pointer.
+- **Status:** Reversed — the history was imported on 2026-09-18; on 2026-10-10 the owner merged that lineage back into
+  this repository, which is again the product (`REVIEW.md` R-013, R-014, R-023). On 2026-10-25 it was made to stand
+  alone: it depends on no other repository.
+- **Notes for future engineers:** Issue and pull-request numbers of the form `#NNN` that refer to the earlier
+  repositories in `CHANGELOG.md`, `REVIEW.md`, `CNA-0.90-updates.md` and this file are historical citations of threads
+  that no longer exist; they were links and are now plain numbers.
 
 ---
 
@@ -1774,7 +1698,7 @@ order; do not reorder it.
   workflow numbers, `REVIEW.md` ids) found one project-specific tree: `.kiro/specs/production-readiness/`,
   the Kiro spec (requirements, design, 15 tasks, all complete) of the 2026-09-14 production-hardening
   review. Everything it produced already lives where the model says — its findings in the three
-  `TODO.md` files (this repository's T-4xx, the appliances' T-106/T-111), its blockers in the
+  `TODO.md` (this repository's T-4xx), its blockers in the
   `REVIEW.md` files, its outcome in `CHANGELOG.md` — so the spec was removed rather than moved
   (its proper home is the Wiki, which `REVIEW.md` R-009 keeps closed; git history retains it). The
   Azure skill references under `.claude/skills/azure-*` mention Foundry and Front Door as Azure
@@ -1949,18 +1873,13 @@ High rows that were not closed in that change set, plus the Medium rows with a c
 Each item names the register finding; the evidence (file:line) is in the finding. Human decisions
 from the same review are `REVIEW.md` → R-016 – R-022.
 
-### T-701 — Deploy by digest in both appliances (RELEASE-001)
-- **Status:** Done 2026-09-24 — Azure appliance PR #11 and AWS appliance PR #15 (merged); the
-  contract note landed here in PR #37. `230` composes `docker.io/<ns>/cna:<role>-sha-<7>@sha256:<64>`
-  from `images{}` + `digests{}` and passes all four images (new `migrator_image` input) to `210`,
-  which refuses empty or floating references; `220`, `350`/`360` and `100` no longer depend on
-  `*-latest`. Rollback carries `previous_migrator_image` through `workflow_call` only (GitHub caps
-  `workflow_dispatch` at ten inputs) and otherwise resolves the migrator from the release catalog.
-- **Original description:** `200-build-images` now records `digests{}` (`docker.io/<ns>/cna@sha256:…`) next to `images{}` in
-`.deployment-catalog/latest-build.json`. `210-deploy` in both appliances still resolves images by
-mutable tag and unconditionally uses `migrator-latest`. Add a `migrator_image` input, fail on any
-`*-latest` reference, and deploy the `@sha256:` reference from the manifest; `230` forwards
-`digests{}`. Shared change — both appliances in one change set.
+### T-701 — Deploy by digest (RELEASE-001)
+- **Status:** Done 2026-09-24, superseded 2026-10-25. Consumers pull by digest. This repository records every
+  digest in the step summary of `tag-images` (`200-build-images.yml`) and repeats the five digests in the `310` release
+  notes; nothing is written to the repository, and how a consumer deploys is its own process.
+- **Original description:** `200-build-images` recorded `digests{}` next to `images{}` in a build manifest
+  (`docker.io/<ns>/cna@sha256:…`), while deployments still resolved images by mutable tag and unconditionally used
+  `migrator-latest`. The ask: fail on any `*-latest` reference and deploy the `@sha256:` reference.
 
 ### T-702 — Python lockfile and pinned floors (PY-020, IMG-004)
 - **Status:** Done 2026-09-30 — `uv.lock` (145 packages, universal, hashed) is committed and every
@@ -1983,22 +1902,20 @@ floor). Generate a lock (`uv lock` / `pip-compile` with hashes) consumed by all 
 Dockerfiles, and drop `apt-get -y upgrade` from the final stages once Dependabot's docker coverage
 (added in this review) keeps the base digests fresh.
 
-### T-703 — Sign images and verify provenance in the appliances (RELEASE-003, IMG-012)
+### T-703 — Sign images and verify provenance (RELEASE-003, IMG-012)
 - **Status:** Done 2026-10-03 — `200` signs every digest after its gates with cosign keyless
   (`scripts/ci/sign_image.sh`: `cosign sign` + `cosign attest --type slsaprovenance02` with
   BuildKit's own provenance predicate, `builder.id` asserted to be the run) under
-  `https://github.com/<owner>/<core>/.github/workflows/200-build-images.yml@refs/heads/main`. Both
-  appliances gain `scripts/ci/verify_image_signature.sh`, run by `210` on all four images before
-  the plan and by `220` on every image named: `cosign verify` (exact identity + issuer),
-  `cosign verify-attestation --type slsaprovenance02`, subject digest = deployed digest,
-  `predicate.builder.id` under `https://github.com/<owner>/<core>/actions/runs/`. The identity is
-  the appliance variable `IMAGE_SIGNING_IDENTITY` (checked by `100`; appliance `REVIEW.md` entry
-  for the roll-out order — pre-T-703 digests, rollback targets included, do not verify). Shared
-  cosign release `v3.1.3`, installer `sigstore/cosign-installer@6f9f177` (v4.1.2), in all three.
-  The verifier accepts either proof of signing time cosign 3 supports — a Sigstore TSA signed
+  `https://github.com/<owner>/<this repo>/.github/workflows/200-build-images.yml@refs/heads/main`.
+  `scripts/ci/verify_signed_digest.sh` is the verifier `310` runs on all five images: `cosign verify` (exact
+  identity + issuer), `cosign verify-attestation --type slsaprovenance02`, subject digest = the digest checked,
+  `predicate.builder.id` under `https://github.com/<owner>/<this repo>/actions/runs/`. The verifier accepts either
+  proof of signing time cosign 3 supports — a Sigstore TSA signed
   timestamp (`--use-signed-timestamps`, what Rekor v2 requires) or Rekor v1's integrated
-  timestamp — so the appliances keep verifying when Sigstore's signing config moves to Rekor v2.
-  Appliance change on the same branch name in both appliance repositories.
+  timestamp — so it keeps verifying when Sigstore's signing config moves to Rekor v2. Shared cosign release
+  `v3.1.3`, installer `sigstore/cosign-installer@6f9f177` (v4.1.2), in `200` and `310`. Anyone who deploys the
+  images should make the same checks (README, *Publishing and verifying the images*). Digests signed before this
+  change, rollback targets included, do not verify.
 - **Original description:** `200` emits unsigned BuildKit SBOM/provenance attestations; nothing verifies them. Sign every
 published digest (cosign keyless with the workflow OIDC identity) and have `210` verify the
 signature and the SLSA provenance subject before deploying.
@@ -2014,8 +1931,8 @@ signature and the SLSA provenance subject before deploying.
   `/health` or in tests) and closed by the lifespan on shutdown. A caller that waits past
   `CNA_DB_POOL_TIMEOUT_SECONDS` for one of `CNA_DB_POOL_MAX` connections gets a 503 with
   `Retry-After` (new `Outcome.UNAVAILABLE`) rather than a 41st connection on the server. Both
-  variables are optional with code defaults (10 / 10; `.env.example`); the appliances inject
-  nothing new. 18 tests (23 parametrised cases) in `tests/unit/test_cna_api_db_pool.py`.
+  variables are optional with code defaults (10 / 10; `.env.example`); a deployment has
+  to inject nothing new. 18 tests (23 parametrised cases) in `tests/unit/test_cna_api_db_pool.py`.
 - **Original description:** `apps/cna-api` opens a new psycopg2 connection per call and never closes it; `_log()` opens one per
 progress line (dozens per job). Introduce one connection pool (`psycopg2.pool` or a per-job
 connection passed to `_log`) and close connections deterministically.
@@ -2046,12 +1963,12 @@ written by every admin/destructive action and encrypt or drop the OAuth token co
 Inventory, diagram and FinOps pages, remediation links (`learn.microsoft.com`), the SP help modal
 and `summarize-error.ts` are Azure-shaped; `POST /publish` hard-codes `AzureBlobDeployer`. Branch
 on `CNA_APPLIANCE_CLOUD` / the credential platform and add the S3 path (the CLI's `s3_deployer.py`
-exists) so the AWS appliance can upload documents and publish portals.
+exists) so an AWS deployment can upload documents and publish portals.
 
 ### T-710 — Align the storage-account variable name (ARCH-003)
-The API reads `AZURE_STORAGE_ACCOUNT_NAME` (`apps/cna-api/main.py`); the Azure appliance injects
-`CNA_STORAGE_ACCOUNT_NAME`, so in-app portal publish always returns 503. Pick one name in
-`.env.example` and mirror the appliance.
+The API reads `AZURE_STORAGE_ACCOUNT_NAME` (`apps/cna-api/main.py`); a deployment that sets
+`CNA_STORAGE_ACCOUNT_NAME` instead gets a 503 from in-app portal publish. Pick one name in
+`.env.example` and record it under `Changed` in `CHANGELOG.md`.
 
 ### T-711 — Regenerate the runtime environment inventory (DOC-003, DOC-002, PROD-003)
 `.env.example` declares ~11 variables nothing reads and omits ~12 that are read (including the
@@ -2171,7 +2088,7 @@ member (`CHANGELOG.md` `[Unreleased]`). Open:
 - Change set D fills `cna_azure_network_engine/discovery/` behind the `[azure]` extra;
   `require_azure_extra()` is the guard today.
 
-### T-722 — Least-privilege roles: verify the actions, assign them in both appliances (change set F)
+### T-722 — Least-privilege roles: verify the actions, assign them in the deployment (change set F)
 `docs/roles/cna-network-bgp-reader.json`, `cna/modules/network/module.yaml`, `.env.example` and the help
 modal now carry the roles table of `REFACTOR_APP.md` section 13 (`CHANGELOG.md` `[Unreleased]`). Open:
 - `[VERIFY actions]` Every action string in the custom role and in `module.yaml` is to be checked against
@@ -2182,24 +2099,24 @@ modal now carry the roles table of `REFACTOR_APP.md` section 13 (`CHANGELOG.md` 
 - `[REVIEW REQUIRED]` The role set itself (Reader + the optional reader roles + the custom role) is an
   owner decision on what the appliance identity may read; Cost Management Reader and Log Analytics
   Reader are only needed for the live cost and Traffic Analytics rules.
-- Core ↔ appliance contract: `Work-Cloud_Network_Azure_Appliance` gains `azurerm_role_definition` from
+- Deployment note (outside this repository): an Azure deployment of the images needs an `azurerm_role_definition` from
   the JSON (`assignable_scopes = var.assessment_scope_ids`) and `azurerm_role_assignment` for Reader on
-  every assessed scope plus the optional roles behind `var.enable_live_rules`; `Work-Cloud_Network_AWS_Appliance`
-  is unaffected (its read-only role is the existing STS AssumeRole path). Record the acceptance run
+  every assessed scope plus the optional roles behind `var.enable_live_rules`; an AWS deployment is
+  unaffected (its read-only role is the existing STS AssumeRole path). Record the acceptance run
   with exactly these roles (zero `HTTP 403` warnings in the progress log) under `REVIEW.md` → R-008.
 - The modal still describes a service principal; change set G turned it into managed-identity guidance.
 
-### T-723 — Managed identity in both appliances; retire the client-secret contract (change set G)
+### T-723 — Managed identity in the deployment; retire the client-secret contract (change set G)
 `cna.core.auth.build_azure_credential` is the one Azure credential; the service-principal secret path,
 Prisma's `spClientId`/`spSecretEnc` and `AZURE_CLIENT_SECRET` are gone (`CHANGELOG.md` `[Unreleased]`;
 `tests/security/test_no_client_secret.py`, `tests/security/test_forbidden_env.py`). Open:
-- Core ↔ appliance contract: `Work-Cloud_Network_Azure_Appliance` creates a user-assigned managed
-  identity, attaches it to the api, worker and web Container Apps and sets `AZURE_CLIENT_ID` on each; its
-  Terraform must stop passing any `AZURE_CLIENT_SECRET` secret and must not set any variable of
-  `cna.core.auth.FORBIDDEN_CREDENTIAL_ENV` (the api refuses to start). `Work-Cloud_Network_AWS_Appliance`
+- Deployment note (outside this repository): an Azure deployment creates a user-assigned managed
+  identity, attaches it to the api, worker and web Container Apps and sets `AZURE_CLIENT_ID` on each; it
+  must not pass any `AZURE_CLIENT_SECRET` secret or set any variable of
+  `cna.core.auth.FORBIDDEN_CREDENTIAL_ENV` (the api refuses to start). An AWS deployment
   keeps the STS AssumeRole path (`aws_secret_access_key` on the credential form stays, encrypted at rest).
 - The Prisma migration `20261010000016_drop_sp_secret` drops two columns and is destructive; the migrator
-  job runs it on the appliance's next release. Engagements that stored a service principal need the
+  job runs it on the deployment's next release. Engagements that stored a service principal need the
   identity assigned the T-722 roles on the same subscriptions before their next discovery; `POST
   /discovery/test-access` (the form's **Test access** button) shows which subscriptions are still missing.
 - `[REVIEW REQUIRED]` The credential chain keeps workload identity, managed identity, Azure CLI, Azure
@@ -2209,16 +2126,16 @@ Prisma's `spClientId`/`spSecretEnc` and `AZURE_CLIENT_SECRET` are gone (`CHANGEL
 - The web tier's `@azure/identity` (Blob, AI) is unchanged and already uses `DefaultAzureCredential`
   without exclusions; align it with the factory's exclusions when the web tier is next touched.
 
-### T-724 — Entra bearer on the internal routes: app registration, role and web identity in both appliances (change set H)
+### T-724 — Entra bearer on the internal routes: app registration, role and web identity in the deployment (change set H)
 `apps/cna-api/entra.py` validates Entra tokens for `CNA_ENTRA_AUDIENCE` and the `internal` router requires
 the `Discovery.Run` role; the shared token `CNA_API_TOKEN` stays accepted so a deployment can move one
 container at a time (`CHANGELOG.md` `[Unreleased]`; `tests/unit/test_cna_api_auth.py`,
 `tests/security/test_profile_refused.py`). Open:
-- Core ↔ appliance contract: `Work-Cloud_Network_Azure_Appliance` creates the api's app registration with
+- Deployment note (outside this repository): an Azure deployment creates the api's app registration with
   `identifier_uris = ["api://<name>"]` and an app role `Discovery.Run`, assigns that role to the web
   container's user-assigned identity, and sets `CNA_ENTRA_TENANT_ID` and `CNA_ENTRA_AUDIENCE` on the api
   and `CNA_ENTRA_AUDIENCE` on the web container; once both are in place it may drop `CNA_API_TOKEN` from
-  both containers (the api refuses to start with neither). `Work-Cloud_Network_AWS_Appliance` has no Entra
+  both containers (the api refuses to start with neither). An AWS deployment has no Entra
   tenant and keeps the shared token.
 - `[VERIFY]` The accepted issuers (`https://login.microsoftonline.com/<tenant>/v2.0` and
   `https://sts.windows.net/<tenant>/`) against a real token for the `api://` audience; the app
@@ -2265,8 +2182,8 @@ old loop for one release (`CHANGELOG.md` `[Unreleased]`). Open:
   through `scripts/author-rules`-style authoring upstream, never by editing findings by hand.
 - Remove the `arm` backend, `_run_arm`, `_discover_subscription` and the fifteen ARM list collectors in the
   release after the acceptance run; `tests/unit/test_azure_discovery.py` keeps only the live-collector tests.
-- Core ↔ appliance contract: both appliances may set `CNA_SCOPES` (space-separated scopes) and
-  `CNA_DISCOVERY_BACKEND`; the Azure appliance's identity needs no `Microsoft.Compute` or
+- Deployment note (outside this repository): a deployment may set `CNA_SCOPES` (space-separated scopes) and
+  `CNA_DISCOVERY_BACKEND`; the Azure identity needs no `Microsoft.Compute` or
   `Microsoft.Security` SDK permissions beyond Reader for the Resource Graph tables.
 
 ### T-727 — Lab boundary image: first CI build, and the API Dockerfile into the root file (change set I)
@@ -2282,15 +2199,15 @@ old loop for one release (`CHANGELOG.md` `[Unreleased]`). Open:
   `final-appliance` stage body and deletes it. The two files share every convention already (uv stage, lock
   export, pip removal, uid 1001, draw.io), so the fold is a move, not a rewrite; `200-build-images.yml`'s
   matrix `file:` entries change with it.
-- `cna:lab` must never appear in a registry or a manifest: `test_lab_boundary.py` checks `200-build-images.yml`
-  and `latest-build.json` for it; keep that check when the image workflow changes.
+- `cna:lab` must never appear in a registry: `test_lab_boundary.py` checks `200-build-images.yml`
+  for it; keep that check when the image workflow changes.
 - The AddOn builds its deployable lab image from the published engine with the same pattern (its
   `infrastructure/docker/Dockerfile`); once the engine wheel is released (T-728; the AddOn pins the GitHub Release asset by URL and sha256) its `edition.py` can import
   `cna_azure_network_engine.edition` instead of carrying its own copy.
 
-### T-728 — Engine release and OIDC registry login: the owner steps, and the appliances on digests (change set J)
+### T-728 — Engine release and OIDC registry login: the owner steps (change set J)
 `320-release-engine.yml` publishes the engine wheel by trusted publishing on `engine-v*` tags; `200` and `310`
-log in to Docker Hub through its OIDC connection (`CHANGELOG.md` `[Unreleased]`; `tests/unit/test_build_manifest.py`).
+log in to Docker Hub through its OIDC connection (`CHANGELOG.md` `[Unreleased]`; `tests/security/test_image_repository_name.py`).
 Nothing publishes until the owner flips the variables below. Open, in order:
 - `[REVIEW REQUIRED]` **PyPI trusted publisher.** In a browser, at
   <https://pypi.org/manage/account/publishing/>, add a pending publisher with PyPI project name
@@ -2332,28 +2249,24 @@ Nothing publishes until the owner flips the variables below. Open, in order:
   $conn = Read-Host "Docker Hub OIDC connection id"
   gh variable set DOCKERHUB_NAMESPACE --body hybridcloudworks --repo saulpatinojr/HCW-NetworkEyes_App
   gh variable set DOCKERHUB_CONNECTION --body $conn --repo saulpatinojr/HCW-NetworkEyes_App
-  gh variable set APPLIANCE_OWNER --body saulpatino-cbts --repo saulpatinojr/HCW-NetworkEyes_App
   gh variable set DOCKERHUB_ENABLED --body true --repo saulpatinojr/HCW-NetworkEyes_App
   gh secret delete DOCKERHUB_TOKEN --repo saulpatinojr/HCW-NetworkEyes_App
   ```
 
-  `APPLIANCE_OWNER` is the account that owns the appliance repositories named in `APPLIANCE_REPOS` (they moved
-  from `saulpatinojr`); the GitHub App behind `GH_APP_ID` must be installed on that account for those two
-  repositories, or `notify-appliances` cannot mint its token. Success looks like: the next push to `main` that
+  Success looks like: the next push to `main` that
   touches a Dockerfile runs `200-build-images.yml` with the `Log in to Docker Hub` step green and no `password`
   input in its log; a failed exchange reads `unable to exchange OIDC token` and means the connection id, the
   subject claim or its repository scope is wrong (see the troubleshooting page). Delete the secret only after
   that first green run.
 - `[REVIEW REQUIRED]` **Dry run of the Docker Hub connection, before `DOCKERHUB_ENABLED` is set.** After this is
   merged to `main` (the job only runs there, because the connection's ruleset names `refs/heads/main`): in the
-  browser, **Actions** → **200 · Build Container Images** → **Run workflow**, branch `main`, tick **rehearsal**
-  (leave **merge** unticked), **Run workflow**. One run executes two jobs: `rehearse-manifest-pr` (the GitHub App
-  and auto-merge) and `rehearse-docker-login`. Success for the Docker job looks like: `Log in to Docker Hub` green
+  browser, **Actions** → **200 · Build Container Images** → **Run workflow**, branch `main`, tick **rehearsal**,
+  **Run workflow**. One run executes one job, `rehearse-docker-login`. Success looks like: `Log in to Docker Hub` green
   (the subject claim matches the ruleset), `Push the rehearsal image by digest` green (the Image Push scope), and
   `Read the pushed digest back` printing `Docker Hub accepted the login and the push`. The pushed image is untagged
   and carries one tiny layer; no tag resolves to it, and whether and when Docker Hub deletes it was not checked
-  against Docker's documentation, so remove the digest by hand if you want it gone. Nothing is tagged, signed or
-  written to the manifest, and the real build jobs stay skipped. The job also has Docker Scout analyse the digest
+  against Docker's documentation, so remove the digest by hand if you want it gone. Nothing is tagged or
+  signed, and the real build jobs stay skipped. The job also has Docker Scout analyse the digest
   with the same call the real build makes. If it fails, the failing step prints the three likely causes (mutable instead of immutable
   `sub`, the ruleset missing the repository, the scope missing); open the connection's **Failures** tab in Docker
   Home for the claims Docker received. Docker's guide:
@@ -2370,14 +2283,14 @@ Nothing publishes until the owner flips the variables below. Open, in order:
   it now promotes the image `200` built, which has no `platforms:` setting and so is whatever the runner builds,
   amd64. If an arm64 release image matters, add `platforms: linux/amd64,linux/arm64` to the build steps of `200`
   (the Scout, signing and smoke steps then need to follow) and decide it deliberately; nothing else restores it.
-- **Releasing, once `DOCKERHUB_ENABLED` is set and `200` has built.** (1) Optional: Actions, **310 · Release CLI
-  Tool**, **Run workflow**, branch `main`, `dry_run` ticked: it finds and verifies the image of the latest build and
-  prints what it would promote; it logs in for nothing and creates nothing. (2) Tag the head of `main` or the
-  commit recorded as `commit` in `.deployment-catalog/latest-build.json` (`git tag vX.Y.Z <sha>`, `git push origin
-  vX.Y.Z`). Every successful `200` ends with a manifest-only commit; `310` accepts a tag on it, or on a
-  documentation-only commit after a build, because nothing `200` builds from changed since. A tag on a commit that
-  changed a file in `200`'s `on.push.paths` after the last build fails with the file names: tag the recorded commit
-  instead. (3) If the run fails after `Promote the digest` created the tag but the post-check disagrees ("resolves to
+- **Releasing, once `DOCKERHUB_ENABLED` is set and `200` has built (owner steps; dry run first).** (1) Dry run: in the
+  browser, Actions, **310 · Release CLI Tool**, **Run workflow**, branch `main`, leave `dry_run` ticked (the default).
+  It finds and verifies the image of the latest build and prints what it would promote, with the commit it was built
+  from; it logs in for nothing and creates nothing. (2) Tag that commit (bash or PowerShell: `git tag vX.Y.Z <sha>`,
+  `git push origin vX.Y.Z`). `310` accepts a tag on a documentation-only commit after a build, because nothing `200`
+  builds from changed since. A tag on a commit that changed a file in `200`'s `on.push.paths` after the last build fails
+  with the file names: tag the commit the dry run names instead. (3) The release notes list the digests of all five
+  images. If the run fails after `Promote the digest` created the tag but the post-check disagrees ("resolves to
   ... expected ..."), the version tag exists with the wrong digest: delete that tag on Docker Hub (Repository, Tags)
   and re-run; a re-run refuses to move an existing tag, and so does it if the tag was created by something else.
 - **Who can mint the Docker token through a tag.** The ruleset "Protect release tags"
@@ -2401,12 +2314,10 @@ Nothing publishes until the owner flips the variables below. Open, in order:
   `core-update.yml` finds nothing to do and the lab still runs the ported copy under
   `src/network_assessment` (its `PROVENANCE.md`). That adoption belongs in the AddOn (its
   `REFACTOR_APP.md` change set C) and is tracked in its `docs/whats-new-upstream.md`.
-- Core ↔ appliance contract: `Work-Cloud_Network_Azure_Appliance` and `Work-Cloud_Network_AWS_Appliance`
-  read `digests{}` from `.deployment-catalog/latest-build.json` (`name@sha256:…`, same keys as `images{}`)
-  in their `230-image-update` consumers and pin by digest; `images{}` stays for the transition. Their own
-  Docker Hub logins move to the same OIDC form.
+- Consumers: the digests are in the step summary of `tag-images` (`200-build-images.yml`) and in the `310` release
+  notes; nothing is written to the repository. A consumer pins by digest and verifies the cosign signature.
 
-### T-729 — AWS extra: move the AWS modules under `cna/aws/` with shims, and the AWS appliance's install (change set K)
+### T-729 — AWS extra: move the AWS modules under `cna/aws/` with shims (change set K)
 `boto3` is the `[aws]` extra; the AWS paths are guarded by `cna.aws` (`CHANGELOG.md` `[Unreleased]`;
 `tests/packaging/test_azure_only_install.py`). Open:
 - The plan moves `cna/modules/network/discovery/{aws_discovery,aws_network}.py`,
@@ -2416,11 +2327,11 @@ Nothing publishes until the owner flips the variables below. Open, in order:
   account_hierarchy}.py`, `CRITICAL_TRIGGERS_AWS` and the `_check_aws_*` rules of `analysis_engine.py` under
   `cna/aws/` with re-export shims at the old paths for one release. This change gated them in place; do the
   move as its own PR, together with the AWS rules leaving `AnalysisEngine` (T-725).
-- Core ↔ appliance contract: `Work-Cloud_Network_AWS_Appliance` deploys the same images, which carry the
-  extra, so nothing changes there; a future Azure-only image (`--extra api` without `--extra aws`) is the
-  moment the Azure appliance stops shipping boto3. `Work-Cloud_Network_Azure_Appliance` is unaffected.
+- Deployment note (outside this repository): the published images carry the extra, so nothing changes for an AWS
+  deployment; a future Azure-only image (`--extra api` without `--extra aws`) is the moment an Azure deployment stops
+  shipping boto3.
 - `[VERIFY]` `cna/modules/network/module.aws.yaml` against the IAM actions the collectors call; the
-  AWS appliance's Terraform builds its read-only policy from it.
+  AWS read-only policy of a deployment is built from it.
 - Keep `tests/conftest.py`'s skip in step with the marker: an `@pytest.mark.aws` test that runs green
   without `boto3` is not testing the AWS path.
 - The change-set-A shims (`cna/core/topology_schema.py` and the five analysis shims, T-719) and the `arm`
@@ -2476,13 +2387,12 @@ arguments. `.github/dependabot.yml` ignores the major until then. Open: migrate 
 remove the ignore, and check the grid in the browser (sorting, grouping, scrolling) because the type check does not
 cover behaviour.
 
-### T-735 — Confirm both appliances can reach the now-protected draw.io route
+### T-735 — Note for deployers: the draw.io route is now protected
 Since ticket #245 the route `/api/drawio-mcp/*` on the web container answers `401` without `Authorization: Bearer <CNA_API_TOKEN>`, and the
-Python draw.io client sends that header from its own `CNA_API_TOKEN`. No new setting exists, so nothing in the appliances has to change
-unless they point `CNA_DRAWIO_MCP_URL` at the web tier. Open, in both `saulpatinojr/Work-Cloud_Network_Azure_Appliance` and
-`saulpatinojr/Work-Cloud_Network_AWS_Appliance`: check whether `CNA_DRAWIO_MCP_URL` is set for the api container and, if it is, that the
-same container receives `CNA_API_TOKEN` (the api already refuses to start without it in appliance mode) and that the web container's
-`CNA_API_TOKEN` is the same value. Record the result here; no change to those repositories is made from this repository.
+Python draw.io client sends that header from its own `CNA_API_TOKEN`. No new setting exists, so nothing in a deployment has to change
+unless it points `CNA_DRAWIO_MCP_URL` at the web tier. For such a deployment: the api container must receive `CNA_API_TOKEN` (the api already
+refuses to start without it in appliance mode) and the web container's `CNA_API_TOKEN` must be the same value. This repository cannot check
+other people's deployments; the note is in `CHANGELOG.md` for them.
 
 ### T-736 — Keep the pinned CI tools current
 `300-test-codebase.yml` runs hadolint 2.15.1 and actionlint 1.7.12 as containers pinned by digest, `pip-audit`, `ruff`, `pre-commit`, `uv` and `pyyaml` are pinned to exact versions, and `scripts/ci/local-container-checks.sh` pins the same two digests plus Trivy 0.76.1. Dependabot reads `FROM` lines and action references, not an image named in a `run:` step or a version in a `pip install`, so none of these pins moves by itself. Open: when a new release appears, pull the new tag, copy the digest Docker prints, and change the workflow and the script together (`tests/unit/test_ci_hygiene.py` fails when they differ). Consider moving the two images into a small Dockerfile that Dependabot's docker ecosystem can read, or into a scheduled job that opens an issue when a newer release exists. The apt and apk version pins that `.hadolint.yaml` ignores (DL3008, DL3018) are worth revisiting if the images ever move to a Debian snapshot mirror. `320-release-engine.yml` still runs an unpinned `uv pip install pytest`.

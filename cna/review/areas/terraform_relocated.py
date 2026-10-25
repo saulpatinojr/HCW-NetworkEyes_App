@@ -1,14 +1,12 @@
 """Placeholders for the ``terraform-azure`` and ``terraform-aws`` areas.
 
 The production-readiness review audited the Terraform that used to live under
-``infra/terraform/`` in this repository. That layer left the core with
-``TODO.md`` T-504: each cloud's Terraform now lives only in its appliance
-repository, and the findings the audit recorded were exported there — the AWS
-appliance's ``TODO.md`` T-111 and the Azure appliance's ``TODO.md`` T-106 carry
-them verbatim, with paths rebased to the appliance layout. The gated
-escalations they carried (AWS account, state backend, OIDC role, certificates,
-Bedrock opt-in, runtime secrets; the Azure live-acceptance sign-off) are owned by
-the appliances' ``REVIEW.md`` files.
+``infra/terraform/`` in this repository. That layer left this repository with
+``TODO.md`` T-504: this repository builds and publishes images and contains no
+Terraform or deployment workflow, so the Terraform review is not part of this
+repository's review. The gated escalations the Terraform carried (AWS account,
+state backend, OIDC role, certificates, Bedrock opt-in, runtime secrets; the
+Azure live-acceptance sign-off) are not tracked here.
 
 The two areas stay in :data:`~cna.review.model.AREAS` — the closed set is part
 of the design — so each is represented in the consolidated plan by exactly one
@@ -20,8 +18,10 @@ from __future__ import annotations
 
 from cna.review.model import Finding, Severity
 
-AZURE_APPLIANCE = "saulpatinojr/Work-Cloud_Network_Azure_Appliance"
-AWS_APPLIANCE = "saulpatinojr/Work-Cloud_Network_AWS_Appliance"
+#: Subject prefixes of the two records. They name the deployment layer, not a repository: this repository does
+#: not depend on, call or mirror to any repository that deploys its images.
+AZURE_DEPLOYMENT_LAYER = "azure-deployment-layer"
+AWS_DEPLOYMENT_LAYER = "aws-deployment-layer"
 
 
 def terraform_relocated_findings() -> list[Finding]:
@@ -31,28 +31,27 @@ def terraform_relocated_findings() -> list[Finding]:
             area="terraform-azure",
             severity=Severity.INFORMATIONAL,
             proposed_action=(
-                "The Azure Terraform review moved with the deployment layer to "
-                f"the Azure appliance repository ({AZURE_APPLIANCE}); its "
-                "TODO.md T-106 carries the exported findings and its REVIEW.md "
-                "owns the live-acceptance sign-off. No Terraform remains in the "
-                "core (TODO.md T-504); review it there."
+                "The Azure Terraform review left with the deployment layer: "
+                "this repository builds and publishes images and holds no "
+                "Terraform (TODO.md T-504), so there is nothing here to review. "
+                "Whoever deploys the images reviews the Azure Terraform and "
+                "owns its live-acceptance sign-off."
             ),
             dedup_key="terraform-azure:relocated-to-appliance",
-            subject=f"{AZURE_APPLIANCE}:infra/terraform",
+            subject=f"{AZURE_DEPLOYMENT_LAYER}:infra/terraform",
         ),
         Finding(
             area="terraform-aws",
             severity=Severity.INFORMATIONAL,
             proposed_action=(
-                "The AWS Terraform review moved with the deployment layer to "
-                f"the AWS appliance repository ({AWS_APPLIANCE}); its TODO.md "
-                "T-111 carries the exported findings and its REVIEW.md R-001 – "
-                "R-005 and R-008 own the gated escalations (account, state "
-                "backend, OIDC role, certificates, Bedrock opt-in, runtime "
-                "secrets). No Terraform remains in the core (TODO.md T-504); "
-                "review it there."
+                "The AWS Terraform review left with the deployment layer: this "
+                "repository builds and publishes images and holds no Terraform "
+                "(TODO.md T-504), so there is nothing here to review. Whoever "
+                "deploys the images reviews the AWS Terraform and owns the "
+                "gated escalations (account, state backend, OIDC role, "
+                "certificates, Bedrock opt-in, runtime secrets)."
             ),
             dedup_key="terraform-aws:relocated-to-appliance",
-            subject=f"{AWS_APPLIANCE}:infra/terraform",
+            subject=f"{AWS_DEPLOYMENT_LAYER}:infra/terraform",
         ),
     ]

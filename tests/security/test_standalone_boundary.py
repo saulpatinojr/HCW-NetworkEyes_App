@@ -7,14 +7,10 @@ repositories) or from a GitHub App installed on them. This guard keeps that from
 
 * ``TestNoOtherRepositoryIsNamed`` scans the repository for the strings below. The scan skips history
   (``CHANGELOG.md``, ``CNA-0.90-updates.md``), the tests (they may spell a forbidden string out to prove a
-  guard), dependency and build directories, and this file.
+  guard), dependency and build directories, and this file. There is no exemption list: a live file that
+  names one of the strings fails the test.
 * ``TestEveryActionIsFromAnAllowedPublisher`` fails when a workflow or a local action uses an action from a
   publisher outside ``ALLOWED_PUBLISHERS`` or one that is not pinned to a full commit SHA.
-
-The scan is a ratchet, not an exemption: ``PENDING_PR3`` lists, by file and token, the references that the
-documentation and review-tool rewrite (PR-3 of the standalone plan) still has to remove. ``test_nothing_new_...``
-fails on any occurrence outside that list, and ``test_every_pending_entry_is_still_a_real_reference`` fails when
-an entry no longer matches, so the list can only shrink. When it is empty, delete it and the test that reads it.
 
 Both checks are static reads of files; they do not prove what a workflow does when it runs.
 """
@@ -77,39 +73,6 @@ ALLOWED_PUBLISHERS = frozenset(
         "softprops",  # 310 creates the GitHub Release
     }
 )
-
-#: References still to be removed by PR-3 (documentation, review tool, history items of REVIEW.md / TODO.md).
-#: file -> tokens. Shrink only.
-PENDING_PR3: dict[str, frozenset[str]] = {
-    ".github/ISSUE_TEMPLATE/config.yml": frozenset({"Work-Cloud_", "saulpatino-cbts"}),
-    ".github/SECURITY.md": frozenset({"Work-Cloud_", "saulpatino-cbts"}),
-    "CLAUDE.md": frozenset({"APPLIANCE_REPOS/OWNER/REPO", "IMAGE_SIGNING_IDENTITY", "Work-Cloud_"}),
-    "README.md": frozenset({"Work-Cloud_"}),
-    "REFACTOR_APP.md": frozenset({"Work-Cloud_"}),
-    "REVIEW.md": frozenset(
-        {
-            "APPLIANCE_REPOS/OWNER/REPO",
-            "CORE_REPO",
-            "GH_APP_",
-            "IMAGE_SIGNING_IDENTITY",
-            "Work-Cloud_",
-            "cna-image-published",
-            "saulpatino-cbts",
-        }
-    ),
-    "TODO.md": frozenset(
-        {
-            "APPLIANCE_REPOS/OWNER/REPO",
-            "CORE_REPO",
-            "GH_APP_",
-            "IMAGE_SIGNING_IDENTITY",
-            "Work-Cloud_",
-            "saulpatino-cbts",
-        }
-    ),
-    "cna/review/areas/cicd.py": frozenset({"Work-Cloud_"}),
-    "cna/review/areas/terraform_relocated.py": frozenset({"Work-Cloud_"}),
-}
 
 
 def _is_text(raw: bytes) -> bool:
@@ -209,27 +172,10 @@ class TestNoOtherRepositoryIsNamed:
     def test_the_matchers_leave_the_products_own_vocabulary_alone(self, text):
         assert violations_in(text) == set()
 
-    def test_nothing_new_names_a_sibling_repository_or_its_settings(self):
-        found = _found()
-        unexpected = {
-            path: sorted(tokens - PENDING_PR3.get(path, frozenset()))
-            for path, tokens in found.items()
-            if tokens - PENDING_PR3.get(path, frozenset())
-        }
-        assert unexpected == {}, (
-            "NetworkEyes stands alone: remove these references (file: tokens): " + repr(unexpected)
-        )
-
-    def test_every_pending_entry_is_still_a_real_reference(self):
-        found = _found()
-        stale = {
-            path: sorted(tokens - found.get(path, set()))
-            for path, tokens in PENDING_PR3.items()
-            if tokens - found.get(path, set())
-        }
-        assert stale == {}, (
-            "these pending references are gone: delete them from PENDING_PR3 (file: tokens): "
-            + repr(stale)
+    def test_nothing_names_a_sibling_repository_or_its_settings(self):
+        found = {path: sorted(tokens) for path, tokens in _found().items()}
+        assert found == {}, (
+            "NetworkEyes stands alone: remove these references (file: tokens): " + repr(found)
         )
 
     def test_the_publishing_workflows_use_no_secret_of_another_repository_and_no_app_token(self):

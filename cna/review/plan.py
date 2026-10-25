@@ -27,8 +27,8 @@ Every area emitter listed in :data:`AREA_EMITTERS` contributes, so the plan
 reflects the full audit — every area's audit findings, verification records,
 and escalations. The two Terraform areas are represented by the relocation
 records in :mod:`cna.review.areas.terraform_relocated`: the deployment layer
-left the core (``TODO.md`` T-504) and its findings and gated escalations live in
-the appliance repositories.
+left this repository (``TODO.md`` T-504) and its findings and gated escalations are
+not tracked here.
 """
 
 from __future__ import annotations
@@ -70,9 +70,8 @@ __all__ = [
 # "Blocker model" table, "Consumers in this review" column). R-005 is the
 # Bedrock model-access opt-in the observability area's live-Bedrock coverage
 # depends on, and R-009 is the Wiki-publication gate. R-001 – R-004, R-006 and
-# R-008 left the core with the deployment layer (TODO.md T-504): the Terraform
-# and workflow subjects they gated are reviewed in the appliance repositories,
-# whose REVIEW.md files own those escalations now. R-007 is deliberately
+# R-008 left this repository with the deployment layer (TODO.md T-504): the
+# Terraform and workflow subjects they gated are no longer reviewed here. R-007 is deliberately
 # absent: it is resolved-but-not-closed, so its subject stays out of automated
 # scope rather than becoming an escalation consumer.
 EXPECTED_ESCALATION_BLOCKERS: frozenset[str] = frozenset(
@@ -90,8 +89,7 @@ _BLOCKER_ID_PATTERN = re.compile(r"R-\d{3,}")
 # area for readability; ordering does not affect the consolidated result (the
 # consolidation engine sorts by severity and dedup key). The AWS gated
 # escalations (R-001 – R-006) and the R-003 CI escalation left with the
-# deployment layer (TODO.md T-504) and are owned by the appliances' REVIEW.md
-# files; the escalations that remain are R-005 (observability, live Bedrock) and
+# deployment layer (TODO.md T-504); the escalations that remain are R-005 (observability, live Bedrock) and
 # R-009 (documentation, Wiki publication).
 AREA_EMITTERS: tuple[Callable[[], list[Finding]], ...] = (
     # python-engine-api
@@ -100,7 +98,7 @@ AREA_EMITTERS: tuple[Callable[[], list[Finding]], ...] = (
     # app-typescript
     app_typescript_findings,
     app_typescript_verify_findings,
-    # terraform-azure + terraform-aws (relocated to the appliances; T-504)
+    # terraform-azure + terraform-aws (left this repository; T-504)
     terraform_relocated_findings,
     # cicd (audit + verify + the SHA-pin findings)
     cicd_findings,

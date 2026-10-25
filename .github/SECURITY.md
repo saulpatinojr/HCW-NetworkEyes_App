@@ -40,9 +40,8 @@ and publish those images. Please report problems in:
 
 Out of scope here, with where to report it instead:
 
-- Deployment, Terraform and runtime problems of a customer environment belong to the appliance repositories
-  ([Azure](https://github.com/saulpatino-cbts/Work-Cloud_Network_Azure_Appliance),
-  [AWS](https://github.com/saulpatino-cbts/Work-Cloud_Network_AWS_Appliance)); their security policies apply.
+- Deployment, Terraform and runtime problems of an environment that runs these images belong to whoever deploys
+  and operates that environment. Report a flaw in an image itself here.
 - The free upload-only lab edition,
   [HCW-NetworkEyes_AddOn](https://github.com/saulpatinojr/HCW-NetworkEyes_AddOn), has its own repository and policy.
 - Problems already recorded in this repository's `REVIEW.md` or `TODO.md` do not need a new report unless you found a
@@ -56,7 +55,7 @@ form above), keep only the minimum evidence, and do not try to use it. The maint
 ## What happens next
 
 Reports are read and triaged as soon as practical. How long a fix takes depends on severity, the versions affected and
-who has to change what (this repository, an appliance repository, or an upstream project). Please keep the report
+who has to change what (this repository or an upstream project). Please keep the report
 private until the maintainers confirm that disclosure is coordinated. Credit is given in the advisory if you want it.
 
 This is a one-maintainer project: the maintainer is the repository owner named in `.github/CODEOWNERS`, and no response
