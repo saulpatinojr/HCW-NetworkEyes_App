@@ -1337,7 +1337,9 @@ order; do not reorder it.
   "the least-proven infra" for unrelated reasons (the dev account was renamed `-aif2` after a
   soft-delete collision). Two independent signals pointing at the same untested path is the
   argument for closing this one properly rather than deleting the markers.
-- **Status:** Left this repository 2026-09-15 (T-507); not tracked here, body kept for history only, do not update it.### T-416 — A scheduled drift check failed daily for five weeks and nothing surfaced it
+- **Status:** Left this repository 2026-09-15 (T-507); not tracked here, body kept for history only, do not update it.
+
+### T-416 — A scheduled drift check failed daily for five weeks and nothing surfaced it
 
 - **Priority:** High
 - **Category:** Operational safety
@@ -1360,7 +1362,9 @@ order; do not reorder it.
   a distinct, louder failure — those mean very different things.
 - **Notes for future engineers:** Do not close this by muting the check or by making it tolerate
   a missing backend. The check was right; the delivery was missing.
-- **Status:** Left this repository 2026-09-15 (T-507); not tracked here, body kept for history only, do not update it.### T-417 — "Generate All Assessments" still runs four reports synchronously in the request
+- **Status:** Left this repository 2026-09-15 (T-507); not tracked here, body kept for history only, do not update it.
+
+### T-417 — "Generate All Assessments" still runs four reports synchronously in the request
 
 - **Priority:** Medium
 - **Category:** Web app reliability
@@ -2241,23 +2245,31 @@ Nothing publishes until the owner flips the variables below. Open, in order:
      the first) to the same connection: subject claim
      `repo:saulpatinojr@34853639/HCW-NetworkEyes_App@1173847343:ref:refs/tags/v*`, resource
      `hybridcloudworks/img-ne-appliance-app`, scope **Image Push** only (Image Pull is not needed: the repository is
-     public and `310` reads it anonymously). It only lets a pushed `v*` tag add the five version tags (`X.Y.Z`,
-     `api-X.Y.Z`, `worker-X.Y.Z`, `web-X.Y.Z`, `migrator-X.Y.Z`) to digests `200` scanned and signed. Copy the connection id it shows.
+     public and `310` reads it anonymously). Image Push is push access to the repository, not a limit to five tag
+     names: `310` is written to add only the five version tags (`X.Y.Z`, `api-X.Y.Z`, `worker-X.Y.Z`, `web-X.Y.Z`,
+     `migrator-X.Y.Z`) to digests `200` scanned and signed, and what limits who can run it is the GitHub tag ruleset
+     (see "Who can mint the Docker token through a tag" below) and review of the workflow file. Copy the connection id it
+     shows.
   3. PowerShell, which reads the id from the prompt so nothing is retyped into the command:
 
   ```powershell
   $conn = Read-Host "Docker Hub OIDC connection id"
   gh variable set DOCKERHUB_NAMESPACE --body hybridcloudworks --repo saulpatinojr/HCW-NetworkEyes_App
   gh variable set DOCKERHUB_CONNECTION --body $conn --repo saulpatinojr/HCW-NetworkEyes_App
-  gh variable set DOCKERHUB_ENABLED --body true --repo saulpatinojr/HCW-NetworkEyes_App
-  gh secret delete DOCKERHUB_TOKEN --repo saulpatinojr/HCW-NetworkEyes_App
   ```
 
-  Success looks like: the next push to `main` that
-  touches a Dockerfile runs `200-build-images.yml` with the `Log in to Docker Hub` step green and no `password`
-  input in its log; a failed exchange reads `unable to exchange OIDC token` and means the connection id, the
-  subject claim or its repository scope is wrong (see the troubleshooting page). Delete the secret only after
-  that first green run.
+  Do NOT set `DOCKERHUB_ENABLED` yet. The dry run below needs only these two variables and is what proves the
+  connection; a failed exchange reads `unable to exchange OIDC token` and means the connection id, the subject claim or
+  its repository scope is wrong (see the troubleshooting page). When the dry run is green and the Scout decision below
+  is settled, switch publishing on:
+
+  ```powershell
+  gh variable set DOCKERHUB_ENABLED --body true --repo saulpatinojr/HCW-NetworkEyes_App
+  ```
+
+  Success looks like: the next push to `main` that touches a Dockerfile runs `200-build-images.yml` with the
+  `Log in to Docker Hub` step green and no `password` input in its log. Only after that first green real run, remove
+  the old secret (`gh secret delete DOCKERHUB_TOKEN --repo saulpatinojr/HCW-NetworkEyes_App`).
 - `[REVIEW REQUIRED]` **Dry run of the Docker Hub connection, before `DOCKERHUB_ENABLED` is set.** After this is
   merged to `main` (the job only runs there, because the connection's ruleset names `refs/heads/main`): in the
   browser, **Actions** → **200 · Build Container Images** → **Run workflow**, branch `main`, tick **rehearsal**,

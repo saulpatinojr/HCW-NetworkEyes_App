@@ -547,9 +547,9 @@ Repository owner.
 Choose one:
 1. Move the repositories under a GitHub organization, grant the App
    `organization_projects: write`, and use the App token in the `add-to-project` workflow; or
-2. Create a fine-grained PAT with `project` scope (and `issues`/`pull_requests: read` on the
-   repository), store it as `PROJECT_BOARD_TOKEN` here, and set a rotation
-   reminder.
+2. Create a classic personal access token with the `project` scope (GitHub's fine-grained tokens do not cover a
+   user-owned project; check GitHub's current documentation before choosing), store it as `PROJECT_BOARD_TOKEN`
+   here, and set a rotation reminder.
 
 **Impact if unresolved**
 Work stays visible per repository only. Nothing else depends on this.
@@ -580,12 +580,13 @@ this order:
 2. In Docker Home, create the OIDC connection with one ruleset for `main` (scope Image Push on that repository, used
    by `200`) and, before the first release, a SECOND ruleset for `refs/tags/v*` (Image Push only, used by `310`).
 3. On this repository → *Settings → Secrets and variables → Actions → Variables*: `DOCKERHUB_NAMESPACE`,
-   `DOCKERHUB_CONNECTION` and `DOCKERHUB_ENABLED`. No registry token is created for publishing (the registry cleanup
+   `DOCKERHUB_CONNECTION` (not `DOCKERHUB_ENABLED` yet: step 4). No registry token is created for publishing (the registry cleanup
    `370` still uses a personal access token, step 3 of R-026). Leave *Actions → General → Workflow permissions* on
    *read-only*, which is how it is set (read 2026-10-25): `310` declares its own `contents: write` for the release job.
 4. Decide Docker Scout's credential and run the dry run of the connection (`200` with `rehearsal` ticked: one job that
    logs in, pushes, signs, attests, verifies and tags a throwaway image `rehearsal-<run id>`, which you remove by
-   hand); both are in T-728.
+   hand); both are in T-728. Only when the dry run is green and the Scout decision is settled, set
+   `DOCKERHUB_ENABLED` to `true`.
 5. Run `200 · Build Container Images` once from *Run workflow* (or push to `main` touching a Dockerfile). To release:
    run `310 · Release CLI Tool` as a dry run first, then tag the commit it names (README → *Publishing the images*; the checks are under *Verifying images*).
 6. Keep the branch protection on `main` here (required check `300 · Test Codebase`, review requirements).
