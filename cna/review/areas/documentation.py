@@ -22,7 +22,7 @@ findings so the plan captures what was checked, not only what broke:
     ``CHANGELOG.md``, ``REVIEW.md``, ``TODO.md`` and the one optional
     ``CNA-0.90-updates.md`` — consistent.
   * **Numbered workflows.** ``README`` conventions describe numeric workflow
-    bands shared with the appliances and name the five workflows the core keeps
+    bands and name the five workflows this repository keeps
     (``200-build-images.yml``, ``300-test-codebase.yml``,
     ``310-release-version.yml``, ``320-release-engine.yml``, ``370-registry-cleanup.yml``). All five exist
     under ``.github/workflows/`` and every referenced filename resolves —
@@ -38,11 +38,10 @@ Executable status of documented paths (Requirement 9.2):
     therefore *executable only after* its own install prerequisite — recorded so
     the plan states the path's executable status rather than assuming it runs.
   * **Deploy path.** ``README`` states that deployment does not happen from this
-    repository — each appliance repository owns its cloud's Terraform and deploy
-    workflows, and the AWS appliance's deploy stays fail-fast until its account
-    prerequisites clear (its ``REVIEW.md`` R-001 – R-003). That documented status
-    is accurate: no deploy path is executable from the core, by design, so it is
-    recorded as documented-non-executable-by-design, not a defect.
+    repository, which only publishes the images; whoever deploys them owns the
+    Terraform and the deploy workflows. That documented status
+    is accurate: no deploy path is executable from this repository, by design, so
+    it is recorded as documented-non-executable-by-design, not a defect.
 
 Open doc tasks (Requirement 9.3). Of T-103, T-304, T-401 — checked against
 ``TODO.md`` current status:
@@ -117,7 +116,7 @@ def _accuracy_findings() -> list[Finding]:
                 ".github/workflows/ (200-build-images.yml, 300-test-codebase.yml, "
                 "310-release-version.yml, 320-release-engine.yml, 370-registry-cleanup.yml) and every "
                 "workflow filename README references resolves; the deploy and "
-                "operations workflows live in the appliance repositories (TODO.md "
+                "operations workflows left this repository (TODO.md "
                 "T-504). Reference workflows by filename per the numbered-workflow "
                 "convention."
             ),
@@ -161,12 +160,12 @@ def _executable_status_findings() -> list[Finding]:
             severity=Severity.LOW,
             proposed_action=(
                 "Executable status: the deploy path is not executable from this "
-                "repository — README's Deploying an environment section points "
-                "at the appliance repositories, which own the Terraform and "
-                "deploy workflows (TODO.md T-504); the AWS appliance's deploy "
-                "stays fail-fast until its REVIEW.md R-001 - R-003 clear. "
+                "repository — README's Deploying an environment section says "
+                "that this repository only publishes the images and that "
+                "whoever deploys them owns the Terraform and the deploy "
+                "workflows (TODO.md T-504). "
                 "Recorded as documented-non-executable-by-design; keep README "
-                "pointing at the appliances for deployment."
+                "saying that deployment happens elsewhere."
             ),
             dedup_key="documentation:aws-deploy-path-not-executable",
             subject="README.md::deploying-an-environment",

@@ -98,15 +98,11 @@ def test_coverage_all_nine_owner_areas_represented():
     assert represented == AREAS, f"missing areas: {sorted(AREAS - represented)}"
 
 
-def test_coverage_terraform_areas_point_at_the_appliances():
+def test_coverage_terraform_areas_are_represented_by_their_relocation_records():
     """Requirement 4.1: the Terraform areas are represented by their relocation records."""
     tokens = _all_subject_tokens(build_remediation_plan())
-    assert any(
-        token.startswith("saulpatinojr/Work-Cloud_Network_AWS_Appliance:") for token in tokens
-    )
-    assert any(
-        token.startswith("saulpatinojr/Work-Cloud_Network_Azure_Appliance:") for token in tokens
-    )
+    assert any(token.startswith("aws-deployment-layer:") for token in tokens)
+    assert any(token.startswith("azure-deployment-layer:") for token in tokens)
 
 
 def test_coverage_all_core_ci_workflows_present():

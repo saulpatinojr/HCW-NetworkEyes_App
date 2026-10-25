@@ -8,7 +8,7 @@ The model (README.md → "Repository conventions"): the repository keeps four
 required documents — README.md, CHANGELOG.md, REVIEW.md, TODO.md — and long-form
 documentation lives in the GitHub Wiki. Three more root documents are allowed
 but not required: CLAUDE.md, the agent-instruction file that states the rules an
-AI coding agent must not infer wrongly (the core ↔ appliance contract above
+AI coding agent must not infer wrongly (the image contract above
 all), and two temporary working documents with a planned retirement,
 CNA-0.90-updates.md and REFACTOR_APP.md. That makes seven root documents at
 most. Vendored agent configuration (.claude/, .agents/, .codex/, .kiro/) is

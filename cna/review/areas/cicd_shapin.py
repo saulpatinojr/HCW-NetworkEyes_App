@@ -32,15 +32,15 @@ when* it is not pinned to a 40-hex commit SHA. :func:`is_third_party_action` and
 The live scan over ``.github/workflows/`` at authoring time found two unpinned
 third-party references — ``actions/checkout@v4`` in the AWS deploy workflow and
 ``actions/create-github-app-token@v3`` in the Azure deploy workflow. Both
-workflows left the core with the deployment layer (``TODO.md`` T-504) and are
-now the appliances' to pin; every ``uses:`` reference that remains here is
+workflows left this repository with the deployment layer (``TODO.md`` T-504);
+every ``uses:`` reference that remains here is
 40-hex pinned, so the scan records the single informational all-pinned entry.
 
 Each *distinct* unpinned reference found is recorded once as a fixable
 ``Finding`` (MEDIUM: a mutable tag is a supply-chain exposure,
 engineering-fixable by pinning to the tag's current commit SHA). The R-003
-escalation for the AWS deploy workflow (5.4) that used to be recorded here is
-owned by the AWS appliance's ``REVIEW.md``. These records are consumed by the
+escalation for the AWS deploy workflow (5.4) that used to be recorded here left
+this repository with that workflow. These records are consumed by the
 consolidation step (spec task 14.1).
 """
 
@@ -224,8 +224,8 @@ def cicd_sha_and_escalation_findings(
     """Return spec task 9.3's findings: the SHA-pinning scan (5.3).
 
     The R-003 escalation for the AWS deploy workflow (5.4) that this function
-    used to append left the core with that workflow (``TODO.md`` T-504); the
-    AWS appliance's ``REVIEW.md`` owns it. The name is kept so the plan wiring
+    used to append left this repository with that workflow (``TODO.md`` T-504). The
+    name is kept so the plan wiring
     and its tests read the same.
     """
     return [*sha_pin_findings(workflows_dir)]

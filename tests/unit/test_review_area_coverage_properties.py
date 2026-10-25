@@ -54,10 +54,8 @@ _PROPERTY_SETTINGS = settings(max_examples=100)
 _EXPECTED_AREAS = frozenset(AREAS)
 
 # The two Terraform areas are represented by their relocation records: the
-# Terraform itself lives in the appliance repositories (TODO.md T-504).
-_EXPECTED_AWS_SUBJECTS = frozenset(
-    {"saulpatinojr/Work-Cloud_Network_AWS_Appliance:infra/terraform"}
-)
+# Terraform itself left this repository (TODO.md T-504).
+_EXPECTED_AWS_SUBJECTS = frozenset({"aws-deployment-layer:infra/terraform"})
 
 # The core's numbered CI workflows, recorded as repo-relative workflow subjects.
 _ALL_WORKFLOWS = SELF_HOSTED_ONLY_WORKFLOWS + GITHUB_HOSTED_WORKFLOWS

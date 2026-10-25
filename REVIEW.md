@@ -6,27 +6,27 @@ that belongs to a named owner outside the engineering task itself.
 
 Anything an engineer can solve without external input belongs in [`TODO.md`](TODO.md), not here.
 
-**Last reviewed:** 2026-09-23
+**Last reviewed:** 2026-10-25
 
 | ID | Blocker | Owner | Status |
 |---|---|---|---|
-| [R-001](#r-001--aws-account-and-administrative-access) | AWS account + administrative access for first deploy | AWS account owner | Open — tracked in the AWS appliance's `REVIEW.md` (R-001); deploy layer moved 2026-09-15 |
-| [R-002](#r-002--terraform-s3-state-backend-must-be-created-out-of-band) | Terraform S3 state backend + DynamoDB lock table | AWS account owner | Open — tracked in the AWS appliance's `REVIEW.md` (R-002); deploy layer moved 2026-09-15 |
-| [R-003](#r-003--github-oidc-deploy-role-must-be-wired-into-ci) | GitHub OIDC deploy role wired into CI secrets | Repository admin | Open — tracked in the AWS appliance's `REVIEW.md` (R-003); deploy layer moved 2026-09-15 |
-| [R-004](#r-004--acm-certificates-and-custom-domain-decision) | ACM certificates + custom-domain decision | DNS / domain owner | Open — tracked in the AWS appliance's `REVIEW.md` (R-004); deploy layer moved 2026-09-15 |
-| [R-005](#r-005--amazon-bedrock-model-access-opt-in) | Amazon Bedrock foundation-model access opt-in | AWS account owner | Open — tracked in the AWS appliance's `REVIEW.md` (R-005); deploy layer moved 2026-09-15 |
-| [R-006](#r-006--runtime-secrets-have-no-defaults-and-must-be-supplied) | Runtime secrets supplied at apply time | Security / secret owner | Open — tracked in the AWS appliance's `REVIEW.md` (R-008); transferred 2026-09-15 |
+| [R-001](#r-001--aws-account-and-administrative-access) | AWS account + administrative access for first deploy | AWS account owner | Not tracked here — the deploy layer left this repository on 2026-09-15 (`TODO.md` T-504) |
+| [R-002](#r-002--terraform-s3-state-backend-must-be-created-out-of-band) | Terraform S3 state backend + DynamoDB lock table | AWS account owner | Not tracked here — the deploy layer left this repository on 2026-09-15 (`TODO.md` T-504) |
+| [R-003](#r-003--github-oidc-deploy-role-must-be-wired-into-ci) | GitHub OIDC deploy role wired into CI secrets | Repository admin | Not tracked here — the deploy layer left this repository on 2026-09-15 (`TODO.md` T-504) |
+| [R-004](#r-004--acm-certificates-and-custom-domain-decision) | ACM certificates + custom-domain decision | DNS / domain owner | Not tracked here — the deploy layer left this repository on 2026-09-15 (`TODO.md` T-504) |
+| [R-005](#r-005--amazon-bedrock-model-access-opt-in) | Amazon Bedrock foundation-model access opt-in | AWS account owner | Not tracked here — the deploy layer left this repository on 2026-09-15 (`TODO.md` T-504) |
+| [R-006](#r-006--runtime-secrets-have-no-defaults-and-must-be-supplied) | Runtime secrets supplied at apply time | Security / secret owner | Not tracked here — left this repository on 2026-09-15 (`TODO.md` T-507) |
 | [R-007](#r-007--azure-subscription-resource-provider-registration) | `Microsoft.AlertsManagement` provider registration | Azure subscription owner | Resolved — no longer required |
-| [R-008](#r-008--live-azure-beta-acceptance-sign-off) | 0.8 beta exit — live Azure acceptance sign-off | Product owner | Open — deploy done 2026-08-28, acceptance outstanding; tracked in the Azure appliance's `REVIEW.md` (R-003); transferred 2026-09-15 |
+| [R-008](#r-008--live-azure-beta-acceptance-sign-off) | 0.8 beta exit — live Azure acceptance sign-off | Product owner | Not tracked here — deploy done 2026-08-28, acceptance outstanding; left this repository on 2026-09-15 (`TODO.md` T-507) |
 | [R-009](#r-009--github-wiki-write-access-for-documentation-migration) | GitHub Wiki write access to publish prepared pages | Repository owner | Open — not blocking |
-| [R-010](#r-010--the-dev-environment-has-no-protection-against-out-of-band-deletion) | Dev environment deleted out of band; no protection against a repeat | Azure subscription owner | Open — tracked in the Azure appliance's `REVIEW.md` (R-004); transferred 2026-09-15 |
+| [R-010](#r-010--the-dev-environment-has-no-protection-against-out-of-band-deletion) | Dev environment deleted out of band; no protection against a repeat | Azure subscription owner | Not tracked here — left this repository on 2026-09-15 (`TODO.md` T-507) |
 | [R-011](#r-011--security-review-of-the-bring-your-own-ai-key-path-and-provider-egress) | Security review: bring-your-own AI key handling + firewall egress to Anthropic/OpenAI | Security | Open — before the first `byo-api` deploy |
-| [R-012](#r-012--token-for-a-shared-project-board-across-three-repositories) | Token type for a shared project board (PAT vs GitHub App / organization) | Repository owner | Open — not blocking |
-| [R-013](#r-013--bring-this-repository-live-and-cut-the-appliances-over-to-it) | Bring this repository live: Docker Hub OIDC variables, GitHub App, `CORE_REPO` → `HCW-NetworkEyes_App` in both appliances | Repository owner | Open — blocks the first image publish from this repository (T-728) |
-| [R-014](#r-014--move-the-wiki-and-delete-the-original-repository) | Move the Wiki, then delete `Work-Cloud_Network_Assessment` | Repository owner | Superseded 2026-10-11 — this repository (the renamed original) is the product and is not deleted; the Wiki moves here (R-023) |
-| [R-015](#r-015--decide-the-customer-facing-appliance-repository-names) | Decide the customer-facing appliance repository names (`*_Appliance` vs `*_Assessment`) | Repository owner | Open — not blocking |
-| [R-016](#r-016--retire-appscna-worker-and-its-image-service-and-catalog-slot) | Retire `apps/cna-worker` — placeholder deployed as an always-on service in both appliances | Repository owner | Open — v1.0 review finding IMG-003 / ARCH-101 |
-| [R-017](#r-017--stop-publishing-the-cli-image-on-every-push) | Stop building/publishing the CLI image `cna:sha-<7>` (no appliance consumes it) | Repository owner | Open — not blocking |
+| [R-012](#r-012--token-for-a-shared-project-board) | Token type for a shared project board (PAT vs GitHub App / organization) | Repository owner | Open — not blocking |
+| [R-013](#r-013--bring-this-repository-live-the-docker-hub-repository-its-oidc-connection-and-the-first-publish) | Bring this repository live: the Docker Hub repository, its OIDC connection, the variables and the first publish | Repository owner | Open — blocks the first image publish from this repository (T-728) |
+| [R-014](#r-014--move-the-wiki-and-delete-the-original-repository) | Move the Wiki, then delete the original repository | Repository owner | Superseded 2026-10-11 — this repository (the renamed original) is the product and is not deleted; the Wiki moves here (R-023) |
+| [R-015](#r-015--decide-the-customer-facing-appliance-repository-names) | Decide the customer-facing appliance repository names | Repository owner | Withdrawn 2026-10-25 — not this repository's decision |
+| [R-016](#r-016--retire-appscna-worker-and-its-image-and-service) | Retire `apps/cna-worker` — placeholder that runs as an always-on service in a deployment | Repository owner | Open — v1.0 review finding IMG-003 / ARCH-101 |
+| [R-017](#r-017--stop-publishing-the-cli-image-on-every-push) | Stop building/publishing the CLI image `sha-<7>` (nothing in this repository pulls it except the release) | Repository owner | Open — not blocking |
 | [R-018](#r-018--remove-cnareview-from-the-shipped-package) | Move `cna/review/**` out of the shipped package and API image | Repository owner | Open — not blocking |
 | [R-019](#r-019--diagram-editor-sends-customer-topology-to-embeddiagramsnet) | Diagram editor posts customer topology XML to public `embed.diagrams.net`; no offline path | Product owner / Security | Open — data-governance decision |
 | [R-020](#r-020--aeonik-font-licence-and-oci-licence-label) | Aeonik typeface licence coverage; OCI label `Proprietary` vs Apache-2.0 `LICENSE` | Legal / brand | Open — [VERIFY] |
@@ -34,12 +34,13 @@ Anything an engineer can solve without external input belongs in [`TODO.md`](TOD
 | [R-022](#r-022--version-100-release-identity) | Version 1.0.0 identity: withdrawn `[1.0.0]` heading, version strings, first tag | Repository owner | Open — before the first `v*` tag |
 | [R-025](#r-025--the-drawio-mcp-route-is-internal-only) | Is `/api/drawio-mcp` public or internal only? | Repository owner | Decided 2026-10-24 — internal only; implemented (ticket #245) |
 | [R-026](#r-026--owner-steps-after-the-governance-and-ci-hygiene-change) | Add three new checks to the `Protect main` ruleset; confirm private vulnerability reporting; the `370` token | Repository owner | Open — raised with the governance and CI hygiene pull request (tickets #247, #252, #253) |
+| [R-027](#r-027--remove-the-orphaned-cloud-trust-entries-of-the-earlier-repository-name) | Remove the cloud trust entries (Azure federated credentials, AWS role trust) that name this repository by its earlier name | Repository owner / cloud account owners | Open — not blocking |
 
 ---
 
 ## R-001 — AWS account and administrative access
 
-> **Moved 2026-09-15.** The Terraform and workflows this blocker gates left the core with `TODO.md` → T-504 and live in the AWS appliance repository, where the blocker is tracked as **R-001** with paths rebased to `infra/terraform/modules/`. This entry is kept for history and for the references below; resolve it there.
+> **Moved 2026-09-15.** The Terraform and workflows this blocker gates left this repository with `TODO.md` → T-504. It is not tracked here; this entry is kept as history.
 
 **Problem**
 The AWS Terraform under `infra/terraform/providers/aws/` and
@@ -82,7 +83,7 @@ dev + prod together) before any further AWS engineering effort is scheduled.
 
 ## R-002 — Terraform S3 state backend must be created out of band
 
-> **Moved 2026-09-15.** The Terraform and workflows this blocker gates left the core with `TODO.md` → T-504 and live in the AWS appliance repository, where the blocker is tracked as **R-002** with paths rebased to `infra/terraform/modules/`. This entry is kept for history and for the references below; resolve it there.
+> **Moved 2026-09-15.** The Terraform and workflows this blocker gates left this repository with `TODO.md` → T-504. It is not tracked here; this entry is kept as history.
 
 **Problem**
 Every AWS root uses an empty `backend "s3" {}` block — the same init-time-configuration pattern
@@ -125,7 +126,7 @@ Decide bucket and table naming (the Azure convention is
 
 ## R-003 — GitHub OIDC deploy role must be wired into CI
 
-> **Moved 2026-09-15.** The Terraform and workflows this blocker gates left the core with `TODO.md` → T-504 and live in the AWS appliance repository, where the blocker is tracked as **R-003** with paths rebased to `infra/terraform/modules/`. This entry is kept for history and for the references below; resolve it there.
+> **Moved 2026-09-15.** The Terraform and workflows this blocker gates left this repository with `TODO.md` → T-504. It is not tracked here; this entry is kept as history.
 
 **Problem**
 The `identity` module provisions the GitHub OIDC provider and a deploy role assumable via
@@ -167,7 +168,7 @@ must import it rather than create it — plan for that before the first apply.
 
 ## R-004 — ACM certificates and custom-domain decision
 
-> **Moved 2026-09-15.** The Terraform and workflows this blocker gates left the core with `TODO.md` → T-504 and live in the AWS appliance repository, where the blocker is tracked as **R-004** with paths rebased to `infra/terraform/modules/`. This entry is kept for history and for the references below; resolve it there.
+> **Moved 2026-09-15.** The Terraform and workflows this blocker gates left this repository with `TODO.md` → T-504. It is not tracked here; this entry is kept as history.
 
 **Problem**
 TLS certificates are taken as **inputs** (`alb_certificate_arn`, `acm_certificate_arn`, both
@@ -207,7 +208,7 @@ single CloudFront-default deployment with no certificate work at all.
 
 ## R-005 — Amazon Bedrock model access opt-in
 
-> **Moved 2026-09-15.** The Terraform and workflows this blocker gates left the core with `TODO.md` → T-504 and live in the AWS appliance repository, where the blocker is tracked as **R-005** with paths rebased to `infra/terraform/modules/`. This entry is kept for history and for the references below; resolve it there.
+> **Moved 2026-09-15.** The Terraform and workflows this blocker gates left this repository with `TODO.md` → T-504. It is not tracked here; this entry is kept as history.
 
 **Problem**
 Amazon Bedrock foundation-model access is granted per account **and** per region through a
@@ -243,7 +244,7 @@ multi-hour approval delay for some models, so it should not be discovered late.
 
 ## R-006 — Runtime secrets have no defaults and must be supplied
 
-> **Transferred 2026-09-15** to the AWS appliance's `REVIEW.md` as **R-008** (`TODO.md` → T-507). Resolve it there; this entry is history.
+> **Left this repository 2026-09-15** (`TODO.md` → T-507). It is not tracked here; this entry is history.
 
 **Problem**
 Five runtime inputs are declared `sensitive` with **no defaults** and are intentionally absent
@@ -286,7 +287,7 @@ provisions Secrets Manager entries, so seeding is the closer mirror.
 
 ## R-007 — Azure subscription resource-provider registration
 
-> **Note 2026-09-15.** The `100-validate-prereqs` provider check and the `211` registration step this entry discusses are Azure appliance workflows now (`TODO.md` → T-504).
+> **Note 2026-09-15.** The `100-validate-prereqs` provider check and the `211` registration step this entry discusses are no longer in this repository (`TODO.md` → T-504).
 
 **Status: Resolved — nothing is required of the subscription owner.**
 
@@ -339,7 +340,7 @@ operation the deploy identity cannot perform itself.
 
 ## R-008 — Live Azure beta acceptance sign-off
 
-> **Transferred 2026-09-15** to the Azure appliance's `REVIEW.md` as **R-003** (`TODO.md` → T-507). Resolve it there; this entry is history.
+> **Left this repository 2026-09-15** (`TODO.md` → T-507). It is not tracked here; this entry is history.
 
 **Problem**
 The repository is at `0.8.0b0`. Code, Terraform, workflows, and the changelog are aligned on
@@ -359,7 +360,7 @@ Product owner (with the AWS/Azure account owners for the deploy windows).
    and `CNA-0.90-updates.md` §5), so it was rebuilt from nothing via `000` → `100` → `211`.
    Run `33169632082`, all jobs green.
 2. **Review the deployment evidence artifacts produced by the workflow run.** These now exist:
-   `.deployment-catalog/dev/33169632082.json` records `health_status: healthy`, 100% origin
+   The run's deployment record (removed from this repository with T-504) recorded `health_status: healthy`, 100% origin
    health, and passing canary, staged-promotion, certificate and private-endpoint checks.
    **Read the two `required` markers before accepting** — `foundry_private_dns_validation` and
    `foundry_managed_identity_inference` are never set by any workflow step, so a `healthy`
@@ -429,7 +430,7 @@ merge rather than create.
 
 ## R-010 — The dev environment has no protection against out-of-band deletion
 
-> **Transferred 2026-09-15** to the Azure appliance's `REVIEW.md` as **R-004** (`TODO.md` → T-507). Resolve it there; this entry is history.
+> **Left this repository 2026-09-15** (`TODO.md` → T-507). It is not tracked here; this entry is history.
 
 **Problem**
 The entire Azure dev environment — workload resource group *and* the `-tfstate` resource group
@@ -470,7 +471,7 @@ would be materially faster — but it would still be a rebuild, with a fresh, em
 **References**
 - [`CNA-0.90-updates.md`](CNA-0.90-updates.md) → §5 (the full rebuild record)
 - [`TODO.md`](TODO.md) → T-416 (the drift check that detected this and told no one)
-- `.deployment-catalog/dev/33169632082.json` (the rebuild's evidence)
+- The deployment record of that run (the rebuild's evidence; removed from this repository with T-504)
 
 **Recommended next step**
 Ask the sandbox administrator the one question that decides everything else: is
@@ -509,7 +510,7 @@ Security.
 1. Review the key lifecycle: entry (`admin/ai-engine/actions.ts`, admin-only), storage
    (`lib/ai-byo-credentials.ts`), decryption points (`lib/ai-engine.ts`,
    `apps/cna-api/routers/chat.py`), and that no path logs, returns, or persists a plaintext key.
-2. Approve or amend the two egress FQDNs and decide whether the AWS appliance needs an equivalent
+2. Approve or amend the two egress FQDNs and decide whether an AWS deployment needs an equivalent
    outbound control before its first byo-api deploy.
 3. Confirm the key-probe (a `GET /v1/models` against the provider at save time) is acceptable, or
    ask for it to be disabled (`setByoApiKey(..., { probe: false })`).
@@ -525,15 +526,13 @@ inert when `CNA_AI_MODE` is `saas` or unset.
 
 ---
 
-## R-012 — Token for a shared project board across three repositories
+## R-012 — Token for a shared project board
 
 **Problem**
-`TODO.md` → T-505 wants one GitHub Project (v2) holding issues and pull requests from the core and
-both appliance repositories, populated automatically by an `add-to-project` workflow in each.
-User-owned Projects v2 are **not** reachable with a GitHub App installation token — the App that
-already backs cross-repository dispatch cannot add items to a user project — so the workflow needs
-either a fine-grained personal access token with `project` scope stored as a secret in three
-repositories, or the repositories moved under an organization where the App can hold the
+`TODO.md` → T-505 wants one GitHub Project (v2) holding this repository's issues and pull requests, populated
+automatically by an `add-to-project` workflow. User-owned Projects v2 are **not** reachable with a GitHub App
+installation token, so the workflow needs either a fine-grained personal access token with `project` scope stored as
+a secret in this repository, or the repositories moved under an organization where the App can hold the
 `organization_projects` permission.
 
 **Why it needs an owner**
@@ -546,201 +545,99 @@ Repository owner.
 
 **Required action**
 Choose one:
-1. Move the three repositories under a GitHub organization, grant the existing App
-   `organization_projects: write`, and use the App token in the `add-to-project` workflows; or
-2. Create a fine-grained PAT with `project` scope (and `issues`/`pull_requests: read` on the three
-   repositories), store it as `PROJECT_BOARD_TOKEN` in each repository, and set a rotation
-   reminder.
+1. Move the repositories under a GitHub organization, grant the App
+   `organization_projects: write`, and use the App token in the `add-to-project` workflow; or
+2. Create a classic personal access token with the `project` scope (GitHub's fine-grained tokens do not cover a
+   user-owned project; check GitHub's current documentation before choosing), store it as `PROJECT_BOARD_TOKEN`
+   here, and set a rotation reminder.
 
 **Impact if unresolved**
-Work stays visible per repository only; the appliances' `update-available` issues are not
-aggregated. Nothing else depends on this.
+Work stays visible per repository only. Nothing else depends on this.
 
 **References**
 - [`TODO.md`](TODO.md) → T-505
 
 ---
 
-## R-013 — Bring this repository live and cut the appliances over to it
+## R-013 — Bring this repository live: the Docker Hub repository, its OIDC connection and the first publish
 
 **Problem**
-`TODO.md` → T-509 moved the core into `Work-Cloud_Network_Core` on 2026-09-18; on 2026-10-10 the owner merged
-that lineage back here and decided (2026-10-11) that **this repository is the product and the Core is reference
-only: nothing for this repository is written there.** The configuration the publishing workflows read therefore
-belongs to this repository, and the appliances' `230-image-update` must poll this repository's manifest instead of
-the frozen one their `CORE_REPO` variable still names.
+NetworkEyes stands alone (owner decision 2026-10-25): this repository builds, signs and publishes its own images to
+Docker Hub and depends on nothing but itself and that registry. The publishing workflows read repository variables and
+a Docker Hub OIDC connection that only the owner can create; none of them can be committed. Until they exist, no image
+is published from this repository.
 
 **Why it needs an owner**
-Repository variables, App installations, branch protection and the appliances' variables are settings only the
-repository owner can write; none of them can be committed.
+Docker Hub repositories and OIDC connections, repository variables and branch protection are settings only the
+repository owner can write.
 
 **Required owner**
 Repository owner.
 
-**Required action** — in this order, so the appliances never lose their image source:
-1. On **this repository** → *Settings*: the Docker Hub OIDC connection and the variables `DOCKERHUB_NAMESPACE`,
-   `DOCKERHUB_CONNECTION` and `DOCKERHUB_ENABLED` (`TODO.md` → T-728 carries the page, the subject-claim rules and the
-   `gh variable set` lines; no registry token is created; the image repository is `img-ne-appliance-app`, created
-   public on Docker Hub first), the variable `APPLIANCE_REPOS`
-   (`Work-Cloud_Network_Azure_Appliance,Work-Cloud_Network_AWS_Appliance`) with `APPLIANCE_OWNER`
-   (`saulpatino-cbts`, the account that owns them), a SECOND ruleset on the Docker connection for tags
-   (`...:ref:refs/tags/v*`, Image Push on `img-ne-appliance-app`) before the first release, a decision on
-   Docker Scout's credential (`TODO.md` T-728), and the secrets `GH_APP_ID`,
-   `GH_APP_PRIVATE_KEY` for the cross-repository dispatch. Set *Actions → General → Workflow permissions* to
-   *Read and write* (`310` and the manifest commit in `200` need it).
-2. No runner to register: every workflow here and in both appliances runs on GitHub-hosted runners.
-3. Install the GitHub App that backs the cross-repository dispatch on this repository: `200` uses it to notify the
-   appliances, and each appliance's `230` uses it to read this repository's manifest.
-4. Run `200 · Build Container Images` once from *Run workflow* (or push to `main` touching a Dockerfile) so
-   `.deployment-catalog/latest-build.json` on `main` is written by this repository through the OIDC login.
-5. In **both** appliances set the variable `CORE_REPO` to `HCW-NetworkEyes_App` and merge their repoint pull
-   requests. From that moment `230` polls this repository. The Core receives no variable, secret, App or push.
+**Required action** — `TODO.md` → T-728 has the pages, the subject-claim rules and the exact commands. In short, in
+this order:
+1. On Docker Hub, in the `hybridcloudworks` organisation, create the **public** repository `img-ne-appliance-app`.
+2. In Docker Home, create the OIDC connection with one ruleset for `main` (scope Image Push on that repository, used
+   by `200`) and, before the first release, a SECOND ruleset for `refs/tags/v*` (Image Push only, used by `310`).
+3. On this repository → *Settings → Secrets and variables → Actions → Variables*: `DOCKERHUB_NAMESPACE`,
+   `DOCKERHUB_CONNECTION` (not `DOCKERHUB_ENABLED` yet: step 4). No registry token is created for publishing (the registry cleanup
+   `370` still uses a personal access token, step 3 of R-026). Leave *Actions → General → Workflow permissions* on
+   *read-only*, which is how it is set (read 2026-10-25): `310` declares its own `contents: write` for the release job.
+4. Decide Docker Scout's credential and run the dry run of the connection (`200` with `rehearsal` ticked: one job that
+   logs in, pushes, signs, attests, verifies and tags a throwaway image `rehearsal-<run id>`, which you remove by
+   hand); both are in T-728. Only when the dry run is green and the Scout decision is settled, set
+   `DOCKERHUB_ENABLED` to `true`.
+5. Run `200 · Build Container Images` once from *Run workflow* (or push to `main` touching a Dockerfile). To release:
+   run `310 · Release CLI Tool` as a dry run first, then tag the commit it names (README → *Publishing the images*; the checks are under *Verifying images*).
 6. Keep the branch protection on `main` here (required check `300 · Test Codebase`, review requirements).
 
 **Impact if unresolved**
-Two repositories claim to be the core; images keep being built from a repository the documents say is reference
-only, and the appliances never see a build from this one.
+No image is published from this repository, so there is nothing to scan, sign, release or pull.
 
 **References**
-- [`TODO.md`](TODO.md) → T-509 (history), T-728 (the owner steps with commands)
+- [`TODO.md`](TODO.md) → T-728 (the owner steps with commands)
 - `.github/workflows/200-build-images.yml`, `310-release-version.yml`, `370-registry-cleanup.yml`
   (the variables each reads are in its header and `vars.*` references)
-- Appliances: `README.md` → *Configuration* (`CORE_REPO`), `230-image-update.yml`
 
 ---
 
 ## R-014 — Move the Wiki and delete the original repository
 
-> **Superseded 2026-10-11.** The original repository is this one, renamed `HCW-NetworkEyes_App`; on 2026-10-10 the owner merged the
-> Core lineage back here and on 2026-10-11 decided that this repository is the product and `Work-Cloud_Network_Core` is
-> reference only. Nothing here is deleted. Of the steps below only the Wiki move survives, reversed in direction: the pages
-> on the Core's wiki come back to this repository's wiki (R-023); `CORE_REPO` in both appliances points at
-> `HCW-NetworkEyes_App` (R-013 step 5). The text below is kept as the record of the earlier plan.
-
-**Problem**
-The original repository, `Work-Cloud_Network_Assessment`, is retired: its tree has been a pointer
-since 2026-09-21 (its pull request #178) and the owner has decided to **delete** it rather than
-archive it. Deletion also removes its issues, pull requests, releases, Wiki and the legacy GHCR
-packages, so anything the platform still needs from it has to live in this repository or in one of
-the two appliances first.
-
-**What engineering verified (2026-09-24)**
-- *Files.* All 8,857 paths at its last full commit (`5d3b914`) are in this repository's history —
-  `5d3b914` is an ancestor of `main`. 8,851 are on `main` byte-for-byte or superseded by later edits
-  here; the other 6 were removed deliberately: `.kiro/specs/production-readiness/*` (#20, vendored-pack
-  sweep) and `apps/cna-web/app/(dashboard)/engagements/[id]/analysis/run-form.tsx` (#21, dead-code
-  sweep; nothing imported it). The deployment layer had already moved to the appliances (T-504 – T-508).
-- *Branches.* Only `main` and the pointer branch exist; no unmerged work.
-- *Issues and pull requests.* None open. Closed threads are cited in this repository's documents by
-  number only; those citations are historical and are not expected to resolve.
-- *Releases and tags.* `v0.1.0` and `v0.8.0` — both commits are on `main` here and their content is
-  `CHANGELOG.md` → 0.1.0 and 0.8.0-beta. The tags are **not** recreated here: a `v*.*.*` push
-  triggers `310-release-version`, which would rebuild and republish an old commit.
-- *Container images.* The appliances pull `docker.io/<namespace>/cna:*-sha-*`; the Azure appliance's
-  live catalog entry is on Docker Hub. The GHCR packages those two releases named
-  (`ghcr.io/saulpatinojr/Work-Cloud_Network_Assessment`, `ghcr.io/saulpatinojr/MVP-Cloud_Network_Assessment`)
-  are used by nothing current; the Azure catalog archives from run `24168247436` to `24585307176`
-  name them and become non-restorable, which is accepted.
-- *Actions secrets and variables.* The set the original's workflows consumed (`DOCKERHUB_NAMESPACE`,
-  `DOCKERHUB_TOKEN`, `DOCKERHUB_PERSONAL_USERNAME`, `DOCKERHUB_PERSONAL_TOKEN`, `APPLIANCE_REPOS`,
-  `GH_APP_ID`, `GH_APP_PRIVATE_KEY`) is exactly the set this repository's workflows consume — R-013.
-- *Wiki.* Not verifiable from the engineering side (a Wiki is a separate git repository that needs
-  write access, R-009); step 1 below.
-
-**Why it needs an owner**
-The Wiki move needs write access, repository settings and cloud identity federation can only be read
-by an admin, and deleting a repository is owner-only and final after GitHub's 90-day restore window.
-
-**Required owner**
-Repository owner.
-
-**Required action** — in this order; the deletion is last
-1. Move the Wiki: `git clone https://github.com/saulpatinojr/Work-Cloud_Network_Assessment.wiki.git`, add
-   `https://github.com/saulpatinojr/Work-Cloud_Network_Core.wiki.git` as a remote and push `master`
-   (create one page in the new Wiki first so the Wiki repository exists). Confirm the page count
-   matches. This also closes the destination half of R-009.
-2. Set `CORE_REPO` to `Work-Cloud_Network_Core` in **both** appliances (Azure R-005, AWS R-009) and
-   run `230 · Image Update` once in each. After the deletion the old value fails with a 404.
-3. Make `DOCKERHUB_NAMESPACE` visible to this repository's Actions and run `200 · Build Container
-   Images` once (R-013 step 4). Every run so far has failed on that variable, so no manifest has been
-   published from here yet.
-4. Open <https://github.com/saulpatinojr?tab=packages>. If either legacy GHCR package must survive,
-   retag it to Docker Hub before the deletion; otherwise let it go with the repository.
-5. Remove the original repository's Actions secrets, variables, environments and any runner
-   registration. In Azure and AWS, delete the federated identity credentials / OIDC role trust
-   entries whose subject names `repo:saulpatinojr/Work-Cloud_Network_Assessment:*` — they are orphaned.
-6. Confirm nothing you still need is owned by that repository: a repository-level project board,
-   a GitHub App installation scoped to it, or Dependabot alerts (T-204 now re-triages on this
-   repository's Security tab).
-7. Delete it: *Settings → Danger Zone → Delete this repository*. GitHub can restore a deleted
-   repository for 90 days.
-
-**Impact if unresolved**
-The pointer repository lingers with its secrets and variables still set; nothing breaks, but the
-documents in three repositories say it is gone.
-
-**References**
-- [`TODO.md`](TODO.md) → T-509, T-601 (the Wiki pages still waiting on R-009)
-- R-009, R-013; Azure appliance R-005, AWS appliance R-009
+> **Superseded 2026-10-11.** The original repository is this one, renamed `HCW-NetworkEyes_App`. On 2026-10-10 the
+> owner merged the lineage of the separate core repository back here, and on 2026-10-11 decided that this repository is
+> the product and the separate core repository is reference only. Nothing here is deleted. Of the earlier plan only
+> the Wiki move survives, reversed in direction: the pages on the earlier core repository's wiki come back to this
+> repository's wiki (R-023). The earlier plan (delete the original after repointing other repositories' variables and
+> migrating the legacy container packages) is withdrawn; this repository sets nothing in any other repository.
 
 ---
 
 ## R-015 — Decide the customer-facing appliance repository names
 
-**Problem**
-The target topology names the customer-facing solutions the **Azure Assessment** and the **AWS
-Assessment**, but the repositories are `Work-Cloud_Network_Azure_Appliance` and
-`Work-Cloud_Network_AWS_Appliance`. Whether the repositories should be renamed to match is a
-product-naming decision, and a rename touches every cross-reference: the `APPLIANCE_REPOS` variable
-here, the `cna-image-published` dispatch targets, `cna/review/areas/terraform_relocated.py` and its
-tests, `CLAUDE.md`/`README.md` in all three repositories, and the sibling links inside each
-appliance.
-
-**Why it needs an owner**
-Customer-facing names are the owner's call; GitHub redirects the old name for git and web traffic
-but the API dispatch in `200` and the documents must be updated in the same change set.
-
-**Required owner**
-Repository owner.
-
-**Required action**
-Choose one:
-1. Keep `*_Appliance` (no change; the documents already describe them as the customer-facing
-   solutions), or
-2. Rename both to `Work-Cloud_Network_Azure_Assessment` / `Work-Cloud_Network_AWS_Assessment` and
-   open a `TODO.md` item here to update `APPLIANCE_REPOS`, the review-engine constants and every
-   document link in the three repositories together.
-
-**Impact if unresolved**
-None operationally; the prose and the repository names disagree.
-
-**References**
-- [`TODO.md`](TODO.md) → T-509
-- `.github/workflows/200-build-images.yml` (`APPLIANCE_REPOS`), `cna/review/areas/terraform_relocated.py`
+> **Withdrawn 2026-10-25.** The repositories that deploy the images belong to another owner's account and are not
+> part of this repository (NetworkEyes stands alone, see R-013). Their names are not this repository's decision, and
+> the variables, dispatch targets and review-engine constants the earlier text said a rename would touch no longer exist.
 
 ---
 
-## R-016 — Retire `apps/cna-worker` and its image, service and catalog slot
+## R-016 — Retire `apps/cna-worker` and its image and service
 
 **Problem**
 `apps/cna-worker/main.py` is a 101-line placeholder: it writes a "CNA publish placeholder" HTML
 file for a hard-coded `sample-engagement` and exits. `POST /publish` superseded it
-(`CHANGELOG.md`, "The client-portal publish story is real"). Both appliances still deploy it as an
-always-on service (Azure `modules/compute/main.tf`, AWS `modules/compute/main.tf`), so it exits and
-restarts continuously, its image is built and scanned on every push, and `latest-build.json`,
-`210`, `230`, `350` and `360` all carry a `worker` slot.
+(`CHANGELOG.md`, "The client-portal publish story is real"). A deployment of the images still runs it as an
+always-on service, so it exits and restarts continuously, and its image is built and scanned on every push.
 
 **Why it needs an owner**
-Removing it destroys a live Container App in Azure dev and changes the core ↔ appliance contract
-(`images.worker`), which `CLAUDE.md` says is never a unilateral cleanup.
+Removing it changes the published image set (the `worker` image and its `worker-<version>` release tag), which consumers rely on and which `CLAUDE.md`
+(*The image contract*) says is never a unilateral cleanup.
 
 **Required owner**
 Repository owner.
 
 **Required action**
-Approve one coordinated change set across the three repositories: delete `apps/cna-worker` and its
-Dockerfile and build job here; remove the worker service, image inputs and catalog fields in both
-appliances.
+Approve deleting `apps/cna-worker` and its Dockerfile and build job here, recorded under `Changed` in `CHANGELOG.md`
+and in the release notes so that whoever deploys the images can drop the worker service.
 
 **Impact if unresolved**
 Wasted compute, a permanently restarting container in every environment, and documentation that
@@ -752,8 +649,8 @@ describes a component that does nothing.
 ## R-017 — Stop publishing the CLI image on every push
 
 **Problem**
-No appliance references `images.cli` (`grep` over both appliances: zero hits outside
-`320-publish-portal`). It is the largest image (draw.io + Electron + Xvfb) and its root
+Nothing in this repository pulls the CLI image (`sha-<7>`) except the release, which gives it the `<version>` tag (the other four images get `<component>-<version>`).
+It is the largest image (draw.io + Electron + Xvfb) and its root
 `COPY . .` ships `TODO.md`, `REVIEW.md` and `cna/review/**` inside a customer-pullable artifact.
 
 **Required owner**
@@ -761,8 +658,8 @@ Repository owner.
 
 **Required action**
 Decide: keep the CLI image as a developer-only local build (`docker-compose.yml` already has it) and
-drop it from `200-build-images.yml`, `310` and the manifest; or keep publishing and fence the build
-context.
+drop it from `200-build-images.yml` and `310` (a release would then lose the plain `<version>` tag, which sits on the CLI image); or
+keep publishing and fence the build context.
 
 **Impact if unresolved**
 Extra build time and scan noise on every push; repository-internal documents in a shipped image.
@@ -876,28 +773,28 @@ A customer cannot tell what "1.0" they run; a new `[1.0.0]` heading would collid
 ## R-023 — Wiki content after the restore
 
 - **Decision (owner, 2026-10-11):** this repository's wiki (<https://github.com/saulpatinojr/HCW-NetworkEyes_App/wiki>)
-  is the home; the Core is reference only and receives nothing. The pages (architecture, ADRs, runbooks, workflow
-  reference) still live on `Work-Cloud_Network_Core`'s wiki until the owner moves them. PowerShell, any folder (create
-  one page in this repository's wiki first so its wiki repository exists):
+  is the home; the earlier core repository is reference only and receives nothing. The pages (architecture, ADRs,
+  runbooks, workflow reference) still live on that repository's wiki until the owner moves them. PowerShell, any
+  folder (create one page in this repository's wiki first so its wiki repository exists). The command asks for the
+  address of the earlier core repository's wiki, which its **Wiki** tab shows and which ends in `.wiki.git`:
 
   ```powershell
-  git clone -q https://github.com/saulpatinojr/Work-Cloud_Network_Core.wiki.git $env:TEMP\hcw-ne-wiki; git -C $env:TEMP\hcw-ne-wiki remote add app https://github.com/saulpatinojr/HCW-NetworkEyes_App.wiki.git; git -C $env:TEMP\hcw-ne-wiki -c user.email=34853639+saulpatinojr@users.noreply.github.com -c user.name=saulpatinojr push app master --force
+  $source = Read-Host "Address of the earlier core repository's wiki (ends in .wiki.git)"; git clone -q $source $env:TEMP\hcw-ne-wiki; git -C $env:TEMP\hcw-ne-wiki remote add app https://github.com/saulpatinojr/HCW-NetworkEyes_App.wiki.git; git -C $env:TEMP\hcw-ne-wiki -c user.email=34853639+saulpatinojr@users.noreply.github.com -c user.name=saulpatinojr push app master --force
   ```
 
-  Success looks like: the page count at the App wiki equals the Core wiki's. The Core wiki is left as is.
+  Success looks like: the page count at the App wiki equals the earlier wiki's. The earlier wiki is left as is.
 - **Raised:** 2026-10-10, with the restore of the Core lineage into this repository.
 - **Status:** Decided; the move is an owner step
 
 ## R-024 — Image signing identity after the restore
 
-- **Decision needed:** both appliances verify images against `IMAGE_SIGNING_IDENTITY`, which names the
-  Core's `200-build-images.yml` on its `main`. Once images publish from this repository (after the
-  Docker Hub OIDC connection and `DOCKERHUB_ENABLED` exist here), that variable must change in both
-  appliance repositories to
-  `https://github.com/saulpatinojr/HCW-NetworkEyes_App/.github/workflows/200-build-images.yml@refs/heads/main`,
-  or every deploy fails verification. Until then the appliances keep consuming the Core's images.
+- **Decision (2026-10-25):** nothing to decide. Images are signed under this repository's own identity,
+  `https://github.com/saulpatinojr/HCW-NetworkEyes_App/.github/workflows/200-build-images.yml@refs/heads/main`, and no
+  other repository's configuration is changed from here. Whoever verifies the images uses that identity (README,
+  *Publishing the images* and *Verifying images*). Renaming or moving this repository, that workflow file or the default
+  branch changes the identity and must be announced in `CHANGELOG.md` and the release notes.
 - **Raised:** 2026-10-10.
-- **Status:** Open
+- **Status:** Superseded 2026-10-25
 
 ## R-025 — The draw.io MCP route is internal only
 
@@ -910,7 +807,7 @@ A customer cannot tell what "1.0" they run; a new `[1.0.0]` heading would collid
   token configured on the web container every request is refused. The Python client sends the same header from the same
   setting. This adds no new setting. Not chosen: `public-exempt` (an intentional open route).
 - **Raised:** 2026-10-24, ticket #245.
-- **Status:** Decided and implemented in the pull request linked from the ticket; the appliance follow-up check is `TODO.md` T-735
+- **Status:** Decided and implemented in the pull request linked from the ticket; the note for deployers is `TODO.md` T-735
 
 ## R-026 — Owner steps after the governance and CI hygiene change
 
@@ -920,3 +817,12 @@ A customer cannot tell what "1.0" they run; a new `[1.0.0]` heading would collid
 - **Step 3 — the `370` registry token (ticket #252, unchanged).** `370-registry-cleanup.yml` still uses the personal access token `DOCKERHUB_PERSONAL_TOKEN`; Docker Hub's OIDC connection does not replace it for deleting tags. The decision to keep it or to change how tags are removed is still open.
 - **Raised:** 2026-10-25.
 - **Status:** Open
+
+## R-027 — Remove the orphaned cloud trust entries of the earlier repository name
+
+- **Why this is here:** the earlier plan for the original repository (R-014) ended with a step that told the owner to delete the Azure federated identity credentials and the AWS OIDC role trust entries whose subject names that repository. R-014 is superseded and its text was dropped, so nothing else reminds the owner. This repository is that original, renamed, and GitHub puts the current repository name in a run's OIDC token, so an entry that still carries the earlier name matches no run of this repository. It is dead trust, and it would grant access again if anyone ever created a repository with that name under the same owner. (The earlier name is not written here on purpose: the standalone guard forbids it in live files. It is in this repository's git history and in the two clouds' trust entries themselves.)
+- **Where to look.** Azure: Microsoft Entra admin center → App registrations → each application used for GitHub deployments → Certificates & secrets → Federated credentials; the subject looks like `repo:saulpatinojr/<name>:ref:refs/heads/main` or `...:environment:<name>`. AWS: IAM → Roles → the GitHub deploy role → Trust relationships; the condition on `token.actions.githubusercontent.com:sub`. Documentation: <https://learn.microsoft.com/entra/workload-id/workload-identity-federation-create-trust> and <https://docs.github.com/actions/security-for-github-actions/security-hardening-your-deployments/about-security-hardening-with-openid-connect>.
+- **What to do.** Delete every entry whose repository part is not a repository you still deploy from. Keep entries for `HCW-NetworkEyes_App` and for the other current repositories. If you keep a subject for this repository, use the immutable form with the owner and repository ids (as `TODO.md` T-728 does for Docker Hub) so a rename never leaves a stale entry again.
+- **Impact if unresolved:** none today; a standing, unused grant.
+- **Raised:** 2026-10-25.
+- **Status:** Open — not blocking

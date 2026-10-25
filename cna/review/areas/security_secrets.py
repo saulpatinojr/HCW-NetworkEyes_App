@@ -22,7 +22,7 @@ Scans performed (design "6. Security & secrets"):
     baselined location is recorded here by location + detector type, never value.
     One record additionally captures the baseline drift observed during the scan
     (the live scan surfaces the skill-library reference trees under
-    ``.agents/``, ``.claude/``, ``.codex/``, ``.deployment-catalog/`` that the
+    ``.agents/``, ``.claude/``, ``.codex/`` that the
     committed baseline does not carry).
   * **gitleaks** (``gitleaks detect``). The ``gitleaks`` binary is a Go
     executable not installable through the project's Python dev dependencies and
@@ -38,8 +38,8 @@ Scans performed (design "6. Security & secrets"):
     recorded as its own finding at its reported severity (Requirement 6.3).
 
 The R-006 runtime-secret escalation (Requirement 6.4) this area used to record
-left the core with the AWS Terraform whose ``sensitive``-with-no-default inputs
-it described (``TODO.md`` T-504); the AWS appliance's ``REVIEW.md`` owns it. No
+left this repository with the AWS Terraform whose ``sensitive``-with-no-default
+inputs it described (``TODO.md`` T-504). No
 finding here carries a ``blocker_id``. These records are consumed by the
 consolidation step (spec task 14.1).
 """
@@ -142,7 +142,7 @@ def security_secrets_findings() -> list[Finding]:
             proposed_action=(
                 "detect-secrets scan surfaces additional detections in the "
                 "vendored skill-library reference trees (.agents/, .claude/, "
-                ".codex/, .deployment-catalog/) that the committed "
+                ".codex/) that the committed "
                 ".secrets.baseline does not carry. Either add these paths to the "
                 "detect-secrets should_exclude_file filter (they are third-party "
                 "documentation fixtures, not project secrets) or re-audit and "
@@ -249,8 +249,7 @@ def security_secrets_findings() -> list[Finding]:
         )
     )
 
-    # 6.4 — the runtime-secret escalation (R-006) left the core with the AWS
-    # Terraform whose variables it described (TODO.md T-504); the AWS
-    # appliance's REVIEW.md owns it (R-008 there).
+    # 6.4 — the runtime-secret escalation (R-006) left this repository with the AWS
+    # Terraform whose variables it described (TODO.md T-504).
 
     return findings

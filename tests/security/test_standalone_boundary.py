@@ -7,17 +7,12 @@ repositories) or from a GitHub App installed on them. This guard keeps that from
 
 * ``TestNoOtherRepositoryIsNamed`` scans the repository for the strings below. The scan skips history
   (``CHANGELOG.md``, ``CNA-0.90-updates.md``), the tests (they may spell a forbidden string out to prove a
-  guard), dependency and build directories, and this file.
+  guard), dependency and build directories, and this file. There is no exemption list: a live file that
+  names one of the strings fails the test.
 * ``TestEveryActionIsFromAnAllowedPublisher`` fails when a workflow or a local action (``*.yml`` and ``*.yaml``)
   uses an action from a publisher outside ``ALLOWED_PUBLISHERS`` or one that is not pinned to a full commit SHA.
 * ``TestTheAdminAppIsUsedByTheAdminWorkflowOnly`` keeps the GitHub App token, and the ``admin-ops`` credentials
   behind it, out of every workflow except ``390-repository-admin.yml`` (``ADMIN_WORKFLOWS``).
-
-The scan is a ratchet, not an exemption: ``PENDING_PR3`` lists, by file and token, HOW MANY references the
-documentation and review-tool rewrite (PR-3 of the standalone plan) still has to remove. The comparison is exact:
-``test_the_references_are_exactly_the_pending_ones`` fails on an extra occurrence (a new reference, or one more of
-a pending kind) and on a missing one (an entry that is stale or overstated), so the numbers can only go down and
-every PR-3 edit must lower them. When the dict is empty, delete it and the test that reads it.
 
 Both checks are static reads of files; they do not prove what a workflow does when it runs.
 """
@@ -96,35 +91,6 @@ ADMIN_ONLY_TOKENS = (
     "admin-ops",
 )
 
-#: References still to be removed by PR-3 (documentation, review tool, history items of REVIEW.md / TODO.md):
-#: file -> token -> number of occurrences. The comparison is exact, so the numbers only go down.
-PENDING_PR3: dict[str, dict[str, int]] = {
-    ".github/ISSUE_TEMPLATE/config.yml": {"Work-Cloud_": 2, "saulpatino-cbts": 2},
-    ".github/SECURITY.md": {"Work-Cloud_": 2, "saulpatino-cbts": 2},
-    "CLAUDE.md": {"APPLIANCE_REPOS/OWNER/REPO": 1, "IMAGE_SIGNING_IDENTITY": 1, "Work-Cloud_": 4},
-    "README.md": {"Work-Cloud_": 9},
-    "REFACTOR_APP.md": {"Work-Cloud_": 12},
-    "REVIEW.md": {
-        "APPLIANCE_REPOS/OWNER/REPO": 6,
-        "CORE_REPO": 6,
-        "GH_APP_": 4,
-        "IMAGE_SIGNING_IDENTITY": 1,
-        "Work-Cloud_": 17,
-        "cna-image-published": 1,
-        "saulpatino-cbts": 1,
-    },
-    "TODO.md": {
-        "APPLIANCE_REPOS/OWNER/REPO": 4,
-        "CORE_REPO": 4,
-        "GH_APP_": 3,
-        "IMAGE_SIGNING_IDENTITY": 1,
-        "Work-Cloud_": 25,
-        "saulpatino-cbts": 1,
-    },
-    "cna/review/areas/cicd.py": {"Work-Cloud_": 1},
-    "cna/review/areas/terraform_relocated.py": {"Work-Cloud_": 2},
-}
-
 
 def _is_text(raw: bytes) -> bool:
     return b"\x00" not in raw
@@ -177,23 +143,6 @@ def _found() -> dict[str, dict[str, int]]:
         if hit:
             found[path.relative_to(REPO_ROOT).as_posix()] = hit
     return found
-
-
-def ratchet_differences(
-    found: dict[str, dict[str, int]], pending: dict[str, dict[str, int]]
-) -> tuple[dict[str, dict[str, int]], dict[str, dict[str, int]]]:
-    """(extra, missing): occurrences beyond the pending ones, and pending ones that are not there."""
-    extra: dict[str, dict[str, int]] = {}
-    missing: dict[str, dict[str, int]] = {}
-    for path in sorted(set(found) | set(pending)):
-        for token in sorted(set(found.get(path, {})) | set(pending.get(path, {}))):
-            have = found.get(path, {}).get(token, 0)
-            allowed = pending.get(path, {}).get(token, 0)
-            if have > allowed:
-                extra.setdefault(path, {})[token] = have - allowed
-            elif have < allowed:
-                missing.setdefault(path, {})[token] = allowed - have
-    return extra, missing
 
 
 class TestNoOtherRepositoryIsNamed:
@@ -252,35 +201,11 @@ class TestNoOtherRepositoryIsNamed:
     def test_the_matchers_leave_the_products_own_vocabulary_alone(self, text):
         assert violations_in(text) == set()
 
-    def test_the_references_are_exactly_the_pending_ones(self):
-        extra, missing = ratchet_differences(_found(), PENDING_PR3)
-        assert extra == {}, (
-            "NetworkEyes stands alone: remove these references (file: token: extra occurrences): "
-            + repr(extra)
-        )
-        assert missing == {}, (
-            "these pending references are gone: lower or delete them in PENDING_PR3 "
-            "(file: token: occurrences no longer there): " + repr(missing)
-        )
-
-    def test_the_ratchet_fails_on_an_extra_and_on_a_missing_occurrence(self):
-        found = {"a.md": {"Work-Cloud_": 3}, "b.md": {"GH_APP_": 1}}
-        # exact: no difference
-        assert ratchet_differences(found, {"a.md": {"Work-Cloud_": 3}, "b.md": {"GH_APP_": 1}}) == (
-            {},
-            {},
-        )
-        # one more of a pending kind, and a new file
-        assert ratchet_differences(found, {"a.md": {"Work-Cloud_": 2}}) == (
-            {"a.md": {"Work-Cloud_": 1}, "b.md": {"GH_APP_": 1}},
-            {},
-        )
-        # an overstated count, and an entry whose file is clean
-        assert ratchet_differences(
-            found, {"a.md": {"Work-Cloud_": 5}, "b.md": {"GH_APP_": 1}, "c.md": {"GH_APP_": 2}}
-        ) == (
-            {},
-            {"a.md": {"Work-Cloud_": 2}, "c.md": {"GH_APP_": 2}},
+    def test_nothing_names_a_sibling_repository_or_its_settings(self):
+        found = _found()
+        assert found == {}, (
+            "NetworkEyes stands alone: remove these references (file: token: occurrences): "
+            + repr(found)
         )
 
     def test_occurrences_are_counted_per_token(self):
