@@ -11,7 +11,7 @@ source of application code — `apps/cna-web`, `apps/cna-api`, `apps/cna-worker`
 and the `cna` Python package — and the pipeline that builds and publishes their
 container images (`200-build-images.yml` → Docker Hub `<namespace>/img-ne-appliance-app`).
 
-Customers consume the images, not this repository. **NetworkEyes stands alone** (owner decision 2026-10-25): this
+Users pull the images, not this repository. **NetworkEyes stands alone** (owner decision 2026-10-25): this
 repository builds, scans, signs and publishes its own images and depends on nothing but itself and its own Docker Hub
 repository, `docker.io/hybridcloudworks/img-ne-appliance-app`. The dependencies that were removed
 stay removed: no workflow, script, Dockerfile, application code, template or live document names, calls, dispatches

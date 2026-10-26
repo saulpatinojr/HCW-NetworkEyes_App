@@ -13,7 +13,7 @@ requires-python = ">=3.14"
 dependencies = [
     "pydantic>=2.13,<3",
 ]
-# [REVIEW REQUIRED] licence and copyright holder: REFACTOR_APP.md section 22, item 1.
+license = "Apache-2.0"  # owner decision 2026-10-25; copyright holder Hybrid Cloud Works (2026-10-26): REVIEW.md R-030
 
 [project.optional-dependencies]
 # Live discovery (change set D). Lower bounds are the versions the code was written
