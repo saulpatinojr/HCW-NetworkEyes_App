@@ -7,6 +7,6 @@ contact_links:
   - name: Report a security vulnerability
     url: https://github.com/saulpatinojr/HCW-NetworkEyes_App/security/advisories/new
     about: Report a vulnerability privately, as the security policy describes. Never in a public issue.
-  - name: Questions about the lab edition
+  - name: Questions about the lab build
     url: https://github.com/saulpatinojr/HCW-NetworkEyes_AddOn/issues/new/choose
-    about: The free upload-only lab edition lives in its own repository.
+    about: The free upload-only lab build lives in its own repository.
