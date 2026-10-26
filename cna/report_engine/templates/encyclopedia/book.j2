@@ -14,7 +14,7 @@
   <img class="logo" src="assets/logos/CBTS%20Logo%20Bright%20Teal.svg" alt="CBTS">
   <h1>Cloud Networking<br>Encyclopedia</h1>
   <div class="subtitle">{{ engagement.engagement_name }}{% if engagement.client_org %} — {{ engagement.client_org }}{% endif %}</div>
-  <span class="edition-tag">{{ "Condensed Edition" if is_condensed else "Expanded Edition" }}</span>
+  <span class="edition-tag">{{ "Condensed report" if is_condensed else "Expanded report" }}</span>
   <div class="meta">
     Engagement: {{ engagement.engagement_id }}<br>
     {% if engagement.generated_at %}Generated: {{ engagement.generated_at }}<br>{% endif %}

@@ -122,8 +122,8 @@ export default async function ReportBookModePage({ params, searchParams }: PageP
           <h1 className="mt-0.5 text-xl font-black text-navy-800 dark:text-navy-100">Book Mode Preview</h1>
         </div>
         <div className="flex items-center gap-2">
-          {/* Edition toggle */}
-          <div className="flex rounded-lg border border-navy-200 p-0.5 dark:border-navy-700" role="group" aria-label="Report edition">
+          {/* Report type toggle (condensed or expanded) */}
+          <div className="flex rounded-lg border border-navy-200 p-0.5 dark:border-navy-700" role="group" aria-label="Report type">
             {(["condensed", "expanded"] as const).map((e) => (
               <Link
                 key={e}
@@ -169,7 +169,7 @@ export default async function ReportBookModePage({ params, searchParams }: PageP
         </div>
         <div className="text-xs text-navy-500">
           <p>
-            {edition === "expanded" ? "Expanded Edition" : "Condensed Edition"} ·{" "}
+            {edition === "expanded" ? "Expanded report" : "Condensed report"} ·{" "}
             {new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
           </p>
           {jobDate && (
@@ -251,7 +251,7 @@ export default async function ReportBookModePage({ params, searchParams }: PageP
         )}
         {edition === "condensed" && eastWest.length > 5 && (
           <p className="mt-2 text-xs text-navy-500">
-            + {eastWest.length - 5} more in the Expanded edition.
+            + {eastWest.length - 5} more in the Expanded report.
           </p>
         )}
       </section>
@@ -273,7 +273,7 @@ export default async function ReportBookModePage({ params, searchParams }: PageP
         )}
         {edition === "condensed" && northSouth.length > 5 && (
           <p className="mt-2 text-xs text-navy-500">
-            + {northSouth.length - 5} more in the Expanded edition.
+            + {northSouth.length - 5} more in the Expanded report.
           </p>
         )}
       </section>
@@ -345,7 +345,7 @@ export default async function ReportBookModePage({ params, searchParams }: PageP
                 </ul>
                 {edition === "condensed" && phase.items.length > 4 && (
                   <p className="mt-1.5 text-xs text-navy-500">
-                    + {phase.items.length - 4} more in the Expanded edition.
+                    + {phase.items.length - 4} more in the Expanded report.
                   </p>
                 )}
               </div>
@@ -357,7 +357,7 @@ export default async function ReportBookModePage({ params, searchParams }: PageP
           <Link href={`/engagements/${id}/diagram`} className="font-semibold text-teal-500 hover:underline">
             Diagram
           </Link>{" "}
-          page. Generated PDF editions are published via{" "}
+          page. Generated PDF reports are published via{" "}
           <Link href={`/engagements/${id}/deliverables`} className="font-semibold text-teal-500 hover:underline">
             Assessments
           </Link>

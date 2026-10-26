@@ -290,7 +290,8 @@ def test_expanded_html_contains_all_chapters_and_toc(findings, topology):
         assert heading in html, f"missing chapter heading: {heading}"
     assert "Table of Contents" in html
     assert 'href="#ch6"' in html
-    assert "Expanded Edition" in html
+    assert '<span class="edition-tag">Expanded report</span>' in html
+    assert "Edition" not in html  # the label says "report"; the report has no "edition" wording
     assert "Remediation steps" in html  # per-finding playbooks
     assert "[VERIFY]" in html  # cost figures flagged
     assert "data-diagram='current'" in html
@@ -304,7 +305,8 @@ def test_condensed_html_is_shorter_and_omits_remediation_detail(findings, topolo
     condensed = _render(findings, topology, EDITION_CONDENSED)
     for heading in _CHAPTER_HEADINGS:
         assert heading in condensed, f"missing chapter heading: {heading}"
-    assert "Condensed Edition" in condensed
+    assert '<span class="edition-tag">Condensed report</span>' in condensed
+    assert "Edition" not in condensed
     assert "Remediation steps" not in condensed
     assert len(condensed) < len(expanded)
 
