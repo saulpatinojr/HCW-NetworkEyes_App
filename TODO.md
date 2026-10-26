@@ -2068,9 +2068,9 @@ moved it into `packages/cna-azure-network-engine` (T-721). Left open, in the ord
 ### T-721 — Engine package follow-ups (change set C)
 `packages/cna-azure-network-engine` is the Azure engine and the monorepo consumes it as a uv workspace
 member (`CHANGELOG.md` `[Unreleased]`). Open:
-- `[REVIEW REQUIRED]` Licence and copyright holder of the package (plan section 22, item 1): its
-  `pyproject.toml` carries no `license` field until the owner decides, and the wheel is not published
-  before that.
+- Licence and copyright holder of the package (plan section 22, item 1): decided. The owner chose Apache-2.0
+  (2026-10-25) and Hybrid Cloud Works as the copyright holder (2026-10-26); the package's `pyproject.toml` says
+  `license = "Apache-2.0"`. The wheel stays unpublished until the PyPI step below.
 - `[REVIEW REQUIRED]` The PyPI name `cna-azure-network-engine` and trusted publishing (plan section 22,
   item 2; change set J's `320-release-engine.yml`). Until then the monorepo consumes the workspace member
   and CI installs it from the tree before `cna`.

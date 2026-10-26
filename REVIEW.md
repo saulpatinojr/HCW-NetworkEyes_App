@@ -37,7 +37,7 @@ Anything an engineer can solve without external input belongs in [`TODO.md`](TOD
 | [R-027](#r-027--remove-the-orphaned-cloud-trust-entries-of-the-earlier-repository-name) | Remove the cloud trust entries (Azure federated credentials, AWS role trust) that name this repository by its earlier name | Repository owner / cloud account owners | Open — not blocking |
 | [R-028](#r-028--should-the-default-model-ids-of-the-bring-your-own-engines-follow-the-vendors-current-models) | Should the default model ids of the bring-your-own engines follow the vendors' current models? | Product owner | Open — not blocking |
 | [R-029](#r-029--the-appliance-and-core-repositories-are-out-of-board-scope) | The two appliance repositories and the earlier core repository (the other owner's, named on ticket #249): their state, and whether they belong on the HCW Field Applications board | Repository owner | Decided 2026-10-25 — out of board scope; nothing is written there |
-| [R-030](#r-030--name-the-copyright-holder) | Name the copyright holder of the code in this repository | Repository owner | Open — not blocking |
+| [R-030](#r-030--name-the-copyright-holder) | Name the copyright holder of the code in this repository | Repository owner | Decided 2026-10-26 — Hybrid Cloud Works (owner's statement); nothing further is open here |
 
 ---
 
@@ -772,8 +772,15 @@ Legal / brand (the font part only; the label part is decided and done).
 
 **Decision, 2026-10-25 (owner)**
 Apache-2.0 for the code and for the image label. Done in ticket #251: `org.opencontainers.image.licenses` in
-`Dockerfile` now reads `Apache-2.0`, matching `LICENSE`, and a new `NOTICE` file says the Aeonik typeface is
-separately licensed. `tests/unit/test_licence_statement.py` fails if the label, `LICENSE` and `NOTICE` stop agreeing.
+`Dockerfile` now reads `Apache-2.0`, matching `LICENSE`, and `NOTICE` records the owner's statement that no
+separate Aeonik licence is required (see below). `tests/unit/test_licence_statement.py` fails if the label, `LICENSE`
+and `NOTICE` stop agreeing.
+
+**Copyright holder, decided 2026-10-26 (owner's statement)**
+The owner's rule is that copyright is "Saul Patino" for personal work and "Hybrid Cloud Works" for the website, the
+apps and the other HCW projects. For this repository that is **Hybrid Cloud Works**. `LICENSE` (the copyright line
+of the Apache appendix) and `NOTICE` now say "Copyright 2026 Hybrid Cloud Works"; the year is that of the first commit
+(2026-03-05). Tracked as R-030.
 
 **Aeonik font licence: resolved by owner statement, 2026-10-25**
 The owner states that Aeonik needs no separate licence and says they verified this on 2026-10-25. That is the owner's
@@ -921,8 +928,8 @@ A customer cannot tell what "1.0" they run; a new `[1.0.0]` heading would collid
 
 ## R-030 — Name the copyright holder
 
-- **What this is:** the code in this repository is under the Apache License, Version 2.0, decided by the owner on 2026-10-25 (R-020). That licence works best with a named copyright holder, and no file in this repository names one. An older planning note carried a placeholder that left the choice open; it was replaced with "the repository owner" and nothing was decided.
-- **Decision needed (repository owner):** name the holder, in one line, for example a person or an organisation. Until then no document states one.
-- **Where it goes once named:** a copyright line in `NOTICE`, the `authors` field of `packages/cna-azure-network-engine/pyproject.toml`, and `REFACTOR_APP.md` section 22, item 1.
-- **Raised:** 2026-10-25.
-- **Status:** Open — not blocking
+- **What this is:** the code in this repository is under the Apache License, Version 2.0, decided by the owner on 2026-10-25 (R-020). That licence works best with a named copyright holder, and no file in this repository named one. An older planning note had left the choice open between two organisations.
+- **Decision (owner's statement, 2026-10-26):** the copyright holder is **Hybrid Cloud Works**. The owner's rule: "Saul Patino" for personal work, "Hybrid Cloud Works" for the website, the apps and the other HCW projects; this repository is an HCW app.
+- **Where it is recorded:** the copyright line of `LICENSE` and a copyright line in `NOTICE` ("Copyright 2026 Hybrid Cloud Works"), the README *Licence* section, `REFACTOR_APP.md` section 22 item 1, and `TODO.md`. No author or copyright field existed in the `Dockerfile` files, `pyproject.toml` files or `package.json`, so none was added.
+- **Raised:** 2026-10-25. **Decided:** 2026-10-26.
+- **Status:** Decided 2026-10-26 — nothing further is open here.

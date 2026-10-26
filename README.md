@@ -228,7 +228,8 @@ The code in this repository and the container images built from it are licensed 
 [Apache License, Version 2.0](LICENSE). The image label `org.opencontainers.image.licenses` says `Apache-2.0`.
 The [`NOTICE`](NOTICE) file lists what the Apache licence does not cover: the Aeonik typeface. The owner states that no
 separate licence is required for it (2026-10-25); this repository holds no licence file for it and has not verified the
-statement (`REVIEW.md`, R-020). The copyright holder is not yet named (`REVIEW.md`, R-030).
+statement (`REVIEW.md`, R-020). The copyright holder is Hybrid Cloud Works (owner's statement, 2026-10-26; `REVIEW.md`,
+R-030).
 
 ## Repository conventions
 

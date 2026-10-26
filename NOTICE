@@ -1,6 +1,8 @@
 HCW NetworkEyes App (Cloud Network Assessment)
 https://github.com/saulpatinojr/HCW-NetworkEyes_App
 
+Copyright 2026 Hybrid Cloud Works
+
 The code in this repository, and the container images built from it, are
 licensed under the Apache License, Version 2.0. The full text is in the file
 LICENSE. The image label org.opencontainers.image.licenses says the same
