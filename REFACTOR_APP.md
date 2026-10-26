@@ -7,7 +7,7 @@
 | This repository | `saulpatinojr/HCW-NetworkEyes_App` — retired on 2026-09-18, **restored on 2026-10-10** by the owner's decision (the earlier core repository's lineage merged back here) |
 | Implementation target | **this repository** (owner decision 2026-10-10; written for the earlier core repository, whose paths are identical here) |
 | Evidence commit | `5d3b914` (last `main` commit before retirement, read with `git show` and `git ls-tree` only) |
-| Downstream consumer | `saulpatinojr/HCW-NetworkEyes_AddOn` (lab edition, id `network-assessment`) |
+| Downstream consumer | `saulpatinojr/HCW-NetworkEyes_AddOn` (lab build, id `network-assessment`) |
 
 > **Owner decision 2026-10-10:** this repository is the implementation target. The paragraph that stood here said the repository was archived and the target was the earlier core repository; its lineage has since been merged back here, so every path below applies to this tree unchanged. **Owner decision 2026-10-25 (standalone):** this repository depends on no other repository, so every statement below about appliance repositories, a build manifest (`latest-build.json`, `.deployment-catalog/`) or a dispatch to other repositories is the 2026-10-10 plan as written and no longer applies: the record of a build is the digest table in the step summary of `200-build-images.yml` and the five digests in the `310` release notes (`CLAUDE.md`, *The image contract*).
 
@@ -22,7 +22,7 @@
 This document tells a Core maintainer what to change, file by file, so that:
 
 1. One engine (model, rules, classifier, findings, Markdown and JSON report, Resource Graph normalizer) exists once, as an installable package with no Azure SDK in its base dependencies.
-2. One root Dockerfile builds the `appliance` edition (Container Apps, user-assigned managed identity, live Resource Graph refresh, no upload) and a build-only `lab` target that proves the engine installs and runs without any Azure SDK; the deployable lab edition, its HTTP contract and its checks belong to the AddOn, which builds its own image on the published engine with the same Dockerfile pattern.
+2. One root Dockerfile builds the `appliance` edition (Container Apps, user-assigned managed identity, live Resource Graph refresh, no upload) and a build-only `lab` target that proves the engine installs and runs without any Azure SDK; the deployable lab build, its HTTP contract and its checks belong to the AddOn, which builds its own image on the published engine with the same Dockerfile pattern.
 3. The security findings recorded at `5d3b914` are closed: unauthenticated API, plaintext service-principal secrets between tiers, Network Contributor advice for a read-only scan, scanner-host DNS resolution presented as client evidence, raw exception strings persisted.
 4. The two overlapping Azure rule engines become one typed, versioned rule set with stable ids.
 5. AWS code stops being a hard dependency of an Azure-only install.
@@ -72,7 +72,7 @@ HCW-NetworkEyes_App (upstream)
 Azure appliance repo: one Consumption Container App (min 1 / max 1), UAMI, Reader + optional reader roles
   + custom "CNA Network BGP Reader"; timer-driven ARG refresh; no upload route.
 HCW-NetworkEyes_AddOn (downstream): same Dockerfile pattern on the published wheel without [azure]; builds and
-  ships docker.io/hybridcloudworks/hcw-addon-network-assessment (the lab edition's HTTP contract lives there);
+  ships docker.io/hybridcloudworks/hcw-addon-network-assessment (the lab build's HTTP contract lives there);
   visitors upload an ARG export; deletes its ported model/rules/classify once the wheel exists.
 ```
 
@@ -90,7 +90,7 @@ Package contract:
 
 ## 4 Constraints
 
-1. Never weaken: the lab edition's inability to hold a credential or an Azure SDK, the appliance's read-only roles and refusal of client secrets, the "not production" labels, and the observed-state discipline (`_emit` hedge check at `analysis_engine.py` line 165 must apply to every rule, including the ported Engine B checks).
+1. Never weaken: the lab build's inability to hold a credential or an Azure SDK, the appliance's read-only roles and refusal of client secrets, the "not production" labels, and the observed-state discipline (`_emit` hedge check at `analysis_engine.py` line 165 must apply to every rule, including the ported Engine B checks).
 2. No secrets, tokens, customer inventories or real tenant or subscription ids in fixtures, tests or docs. Sample subscriptions are `00000000-0000-0000-0000-000000000001` and `...0002`.
 3. Rule ids are never reused; a changed rule bumps its own `version`; live-only rules stay registered so the AddOn's `unknowns[]` list is stable.
 4. The Core publishes images to Docker Hub only (`docker.io/hybridcloudworks/img-ne-appliance-app`), by digest, through the Docker OIDC connection (section 12). No GHCR.
@@ -128,7 +128,7 @@ Package contract:
 | F | Least-privilege roles | P1 (security) | Replace Network Contributor in four places; custom role JSON `docs/roles/cna-network-bgp-reader.json` |
 | G | Appliance on Container Apps with UAMI; remove SP secrets | P1 (security) | Delete `ClientSecretCredential`, `sp_client_secret`, `/discovery/test-connection`; Prisma migration drops `spSecretEnc` |
 | H | API bearer auth and exception redaction | P1 (security) | Entra JWT validation on `cna-api`; redaction helper for persisted errors |
-| I | Lab boundary image target and boundary test | P2 | `ARG EDITION=appliance|lab` in the root `Dockerfile`; the `lab` target is a build-only boundary proof, never pushed; `tests/security/test_lab_boundary.py`; the deployable lab edition is the AddOn's image |
+| I | Lab boundary image target and boundary test | P2 | `ARG EDITION=appliance|lab` in the root `Dockerfile`; the `lab` target is a build-only boundary proof, never pushed; `tests/security/test_lab_boundary.py`; the deployable lab build is the AddOn's image |
 | J | Engine release workflow and image digests | P3 | `320-release-engine.yml`; digests in the `tag-images` step summary and the `310` release notes |
 | K | AWS gating behind an extra | P3 | `aws` extra and `cna/aws/` subpackage; `boto3` leaves the base |
 
@@ -458,7 +458,7 @@ def redact_exception(exc: BaseException) -> str:
 
 **Current behavior.** Root `Dockerfile` builds the CLI image with graphviz, draw.io and xvfb; `apps/cna-api/Dockerfile` installs the API's dependencies inline (lines 17 to 39) including `boto3`, `psycopg2-binary`, `openai`, `anthropic`. There is no `tests/security/` directory.
 
-**Required behavior.** One root `Dockerfile` builds the appliance image and a build-only `lab` target. The `lab` target installs the engine without `[azure]`, copies no `apps/`, runs no server, and its `CMD` is the boundary proof (exit 0 only when `azure` is not importable); it is built in CI and never pushed. The deployable lab edition, its HTTP contract (`/api/health` with `edition: "lab"`, uploads, pane) and the checks on it belong solely to the AddOn, which builds `docker.io/hybridcloudworks/hcw-addon-network-assessment` from its own source on the published engine using this same Dockerfile pattern.
+**Required behavior.** One root `Dockerfile` builds the appliance image and a build-only `lab` target. The `lab` target installs the engine without `[azure]`, copies no `apps/`, runs no server, and its `CMD` is the boundary proof (exit 0 only when `azure` is not importable); it is built in CI and never pushed. The deployable lab build, its HTTP contract (`/api/health` with `edition: "lab"`, uploads, pane) and the checks on it belong solely to the AddOn, which builds `docker.io/hybridcloudworks/hcw-addon-network-assessment` from its own source on the published engine using this same Dockerfile pattern.
 
 **Exact change.** Root `Dockerfile`, complete (digest-pinned base, uid 1001, pip removal and the stdlib healthcheck kept from `apps/cna-api/Dockerfile`):
 
@@ -565,7 +565,7 @@ Headers on every response: `X-Addon-Id: network-assessment`, `X-Addon-Version`, 
 | `Finding` | fields at lines 53 to 91, including MCP fields and `est_monthly_cost_usd` | Keep `id, rule_id, severity, platform, region, category, title, description, resource_id, resource_type, account_id, observed_state, affected_resources, framework_mappings, traffic_direction, created_at, version`; add `rule_version: int`, `remediation: str | None`, `learn_url: str | None`; drop `recommendation_source`, `human_reviewed`, `human_notes`, `est_monthly_cost_usd` and `FindingRecommendation.source` from the engine model (the monorepo may keep a subclass with them for the web tier) |
 | `FindingsReport` | `engagement_id: str` required (line 95) | `engagement_id: str | None = None`; add `rules_version: str`, `model_version: str`, `unknowns: list[Unknown]` where `Unknown = { rule_id, reason }` |
 | Rule registry | none; Engine B has no ids | `RULES_VERSION` (calendar string, hash-pinned in a test); every rule has `id, title, severity, category, version, learn_url, frameworks, applies_to, evidence`; live-only rules are registered and surface in `unknowns[]` |
-| Resource Graph row | not consumed | `{ id, name, type, location, resourceGroup, subscriptionId, tags, zones, sku, kind, properties }`; `type` lower-cased; `resourceGroup` and `subscriptionId` derived from `id` when absent; the `az graph query` envelope `{ count, data, skip_token, total_records }` is accepted by the normalizer's caller. A `skip_token` is followed by the Core's discovery until it is exhausted and normal paging records nothing; a warning is recorded only when a token remains unconsumed (paging stopped at the row cap or a page failed) or `total_records` exceeds the rows received (truncated response). An uploaded envelope that still carries a `skip_token` is by definition unconsumed, which is why the lab edition warns on it |
+| Resource Graph row | not consumed | `{ id, name, type, location, resourceGroup, subscriptionId, tags, zones, sku, kind, properties }`; `type` lower-cased; `resourceGroup` and `subscriptionId` derived from `id` when absent; the `az graph query` envelope `{ count, data, skip_token, total_records }` is accepted by the normalizer's caller. A `skip_token` is followed by the Core's discovery until it is exhausted and normal paging records nothing; a warning is recorded only when a token remains unconsumed (paging stopped at the row cap or a page failed) or `total_records` exceeds the rows received (truncated response). An uploaded envelope that still carries a `skip_token` is by definition unconsumed, which is why the lab build warns on it |
 | Prisma `CloudCredential` | `spClientId`, `spSecretEnc` (`schema.prisma:216-217`) | Dropped by migration `20261010000016_drop_sp_secret` (7.G) |
 | Build record | `{ sha_tag, commit, built_at, run_id, images{} }` in a manifest file | digest table in the `tag-images` step summary, one row per component (no `lab` entry: that target is never pushed); no manifest file (2026-10-25) |
 
@@ -629,7 +629,7 @@ Pattern: `/home/user/HCW-AzMigrateOrchestrator_App/infrastructure/terraform/appl
 | `azurerm_consumption_budget_resource_group` | Monthly budget with one alert `[VERIFY amount]` |
 | Images | Docker Hub `docker.io/hybridcloudworks/img-ne-appliance-app:*` by digest; published by `200-build-images.yml` through the Docker OIDC connection (`vars.DOCKERHUB_CONNECTION`, `vars.DOCKERHUB_ENABLED`), the pattern the website's `publish-lab-image.yml` uses; the Core already publishes to Docker Hub, so this is a login-step change, not a registry move |
 
-Clients set `assessment_scope_ids`, `tenant_id` and `image_digest` in `terraform.tfvars`, and run `terraform plan` then `terraform apply`; `terraform apply` is a human-reviewed step and is never run from an automated session. The lab edition is not deployed on Container Apps: it runs on the Hostinger lab host from the AddOn's image (AddOn ADR-0003).
+Clients set `assessment_scope_ids`, `tenant_id` and `image_digest` in `terraform.tfvars`, and run `terraform plan` then `terraform apply`; `terraform apply` is a human-reviewed step and is never run from an automated session. The lab build is not deployed on Container Apps: it runs on the Hostinger lab host from the AddOn's image (AddOn ADR-0003).
 
 ## 13 Security changes
 
@@ -690,7 +690,7 @@ Order: **A -> C -> (B, E) -> D -> F -> G -> H -> I -> J -> K.** F, G and H are i
 | 2 | C, E | `engine-v0.1.0` (wheel) + `v0.10.0` | First wheel; the AddOn adopts it and deletes its port. **Status 2026-10-24:** `engine-v0.1.0` is published (2026-10-12); the AddOn has not adopted it yet; no `v0.10.0` tag exists (tags: `v0.1.0`, `v0.8.0`, `engine-v0.1.0`) |
 | 3 | B | `engine-v0.2.0` + `v0.10.1` | `RULES_VERSION` bump; web findings gain ids |
 | 4 | D | `v0.11.0` | `CNA_DISCOVERY_BACKEND` defaults to `resource-graph`; `arm` kept one release |
-| 5 | I | `v0.11.1` | Build-only lab boundary target; boundary test in CI; the AddOn ships the deployable lab edition |
+| 5 | I | `v0.11.1` | Build-only lab boundary target; boundary test in CI; the AddOn ships the deployable lab build |
 | 6 | J | `v0.11.2` | OIDC login; digests in the step summary and the release notes |
 | 7 | K | `v0.12.0` | AWS extra; remove the A shims and the `arm` backend in the same release |
 

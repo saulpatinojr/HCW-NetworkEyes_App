@@ -42,7 +42,7 @@ Out of scope here, with where to report it instead:
 
 - Deployment, Terraform and runtime problems of an environment that runs these images belong to whoever deploys
   and operates that environment. Report a flaw in an image itself here.
-- The free upload-only lab edition,
+- The free upload-only lab build,
   [HCW-NetworkEyes_AddOn](https://github.com/saulpatinojr/HCW-NetworkEyes_AddOn), has its own repository and policy.
 - Problems already recorded in this repository's `REVIEW.md` or `TODO.md` do not need a new report unless you found a
   missing control, a wider impact or a way around the recorded mitigation.

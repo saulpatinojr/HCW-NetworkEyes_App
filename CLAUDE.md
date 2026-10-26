@@ -17,16 +17,16 @@ repository, `docker.io/hybridcloudworks/img-ne-appliance-app`. The dependencies 
 stay removed: no workflow, script, Dockerfile, application code, template or live document names, calls, dispatches
 to or reads a setting from the appliance repositories (another owner's), and no build, release or cleanup workflow
 uses a GitHub App (only the owner-approved `390-repository-admin.yml` does, see `ADMIN_WORKFLOWS` in the boundary
-test). The one carve-out is the lab edition, `saulpatinojr/HCW-NetworkEyes_AddOn`: it is a downstream edition that
+test). The one carve-out is the lab build, `saulpatinojr/HCW-NetworkEyes_AddOn`: it is a downstream build that
 pulls from this repository, so documents name and link it, this repository calls nothing in it and reads no setting
-from it, and the one rule that reaches into it is a documentation note (*Tell the lab edition what changed*, below). `tests/security/test_standalone_boundary.py` (the repository) and
+from it, and the one rule that reaches into it is a documentation note (*Tell the lab build what changed*, below). `tests/security/test_standalone_boundary.py` (the repository) and
 `apps/cna-web/lib/standalone-boundary.test.ts` (the web tier) fail when that comes back. Whoever deploys the images (a
 person or a separate project) pulls them from Docker Hub by digest and verifies the cosign signature; this repository
 does not know who that is and notifies no one.
 
 History: this repository was the original Cloud Network Assessment repository. On 2026-09-18 its code moved to a
 separate core repository, and on 2026-10-10 the owner merged that lineage back here, so this repository is again the
-implementation target of `REFACTOR_APP.md` (the HCW App-to-AddOn plan; its lab edition is
+implementation target of `REFACTOR_APP.md` (the HCW App-to-AddOn plan; its lab build is
 `saulpatinojr/HCW-NetworkEyes_AddOn`). **The earlier core repository is reference only: nothing for this repository is
 written there (owner, 2026-10-11)**; its wiki pages move here (`REVIEW.md` → R-023). Issue and pull-request numbers in
 the documents older than that date name threads of the original or the earlier core repository.
@@ -176,7 +176,7 @@ change under `Changed` in `CHANGELOG.md` (and in the release notes) where a cons
 - **`REFACTOR_APP.md`** at the root is the owner-approved refactoring plan this repository
   executes; the documentation model allows it (and the temporary `CNA-0.90-updates.md`) beside the four
   documents and this file, seven root documents at most, until their work has shipped.
-- **Tell the lab edition what changed.** `saulpatinojr/HCW-NetworkEyes_AddOn` keeps a "what's new"
+- **Tell the lab build what changed.** `saulpatinojr/HCW-NetworkEyes_AddOn` keeps a "what's new"
   file, `docs/whats-new-upstream.md`, that its agents read before changing anything. When a change lands
   here that reaches it (the engine package `packages/cna-azure-network-engine`, the rules, an
   `engine-v*` release, or anything it ports or pins), add an entry to that file in the same change set,

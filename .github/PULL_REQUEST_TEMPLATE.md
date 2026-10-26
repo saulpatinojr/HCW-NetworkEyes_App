@@ -37,7 +37,7 @@ Closes #
 
 - [ ] The image tag scheme, the signing identity and the runtime environment settings are unchanged, or the change is recorded under `Changed` in `CHANGELOG.md` and in `TODO.md`.
 - [ ] `.env.example` lists every setting the code reads.
-- [ ] If the change reaches the lab edition (engine package, rules, an `engine-v*` release), an entry was added to `docs/whats-new-upstream.md` in `HCW-NetworkEyes_AddOn`, or this description says why none is needed.
+- [ ] If the change reaches the lab build (engine package, rules, an `engine-v*` release), an entry was added to `docs/whats-new-upstream.md` in `HCW-NetworkEyes_AddOn`, or this description says why none is needed.
 
 ## CI, containers and dependencies
 

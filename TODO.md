@@ -2050,7 +2050,7 @@ moved it into `packages/cna-azure-network-engine` (T-721). Left open, in the ord
   BGP peer not Connected, connected peers with zero learned routes, the BGP route summary, Network Watcher
   missing per region, no Log Analytics workspace, workspace retention under 90 days, the NSGs-missing-flow-
   logs count and the gateway metrics summary. Reserve ids from `AZ-NET-034` and `AZ-BCDR-008` onward; the
-  downstream lab edition (`HCW-NetworkEyes_AddOn`) adopts the same ids and severities through its
+  downstream lab build (`HCW-NetworkEyes_AddOn`) adopts the same ids and severities through its
   `core-update` PR and must never see one renumbered.
 - The "discovery blocked" finding Engine B emitted for a subscription the identity cannot read is gone (the
   registry skips blocked subscriptions, as Engine A always did); the runner's progress log names it. Change
@@ -2062,7 +2062,7 @@ moved it into `packages/cna-azure-network-engine` (T-721). Left open, in the ord
   `[REVIEW REQUIRED]` compliance claim (plan section 22, item 5); confirm them before the appliance's public
   surface exposes them.
 - `RULES_VERSION` and the rule id:version table are pinned together in `tests/unit/test_registry.py`, and
-  the lab edition pins `rules_digest()` over the same table: bump both, never one.
+  the lab build pins `rules_digest()` over the same table: bump both, never one.
 - Plan change sets C–K are still not folded into this backlog (see T-719).
 
 ### T-721 — Engine package follow-ups (change set C)
@@ -2075,8 +2075,8 @@ member (`CHANGELOG.md` `[Unreleased]`). Open:
   item 2; change set J's `320-release-engine.yml`). Until then the monorepo consumes the workspace member
   and CI installs it from the tree before `cna`.
 - Model version: the plan declared `TOPOLOGY_MODEL_VERSION = "1.3.0"`; the engine ships `1.4.0` because
-  the lab edition's normalizer fills fields 1.3.0 lacks (firewall and WAF policies, flow logs,
-  `ip_configuration_count`, export provenance). The lab edition's `core-update` PR replaces `lab-1.0.0`
+  the lab build's normalizer fills fields 1.3.0 lacks (firewall and WAF policies, flow logs,
+  `ip_configuration_count`, export provenance). The lab build's `core-update` PR replaces `lab-1.0.0`
   with it and deletes `src/network_assessment/{model,rules,classify,ingestion/normalize}` (plan section
   21); its `/api/health model.version` then reads `1.4.0`, and its `rules_digest()` pin equals this
   tree's `tests/unit/test_registry.py` table.
