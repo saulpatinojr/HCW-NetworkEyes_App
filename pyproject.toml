@@ -102,7 +102,7 @@ enrichment = [
 # exercises at discovery time and must be present in the image; the rest of the
 # enrichment extra remains optional.
 api = [
-    "fastapi>=0.161.0",
+    "fastapi>=0.161.1",
     "uvicorn[standard]>=0.54.0",
     "psycopg2-binary>=2.9",
     # Entra bearer validation on the internal routes (change set H): signature via
@@ -116,7 +116,7 @@ api = [
 dev = [
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",               # coverage plugin (was missing from dev deps)
-    "hypothesis>=6.170.7",             # property-based tests (production-readiness review invariants)
+    "hypothesis>=6.170.8",             # property-based tests (production-readiness review invariants)
     "ruff>=0.17.2",
     "ty>=0.0.91",                       # type checker (TODO.md T-402)
     "pre-commit>=4.7.0",               # pre-commit itself as a dev dep
