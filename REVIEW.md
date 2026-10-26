@@ -28,7 +28,7 @@ Anything an engineer can solve without external input belongs in [`TODO.md`](TOD
 | [R-016](#r-016--retire-appscna-worker-and-its-image-and-service) | Retire `apps/cna-worker` — placeholder that runs as an always-on service in a deployment | Repository owner | Open — v1.0 review finding IMG-003 / ARCH-101 |
 | [R-017](#r-017--stop-publishing-the-cli-image-on-every-push) | Stop building/publishing the CLI image `sha-<7>` (nothing in this repository pulls it except the release) | Repository owner | Open — not blocking |
 | [R-018](#r-018--remove-cnareview-from-the-shipped-package) | Move `cna/review/**` out of the shipped package and API image | Repository owner | Open — not blocking |
-| [R-019](#r-019--diagram-editor-sends-customer-topology-to-embeddiagramsnet) | Diagram editor posts customer topology XML to public `embed.diagrams.net`; no offline path | Product owner / Security | Decided 2026-10-25 — self-host; implemented (ticket #248) |
+| [R-019](#r-019--diagram-editor-sends-network-topology-to-embeddiagramsnet) | Diagram editor posts network topology XML to public `embed.diagrams.net`; no offline path | Product owner / Security | Decided 2026-10-25 — self-host; implemented (ticket #248) |
 | [R-020](#r-020--aeonik-font-licence-and-oci-licence-label) | Aeonik typeface licence coverage; OCI label `Proprietary` vs Apache-2.0 `LICENSE` | Legal / brand | Resolved 2026-10-25 — licence label decided (Apache-2.0, done); font: resolved by owner statement that no separate licence is required, no licence file claimed |
 | [R-021](#r-021--byo-api-mode-scope-for-10) | Ship 1.0 `saas`-only or complete R-011 first | Product owner / Security | Open |
 | [R-022](#r-022--version-100-release-identity) | Version 1.0.0 identity: withdrawn `[1.0.0]` heading, version strings, first tag | Repository owner | Open — before the first `v*` tag |
@@ -69,7 +69,7 @@ AWS account owner / cloud finance approver (account creation carries a billing c
 **Impact if unresolved**
 AWS parity work stays code-only indefinitely. The repository continues to advertise an AWS
 deployment path that cannot be executed, and the AWS half of the platform cannot be validated
-before a customer engagement.
+before real use.
 
 **References**
 - `infra/terraform/providers/aws/` (ai, compute, database, identity, observability, runtime,
@@ -197,7 +197,7 @@ whether a custom domain is in scope for beta.
 
 **Impact if unresolved**
 The AWS stack can only be deployed without HTTPS termination at the edge, which is not
-acceptable for a client-facing delivery portal.
+acceptable for a delivery portal that people open from the internet.
 
 **References**
 - `infra/terraform/providers/aws/compute/` (ALB listener), `infra/terraform/providers/aws/security/`
@@ -486,8 +486,8 @@ Ask the sandbox administrator the one question that decides everything else: is
 
 **Problem**
 The `byo-api` AI mode (`CHANGELOG.md` → Unreleased) introduces two things that did not exist
-before and that CBTS engineering standards say need a human security review before they carry
-customer traffic:
+before and that need a human security review before they carry
+user traffic:
 
 1. **Admin-entered API keys stored in the application database.** An admin pastes an Anthropic
    and/or OpenAI key on `/admin/ai-engine`; it is probed against the provider, AES-256-GCM
@@ -519,7 +519,7 @@ Security.
    ask for it to be disabled (`setByoApiKey(..., { probe: false })`).
 
 **Impact if unresolved**
-`byo-api` cannot be offered to a customer. `saas` deployments are unaffected — the code path is
+`byo-api` cannot be offered to users. `saas` deployments are unaffected — the code path is
 inert when `CNA_AI_MODE` is `saas` or unset.
 
 **References**
@@ -540,7 +540,7 @@ a secret in this repository, or the repositories moved under an organization whe
 
 **Why it needs an owner**
 Creating a long-lived personal token, or reorganizing the repositories under an organization, is
-the repository owner's decision; CBTS standards prefer the short-lived, identity-based option where
+the repository owner's decision; a short-lived, identity-based option is preferred where
 one exists.
 
 **Required owner**
@@ -655,7 +655,7 @@ describes a component that does nothing.
 **Problem**
 Nothing in this repository pulls the CLI image (`sha-<7>`) except the release, which gives it the `<version>` tag (the other four images get `<component>-<version>`).
 It is the largest image (draw.io + Electron + Xvfb) and its root
-`COPY . .` ships `TODO.md`, `REVIEW.md` and `cna/review/**` inside a customer-pullable artifact.
+`COPY . .` ships `TODO.md`, `REVIEW.md` and `cna/review/**` inside an artifact that users pull.
 
 **Required owner**
 Repository owner.
@@ -686,17 +686,17 @@ Approve moving it under `scripts/` (or a separate tooling package) with its test
 `cna` package contains product code only.
 
 **Impact if unresolved**
-Larger images and slower CI; no customer impact.
+Larger images and slower CI; no user impact.
 
 **References**
 - v1.0 review findings ARCH-104, PY-014
 
-## R-019 — Diagram editor sends customer topology to `embed.diagrams.net`
+## R-019 — Diagram editor sends network topology to `embed.diagrams.net`
 
 **Problem**
 `apps/cna-web/components/diagrams/DrawioEmbed.tsx` iframes the public draw.io embed and posts the
 engagement's `.drawio` XML into it. There is no self-hosted or offline fallback, so an appliance
-without internet egress from the analyst's browser shows a blank editor, and every customer's
+without internet egress from the analyst's browser shows a blank editor, and every user's
 network architecture leaves the appliance boundary to a third party.
 
 **Required owner**
@@ -704,12 +704,12 @@ Product owner (feature) and Security (data governance).
 
 **Required action**
 Choose: self-host draw.io (static bundle served by the web tier, or a container), or document the
-dependency as a customer opt-in with a data-handling statement.
+dependency as a user opt-in with a data-handling statement.
 
 **Decision (2026-10-25, ticket #248, taken under the owner's instruction to close the open issues): `self-host`.**
 The editor is the draw.io web app (`draw.war` of the jgraph/drawio release, Apache-2.0, pinned by version and sha256 in
-the `drawio-webapp` stage of `apps/cna-web/Dockerfile`), served by the web image under `/drawio/`. Not chosen: a customer
-opt-in to the public service (a data-handling statement does not make a customer's network layout leave the
+the `drawio-webapp` stage of `apps/cna-web/Dockerfile`), served by the web image under `/drawio/`. Not chosen: a user
+opt-in to the public service (a data-handling statement does not make a user's network layout leave the
 appliance) and disabling the Diagram page (the page is the product's editor).
 
 **What now applies**
@@ -726,7 +726,7 @@ appliance) and disabling the Diagram page (the page is the product's editor).
   from the image so nothing registers one on the application's origin. The price of the sandbox is that the host page
   answers the editor with `postMessage(..., "*")` (the only target an opaque origin accepts) to the one window it
   created, and that `/drawio/*` is sent with `Access-Control-Allow-Origin: *`: the editor fetches its language file with
-  XHR and an opaque origin needs CORS for that. Those files are public Apache-2.0 static content with no customer data;
+  XHR and an opaque origin needs CORS for that. Those files are public Apache-2.0 static content with no user data;
   a browser that applies Private Network Access lets any website read them from an appliance on a private address,
   which exposes nothing that is not public. Scoping the header to the fetched paths was left out: the set of paths
   depends on which editor features are used, and a miss breaks the editor.
@@ -755,7 +755,7 @@ appliance) and disabling the Diagram page (the page is the product's editor).
   image. Local development has no `/drawio/` until the files are copied in (comment on the Dockerfile stage).
 
 **Impact if unresolved**
-Resolved: no customer topology leaves the deployment through the editor.
+Resolved: no network topology leaves the deployment through the editor.
 
 **References**
 - v1.0 review findings UI-002, ARCH-012
@@ -845,7 +845,7 @@ Rename the historical heading (for example `[1.0.0-rc1] — withdrawn`), set the
 Critical and High rows of the v1.0 findings register are closed.
 
 **Impact if unresolved**
-A customer cannot tell what "1.0" they run; a new `[1.0.0]` heading would collide.
+A user cannot tell what "1.0" they run; a new `[1.0.0]` heading would collide.
 
 **References**
 - v1.0 review findings RELEASE-004, DOC-001, DOC-022
@@ -910,8 +910,8 @@ A customer cannot tell what "1.0" they run; a new `[1.0.0]` heading would collid
 ## R-028 — Should the default model ids of the bring-your-own engines follow the vendors' current models?
 
 - **Why this is here:** the code defaults are `claude-opus-5` and `gpt-5.4` (`cna/ai_engine/chat_agent.py`, `apps/cna-web/lib/ai-engine.ts`; `.env.example` explains the override variables). The `.env.example` note asked someone to verify they are current. Checked 2026-10-25: both are still available. Anthropic lists Claude Opus 5 as a legacy model that is still available; the current Opus is `claude-opus-5-5` (<https://platform.claude.com/docs/en/models/overview>). OpenAI's deprecations page lists no retirement for `gpt-5.4`, whose flagship successors are `gpt-6-astra` and `gpt-6.1-sol` (<https://developers.openai.com/api/docs/deprecations>, <https://developers.openai.com/api/docs/models>). Nothing is broken, so nothing was changed.
-- **The decision:** keep the two defaults, or move them to the current models. A move changes the price per assessment and the wording customers see, which is why it is yours to decide, not an engineer's.
-- **Recommendation:** keep the defaults until Anthropic or OpenAI announces a retirement date for them, because customers who set no override would otherwise see answers change on the day of an upgrade.
+- **The decision:** keep the two defaults, or move them to the current models. A move changes the price per assessment and the wording users see, which is why it is yours to decide, not an engineer's.
+- **Recommendation:** keep the defaults until Anthropic or OpenAI announces a retirement date for them, because users who set no override would otherwise see answers change on the day of an upgrade.
 - **How to answer:** reply "keep" or "move to current" on the issue or pull request that links this entry. If "move", an engineer changes the constants in both files together (they are pinned by one shared vector table, see `CLAUDE.md`, "AI engine rules") and updates `.env.example`.
 - **Impact if unresolved:** none today; a retirement notice from either vendor would turn it into an urgent change.
 - **Raised:** 2026-10-25.

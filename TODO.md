@@ -244,7 +244,7 @@ Each one actively misleads an engineer or a workflow run.
   (resolves 8.5.26); `nanoid` 3.3.12 → 3.3.18 (infinite loop on zero/negative size);
   `brace-expansion` 1.1.16 → 1.1.18 and 5.0.7 → 5.0.9 (unbounded-expansion DoS, CVE-2026-14257 and
   its mitigation bypass). The two transitive packages are pinned through targeted `overrides`
-  entries in `package.json` rather than a blanket tree refresh, per the CBTS standard of preferring
+  entries in `package.json` rather than a blanket tree refresh, per the standard of preferring
   pinned versions in security-sensitive dependencies. `.github/dependabot.yml` was checked as the
   recommended action asked: it already covers `pip`, `npm` (at `/apps/cna-web`), `github-actions`,
   and `docker`, so no ecosystem is unwatched. Verified with `npm ci --legacy-peer-deps`,
@@ -297,7 +297,7 @@ Each one actively misleads an engineer or a workflow run.
   CI already runs a `pip-audit` job in `300-test-codebase.yml`,
   which covers the Python side — check whether that job is passing before assuming the Python
   dependencies are implicated. A green `pip-audit` alongside 7 high advisories would point at the
-  Node dependency tree. Per CBTS engineering standards, prefer pinned versions over ranges when
+  Node dependency tree. Prefer pinned versions over ranges when
   remediating security-sensitive dependencies.
 
 ---
@@ -875,12 +875,12 @@ order; do not reorder it.
   still carry no `.terraform.lock.hcl`. Generate them from a machine with registry access (the
   self-hosted runner qualifies) with
   `terraform providers lock -platform=linux_amd64` per root — pinning matches the Azure roots and
-  the CBTS pinned-dependency standard.
+  the pinned-dependency standard.
 - **Notes for future engineers:** Do not restore the step without first reproducing a green run —
   it blocks every PR when red, which is why it was pulled rather than left failing. Generating the
   lock files (`terraform providers lock` for the four AWS roots) is worth doing regardless of the
   outcome: it pins provider versions for supply-chain reasons, matching what the Azure roots
-  already do, and it is the CBTS standard of preferring pinned versions in security-sensitive
+  already do, and it is the standard of preferring pinned versions in security-sensitive
   dependencies.
 
 ### T-410 — Clear the 96 `ty` findings so the type check can gate
@@ -1281,7 +1281,7 @@ order; do not reorder it.
 - **Recommended action:** Decide per package whether the feature is core or genuinely optional.
   Core ones belong in `[project] dependencies`; optional ones belong in a named extra (say
   `[project.optional-dependencies] enrichment`) with the `except ImportError` path logging a
-  message naming the extra to install, rather than passing silently. Pin versions, per the CBTS
+  message naming the extra to install, rather than passing silently. Pin versions, per the
   standard for security-sensitive dependencies, and re-run `ty check cna/` afterwards — these ten
   account for all 15 remaining `unresolved-import` findings under T-410.
 - **Status:** Done — declared as a `[project.optional-dependencies] enrichment` extra, installable
@@ -1989,7 +1989,7 @@ each cloud (`CNA_APPLIANCE_CLOUD`), or move the limit to the database.
 
 ### T-713 — Deliverable and diagram HTML injection (SEC-006)
 draw.io `html=1` labels are single-escaped and the encyclopedia embeds the exported SVG with
-`| safe`; customer strings (resource names, tags, NSG descriptions) can carry markup into the PDF
+`| safe`; strings from the assessed environment (resource names, tags, NSG descriptions) can carry markup into the PDF
 and the Electron renderer. Escape label text for HTML and XML both, and add a test with a hostile
 resource name.
 

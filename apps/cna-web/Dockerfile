@@ -124,7 +124,7 @@ USER 1001
 CMD ["./prisma/migrate.sh"]
 
 # ── Stage 4b: drawio-webapp ──────────────────────────────────────────────────
-# The diagram editor, served by this image under /drawio/ so that no customer topology leaves the deployment for
+# The diagram editor, served by this image under /drawio/ so that no network topology leaves the deployment for
 # the public draw.io embed service (REVIEW.md R-019). This is the draw.io web app, released by jgraph/drawio under
 # Apache-2.0 as `draw.war` (a zip of static files; no Java is run). It is pinned by version AND sha256: to move to a
 # newer release, change both ARGs together (the checksum is on the release page,

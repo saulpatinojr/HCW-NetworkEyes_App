@@ -64,7 +64,7 @@ async function runSection(
     await onProgress?.({ stepId: spec.id, label: spec.title, status: "skipped" });
     return {
       spec,
-      markdown: `## ${spec.number}. ${spec.title}\n\nNo findings or discovery data relevant to this domain were captured during the assessment window, so it was not assessed in depth. Confirm with the client whether this domain is in scope for a follow-up. [REVIEW REQUIRED]`,
+      markdown: `## ${spec.number}. ${spec.title}\n\nNo findings or discovery data relevant to this domain were captured during the assessment window, so it was not assessed in depth. Confirm with the organization whether this domain is in scope for a follow-up. [REVIEW REQUIRED]`,
       summary: `${spec.title}: no relevant data captured; domain not assessed.`,
     };
   }
@@ -253,13 +253,13 @@ export async function generateComprehensiveReport(
   const titleBlock = [
     `# ${ctx.title}`,
     "",
-    `**Client:** ${ctx.clientOrg}  `,
+    `**Organization:** ${ctx.clientOrg}  `,
     `**Engagement:** ${ctx.engagementName}  `,
     `**Date:** ${date}  `,
-    `**Prepared by:** CBTS Cloud Security Practice  `,
-    `**Classification:** Client Confidential`,
+    `**Prepared by:** Network Eyes  `,
+    `**Classification:** Confidential`,
     "",
-    "> This assessment was generated from live-discovered topology and analysis findings. Content flagged [VERIFY] or [REVIEW REQUIRED] must be validated by the engagement team before client delivery.",
+    "> This assessment was generated from live-discovered topology and analysis findings. Content flagged [VERIFY] or [REVIEW REQUIRED] must be validated by the engagement team before the report is shared.",
   ].join("\n");
 
   const sectionBodies = results.map((r) => r.markdown);

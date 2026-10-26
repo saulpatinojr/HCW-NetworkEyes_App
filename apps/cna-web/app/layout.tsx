@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 
-// CBTS brand typeface. Only the Regular weight is licensed/available;
+// Aeonik brand typeface. Only the Regular weight is licensed/available;
 // heavier weights render via browser synthetic bolding.
 const aeonik = localFont({
   src: "./fonts/Aeonik-Regular.ttf",
@@ -13,9 +13,9 @@ const aeonik = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "CNA Platform — CBTS",
+  title: "CNA Platform",
   description:
-    "CBTS Cloud Network Assessment — multi-user assessment, analysis, and delivery platform",
+    "Cloud Network Assessment — multi-user assessment, analysis, and delivery platform",
 };
 
 export default function RootLayout({

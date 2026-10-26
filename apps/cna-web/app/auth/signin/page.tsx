@@ -25,7 +25,7 @@ export default function SignInPage() {
           Cloud Network Assessment
         </h1>
         <p className="mb-8 text-sm text-navy-400 dark:text-navy-200">
-          Sign in with your CBTS Microsoft account to continue.
+          Sign in with your Microsoft account to continue.
         </p>
 
         <form
@@ -47,7 +47,7 @@ export default function SignInPage() {
       </div>
 
       <p className="mt-6 text-xs text-navy-400 dark:text-navy-300">
-        CBTS Internal Platform · Restricted Access
+        CNA Platform · Restricted access
       </p>
     </div>
   );

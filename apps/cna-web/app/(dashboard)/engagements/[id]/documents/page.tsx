@@ -75,7 +75,7 @@ export default async function DocumentsPage({ params }: PageProps) {
       <section className="glass p-6">
         <h2 className="mb-1 text-lg font-semibold text-navy-800 dark:text-navy-100">Document Templates</h2>
         <p className="mb-5 text-sm text-navy-400">
-          Download a pre-structured template, fill it in with data from the customer
+          Download a pre-structured template, fill it in with data from the assessed
           environment, then upload it above. CSV and text files are parsed for AI analysis.
         </p>
 

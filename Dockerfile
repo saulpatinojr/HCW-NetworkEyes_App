@@ -1,13 +1,13 @@
 # Multi-stage Dockerfile — hardened
 #
-# Two editions from one file (REFACTOR_APP.md change set I):
+# Two builds from one file (REFACTOR_APP.md change set I):
 #   EDITION=appliance (default)  the CLI image as before: the full cna package, the engine
 #                                with its [azure] extra, graphviz and draw.io.
 #   EDITION=lab                  build-only: the engine package without [azure], no apps/,
 #                                no server; its CMD is the boundary proof (exit 0 only when
 #                                azure is not importable). CI builds it with `--build-arg
 #                                EDITION=lab` and never pushes it. The deployable lab
-#                                edition is HCW-NetworkEyes_AddOn, built on the published
+#                                build is HCW-NetworkEyes_AddOn, built on the published
 #                                engine with this same pattern.
 # Changes from original single-stage:
 #   1. Pinned digest on base image (supply chain)
@@ -50,7 +50,7 @@ COPY pyproject.toml uv.lock ./
 # The engine package is a uv workspace member: its pyproject.toml must be present for
 # `uv export --locked` to resolve the workspace, before the source tree is copied.
 COPY packages/cna-azure-network-engine/pyproject.toml packages/cna-azure-network-engine/
-# The appliance edition serves both clouds, so the [aws] extra rides along here; the
+# The appliance build serves both clouds, so the [aws] extra rides along here; the
 # package itself declares boto3 only under that extra (change set K).
 RUN uv export --locked --no-default-groups --no-emit-project --no-emit-workspace --extra aws -o /tmp/requirements.txt \
  && uv pip install --system --no-cache --require-hashes --no-deps --prefix=/install -r /tmp/requirements.txt \
@@ -192,7 +192,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 ENTRYPOINT ["cna"]
 CMD ["--help"]
 
-# ---- the edition that was asked for ----
+# ---- the build that was asked for ----
 # `docker build .` is the appliance image exactly as before; `--build-arg EDITION=lab`
 # selects the build-only lab target. Any other value fails at builder-lab.
 # DL3006 cannot see through `final-${EDITION}`: it is one of the two stages named above (final-lab,

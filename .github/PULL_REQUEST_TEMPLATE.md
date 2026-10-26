@@ -49,7 +49,7 @@ Closes #
 
 ## Security and data
 
-- [ ] No credentials, private keys, tokens, connection strings, personal data, customer data or real tenant identifiers were added.
+- [ ] No credentials, private keys, tokens, connection strings, personal data, data from a real environment or real tenant identifiers were added.
 - [ ] Authorization, least privilege and denial paths are tested where they apply.
 - [ ] Logs and telemetry carry identifiers, not payloads, paths or secrets.
 - [ ] New permissions, dependencies, base images and trust boundaries are called out above.

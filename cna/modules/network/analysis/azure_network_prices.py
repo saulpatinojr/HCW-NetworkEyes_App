@@ -4,7 +4,7 @@ IMPORTANT: These are static list-price ESTIMATES (East US, pay-as-you-go,
 730 hrs/month) used only to size cost-impact findings. They do not reflect
 the client's negotiated rates, reservations, or region. Every figure
 derived from this table MUST be rendered with a [VERIFY] flag in reports
-and client-facing copy per CBTS review policy.
+and in text shown to users, per the project's review policy.
 """
 
 from __future__ import annotations

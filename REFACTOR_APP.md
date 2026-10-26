@@ -15,14 +15,14 @@
 
 **Owner's Azure target decision (2026-10-09, `PLAN.md` owner decision 2), quoted:** "*App* = Azure Container Apps + user-assigned managed identity (Reader; + Cost Management Reader for Cloud Assessor) on a client subscription/RG, clients clone the repo, anonymous live results, no visitor credential. *AddOn* = the **same Docker image** in a `lab` edition on the Hostinger VPS: visitors upload an **Azure Resource Graph export** (JSON/CSV, 5 MB / 5,000 rows, Turnstile-gated, in-memory, TTL), mirroring the Azure Migrate lab model; restart erases everything."
 
-**Upstream and downstream model.** The Core is upstream: it owns the engine, the rule corpus, discovery and the appliance edition, and publishes the Python distribution `cna-azure-network-engine` (import name `cna_azure_network_engine`) plus the appliance image. The AddOn `HCW-NetworkEyes_AddOn` is downstream: until the wheel exists it carries an interim port of about 1,100 lines from `5d3b914` with per-file provenance headers and a root `PROVENANCE.md`; once the wheel is published it pins the exact version and deletes `src/network_assessment/{model,rules,classify}` (AddOn ADR-0001). The AddOn never gains an Azure credential path; the Core never gains an upload path.
+**Upstream and downstream model.** The Core is upstream: it owns the engine, the rule corpus, discovery and the appliance build, and publishes the Python distribution `cna-azure-network-engine` (import name `cna_azure_network_engine`) plus the appliance image. The AddOn `HCW-NetworkEyes_AddOn` is downstream: until the wheel exists it carries an interim port of about 1,100 lines from `5d3b914` with per-file provenance headers and a root `PROVENANCE.md`; once the wheel is published it pins the exact version and deletes `src/network_assessment/{model,rules,classify}` (AddOn ADR-0001). The AddOn never gains an Azure credential path; the Core never gains an upload path.
 
 ## 1 Purpose
 
 This document tells a Core maintainer what to change, file by file, so that:
 
 1. One engine (model, rules, classifier, findings, Markdown and JSON report, Resource Graph normalizer) exists once, as an installable package with no Azure SDK in its base dependencies.
-2. One root Dockerfile builds the `appliance` edition (Container Apps, user-assigned managed identity, live Resource Graph refresh, no upload) and a build-only `lab` target that proves the engine installs and runs without any Azure SDK; the deployable lab build, its HTTP contract and its checks belong to the AddOn, which builds its own image on the published engine with the same Dockerfile pattern.
+2. One root Dockerfile builds the `appliance` target (Container Apps, user-assigned managed identity, live Resource Graph refresh, no upload) and a build-only `lab` target that proves the engine installs and runs without any Azure SDK; the deployable lab build, its HTTP contract and its checks belong to the AddOn, which builds its own image on the published engine with the same Dockerfile pattern.
 3. The security findings recorded at `5d3b914` are closed: unauthenticated API, plaintext service-principal secrets between tiers, Network Contributor advice for a read-only scan, scanner-host DNS resolution presented as client evidence, raw exception strings persisted.
 4. The two overlapping Azure rule engines become one typed, versioned rule set with stable ids.
 5. AWS code stops being a hard dependency of an Azure-only install.
@@ -45,7 +45,7 @@ Evidence at `5d3b914`, line counts from `git show <path> | wc -l`.
 | Traffic taxonomy | `cna/core/finding_taxonomy.py` | 224 | `classify_traffic_direction`, mixed AWS and Azure id tables |
 | File store | `cna/core/persistence.py` | 388 | `EngagementStore`, local disk engagement folders |
 | Web tier | `apps/cna-web/` | about 19.7k TS lines | Next.js 16, next-auth (Entra), Prisma 6, 15 migrations, `CloudCredential.spSecretEnc` (`prisma/schema.prisma` line 217) |
-| SP help modal | `apps/cna-web/components/ui/sp-help-modal.tsx` | 363 | Tells customers to grant Network Contributor (lines 93, 176, 197, 209 to 211, 218 to 225) |
+| SP help modal | `apps/cna-web/components/ui/sp-help-modal.tsx` | 363 | Tells users to grant Network Contributor (lines 93, 176, 197, 209 to 211, 218 to 225) |
 | Packaging | `pyproject.toml` | 182 | `cna 0.8.0b0`, `requires-python >=3.11` (line 9), `boto3` and seven `azure-*` packages in base deps, `enrichment` and `dev` extras, no `license` field |
 | Images | `Dockerfile` (94), `apps/cna-api/Dockerfile` (99) | | `python:3.14-slim@sha256:cae66f2e...` pinned, uid 1001, pip removed, draw.io plus xvfb; OCI label `licenses="Proprietary"` at that commit (`Dockerfile` line 50; `Apache-2.0` since 2026-10-25, `REVIEW.md` R-020); API deps installed inline (lines 17 to 39) including `psycopg2-binary` and `boto3` |
 | CI and release | `.github/workflows/{200-build-images,300-test-codebase,310-release-version,370-registry-cleanup}.yml` | 363 (200) | Docker Hub login with `secrets.DOCKERHUB_TOKEN` (200: lines 67 to 72), Scout by digest, `notify-appliances` dispatch (removed 2026-10-25); release on tags `v*.*.*` (310: line 16) |
@@ -91,7 +91,7 @@ Package contract:
 ## 4 Constraints
 
 1. Never weaken: the lab build's inability to hold a credential or an Azure SDK, the appliance's read-only roles and refusal of client secrets, the "not production" labels, and the observed-state discipline (`_emit` hedge check at `analysis_engine.py` line 165 must apply to every rule, including the ported Engine B checks).
-2. No secrets, tokens, customer inventories or real tenant or subscription ids in fixtures, tests or docs. Sample subscriptions are `00000000-0000-0000-0000-000000000001` and `...0002`.
+2. No secrets, tokens, inventories of a real environment or real tenant or subscription ids in fixtures, tests or docs. Sample subscriptions are `00000000-0000-0000-0000-000000000001` and `...0002`.
 3. Rule ids are never reused; a changed rule bumps its own `version`; live-only rules stay registered so the AddOn's `unknowns[]` list is stable.
 4. The Core publishes images to Docker Hub only (`docker.io/hybridcloudworks/img-ne-appliance-app`), by digest, through the Docker OIDC connection (section 12). No GHCR.
 5. The Core keeps its own `CLAUDE.md` rules for PRs, changelog and review; this document does not override them.
@@ -107,10 +107,10 @@ Package contract:
 | 2 | SDK-shaped models | `cna/core/topology_schema.py:315-1010` mirror ARM SDK objects; Resource Graph rows are camelCase `properties` with `{id}` references | No normalizer exists; an export cannot populate the model without new code |
 | 3 | `EngagementStore` coupling | `analysis_engine.py:38,152`; `run()` reads `self.store.engagement_id` (line 1669 onward); discovery writes checkpoints through the store | The engine cannot be imported without the file store; the API re-implements rules instead of reusing it |
 | 4 | Dead `use_resource_graph` | `azure_discovery.py:96` is set and never read; `_discover_subscription` (line 402) runs 15 ARM list calls per subscription | Minutes per subscription; one permission failure per collector; no cross-subscription query |
-| 5 | Network Contributor advice | `sp-help-modal.tsx:93,176,197,209-211,218-225`; `main.py:1146`; while `.env.example:73` says Reader and `cna/modules/network/module.yaml:27-35` lists only `*/read` actions | Customers grant a write role for a read-only scan; the code contradicts itself |
+| 5 | Network Contributor advice | `sp-help-modal.tsx:93,176,197,209-211,218-225`; `main.py:1146`; while `.env.example:73` says Reader and `cna/modules/network/module.yaml:27-35` lists only `*/read` actions | Users grant a write role for a read-only scan; the code contradicts itself |
 | 6 | Unauthenticated API | `main.py` imports no auth dependency (lines 8 to 40); every route is open; the deployment relies on internal ingress | Any workload in the environment can start discovery, publish portals or read jobs |
-| 7 | Plaintext SP secrets between tiers | `main.py:1457` and `:1541` (`sp_client_secret`, "plaintext, decrypted by web layer"); `apps/cna-web/app/(dashboard)/engagements/[id]/discovery/actions.ts:34`; `azure_discovery.py:247` (`ClientSecretCredential`); Prisma `spSecretEnc` (`schema.prisma:217`) | A long-lived customer secret is stored, decrypted and transmitted; the owner decision is managed identity only |
-| 8 | Scanner-host DNS resolution | `azure_discovery.py:1080-1105` (`_validate_pe_dns`, `_socket.gethostbyname` at 1101) | Evidence describes the scanner's resolver, not the customer's; findings based on it are not observed state |
+| 7 | Plaintext SP secrets between tiers | `main.py:1457` and `:1541` (`sp_client_secret`, "plaintext, decrypted by web layer"); `apps/cna-web/app/(dashboard)/engagements/[id]/discovery/actions.ts:34`; `azure_discovery.py:247` (`ClientSecretCredential`); Prisma `spSecretEnc` (`schema.prisma:217`) | A long-lived user-supplied secret is stored, decrypted and transmitted; the owner decision is managed identity only |
+| 8 | Scanner-host DNS resolution | `azure_discovery.py:1080-1105` (`_validate_pe_dns`, `_socket.gethostbyname` at 1101) | Evidence describes the scanner's resolver, not the user's; findings based on it are not observed state |
 | 9 | Raw exception strings persisted | `azure_discovery.py:441` (`topo.block_reason = str(e)`); `main.py:1704,1812` (`errorMessage=str(exc)`) | Hostnames, paths and SDK text reach the database and the UI |
 | 10 | AWS entanglement | `topology_schema.py:64-313`; `analysis_engine.py` `_check_aws_*` (lines 198 to 638); `boto3` in base deps (`pyproject.toml:13`) and in the API image (`apps/cna-api/Dockerfile:30`); `cna/core/escalation_engine.py:9` | An Azure-only install carries boto3 and AWS rules; the lab boundary test cannot forbid `boto3` without an extra |
 | 11 | 52 MB vendored agent configuration | `.agents/`, `.claude/`, `.codex/`, `.kiro/` | Every clone, image context and `ty` run pays for it; `pyproject.toml:109` already excludes it from type checking |
@@ -247,7 +247,7 @@ Root `pyproject.toml` adds `"cna-azure-network-engine @ file://./packages/cna-az
 
 ### 7.D Resource Graph discovery (change set D)
 
-**Current behavior.** `AzureDiscoveryOptions.use_resource_graph: bool = True` (`azure_discovery.py:96`) is never read. `_discover_subscription` (line 402) creates `NetworkManagementClient` and `ResourceManagementClient`, lists resource groups, then runs 15 collectors (lines 445 to 462: `public_ips, nsgs, route_tables, nat_gateways, vnets, virtual_wans, route_servers, firewalls, application_gateways, load_balancers, virtual_network_gateways, private_endpoints, bastion_hosts, private_dns_zones, express_route_circuits`), then `_run_phase2_collectors` (line 476). `_validate_pe_dns` (lines 1080 to 1105) resolves customer FQDNs with `_socket.gethostbyname` from the scanner host.
+**Current behavior.** `AzureDiscoveryOptions.use_resource_graph: bool = True` (`azure_discovery.py:96`) is never read. `_discover_subscription` (line 402) creates `NetworkManagementClient` and `ResourceManagementClient`, lists resource groups, then runs 15 collectors (lines 445 to 462: `public_ips, nsgs, route_tables, nat_gateways, vnets, virtual_wans, route_servers, firewalls, application_gateways, load_balancers, virtual_network_gateways, private_endpoints, bastion_hosts, private_dns_zones, express_route_circuits`), then `_run_phase2_collectors` (line 476). `_validate_pe_dns` (lines 1080 to 1105) resolves the FQDNs of the assessed environment with `_socket.gethostbyname` from the scanner host.
 
 **Required behavior.** One paged Resource Graph query per scope populates the model through the normalizer; ARM is used only where Resource Graph has no data (BGP POST actions, Monitor metrics, diagnostic settings, Cost Management, Log Analytics queries); the private-endpoint DNS check is removed and the field becomes `unknown`.
 
@@ -411,7 +411,7 @@ def _init_credentials(self) -> None:
 - **Components affected.** Discovery, API, web credential pages, Prisma, appliance Terraform, `sp-help-modal.tsx` (now a managed-identity help modal).
 - **Tests.** `tests/unit/test_azure_discovery.py` credential tests assert `ManagedIdentityCredential` is constructed with `client_id` equal to `AZURE_CLIENT_ID` and that no other `azure.identity` class is imported by the discovery package; `tests/security/test_forbidden_env.py` calls `ApplianceSettings.from_env()` with each of `AZURE_CLIENT_SECRET`, `AZURE_CLIENT_CERTIFICATE_PATH`, `AZURE_USERNAME`, `AZURE_PASSWORD`, `AZURE_FEDERATED_TOKEN_FILE` set, and with `AZURE_TENANT_ID` set alongside a secret, and asserts `SystemExit` before any credential object exists (a patched `azure.identity` records zero constructions), plus `SystemExit` when `AZURE_CLIENT_ID` is absent; `tests/security/test_no_client_secret.py` asserts `git grep -n "ClientSecretCredential\|DefaultAzureCredential\|sp_client_secret\|spSecretEnc" -- apps cna packages` is empty; web `vitest` for the credential form.
 - **Acceptance.** The grep is empty; `prisma migrate deploy` applies on a database that held the column; the appliance starts discovery with only `AZURE_CLIENT_ID` and `AZURE_TENANT_ID` set and refuses to start when any `FORBIDDEN_ENV` variable is present.
-- **Priority** P1 (security; may land first). **Dependencies** none for the code; F for the role set. **Rollback** `down.sql`; the previous image by digest; customers who need a non-identity path have none, by decision.
+- **Priority** P1 (security; may land first). **Dependencies** none for the code; F for the role set. **Rollback** `down.sql`; the previous image by digest; users who need a non-identity path have none, by decision.
 
 ### 7.H API bearer auth and exception redaction (change set H)
 
@@ -539,9 +539,9 @@ In `200-build-images.yml`: replace the `login-action` step's `password: ${{ secr
 
 ## 8 Required API changes
 
-The appliance edition serves two API surfaces: the existing internal `cna-api` (now bearer-authenticated) and a small public, anonymous, read-only surface in the shape the AddOn standard fixes (`CONTRACT-DECISIONS` items 10 and 16: flat envelope, `id` and `version` at the top level).
+The appliance build serves two API surfaces: the existing internal `cna-api` (now bearer-authenticated) and a small public, anonymous, read-only surface in the shape the AddOn standard fixes (`CONTRACT-DECISIONS` items 10 and 16: flat envelope, `id` and `version` at the top level).
 
-| Method and path | Edition | Auth | Behaviour |
+| Method and path | Build | Auth | Behaviour |
 |---|---|---|---|
 | `GET /api/health` | appliance (the AddOn serves the `lab` form of the same envelope from its own image) | none | 200 `{ ok, id: "network-assessment", version, edition: "appliance", capabilities[], asOf, siteOrigins[], turnstile: { required: false, siteKey: null }, azureConnectivity: "managed-identity", rules: { version, count, liveOnly }, model: { version }, scopes: <count>, lastRefreshAt }`; `ok:false` with 503 when the rule registry failed to load. Never 5xx on store state |
 | `GET /api/assessments/current` | appliance | none | 200 `{ assessment: { summary, findings, resources, unknowns, warnings }, refreshedAt, nextRefreshAt }`; 503 `refreshing` before the first refresh completes |
@@ -571,7 +571,7 @@ Headers on every response: `X-Addon-Id: network-assessment`, `X-Addon-Version`, 
 
 ## 10 Configuration changes
 
-| Variable | Edition | Default | Purpose | Source at `5d3b914` |
+| Variable | Build | Default | Purpose | Source at `5d3b914` |
 |---|---|---|---|---|
 | `CNA_EDITION` | appliance; `lab` only in the build-only boundary target | `appliance` | Set by the Dockerfile `ARG EDITION`; the engine's guard refuses `lab` with any Azure SDK present and refuses `appliance` without `AZURE_CLIENT_ID` | new |
 | `CNA_DISCOVERY_BACKEND` | appliance | `resource-graph` | `arm` keeps the old loop for one release (7.D) | new |
@@ -629,14 +629,14 @@ Pattern: `/home/user/HCW-AzMigrateOrchestrator_App/infrastructure/terraform/appl
 | `azurerm_consumption_budget_resource_group` | Monthly budget with one alert `[VERIFY amount]` |
 | Images | Docker Hub `docker.io/hybridcloudworks/img-ne-appliance-app:*` by digest; published by `200-build-images.yml` through the Docker OIDC connection (`vars.DOCKERHUB_CONNECTION`, `vars.DOCKERHUB_ENABLED`), the pattern the website's `publish-lab-image.yml` uses; the Core already publishes to Docker Hub, so this is a login-step change, not a registry move |
 
-Clients set `assessment_scope_ids`, `tenant_id` and `image_digest` in `terraform.tfvars`, and run `terraform plan` then `terraform apply`; `terraform apply` is a human-reviewed step and is never run from an automated session. The lab build is not deployed on Container Apps: it runs on the Hostinger lab host from the AddOn's image (AddOn ADR-0003).
+Users set `assessment_scope_ids`, `tenant_id` and `image_digest` in `terraform.tfvars`, and run `terraform plan` then `terraform apply`; `terraform apply` is a human-reviewed step and is never run from an automated session. The lab build is not deployed on Container Apps: it runs on the Hostinger lab host from the AddOn's image (AddOn ADR-0003).
 
 ## 13 Security changes
 
 | Change | Set | Before | After |
 |---|---|---|---|
 | Internal API authentication and authorization | H | None (`main.py`) | Entra bearer, JWKS-validated, audience-bound, `Discovery.Run` app role or scope required (403 `insufficient_role` otherwise); attached to the `internal` router only; `/health`, `/api/health`, `/api/rules` and the read routes stay public; no runtime off switch |
-| Customer secret path | G | `ClientSecretCredential` (`azure_discovery.py:247`), `sp_client_secret` (`main.py:1457,1541`), `spSecretEnc` (`schema.prisma:217`) | Removed; `ManagedIdentityCredential(client_id=AZURE_CLIENT_ID)` is the only credential class imported (`DefaultAzureCredential` nowhere in the appliance); `FORBIDDEN_ENV` variables refuse startup; Prisma column dropped |
+| User-supplied secret path | G | `ClientSecretCredential` (`azure_discovery.py:247`), `sp_client_secret` (`main.py:1457,1541`), `spSecretEnc` (`schema.prisma:217`) | Removed; `ManagedIdentityCredential(client_id=AZURE_CLIENT_ID)` is the only credential class imported (`DefaultAzureCredential` nowhere in the appliance); `FORBIDDEN_ENV` variables refuse startup; Prisma column dropped |
 | Role guidance | F | Network Contributor in four places | Table below, repeated verbatim everywhere |
 | Private-endpoint DNS evidence | D | Scanner-host `gethostbyname` (`azure_discovery.py:1101`) | Removed; field `None`, state `unknown` |
 | Persisted error text | H | `str(exc)` (`main.py:1704,1812`; `azure_discovery.py:441`) | Class name and status only |
@@ -812,8 +812,8 @@ Live acceptance (R-008), bash, after `az login` as an identity holding only Read
 | Deletion of the port | When `cna-azure-network-engine` is on PyPI (section 15 step 2), the AddOn's `core-update.yml` pins the exact version, deletes `src/network_assessment/{model,rules,classify}`, keeps `ingestion/`, `store/`, `api/`, `security/`, `web/`, and removes the `PROVENANCE.md` rows for the deleted files |
 | Rule ids, severities, `RULES_VERSION`, `TOPOLOGY_MODEL_VERSION` | The AddOn uses the 7.B table and `lab-1.0.0` now; the Core must not renumber. The AddOn's `test_registry.py` hash-pins `RULES_VERSION`; a Core bump is adopted through `core-update` |
 | ARG normalizer | The AddOn's `ingestion/normalize.py` (type table in its design B.3) is the reference implementation for the Core's `normalize/resource_graph.py` (C, D); once published, the AddOn imports it too |
-| Shared `/api/health` and pane contract | Both editions answer the flat envelope of section 8 with `id: "network-assessment"`; the website's status proxy reads exactly `configured, reachable, version, edition, capabilities, asOf`; the pane posts `{ type: 'hcw-addon', id, state }` with states `loading | ready | working | unavailable` to each `siteOrigins` entry. The Core's appliance public surface uses the same headers and error envelope so one pane bundle serves both editions |
-| Edition guard | The AddOn's `edition.py` (`sys.meta_path` finder, env refusal) is the model for the Core's lab guard in change set I; the Core may adopt it verbatim with provenance in the other direction |
+| Shared `/api/health` and pane contract | Both builds answer the flat envelope of section 8 with `id: "network-assessment"`; the website's status proxy reads exactly `configured, reachable, version, edition, capabilities, asOf`; the pane posts `{ type: 'hcw-addon', id, state }` with states `loading | ready | working | unavailable` to each `siteOrigins` entry. The Core's appliance public surface uses the same headers and error envelope so one pane bundle serves both builds |
+| Build guard | The AddOn's `edition.py` (`sys.meta_path` finder, env refusal) is the model for the Core's lab guard in change set I; the Core may adopt it verbatim with provenance in the other direction |
 | Images | AddOn image `docker.io/hybridcloudworks/hcw-addon-network-assessment`; Core images `docker.io/hybridcloudworks/img-ne-appliance-app:*`; both by digest, both through the Docker OIDC connection |
 
 ## 22 Open questions and assumptions
@@ -824,7 +824,7 @@ Live acceptance (R-008), bash, after `az login` as an identity holding only Read
 2. `[REVIEW REQUIRED]` **PyPI name and trusted publishing.** `cna-azure-network-engine` must be registered on PyPI with a trusted publisher for `saulpatinojr/HCW-NetworkEyes_App` and the `320-release-engine.yml` workflow; `vars.PYPI_PUBLISH_ENABLED` stays unset until then, and the wheel is attached to the GitHub Release instead.
 3. **Custom role action names.** Checked on 2026-10-25: the six actions in `docs/roles/cna-network-bgp-reader.json` are listed in the Microsoft Learn Azure permissions reference. Whoever creates the role still re-checks them against their tenant with the `Microsoft.Network` provider operations before `az role definition create`.
 4. `[REVIEW REQUIRED]` **Graph and Entra permissions.** The app registration for the bearer audience (7.H) and any Microsoft Graph permission the web tier needs to acquire tokens with its identity are tenant-admin steps.
-5. `[REVIEW REQUIRED]` **Compliance-framework references** (WAF, CIS, PCI-DSS, ISO 27001, HIPAA, FedRAMP, CISA ZTMM) carried as rule data from `analysis_engine.py` are claims shown to customers; every control reference is `[VERIFY]` and the set needs legal or compliance review before the appliance's anonymous public surface exposes them.
+5. `[REVIEW REQUIRED]` **Compliance-framework references** (WAF, CIS, PCI-DSS, ISO 27001, HIPAA, FedRAMP, CISA ZTMM) carried as rule data from `analysis_engine.py` are claims shown to users; every control reference is `[VERIFY]` and the set needs legal or compliance review before the appliance's anonymous public surface exposes them.
 6. **Rule numbering.** Zone-redundancy checks are numbered `AZ-BCDR-006/007` rather than `AZ-NET-02x`, and `AZ-NET-032/033` severities are lowered from Engine B's; both are flagged for the owner, and the AddOn already uses them.
 7. **Scale-to-zero.** `min_replicas = 1` is the default; persisting the last snapshot to Blob (UAMI `Storage Blob Data Contributor` on one container) would allow `min_replicas = 0` later `[VERIFY cost]`.
 8. **Vendored agent configuration.** Whether the 52 MB under `.agents/`, `.claude/`, `.codex/`, `.kiro/` leaves the product tree is a Core hygiene decision outside the change sets.

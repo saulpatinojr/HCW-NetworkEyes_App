@@ -9,7 +9,7 @@ body:
       value: |
         For planned work with a clear outcome. Write for someone with no memory of earlier sessions: say what a thing is the
         first time it appears. Mark each statement under Evidence as VERIFIED (you saw it) or ASSUMED (you did not).
-        Do not paste secrets or customer data.
+        Do not paste secrets or data from a real environment.
 
   - type: textarea
     id: problem

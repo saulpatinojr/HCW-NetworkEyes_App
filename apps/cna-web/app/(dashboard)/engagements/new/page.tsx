@@ -19,7 +19,7 @@ export default function NewEngagementPage() {
           New Engagement
         </h1>
         <p className="mt-1 text-sm text-navy-400 dark:text-navy-300">
-          Start a Cloud Network Assessment for a client organization.
+          Start a Cloud Network Assessment for an organization.
         </p>
       </div>
 
@@ -46,7 +46,7 @@ export default function NewEngagementPage() {
             htmlFor="clientOrg"
             className="block text-sm font-semibold text-navy-700 dark:text-navy-100"
           >
-            Client organization
+            Organization
           </label>
           <input
             id="clientOrg"

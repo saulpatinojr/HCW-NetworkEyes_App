@@ -9,7 +9,7 @@ Please report a suspected vulnerability privately, not in a public issue.
 2. Describe what you found. Only the maintainers and you can see the report.
 
 Do not put exploit details, credentials, tokens, private endpoints, tenant or subscription identifiers, personal data or
-customer data in a public issue, a pull request, a comment or a commit message. If the private form is not available to
+data from a real environment in a public issue, a pull request, a comment or a commit message. If the private form is not available to
 you, open a minimal public issue that asks for a secure contact and says nothing about the problem itself. Only test
 systems and data you own or are explicitly allowed to assess.
 
@@ -32,7 +32,7 @@ and publish those images. Please report problems in:
   (`CNA_API_TOKEN`) that protects service-to-service routes such as `/api/drawio-mcp/*`;
 - the handling of cloud credentials and of the administrator-entered AI provider keys (encrypted with AES-256-GCM,
   never to be logged, returned or stored anywhere else);
-- the client delivery portal, report and diagram generation, file upload and export paths;
+- the delivery portal, report and diagram generation, file upload and export paths;
 - the images, their base images and dependencies, and the image signature and provenance chain (cosign signatures and
   the SLSA attestation published with every image digest);
 - the workflows, actions, release automation and artifact handling in `.github/`; and
