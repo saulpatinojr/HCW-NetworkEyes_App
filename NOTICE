@@ -24,3 +24,15 @@ Aeonik typeface (Aeonik-Regular.ttf), by Mark Bloom and Joe Leadbeater.
 
 Dependencies installed by npm, uv and the container base images keep their own
 licences. They are not copied into this repository.
+
+Name and logo that are NOT covered by the Apache License
+
+The name "Hybrid Cloud Works" and the Hybrid Cloud Works logo.
+  Files:   apps/cna-web/public/hcw-logo-black.png
+           apps/cna-web/public/hcw-logo-white.png
+           cna/report_engine/templates/assets/logos/hcw-logo-cover.png
+  Licence: none. The Apache License does not cover the name or the logo.
+           Section 6 of it (Trademarks) grants no permission to use them,
+           "except as required for reasonable and customary use in
+           describing the origin of the Work and reproducing the content of
+           the NOTICE file".
