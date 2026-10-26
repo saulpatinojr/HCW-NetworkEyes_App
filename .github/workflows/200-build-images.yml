@@ -192,7 +192,7 @@ jobs:
         # connection guide (docs.docker.com/security/authentication/oidc-connections/create-manage/):
         # the variable is DOCKERHUB_OIDC_CONNECTIONID, the job needs `id-token: write`, the
         # minimum docker/login-action is 4.5.0 (this pin is 4.6.0).
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6  # v4.7.0
         env:
           DOCKERHUB_OIDC_CONNECTIONID: ${{ vars.DOCKERHUB_CONNECTION }}
           # One hour, not the 15 minutes this job used to ask for: the token is minted here and used
@@ -315,7 +315,7 @@ jobs:
         # connection guide (docs.docker.com/security/authentication/oidc-connections/create-manage/):
         # the variable is DOCKERHUB_OIDC_CONNECTIONID, the job needs `id-token: write`, the
         # minimum docker/login-action is 4.5.0 (this pin is 4.6.0).
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6  # v4.7.0
         env:
           DOCKERHUB_OIDC_CONNECTIONID: ${{ vars.DOCKERHUB_CONNECTION }}
           # One hour, not the 15 minutes this job used to ask for: the token is minted here and used
@@ -535,7 +535,7 @@ jobs:
         # connection guide (docs.docker.com/security/authentication/oidc-connections/create-manage/):
         # the variable is DOCKERHUB_OIDC_CONNECTIONID, the job needs `id-token: write`, the
         # minimum docker/login-action is 4.5.0 (this pin is 4.6.0).
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6  # v4.7.0
         env:
           DOCKERHUB_OIDC_CONNECTIONID: ${{ vars.DOCKERHUB_CONNECTION }}
           # The longest the connection allows: five verifications (cosign talks to Sigstore, up to two
@@ -780,7 +780,7 @@ jobs:
       - name: Log in to Docker Hub
         # Exactly as the real jobs log in (change set J of REFACTOR_APP.md): the action exchanges this
         # job's id-token for a short-lived registry credential, so no long-lived access token is stored.
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6  # v4.7.0
         env:
           DOCKERHUB_OIDC_CONNECTIONID: ${{ vars.DOCKERHUB_CONNECTION }}
           DOCKERHUB_OIDC_EXPIREIN: '1800'  # a 25-minute job
