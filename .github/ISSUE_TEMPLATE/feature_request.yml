@@ -8,8 +8,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thank you for the idea. Please search the existing issues first, and do not paste credentials, customer data,
-        tenant or subscription identifiers or real network topology.
+        Thank you for the idea. Please search the existing issues first, and do not paste credentials, data from a real
+        environment, tenant or subscription identifiers or real network topology.
 
   - type: textarea
     id: problem

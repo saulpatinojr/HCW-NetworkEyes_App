@@ -179,12 +179,12 @@ function validateLogoUrl(url: string | null): { error?: string } | null {
         (host) => parsed.hostname === host || parsed.hostname.endsWith("." + host)
       );
       if (!isAllowed) {
-        return { error: "Logo URL must be hosted on an approved CDN (e.g., *.cbts.com)." };
+        return { error: "Logo URL must be hosted on an approved CDN." };
       }
     }
     return null;
   } catch {
-    return { error: "Invalid customer logo URL format." };
+    return { error: "Invalid logo URL format." };
   }
 }
 

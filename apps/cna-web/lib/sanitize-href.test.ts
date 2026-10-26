@@ -6,7 +6,7 @@ describe("sanitizeHref", () => {
   it("keeps http(s), mailto and tel links", () => {
     expect(sanitizeHref("https://example.com/x?y=1")).toBe("https://example.com/x?y=1");
     expect(sanitizeHref("http://example.com")).toBe("http://example.com");
-    expect(sanitizeHref("mailto:ops@cbts.com")).toBe("mailto:ops@cbts.com");
+    expect(sanitizeHref("mailto:ops@example.com")).toBe("mailto:ops@example.com");
     expect(sanitizeHref("tel:+15135550123")).toBe("tel:+15135550123");
   });
 

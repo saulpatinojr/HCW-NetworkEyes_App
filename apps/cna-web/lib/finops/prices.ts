@@ -4,8 +4,8 @@
 // 730 hrs/month) mirroring cna/modules/network/analysis/azure_network_prices.py
 // (keep the two in sync). They do not reflect the client's negotiated rates,
 // reservations, or region. Every figure derived from this table MUST be
-// rendered with a [VERIFY] flag in reports and client-facing copy per CBTS
-// review policy.
+// rendered with a [VERIFY] flag in reports and in text shown to users, per the
+// project's review policy.
 
 export const HOURS_PER_MONTH = 730;
 

@@ -434,7 +434,7 @@ def test_answer_via_mocked_bedrock(monkeypatch):
     assert result.engine == "bedrock"
     assert captured["service"] == "bedrock-runtime"
     assert captured["modelId"].startswith("arn:aws:bedrock")  # inference profile wins over model id
-    assert captured["system"][0]["text"].startswith("You are the CBTS")
+    assert captured["system"][0]["text"].startswith("You are the Cloud Network Assessment copilot")
     assert captured["messages"] == [{"role": "user", "content": [{"text": "Hi"}]}]
     assert captured["inferenceConfig"] == {"maxTokens": 1200}
     assert result.text == "AZ-NET-002 needs an NSG."

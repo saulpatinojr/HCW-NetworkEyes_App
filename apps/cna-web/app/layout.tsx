@@ -13,9 +13,9 @@ const aeonik = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "CNA Platform — CBTS",
+  title: "CNA Platform",
   description:
-    "CBTS Cloud Network Assessment — multi-user assessment, analysis, and delivery platform",
+    "Cloud Network Assessment — multi-user assessment, analysis, and delivery platform",
 };
 
 export default function RootLayout({

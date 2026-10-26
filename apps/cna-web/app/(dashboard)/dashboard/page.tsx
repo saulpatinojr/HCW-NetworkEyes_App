@@ -35,7 +35,7 @@ export default async function DashboardPage() {
       <div className="mb-8 flex items-end justify-between">
         <div>
           <h2 className="label-caps text-navy-400 dark:text-navy-300">
-            CBTS Cloud Network Assessment
+            Cloud Network Assessment
           </h2>
           <h1 className="mt-1 text-3xl font-black tracking-tight text-navy-800 dark:text-navy-50">
             Engagements

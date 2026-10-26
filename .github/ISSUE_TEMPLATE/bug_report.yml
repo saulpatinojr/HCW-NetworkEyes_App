@@ -9,7 +9,7 @@ body:
     attributes:
       value: |
         Thank you for reporting this. Please search the existing issues first, and do not paste credentials, tokens,
-        customer data, tenant or subscription identifiers or real network topology.
+        data from a real environment, tenant or subscription identifiers or real network topology.
         A security problem is not a bug report: use the private route in
         [SECURITY.md](https://github.com/saulpatinojr/HCW-NetworkEyes_App/blob/main/.github/SECURITY.md).
 

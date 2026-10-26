@@ -484,7 +484,7 @@ def build_encyclopedia_context(  # noqa: PLR0913 — one optional input per data
             "client_org": engagement.get("client_org", ""),
             "engagement_name": engagement.get("engagement_name", "Cloud Network Assessment"),
             "generated_at": engagement.get("generated_at", ""),
-            "prepared_by": engagement.get("prepared_by", "CBTS"),
+            "prepared_by": engagement.get("prepared_by", "Network Eyes"),
         },
         "severity_counts": severity_counts,
         "severity_order": list(_SEVERITY_ORDER),

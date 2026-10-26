@@ -123,9 +123,9 @@ export function GenerateDeliverableForm({ engagementId }: { engagementId: string
           </div>
         </div>
 
-        {/* Customer logo */}
+        {/* Logo */}
         <div>
-          <h3 className="label-caps mb-1 text-navy-500">Customer Logo (optional)</h3>
+          <h3 className="label-caps mb-1 text-navy-500">Logo (optional)</h3>
           <p className="mb-2 text-xs text-navy-600">
             PNG or SVG — personalizes the report header. Leave blank to use the default logo.
           </p>
@@ -133,13 +133,13 @@ export function GenerateDeliverableForm({ engagementId }: { engagementId: string
             ref={fileRef}
             type="file"
             accept="image/png,image/svg+xml"
-            aria-label="Customer logo (PNG or SVG)"
+            aria-label="Logo (PNG or SVG)"
             className="block w-full text-sm text-navy-500 file:mr-3 file:rounded-lg file:border-0 file:bg-teal-50 dark:file:bg-teal-900/30 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-teal-700 dark:file:text-teal-300 hover:file:bg-teal-50 dark:hover:file:bg-teal-900/50"
           />
         </div>
 
         <p className="text-xs text-navy-600">
-          Title is auto-generated using the client org name, assessment type, date, and sequence number.
+          Title is auto-generated using the organization name, assessment type, date, and sequence number.
           Generation typically takes 20–60 seconds.
         </p>
 

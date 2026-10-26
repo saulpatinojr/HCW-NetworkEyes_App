@@ -272,7 +272,7 @@ export async function analyzeEngagement(
   const { topologyJson, documents = [], existingFindings = [], focus, extraInstruction } = options;
   const focusInstruction = FOCUS_PROMPTS[focus];
 
-  const systemPrompt = `You are a senior Azure cloud network security architect performing a Cloud Network Assessment (CNA) for a CBTS customer engagement.
+  const systemPrompt = `You are a senior Azure cloud network security architect performing a Cloud Network Assessment (CNA).
 You have access to three data sources: live-discovered topology, uploaded documents, and existing findings from automated rules.
 
 ANALYSIS FOCUS: ${focusInstruction}
@@ -506,9 +506,9 @@ export async function generateDeliverableContent(
   const date = new Date().toISOString().split("T")[0];
 
   const outputInstruction = `OUTPUT: Return only the Markdown document content. No JSON wrapper. Start directly with the report heading.
-Include a professional header: Client, Engagement, Date, Report Type, Prepared By: CBTS Cloud Security Practice.`;
+Include a professional header: Organization, Engagement, Date, Report Type, Prepared with: Network Eyes.`;
 
-  const systemPrompt = `You are a senior CBTS cloud network security consultant generating a professional client deliverable.
+  const systemPrompt = `You are a senior cloud network security architect generating a professional assessment deliverable.
 ${typePrompt}
 
 ${outputInstruction}`;
@@ -519,7 +519,7 @@ ${outputInstruction}`;
 
   // 1. Engagement header
   parts.push(`=== ENGAGEMENT CONTEXT ===`);
-  parts.push(`Client Organization: ${ctx.clientOrg}`);
+  parts.push(`Organization: ${ctx.clientOrg}`);
   parts.push(`Engagement Name: ${ctx.engagementName}`);
   parts.push(`Report Title: ${ctx.title}`);
   parts.push(`Generated: ${date}`);

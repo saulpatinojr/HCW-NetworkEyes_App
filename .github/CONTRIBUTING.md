@@ -9,7 +9,7 @@ overview, and `TODO.md` is the work queue.
 - Search the existing issues and pull requests first.
 - For anything bigger than a small fix, open an issue (use a form from the **New issue** page) so the outcome and the
   acceptance criteria are agreed before you write code.
-- Never put credentials, tokens, private keys, connection strings, personal data, customer data, tenant or subscription
+- Never put credentials, tokens, private keys, connection strings, personal data, data from a real environment, tenant or subscription
   identifiers, or real network topology in code, tests, fixtures, logs, issues or pull requests.
 - A vulnerability is not an issue. Report it privately as `.github/SECURITY.md` describes.
 - By taking part you agree to the `.github/CODE_OF_CONDUCT.md`.
