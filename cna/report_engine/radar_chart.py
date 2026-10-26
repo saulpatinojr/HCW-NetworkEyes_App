@@ -3,7 +3,7 @@
 Pure string-building helper: no matplotlib, no raster output. The returned
 SVG embeds directly into Jinja2 templates and renders in WeasyPrint.
 
-CBTS palette: navy #012638 (text/axes), warm gray #F2F1ED-derived grid,
+Palette: navy #012638 (text/axes), warm gray #F2F1ED-derived grid,
 bright teal #00E9BB (score polygon), dark teal #004E3D (labels).
 """
 

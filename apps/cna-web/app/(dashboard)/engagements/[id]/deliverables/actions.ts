@@ -10,6 +10,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import type { DeliverableType } from "@prisma/client";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { validateLogoUrl } from "@/lib/logo-url";
 import { apiHeaders } from "@/lib/api-client";
 
 // ─── Multi-subscription topology merge ────────────────────────────────────────
@@ -166,26 +167,6 @@ export async function getDeliverableProgress(
     steps = deliverable.progressLog ? (JSON.parse(deliverable.progressLog) as ProgressUpdate[]) : [];
   } catch { /* malformed progress — return empty */ }
   return { status: deliverable.status, steps };
-}
-
-// OWA-07: SSRF Defense - Validate that external image URLs are restricted to trusted domains
-function validateLogoUrl(url: string | null): { error?: string } | null {
-  if (!url || url.trim() === "") return null;
-  try {
-    if (!url.startsWith("/")) {
-      const parsed = new URL(url);
-      const allowedLogoHosts = ["cdn.cbts.com", "storage.azure.com", "githubusercontent.com", "cbts.com"];
-      const isAllowed = allowedLogoHosts.some(
-        (host) => parsed.hostname === host || parsed.hostname.endsWith("." + host)
-      );
-      if (!isAllowed) {
-        return { error: "Logo URL must be hosted on an approved CDN." };
-      }
-    }
-    return null;
-  } catch {
-    return { error: "Invalid logo URL format." };
-  }
 }
 
 // ─── Generate single assessment ───────────────────────────────────────────────

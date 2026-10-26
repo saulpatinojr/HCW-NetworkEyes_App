@@ -9,7 +9,7 @@ import { NextResponse } from "next/server";
 // SEC-005: Content-Security-Policy for served deliverable HTML. `default-src
 // 'none'` denies everything not explicitly allowed; the document needs only
 // inline <style> (style-src 'unsafe-inline'), same-origin + data:/https: images
-// (the encyclopedia embeds inline SVG diagrams and a same-origin CBTS logo),
+// (the encyclopedia embeds inline SVG diagrams and the cover logo embedded as a data: URI),
 // and same-origin/data: fonts (the encyclopedia @font-face). Scripts are denied
 // outright except a single per-response nonce used by the Markdown renderer's
 // print button — the legacy encyclopedia HTML carries no scripts, so it gets no

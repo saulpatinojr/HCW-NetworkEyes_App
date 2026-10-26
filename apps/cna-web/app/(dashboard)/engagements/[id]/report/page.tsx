@@ -158,8 +158,8 @@ export default async function ReportBookModePage({ params, searchParams }: PageP
 
       {/* ── Cover ── */}
       <section className="page-break glass flex min-h-[60vh] flex-col items-center justify-center gap-6 rounded-xl p-10 text-center">
-        <Image src="/cbts-logo-dark-teal.svg" alt="CBTS" width={180} height={48} className="dark:hidden" />
-        <Image src="/cbts-logo-bright-teal.svg" alt="CBTS" width={180} height={48} className="hidden dark:block" />
+        <Image src="/hcw-logo-black.png" alt="Hybrid Cloud Works" width={160} height={144} unoptimized className="dark:hidden" />
+        <Image src="/hcw-logo-white.png" alt="Hybrid Cloud Works" width={160} height={144} unoptimized className="hidden dark:block" />
         <div>
           <p className="label-caps text-teal-500">Cloud Network Assessment</p>
           <h2 className="mt-2 text-3xl font-black text-navy-800 dark:text-navy-100">

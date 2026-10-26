@@ -3,7 +3,7 @@
 // Client-leaf Recharts severity donut (Phase F).
 
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { SEVERITY_HEX, SEVERITY_ORDER, CHART_GRID, CBTS_NAVY } from "./chart-theme";
+import { SEVERITY_HEX, SEVERITY_ORDER, CHART_GRID, PALETTE_NAVY } from "./chart-theme";
 
 export interface SeverityCount {
   severity: string;
@@ -49,7 +49,7 @@ export function SeverityDonut({
           ))}
         </Pie>
         <Tooltip
-          contentStyle={{ background: CBTS_NAVY, border: `1px solid ${CHART_GRID}`, borderRadius: 8, fontSize: 12 }}
+          contentStyle={{ background: PALETTE_NAVY, border: `1px solid ${CHART_GRID}`, borderRadius: 8, fontSize: 12 }}
           labelStyle={{ color: "#fff" }}
         />
         <Legend wrapperStyle={{ fontSize: 11 }} />

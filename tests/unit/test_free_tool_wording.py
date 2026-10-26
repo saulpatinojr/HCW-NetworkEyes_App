@@ -8,13 +8,16 @@ naming another company; that part is the owner's rule.) These tests keep the wor
 coming back. They read tracked files only, so they prove what the repository says and nothing about a
 running system or a published image.
 
-* ``CBTS`` (a company) is named in no tracked file except the ones in ``BRAND_ASSETS``. That list is the owner's
-  open decision about the CBTS logo and colour palette (the files below are brand assets, not wording). A test fails
-  when an entry no longer needs to be there, so the list only gets shorter.
+* ``CBTS`` (a company) is named in no tracked file, in no file name and in no code name, except the history files
+  and the guard files below. The owner chose the Hybrid Cloud Works logo for the report cover and the web pages
+  (ticket #318, 2026-10-26), so ``BRAND_ASSETS`` and ``BRAND_FILE_NAMES``, which held the company's logo and palette
+  while that was open, are empty. They stay as the way to excuse a line, and a test fails when an entry excuses
+  nothing, so a list can only shrink.
+* The Hybrid Cloud Works logo files exist, are small PNGs with a transparent background, and are the files the web
+  header, the sign-in page, the report cover and the encyclopedia cover name.
 * The documents (every Markdown file, ``NOTICE``, ``.env.example`` and everything under ``.github/``) say "user", not
   "customer", and "build", not "edition", except for the quotes in ``DOC_EXCEPTIONS``.
-* Dockerfile comments and every ``LABEL`` say none of those words, and no file is named after the company except
-  the logo images in ``BRAND_FILE_NAMES``.
+* Dockerfile comments and every ``LABEL`` say none of those words, and no file is named after the company.
 * The text sent to an AI model names no company and no payment. (``report-prompts.test.ts`` covers the report
   sections; the files below cover the older prompt path, the report title block and the chat copilot.)
 
@@ -26,6 +29,7 @@ from __future__ import annotations
 
 import re
 import shutil
+import struct
 import subprocess
 from pathlib import Path
 
@@ -49,6 +53,7 @@ GUARD_FILES = frozenset(
         "tests/security/test_standalone_boundary.py",  # names the other owner's GitHub account
         "apps/cna-web/lib/standalone-boundary.test.ts",  # the same, for the web tier
         "apps/cna-web/lib/report-prompts.test.ts",  # the banned-word list of the report prompts
+        "apps/cna-web/lib/logo-url.test.ts",  # spells out the company hosts to prove the logo allow-list rejects them
     }
 )
 LOCK_FILES = frozenset({"uv.lock", "package-lock.json"})
@@ -57,90 +62,27 @@ MAX_BYTES = 2_000_000
 #: Any spelling of the company name, inside a longer word as well (``cbts.com``, ``CBTS_NAVY``, ``cbts-logo``).
 CBTS = re.compile(r"cbts", re.IGNORECASE)
 
-#: (file, pattern, reason): the words that may still name the company. An entry excuses the text it matches and
-#: nothing else: the matched text is cut out of the line, and the line is excused only if no company name is left
-#: (so "CBTS Navy scale and CBTS pricing" fails). Remove an entry as soon as it excuses no line
-#: (``test_every_brand_asset_entry_is_still_needed`` fails until you do). The owner decides what the report cover and
-#: the colours become.
-LOGO = "the CBTS logo, a brand asset: replacing it is the owner's decision (what logo the report cover carries)"
-PALETTE = (
-    "the CBTS colour palette, a brand asset: renaming it follows the owner's decision on the logo"
+#: (file, pattern, reason): lines that may still name the company. EMPTY: the owner chose the Hybrid Cloud Works logo
+#: (ticket #318, 2026-10-26) and the colour constants and comments were renamed with their values unchanged. An entry
+#: excuses the text it matches and nothing else: the matched text is cut out of the line, and the line is excused only
+#: if no company name is left. Remove an entry as soon as it excuses no line
+#: (``test_every_brand_asset_entry_is_still_needed`` fails until you do).
+BRAND_ASSETS: tuple[tuple[str, re.Pattern[str], str], ...] = ()
+#: File names that may carry the company name. Empty for the same reason.
+BRAND_FILE_NAMES: frozenset[str] = frozenset()
+
+#: The Hybrid Cloud Works logo, made from the owner's logo (HCW-HybridCloudWorks, frontend/public/icons/hcw-logo.png):
+#: black strokes for a light background, white strokes for a dark one, both on a transparent background.
+LOGO_BLACK = "apps/cna-web/public/hcw-logo-black.png"
+LOGO_WHITE = "apps/cna-web/public/hcw-logo-white.png"
+#: The encyclopedia cover is dark navy, so it carries the white-stroke logo, at the size WeasyPrint needs for print.
+LOGO_COVER = "cna/report_engine/templates/assets/logos/hcw-logo-cover.png"
+WEB_PAGES_WITH_THE_LOGO = (
+    "apps/cna-web/app/(dashboard)/layout.tsx",
+    "apps/cna-web/app/auth/signin/page.tsx",
+    "apps/cna-web/app/(dashboard)/engagements/[id]/report/page.tsx",
 )
-_LOGO_LINE = re.compile(
-    r'/cbts-logo-[a-z-]+\.svg|CBTS%20Logo%20[A-Za-z0-9%]+\.svg|alt="CBTS"', re.IGNORECASE
-)
-#: The logo image files (the names, not the contents). Remove a name when the file is gone.
-BRAND_FILE_NAMES = frozenset(
-    {
-        "apps/cna-web/public/cbts-logo-bright-teal.svg",
-        "apps/cna-web/public/cbts-logo-dark-teal.svg",
-        "apps/cna-web/public/cbts_dark.png",
-        "apps/cna-web/public/cbts_light.png",
-        "cna/report_engine/templates/assets/logos/CBTS Logo Bright Teal.svg",
-        "cna/report_engine/templates/assets/logos/CBTS Logo Dark Teal.svg",
-        "infra/logos/cbts_dark.png",
-        "infra/logos/cbts_light.png",
-    }
-)
-BRAND_ASSETS: tuple[tuple[str, re.Pattern[str], str], ...] = (
-    ("apps/cna-web/app/(dashboard)/engagements/[id]/report/page.tsx", _LOGO_LINE, LOGO),
-    ("apps/cna-web/app/(dashboard)/layout.tsx", _LOGO_LINE, LOGO),
-    ("apps/cna-web/app/auth/signin/page.tsx", _LOGO_LINE, LOGO),
-    ("cna/report_engine/templates/encyclopedia/book.j2", _LOGO_LINE, LOGO),
-    (
-        "cna/report_engine/encyclopedia_report.py",
-        re.compile(r"CBTS-branded"),
-        "the docstring says the cover is CBTS-branded, which the logo makes true",
-    ),
-    (
-        "apps/cna-web/app/api/deliverables/[id]/route.ts",
-        re.compile(r"same-origin CBTS logo"),
-        "a comment about the logo in the report's content security policy",
-    ),
-    (
-        "apps/cna-web/app/(dashboard)/engagements/[id]/deliverables/actions.ts",
-        re.compile(r"allowedLogoHosts.*"),
-        "the logo host allow-list (cdn.cbts.com, cbts.com) is behaviour, not wording: narrowing it is the owner's call",
-    ),
-    (
-        "REVIEW.md",
-        re.compile(r"sub-cbtssandbox-ops-tst"),
-        "R-010 is history: this is the name of an Azure subscription, an identifier of someone else's environment",
-    ),
-    (
-        "apps/cna-web/app/globals.css",
-        re.compile(r"CBTS (?:Design System|Navy|Teal|Warm Gray|Accent|logo glow)"),
-        PALETTE,
-    ),
-    ("apps/cna-web/app/global-error.tsx", re.compile(r"CBTS palette"), PALETTE),
-    (
-        "apps/cna-web/components/charts/chart-theme.ts",
-        re.compile(r"CBTS_[A-Z_]+|CBTS chart palette"),
-        PALETTE + " (the CBTS_* constants are code names)",
-    ),
-    (
-        "apps/cna-web/components/charts/maturity-radar.tsx",
-        re.compile(r"CBTS_[A-Z_]+"),
-        PALETTE + " (uses a CBTS_* constant)",
-    ),
-    (
-        "apps/cna-web/components/charts/severity-donut.tsx",
-        re.compile(r"CBTS_[A-Z_]+"),
-        PALETTE + " (uses a CBTS_* constant)",
-    ),
-    (
-        "apps/cna-web/components/charts/traffic-breakdown.tsx",
-        re.compile(r"CBTS_[A-Z_]+"),
-        PALETTE + " (uses a CBTS_* constant)",
-    ),
-    ("cna/diagram_engine/drawio_generator.py", re.compile(r"CBTS accent"), PALETTE),
-    ("cna/report_engine/radar_chart.py", re.compile(r"CBTS palette"), PALETTE),
-    (
-        "cna/report_engine/templates/encyclopedia/encyclopedia.css",
-        re.compile(r"CBTS palette"),
-        PALETTE,
-    ),
-)
+MAX_LOGO_BYTES = 100_000
 
 #: Rules for the documents (Markdown files and the issue forms). Matching is case-insensitive.
 DOC_RULES: dict[str, re.Pattern[str]] = {
@@ -227,6 +169,14 @@ def _text(relative: str) -> str | None:
         return raw.decode("utf-8")
     except UnicodeDecodeError:
         return None
+
+
+def _png_header(relative: str) -> tuple[int, int, int]:
+    """(width, height, colour type) of a PNG, read from its header; fails if the file is not a PNG."""
+    raw = (REPO_ROOT / relative).read_bytes()
+    assert raw[:8] == b"\x89PNG\r\n\x1a\n", f"{relative} is not a PNG file"
+    width, height = struct.unpack(">II", raw[16:24])
+    return width, height, raw[25]
 
 
 def _documents() -> list[str]:
@@ -343,9 +293,9 @@ class TestTheCompanyNameStaysOut:
         [
             "CBTS",
             "cbts.com",
-            "sub-cbtssandbox-ops-tst",
+            "my-cbtssandbox-env",
             "CBTSSandbox",
-            "ops@cbts.com",
+            "someone@cbts.example",
             "/cbts-logo-dark-teal.svg",
             "CBTS_NAVY",
             "saulpatino-cbts/x",
@@ -360,6 +310,129 @@ class TestTheCompanyNameStaysOut:
     )
     def test_the_pattern_lets_other_words_through(self, text: str) -> None:
         assert not CBTS.search(text)
+
+
+class TestTheHybridCloudWorksLogo:
+    """The owner chose the Hybrid Cloud Works logo (ticket #318); these tests keep the pages and files in step."""
+
+    def test_the_logo_files_are_tracked_small_pngs_with_a_transparent_background(self) -> None:
+        tracked = set(_tracked())
+        for relative in (LOGO_BLACK, LOGO_WHITE, LOGO_COVER):
+            assert relative in tracked, f"{relative} is not a tracked file"
+            width, height, colour_type = _png_header(relative)
+            assert colour_type in (4, 6), (
+                f"{relative} has no alpha channel (colour type {colour_type})"
+            )
+            assert 300 <= width <= 1000 and 300 <= height <= 1000, f"{relative} is {width}x{height}"
+            assert (REPO_ROOT / relative).stat().st_size <= MAX_LOGO_BYTES, (
+                f"{relative} is larger than the limit"
+            )
+
+    def test_the_web_logos_are_big_enough_for_the_largest_use_and_the_cover_logo_for_print(
+        self,
+    ) -> None:
+        # Largest web use: the report page cover, 160 css pixels wide, on a screen with a 2x pixel ratio.
+        for relative in (LOGO_BLACK, LOGO_WHITE):
+            assert _png_header(relative)[0] >= 320
+        # The encyclopedia cover logo is 4 cm wide: 300 dpi needs 472 pixels.
+        assert _png_header(LOGO_COVER)[0] >= 472
+
+    @pytest.mark.parametrize("relative", WEB_PAGES_WITH_THE_LOGO)
+    def test_each_web_page_uses_the_black_logo_on_light_and_the_white_logo_on_dark(
+        self, relative: str
+    ) -> None:
+        text = _text(relative) or ""
+        assert "/hcw-logo-black.png" in text and "/hcw-logo-white.png" in text, relative
+        if relative.endswith("report/page.tsx"):
+            assert re.search(r'src="/hcw-logo-black\.png"[^>]*dark:hidden', text)
+            assert re.search(r'src="/hcw-logo-white\.png"[^>]*hidden dark:block', text)
+        else:
+            # <picture>: the white logo is the dark-scheme source, the black logo is the default image.
+            assert re.search(
+                r'<source\s+srcSet="/hcw-logo-white\.png"\s+media="\(prefers-color-scheme: dark\)"',
+                text,
+            )
+            assert re.search(r'<img\s+src="/hcw-logo-black\.png"', text)
+
+    def test_every_image_path_the_web_pages_name_is_a_file_in_public(self) -> None:
+        for relative in WEB_PAGES_WITH_THE_LOGO:
+            for match in re.finditer(
+                r"""["'](/[A-Za-z0-9_.-]+\.(?:png|svg|jpe?g|webp|ico))["']""", _text(relative) or ""
+            ):
+                target = REPO_ROOT / "apps/cna-web/public" / match.group(1).lstrip("/")
+                assert target.is_file(), (
+                    f"{relative} names {match.group(1)}, which is not in apps/cna-web/public"
+                )
+
+    def test_the_encyclopedia_html_embeds_the_cover_logo_so_it_shows_in_a_browser_and_in_the_pdf(
+        self,
+    ) -> None:
+        # The HTML is opened by WeasyPrint and also served at /api/deliverables/<id>, where a relative address such as
+        # "assets/logos/..." points at a page that does not exist. A data: URI works in both places.
+        import base64
+
+        from cna.report_engine.encyclopedia_report import EncyclopediaReportRenderer
+
+        html = EncyclopediaReportRenderer(edition="condensed").render_html(
+            [],
+            engagement={
+                "engagement_id": "eng-logo-001",
+                "client_org": "Example Org",
+                "engagement_name": "Example Assessment",
+            },
+        )
+        match = re.search(r'<img class="logo" src="([^"]+)" alt="([^"]*)"', html)
+        assert match, "the cover has no logo image"
+        source, alt = match.groups()
+        assert alt == "Hybrid Cloud Works"
+        prefix = "data:image/png;base64,"
+        assert source.startswith(prefix), f"the cover logo is not embedded: {source[:60]}"
+        assert base64.b64decode(source[len(prefix) :]) == (REPO_ROOT / LOGO_COVER).read_bytes()
+
+    def test_a_templates_folder_without_the_logo_falls_back_to_the_relative_address(
+        self, tmp_path: Path
+    ) -> None:
+        from cna.report_engine.encyclopedia_report import _TEMPLATES_DIR, EncyclopediaReportRenderer
+
+        copy = tmp_path / "templates"
+        shutil.copytree(_TEMPLATES_DIR, copy, ignore=shutil.ignore_patterns("hcw-logo-cover.png"))
+        html = EncyclopediaReportRenderer(templates_dir=copy, edition="condensed").render_html(
+            [], engagement={"engagement_id": "eng-logo-002", "engagement_name": "Example"}
+        )
+        assert 'src="assets/logos/hcw-logo-cover.png"' in html
+
+    def test_the_cover_logo_file_is_where_weasyprint_looks_for_it(self) -> None:
+        # render() gives WeasyPrint base_url=_TEMPLATES_DIR, so the relative address resolves to this file.
+        from cna.report_engine.encyclopedia_report import _COVER_LOGO, _TEMPLATES_DIR
+
+        assert (REPO_ROOT / LOGO_COVER).samefile(_TEMPLATES_DIR / _COVER_LOGO)
+
+    def test_the_logo_pixels_are_the_colour_the_file_name_says_on_a_transparent_background(
+        self,
+    ) -> None:
+        image_module = pytest.importorskip("PIL.Image")
+        for relative, stroke in ((LOGO_BLACK, 0), (LOGO_WHITE, 255), (LOGO_COVER, 255)):
+            with image_module.open(REPO_ROOT / relative) as image:
+                width, height = image.size
+                data = image.convert("LA").tobytes()  # grey, alpha, grey, alpha, ...
+            greys, alphas = data[0::2], data[1::2]
+            for x, y in ((0, 0), (width - 1, 0), (0, height - 1), (width - 1, height - 1)):
+                assert alphas[y * width + x] == 0, (
+                    f"{relative}: the corner ({x}, {y}) is not transparent"
+                )
+            inked = [grey for grey, alpha in zip(greys, alphas, strict=True) if alpha > 128]
+            assert len(inked) / (width * height) > 0.03, f"{relative} has almost no strokes"
+            assert all(abs(grey - stroke) <= 8 for grey in inked), (
+                f"{relative}: its strokes are not {'white' if stroke else 'black'}"
+            )
+
+    def test_the_cover_is_dark_so_it_needs_the_light_stroke_logo(self) -> None:
+        css = (REPO_ROOT / "cna/report_engine/templates/encyclopedia/encyclopedia.css").read_text(
+            "utf-8"
+        )
+        assert re.search(r"@page cover \{\s*background: #012638;", css), (
+            "the cover page is no longer dark navy"
+        )
 
 
 class TestTheDocumentsSayUserAndBuild:

@@ -162,7 +162,7 @@ STYLE_SERVICE_BAND = (
 )
 
 # Phase E: net-new (recommended) resources in future-state diagrams get a
-# dashed bright-teal border (CBTS accent #00E9BB) and a "(recommended)" suffix.
+# dashed bright-teal border (accent #00E9BB) and a "(recommended)" suffix.
 RECOMMENDED_SUFFIX = " (recommended)"
 
 

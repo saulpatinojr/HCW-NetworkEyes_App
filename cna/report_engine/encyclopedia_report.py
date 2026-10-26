@@ -1,6 +1,6 @@
 """Phase D — Encyclopedia Report Renderer.
 
-Produces the six-chapter CBTS-branded "Networking Encyclopedia" deliverable
+Produces the six-chapter "Networking Encyclopedia" deliverable
 from findings + discovery data. Two editions from one template set:
 
   condensed — executive-level: exec summary, maturity radar, key stats,
@@ -24,6 +24,7 @@ Rendering:
 
 from __future__ import annotations
 
+import base64
 import logging
 import tempfile
 from collections.abc import Sequence
@@ -45,6 +46,23 @@ from cna.report_engine.radar_chart import radar_chart_svg
 logger = logging.getLogger("cna.report.encyclopedia")
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
+_COVER_LOGO = "assets/logos/hcw-logo-cover.png"
+
+
+def _cover_logo_src(templates_dir: Path) -> str:
+    """The cover logo as a ``data:`` URI.
+
+    The HTML is opened in two places: by WeasyPrint, which resolves a relative address against the templates folder,
+    and in a browser at ``/api/deliverables/<id>``, where the same relative address points at a page that does not
+    exist. A ``data:`` URI works in both, and the page's content security policy already allows ``data:`` images.
+    If a custom templates folder has no such file, the relative address is returned, as before.
+    """
+    try:
+        data = (templates_dir / _COVER_LOGO).read_bytes()
+    except OSError:
+        return _COVER_LOGO
+    return "data:image/png;base64," + base64.b64encode(data).decode("ascii")
+
 
 EDITION_CONDENSED = "condensed"
 EDITION_EXPANDED = "expanded"
@@ -527,6 +545,7 @@ class EncyclopediaReportRenderer:
         if edition not in _EDITIONS:
             raise ValueError(f"edition must be one of {_EDITIONS}, got {edition!r}")
         self.edition = edition
+        self._templates_dir = templates_dir
         self._env = Environment(
             loader=FileSystemLoader(str(templates_dir)),
             autoescape=select_autoescape(["html", "j2"]),
@@ -562,6 +581,7 @@ class EncyclopediaReportRenderer:
             current_diagram_svg=current_diagram_svg,
             future_diagram_svg=future_diagram_svg,
         )
+        context["cover_logo_src"] = _cover_logo_src(self._templates_dir)
         return self._env.get_template("encyclopedia/book.j2").render(**context)
 
     def render(  # noqa: PLR0913 — one optional input per data source

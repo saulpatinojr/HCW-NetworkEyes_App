@@ -9,15 +9,15 @@ export default function SignInPage() {
         {/* W3C-01 / W3C-12: picture tag with prefers-color-scheme prevents duplicate downloads and CLS */}
         <picture>
           <source
-            srcSet="/cbts-logo-bright-teal.svg"
+            srcSet="/hcw-logo-white.png"
             media="(prefers-color-scheme: dark)"
           />
           <img
-            src="/cbts-logo-dark-teal.svg"
-            alt="CBTS"
-            className="mb-6 h-9 w-auto"
-            width={108}
-            height={36}
+            src="/hcw-logo-black.png"
+            alt="Hybrid Cloud Works"
+            className="mb-6 h-16 w-auto"
+            width={71}
+            height={64}
           />
         </picture>
 

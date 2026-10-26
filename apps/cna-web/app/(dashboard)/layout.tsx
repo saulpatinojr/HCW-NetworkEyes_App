@@ -31,15 +31,15 @@ export default async function DashboardLayout({
             {/* W3C-01 / W3C-12: picture tag with prefers-color-scheme prevents duplicate downloads and CLS */}
             <picture>
               <source
-                srcSet="/cbts-logo-bright-teal.svg"
+                srcSet="/hcw-logo-white.png"
                 media="(prefers-color-scheme: dark)"
               />
               <img
-                src="/cbts-logo-dark-teal.svg"
-                alt="CBTS"
-                className="h-8 w-auto"
-                width={96}
-                height={32}
+                src="/hcw-logo-black.png"
+                alt="Hybrid Cloud Works"
+                className="h-10 w-auto"
+                width={44}
+                height={40}
               />
             </picture>
             <div className="mx-1 h-5 w-px bg-navy-100 dark:bg-navy-700" />
