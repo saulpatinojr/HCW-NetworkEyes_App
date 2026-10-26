@@ -4,7 +4,7 @@
 
 <p>
   This assessment evaluated the cloud network estate of
-  {{ engagement.client_org or "the client organization" }} across
+  {{ engagement.client_org or "the organization" }} across
   {{ topology_tables.subscriptions | length or "the in-scope" }} subscription(s)
   and {{ topology_tables.vnet_count }} virtual network(s).
   Discovery identified <strong>{{ total_count }} finding(s)</strong>:

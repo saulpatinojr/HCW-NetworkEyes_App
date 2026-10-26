@@ -194,7 +194,7 @@ def run(engagement_id, cloud, bucket, s3_prefix, storage_account, container, ttl
         )
     click.echo(f"   Expires: {access_record.expires_at}")
     click.echo(f"   Portal URL: {portal_url}")
-    click.echo("   (Share this URL with the client. It expires automatically.)")
+    click.echo("   (Share this URL with the intended readers. It expires automatically.)")
 
 
 @publish_group.command("status")

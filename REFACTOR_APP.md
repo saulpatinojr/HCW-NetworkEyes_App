@@ -629,7 +629,7 @@ Pattern: `/home/user/HCW-AzMigrateOrchestrator_App/infrastructure/terraform/appl
 | `azurerm_consumption_budget_resource_group` | Monthly budget with one alert `[VERIFY amount]` |
 | Images | Docker Hub `docker.io/hybridcloudworks/img-ne-appliance-app:*` by digest; published by `200-build-images.yml` through the Docker OIDC connection (`vars.DOCKERHUB_CONNECTION`, `vars.DOCKERHUB_ENABLED`), the pattern the website's `publish-lab-image.yml` uses; the Core already publishes to Docker Hub, so this is a login-step change, not a registry move |
 
-Clients set `assessment_scope_ids`, `tenant_id` and `image_digest` in `terraform.tfvars`, and run `terraform plan` then `terraform apply`; `terraform apply` is a human-reviewed step and is never run from an automated session. The lab build is not deployed on Container Apps: it runs on the Hostinger lab host from the AddOn's image (AddOn ADR-0003).
+Users set `assessment_scope_ids`, `tenant_id` and `image_digest` in `terraform.tfvars`, and run `terraform plan` then `terraform apply`; `terraform apply` is a human-reviewed step and is never run from an automated session. The lab build is not deployed on Container Apps: it runs on the Hostinger lab host from the AddOn's image (AddOn ADR-0003).
 
 ## 13 Security changes
 

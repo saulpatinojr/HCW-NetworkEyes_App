@@ -16,7 +16,7 @@ export async function createEngagement(formData: FormData) {
   const clientOrg = (formData.get("clientOrg") as string | null)?.trim() ?? "";
 
   if (!name || !clientOrg) {
-    throw new Error("Engagement name and client organization are required.");
+    throw new Error("Engagement name and organization are required.");
   }
 
   const engagement = await prisma.engagement.create({

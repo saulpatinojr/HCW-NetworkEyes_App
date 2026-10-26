@@ -99,7 +99,7 @@ export default async function ClientDeliverablesPage({ params }: PageProps) {
       <div className="glass p-6">
         <h2 className="text-lg font-semibold text-navy-800 dark:text-navy-100">Deliverables</h2>
         <p className="mt-1 text-sm text-navy-400">
-          All client-facing content for this engagement. Deleting from here removes the item
+          All shareable content for this engagement. Deleting from here removes the item
           everywhere — including the presentation site.
         </p>
       </div>
