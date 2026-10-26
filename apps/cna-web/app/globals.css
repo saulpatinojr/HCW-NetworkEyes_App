@@ -2,9 +2,9 @@
 @plugin "@tailwindcss/typography";
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   CBTS Design System · Official brand palette (Marketing Guidelines)
+   Colour palette and typeface
    Navy #012638 · Dark Teal #004E3D · Bright Teal #00E9BB · Warm Gray #F2F1ED
-   Accent Orange #FFAC00 · Logo Teal #00FFD2 · Typeface: Aeonik
+   Accent Orange #FFAC00 · Glow Teal #00FFD2 · Typeface: Aeonik
 ───────────────────────────────────────────────────────────────────────────── */
 
 @theme {
@@ -12,7 +12,7 @@
   --font-sans: "Aeonik", "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
 
-  /* CBTS Navy scale — anchored on brand navy #012638 */
+  /* Navy scale — anchored on navy #012638 */
   --color-navy-950: #000d14;
   --color-navy-900: #011a26;
   --color-navy-800: #012638;
@@ -25,7 +25,7 @@
   --color-navy-100: #d3e5ec;
   --color-navy-50:  #eef6fa;
 
-  /* CBTS Teal scale — dark teal #004E3D → bright teal #00E9BB */
+  /* Teal scale — dark teal #004E3D → bright teal #00E9BB */
   --color-teal-900: #00332a;
   --color-teal-800: #004e3d;
   --color-teal-700: #00705c;
@@ -37,19 +37,19 @@
   --color-teal-100: #d1fbf1;
   --color-teal-50:  #e8fdf8;
 
-  /* CBTS Warm Gray scale — brand light #F2F1ED */
+  /* Warm Gray scale — light #F2F1ED */
   --color-warmgray-50:  #fbfaf8;
   --color-warmgray-100: #f2f1ed;
   --color-warmgray-200: #e5e3dc;
   --color-warmgray-300: #d4d1c6;
   --color-warmgray-400: #b3afa0;
 
-  /* CBTS Accent Orange — alerts / highlights */
+  /* Accent Orange — alerts / highlights */
   --color-orange-600: #d99200;
   --color-orange-500: #ffac00;
   --color-orange-100: #fff1d1;
 
-  /* CBTS logo glow teal — decorative accents only (not text) */
+  /* Glow teal — decorative accents only (not text) */
   --color-brand-glow: #00ffd2;
 }
 

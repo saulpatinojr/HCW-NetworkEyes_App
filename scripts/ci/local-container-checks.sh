@@ -7,7 +7,7 @@
 # Usage:   bash scripts/ci/local-container-checks.sh <check>...
 #   hadolint       lint every tracked Dockerfile with .hadolint.yaml (the CI job "Dockerfile Lint (hadolint)")
 #   actionlint     lint every workflow in .github/workflows (the CI job "Workflow Lint (actionlint)")
-#   trivy-config   Trivy configuration scan: Dockerfiles, docker-compose.yml, infra/ (misconfigurations)
+#   trivy-config   Trivy configuration scan: Dockerfiles, docker-compose.yml (misconfigurations)
 #   trivy-fs       Trivy filesystem scan: locked dependencies (uv.lock, package-lock.json) and secrets
 #   trivy-image <image>   Trivy scan of an image that is already in the local image store, for example one you
 #                         built with `docker build -t cna:test .`; it is exported to a tar file and scanned from

@@ -3,7 +3,7 @@
 // dashboard radar; `size="lg"` reproduces the compliance-page radar (center
 // label, larger dots and rings).
 
-import { CBTS_BRIGHT_TEAL, CHART_GRID, CHART_TEXT, CHART_TEXT_DIM } from "./chart-theme";
+import { PALETTE_BRIGHT_TEAL, CHART_GRID, CHART_TEXT, CHART_TEXT_DIM } from "./chart-theme";
 
 export interface RadarDim {
   label: string;
@@ -76,7 +76,7 @@ export function MaturityRadar({
       <polygon
         points={dataPolygon}
         fill={fill}
-        stroke={CBTS_BRIGHT_TEAL}
+        stroke={PALETTE_BRIGHT_TEAL}
         strokeWidth="2"
         strokeLinejoin="round"
       />
@@ -85,7 +85,7 @@ export function MaturityRadar({
         const rr = (d.score / 10) * R;
         const sx = cx + rr * Math.cos(angleFor(i));
         const sy = cy + rr * Math.sin(angleFor(i));
-        return <circle key={i} cx={sx} cy={sy} r={dotR} fill={CBTS_BRIGHT_TEAL} />;
+        return <circle key={i} cx={sx} cy={sy} r={dotR} fill={PALETTE_BRIGHT_TEAL} />;
       })}
       {/* Axis labels */}
       {axes.map((ax, i) => (

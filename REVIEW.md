@@ -437,7 +437,7 @@ merge rather than create.
 
 **Problem**
 The entire Azure dev environment — workload resource group *and* the `-tfstate` resource group
-holding the Terraform state — was deleted from `sub-cbtssandbox-ops-tst` around **2026-07-21**,
+holding the Terraform state — was deleted from the sandbox subscription around **2026-07-21**,
 outside CI. No teardown workflow ran in that window (`330-teardown` last ran 2026-07-01), so the
 deletion was performed directly against the subscription, consistent with a sandbox cost sweep.
 
@@ -453,7 +453,7 @@ budget a rebuild each time. If it is not meant to be swept, the environment need
 the subscription owner can say which.
 
 **Required owner**
-Azure subscription owner (`sub-cbtssandbox-ops-tst`), with whoever administers the sandbox
+Azure subscription owner (of the sandbox subscription), with whoever administers the sandbox
 sweep policy.
 
 **Required action**
@@ -478,7 +478,7 @@ would be materially faster — but it would still be a rebuild, with a fresh, em
 
 **Recommended next step**
 Ask the sandbox administrator the one question that decides everything else: is
-`sub-cbtssandbox-ops-tst` swept on a schedule, and can these two resource groups be excluded?
+the sandbox subscription swept on a schedule, and can these two resource groups be excluded?
 
 ---
 

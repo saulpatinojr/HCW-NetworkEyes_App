@@ -1,5 +1,5 @@
 /* Encyclopedia report — WeasyPrint paged media (Phase D).
-   CBTS palette: navy #012638, dark teal #004E3D, warm gray #F2F1ED,
+   Palette: navy #012638, dark teal #004E3D, warm gray #F2F1ED,
    bright teal #00E9BB, orange #FFAC00. */
 
 @font-face {
@@ -55,10 +55,15 @@ body {
   page: cover;
   height: 100%;
   color: #F2F1ED;
+  /* WeasyPrint paints the page itself navy (@page cover); a browser does not paint @page backgrounds, so the cover
+     carries the same colour, otherwise its light text and the white-stroke logo sit on white. */
+  background: #012638;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
   padding: 4cm 2.5cm;
   box-sizing: border-box;
 }
-.cover .logo { width: 6cm; margin-bottom: 3cm; }
+.cover .logo { width: 4cm; margin-bottom: 3cm; }
 .cover h1 {
   font-size: 30pt;
   color: #00E9BB;

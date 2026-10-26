@@ -19,7 +19,7 @@ import {
   TRAFFIC_DIRECTION_LABELS,
   CHART_GRID,
   CHART_TEXT,
-  CBTS_NAVY,
+  PALETTE_NAVY,
 } from "./chart-theme";
 
 export interface TrafficBreakdownDatum {
@@ -57,7 +57,7 @@ export function TrafficBreakdown({
         />
         <YAxis tick={{ fill: CHART_TEXT, fontSize: 11 }} axisLine={false} tickLine={false} width={40} allowDecimals={false} />
         <Tooltip
-          contentStyle={{ background: CBTS_NAVY, border: `1px solid ${CHART_GRID}`, borderRadius: 8, fontSize: 12 }}
+          contentStyle={{ background: PALETTE_NAVY, border: `1px solid ${CHART_GRID}`, borderRadius: 8, fontSize: 12 }}
           labelStyle={{ color: "#fff" }}
           cursor={{ fill: "rgba(0,233,187,0.06)" }}
         />
