@@ -9,11 +9,12 @@
 [![lab edition](https://img.shields.io/badge/lab%20edition-HCW--NetworkEyes__AddOn-6f42c1?logo=github)](https://github.com/saulpatinojr/HCW-NetworkEyes_AddOn)
 
 **New here?** Point it at an Azure or AWS environment and it maps the network, checks what it finds against
-security, resilience and migration-readiness rules, and writes a report a client can read. Nothing is assumed: every
+security, resilience and migration-readiness rules, and writes a report you can share. Nothing is assumed: every
 finding names the fact it came from. A free, upload-only version that needs no cloud access is the lab edition,
 [HCW-NetworkEyes_AddOn](https://github.com/saulpatinojr/HCW-NetworkEyes_AddOn), which will appear at
 [hybridcloudworks.com/tools/network-assessment](https://hybridcloudworks.com/tools/network-assessment) once its first
-image is published.
+image is published. NetworkEyes is a free tool for followers of Hybrid Cloud Works, shared through GitHub. There is no
+paid edition.
 
 This repository is the **product** of the Cloud Network Assessment platform: the single home
 of the application code and of the pipeline that builds and publishes its container images. It
@@ -25,7 +26,7 @@ its lab edition. It stands alone: it builds, signs and publishes its own contain
 
 A CNA-branded, multi-user web platform for cloud network assessments across AWS and Azure.
 Analysts run network discoveries, AI-powered analysis, and generate presentation-ready
-deliverables including an encyclopedia-grade network report. Clients receive deliverables through
+deliverables including an encyclopedia-grade network report. Users share deliverables through
 a time-limited authenticated portal. The platform deploys as three containerized services behind a
 managed edge, backed by PostgreSQL and authenticated via Microsoft Entra ID.
 
@@ -71,7 +72,7 @@ cna/                  Python package, installed as the `cna` CLI
 ├── ai_engine/        Azure rule registry (azure_rules), AWS analysis engine, recommendation engine, chat agent
 ├── report_engine/    Encyclopedia renderer, WeasyPrint PDF, radar chart SVG
 ├── diagram_engine/   Draw.io generator, future-state model
-├── delivery_portal/  Client deliverable delivery
+├── delivery_portal/  Deliverable sharing portal
 └── cli/              Command-line entry point
 scripts/              Repository guards (documentation model, module graph, shape catalog)
                       and the headless draw.io wrapper the images use
@@ -225,8 +226,9 @@ Reference** explains each value in full.
 
 The code in this repository and the container images built from it are licensed under the
 [Apache License, Version 2.0](LICENSE). The image label `org.opencontainers.image.licenses` says `Apache-2.0`.
-The [`NOTICE`](NOTICE) file lists what the Apache licence does not cover: the Aeonik typeface, whose licence is still
-to be confirmed (`REVIEW.md`, R-020).
+The [`NOTICE`](NOTICE) file lists what the Apache licence does not cover: the Aeonik typeface. The owner states that no
+separate licence is required for it (2026-10-25); this repository holds no licence file for it and has not verified the
+statement (`REVIEW.md`, R-020). The copyright holder is not yet named (`REVIEW.md`, R-030).
 
 ## Repository conventions
 

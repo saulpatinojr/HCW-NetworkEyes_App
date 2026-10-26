@@ -29,7 +29,7 @@ Anything an engineer can solve without external input belongs in [`TODO.md`](TOD
 | [R-017](#r-017--stop-publishing-the-cli-image-on-every-push) | Stop building/publishing the CLI image `sha-<7>` (nothing in this repository pulls it except the release) | Repository owner | Open — not blocking |
 | [R-018](#r-018--remove-cnareview-from-the-shipped-package) | Move `cna/review/**` out of the shipped package and API image | Repository owner | Open — not blocking |
 | [R-019](#r-019--diagram-editor-sends-customer-topology-to-embeddiagramsnet) | Diagram editor posts customer topology XML to public `embed.diagrams.net`; no offline path | Product owner / Security | Decided 2026-10-25 — self-host; implemented (ticket #248) |
-| [R-020](#r-020--aeonik-font-licence-and-oci-licence-label) | Aeonik typeface licence coverage; OCI label `Proprietary` vs Apache-2.0 `LICENSE` | Legal / brand | Licence label decided 2026-10-25 (Apache-2.0, done); font licence still to be confirmed — owner |
+| [R-020](#r-020--aeonik-font-licence-and-oci-licence-label) | Aeonik typeface licence coverage; OCI label `Proprietary` vs Apache-2.0 `LICENSE` | Legal / brand | Resolved 2026-10-25 — licence label decided (Apache-2.0, done); font: resolved by owner statement that no separate licence is required, no licence file claimed |
 | [R-021](#r-021--byo-api-mode-scope-for-10) | Ship 1.0 `saas`-only or complete R-011 first | Product owner / Security | Open |
 | [R-022](#r-022--version-100-release-identity) | Version 1.0.0 identity: withdrawn `[1.0.0]` heading, version strings, first tag | Repository owner | Open — before the first `v*` tag |
 | [R-025](#r-025--the-drawio-mcp-route-is-internal-only) | Is `/api/drawio-mcp` public or internal only? | Repository owner | Decided 2026-10-24 — internal only; implemented (ticket #245) |
@@ -37,6 +37,7 @@ Anything an engineer can solve without external input belongs in [`TODO.md`](TOD
 | [R-027](#r-027--remove-the-orphaned-cloud-trust-entries-of-the-earlier-repository-name) | Remove the cloud trust entries (Azure federated credentials, AWS role trust) that name this repository by its earlier name | Repository owner / cloud account owners | Open — not blocking |
 | [R-028](#r-028--should-the-default-model-ids-of-the-bring-your-own-engines-follow-the-vendors-current-models) | Should the default model ids of the bring-your-own engines follow the vendors' current models? | Product owner | Open — not blocking |
 | [R-029](#r-029--the-appliance-and-core-repositories-are-out-of-board-scope) | The two appliance repositories and the earlier core repository (the other owner's, named on ticket #249): their state, and whether they belong on the HCW Field Applications board | Repository owner | Decided 2026-10-25 — out of board scope; nothing is written there |
+| [R-030](#r-030--name-the-copyright-holder) | Name the copyright holder of the code in this repository | Repository owner | Open — not blocking |
 
 ---
 
@@ -774,24 +775,29 @@ Apache-2.0 for the code and for the image label. Done in ticket #251: `org.openc
 `Dockerfile` now reads `Apache-2.0`, matching `LICENSE`, and a new `NOTICE` file says the Aeonik typeface is
 separately licensed. `tests/unit/test_licence_statement.py` fails if the label, `LICENSE` and `NOTICE` stop agreeing.
 
-**Still open: the Aeonik font licence**
-What was checked on 2026-10-25: the font file's own metadata names "Mark Bloom and Joe Leadbeater (c) 2018",
+**Aeonik font licence: resolved by owner statement, 2026-10-25**
+The owner states that Aeonik needs no separate licence and says they verified this on 2026-10-25. That is the owner's
+statement. This repository holds no licence file for the font, and nothing here has checked the statement, so
+`NOTICE` and the README *Licence* section repeat it as the owner's statement and claim no licence. If the owner later
+finds a licence or terms that apply, record them here and in `NOTICE`.
+
+What was checked on 2026-10-25, before the statement: the font file's own metadata names "Mark Bloom and Joe Leadbeater (c) 2018",
 version 1.000, and the licence "This Is Our Shop EULA" (thisisourshop.com, which no longer resolves). CoType Foundry
 now sells Aeonik under four agreements (desktop, web, app, trial; https://cotypefoundry.com/licensing/). Its trial
 agreement allows internal evaluation only, forbids use on any public website or in final commercial files, and
 forbids passing the font on to anyone (https://www.datocms-assets.com/135497/1731056476-cotype-eula-trial-24.pdf).
 Nothing in the repository shows which agreement, if any, covers the copy that is committed here and shipped in the
-web image and in PDF reports, so `NOTICE` lists it as "licence to be confirmed".
+web image and in PDF reports.
 
 **Required action**
-Either show proof of a CoType (or This Is Our Shop) desktop and web licence that covers serving the font on the web
-and embedding it in customer PDFs, and record it here; or replace Aeonik with a font under an open licence (for
-example one under the SIL Open Font License) in `apps/cna-web/app/fonts/`, `apps/cna-web/app/layout.tsx`,
-`apps/cna-web/app/globals.css` and `cna/report_engine/templates/`. Recommended default: replace it, because the
-repository is public and the font file is downloadable from it.
+None while the owner's statement stands. If it is withdrawn, either record proof of a CoType (or This Is Our Shop)
+desktop and web licence that covers serving the font on the web and embedding it in PDF reports; or replace Aeonik
+with a font under an open licence (for example one under the SIL Open Font License) in `apps/cna-web/app/fonts/`,
+`apps/cna-web/app/layout.tsx`, `apps/cna-web/app/globals.css` and `cna/report_engine/templates/`.
 
-**Impact if unresolved**
-Possible licence non-compliance in a customer-facing artifact.
+**Impact if the statement proves wrong**
+Possible licence non-compliance in a published artifact, since the repository is public and the font file is
+downloadable from it.
 
 **References**
 - v1.0 review finding IMG-015
@@ -912,3 +918,11 @@ A customer cannot tell what "1.0" they run; a new `[1.0.0]` heading would collid
 - **What the ticket's security point becomes:** it asked that image signing and digest checks agree across the repositories. This repository now signs its own images under its own identity (`CLAUDE.md`, image contract item 5) and whoever deploys them verifies that signature by digest. Whether another party's deployment repositories do so is theirs to confirm.
 - **Raised:** 2026-10-25, ticket #249.
 - **Status:** Decided 2026-10-25 — nothing further is open here.
+
+## R-030 — Name the copyright holder
+
+- **What this is:** the code in this repository is under the Apache License, Version 2.0, decided by the owner on 2026-10-25 (R-020). That licence works best with a named copyright holder, and no file in this repository names one. An older planning note carried a placeholder that left the choice open; it was replaced with "the repository owner" and nothing was decided.
+- **Decision needed (repository owner):** name the holder, in one line, for example a person or an organisation. Until then no document states one.
+- **Where it goes once named:** a copyright line in `NOTICE`, the `authors` field of `packages/cna-azure-network-engine/pyproject.toml`, and `REFACTOR_APP.md` section 22, item 1.
+- **Raised:** 2026-10-25.
+- **Status:** Open — not blocking

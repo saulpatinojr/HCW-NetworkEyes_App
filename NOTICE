@@ -11,12 +11,14 @@ Third-party material that is NOT covered by the Apache License
 Aeonik typeface (Aeonik-Regular.ttf), by Mark Bloom and Joe Leadbeater.
   Files:   apps/cna-web/app/fonts/Aeonik-Regular.ttf
            cna/report_engine/templates/assets/fonts/Aeonik-Regular.ttf
-  Licence: licence to be confirmed. The font file names "This Is Our Shop EULA"
-           as its licence; that agreement could not be found online. The
-           present publisher, CoType Foundry, licenses Aeonik separately for
-           desktop, web, app and trial use (https://cotypefoundry.com/licensing/).
-           Until the licence is confirmed, this font is not licensed to you
-           under the Apache License, and nothing here grants rights to it.
+  Licence: the owner states no separate licence is required (2026-10-25). This
+           repository holds no licence file for the font and has not verified
+           that statement. The font file names "This Is Our Shop EULA" as its
+           licence; that agreement could not be found online. The present
+           publisher, CoType Foundry, licenses Aeonik separately for desktop,
+           web, app and trial use (https://cotypefoundry.com/licensing/). The
+           Apache License does not cover this font, and nothing here grants
+           rights to it.
 
 Dependencies installed by npm, uv and the container base images keep their own
 licences. They are not copied into this repository.
