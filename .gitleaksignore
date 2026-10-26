@@ -1,0 +1,140 @@
+# gitleaks triage of the full history, 2026-10-25 (ticket #253): 122 hits, all false positives, sorted into the five classes below.
+# gitleaks v8.30.1 reads this file by itself from the repository root. Each line is one finding's fingerprint (commit:file:rule:line), so
+# the file silences exactly these findings (122 hits on 120 distinct lines) and nothing else: a new finding, even in the same file or of the same rule, is still reported.
+# Do not add a line without checking the value and adding it to a class with the reason, as the classes here do.
+
+# A. Third-party security documentation packs (.claude/skills, .agents/skills), 80 hits. They are no longer tracked (they live under
+# local/agent-config/, gitignored, TODO.md T-411) and survive only in history. Every value is an example in the pack's own text: curl
+# examples with placeholders, the RFC 6455 sample WebSocket key (it decodes to the words 'the sample nonce'), jwt.io's example token
+# (name John Doe), Microsoft's published Group Policy Preferences AES key, osquery's public package-signing key id, protocol names.
+1a783247dda208979ca54c98f704f33eb846ae68:.agents/skills/implementing-soar-playbook-for-phishing/scripts/agent.py:generic-api-key:155
+1a783247dda208979ca54c98f704f33eb846ae68:.agents/skills/implementing-zero-trust-dns-with-nextdns/SKILL.md:curl-auth-header:310
+1a783247dda208979ca54c98f704f33eb846ae68:.agents/skills/implementing-zero-trust-dns-with-nextdns/SKILL.md:curl-auth-header:314
+1a783247dda208979ca54c98f704f33eb846ae68:.agents/skills/implementing-zero-trust-dns-with-nextdns/SKILL.md:curl-auth-header:318
+1a783247dda208979ca54c98f704f33eb846ae68:.agents/skills/implementing-zero-trust-with-hashicorp-boundary/SKILL.md:generic-api-key:163
+1a783247dda208979ca54c98f704f33eb846ae68:.agents/skills/implementing-zero-trust-with-hashicorp-boundary/SKILL.md:generic-api-key:170
+1a783247dda208979ca54c98f704f33eb846ae68:.agents/skills/implementing-zero-trust-with-hashicorp-boundary/SKILL.md:generic-api-key:177
+1a783247dda208979ca54c98f704f33eb846ae68:.agents/skills/implementing-zero-trust-with-hashicorp-boundary/SKILL.md:generic-api-key:209
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/analyzing-campaign-attribution-evidence/references/api-reference.md:curl-auth-user:67
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/analyzing-campaign-attribution-evidence/references/api-reference.md:curl-auth-user:70
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/analyzing-email-headers-for-phishing-investigation/SKILL.md:curl-auth-header:196
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/analyzing-email-headers-for-phishing-investigation/SKILL.md:curl-auth-header:232
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/analyzing-email-headers-for-phishing-investigation/references/api-reference.md:curl-auth-header:81
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/building-threat-intelligence-platform/references/api-reference.md:curl-auth-header:64
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/collecting-threat-intelligence-with-misp/scripts/process.py:generic-api-key:307
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/correlating-threat-campaigns/references/api-reference.md:curl-auth-header:12
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/correlating-threat-campaigns/references/api-reference.md:curl-auth-header:17
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/correlating-threat-campaigns/references/api-reference.md:curl-auth-header:21
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/correlating-threat-campaigns/references/api-reference.md:curl-auth-header:7
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/deploying-active-directory-honeytokens/scripts/agent.py:generic-api-key:87
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/deploying-osquery-for-endpoint-monitoring/SKILL.md:generic-api-key:59
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/evaluating-threat-intelligence-platforms/references/api-reference.md:curl-auth-header:11
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/evaluating-threat-intelligence-platforms/references/api-reference.md:curl-auth-header:16
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/evaluating-threat-intelligence-platforms/references/api-reference.md:curl-auth-header:21
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/evaluating-threat-intelligence-platforms/references/api-reference.md:curl-auth-header:7
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/exploiting-mass-assignment-in-rest-apis/SKILL.md:curl-auth-header:101
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/exploiting-mass-assignment-in-rest-apis/SKILL.md:curl-auth-header:107
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/exploiting-mass-assignment-in-rest-apis/SKILL.md:curl-auth-header:113
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/exploiting-mass-assignment-in-rest-apis/SKILL.md:curl-auth-header:119
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/exploiting-mass-assignment-in-rest-apis/SKILL.md:curl-auth-header:128
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/exploiting-mass-assignment-in-rest-apis/SKILL.md:curl-auth-header:134
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/exploiting-mass-assignment-in-rest-apis/SKILL.md:curl-auth-header:140
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/exploiting-mass-assignment-in-rest-apis/SKILL.md:curl-auth-header:149
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/exploiting-mass-assignment-in-rest-apis/SKILL.md:curl-auth-header:155
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/exploiting-mass-assignment-in-rest-apis/SKILL.md:curl-auth-header:161
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/exploiting-mass-assignment-in-rest-apis/SKILL.md:curl-auth-header:57
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/exploiting-mass-assignment-in-rest-apis/SKILL.md:curl-auth-header:61
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/exploiting-mass-assignment-in-rest-apis/SKILL.md:curl-auth-header:76
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/exploiting-mass-assignment-in-rest-apis/SKILL.md:curl-auth-header:82
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/exploiting-mass-assignment-in-rest-apis/SKILL.md:curl-auth-header:87
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/exploiting-template-injection-vulnerabilities/SKILL.md:curl-auth-user:122
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/exploiting-websocket-vulnerabilities/SKILL.md:generic-api-key:143
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/exploiting-websocket-vulnerabilities/SKILL.md:generic-api-key:333
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/exploiting-websocket-vulnerabilities/SKILL.md:generic-api-key:61
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/exploiting-websocket-vulnerabilities/SKILL.md:generic-api-key:72
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/exploiting-websocket-vulnerabilities/scripts/agent.py:generic-api-key:35
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/exploiting-websocket-vulnerabilities/scripts/agent.py:generic-api-key:57
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/operationalizing-misp-threat-feeds/SKILL.md:curl-auth-header:135
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/operationalizing-misp-threat-feeds/SKILL.md:curl-auth-header:140
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/operationalizing-misp-threat-feeds/references/api-reference.md:curl-auth-header:55
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/performing-cryptographic-audit-of-application/scripts/process.py:generic-api-key:282
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/performing-deception-technology-deployment/SKILL.md:generic-api-key:295
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/performing-external-network-penetration-test/SKILL.md:curl-auth-user:223
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/performing-ioc-enrichment-automation/scripts/agent.py:generic-api-key:30
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/performing-jwt-none-algorithm-attack/SKILL.md:jwt:76
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/performing-jwt-none-algorithm-attack/SKILL.md:jwt:85
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/performing-network-forensics-with-wireshark/SKILL.md:curl-auth-header:147
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/performing-open-source-intelligence-gathering/references/workflows.md:curl-auth-user:105
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/performing-phishing-simulation-with-gophish/scripts/process.py:generic-api-key:468
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/performing-post-quantum-cryptography-migration/SKILL.md:generic-api-key:110
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/performing-post-quantum-cryptography-migration/SKILL.md:generic-api-key:115
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/performing-post-quantum-cryptography-migration/SKILL.md:generic-api-key:119
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/performing-post-quantum-cryptography-migration/references/api-reference.md:generic-api-key:126
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/performing-service-account-credential-rotation/scripts/process.py:generic-api-key:115
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/performing-wireless-security-assessment-with-kismet/SKILL.md:curl-auth-user:157
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/performing-wireless-security-assessment-with-kismet/SKILL.md:curl-auth-user:161
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/testing-api-security-with-owasp-top-10/SKILL.md:curl-auth-user:58
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/testing-api-security-with-owasp-top-10/SKILL.md:curl-auth-user:98
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/testing-for-broken-access-control/SKILL.md:curl-auth-header:236
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/testing-jwt-token-security/SKILL.md:jwt:59
+5cb62bdf9600b394e9848128cca5dae14e211f29:.claude/skills/testing-websocket-api-security/scripts/agent.py:generic-api-key:157
+637e481a5bc33d92ab39efad04e8608169fff2ea:.claude/skills/implementing-soar-playbook-for-phishing/scripts/agent.py:generic-api-key:155
+637e481a5bc33d92ab39efad04e8608169fff2ea:.claude/skills/implementing-zero-trust-dns-with-nextdns/SKILL.md:curl-auth-header:310
+637e481a5bc33d92ab39efad04e8608169fff2ea:.claude/skills/implementing-zero-trust-dns-with-nextdns/SKILL.md:curl-auth-header:314
+637e481a5bc33d92ab39efad04e8608169fff2ea:.claude/skills/implementing-zero-trust-dns-with-nextdns/SKILL.md:curl-auth-header:318
+637e481a5bc33d92ab39efad04e8608169fff2ea:.claude/skills/implementing-zero-trust-with-hashicorp-boundary/SKILL.md:generic-api-key:163
+637e481a5bc33d92ab39efad04e8608169fff2ea:.claude/skills/implementing-zero-trust-with-hashicorp-boundary/SKILL.md:generic-api-key:170
+637e481a5bc33d92ab39efad04e8608169fff2ea:.claude/skills/implementing-zero-trust-with-hashicorp-boundary/SKILL.md:generic-api-key:177
+637e481a5bc33d92ab39efad04e8608169fff2ea:.claude/skills/implementing-zero-trust-with-hashicorp-boundary/SKILL.md:generic-api-key:209
+
+# B. .secrets.baseline, 36 hits. detect-secrets records only SHA-1 hashes of what it accepted (every value is 40 hex characters); a hash
+# is not the secret it was made from.
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:100
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:109
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:118
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:127
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:134
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:141
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:150
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:159
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:166
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:173
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:182
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:191
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:205
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:214
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:228
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:237
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:246
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:255
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:264
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:273
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:280
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:287
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:303
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:312
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:321
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:330
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:337
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:344
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:353
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:360
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:369
+64d91fc30ae5fedfeb34e066463140e15e870fa7:.secrets.baseline:generic-api-key:91
+8326845a4d8ca4dd52d7a4ea85974d587a6bd9d2:.secrets.baseline:generic-api-key:166
+8326845a4d8ca4dd52d7a4ea85974d587a6bd9d2:.secrets.baseline:generic-api-key:173
+85c2924683bd08413d26fdd1a2b9396172d92284:.secrets.baseline:generic-api-key:282
+aa67b9f6618d7d359de49ce3881259a8bf6fd330:.secrets.baseline:generic-api-key:328
+
+# C. scripts/appliance-kit/build.sh, 2 hits. The text is the name of a template variable (SIBLING_VAULT=...), not a key.
+5db497b5f447c5938e11870b43adbe8c2082d5db:scripts/appliance-kit/build.sh:generic-api-key:255
+5db497b5f447c5938e11870b43adbe8c2082d5db:scripts/appliance-kit/build.sh:generic-api-key:337
+
+# D. infra/terraform/environments/azure/{dev,prod}/workload/main.tf, 2 hits. 'local-admin-password' is the NAME of a Key Vault secret in a
+# map of environment variable to vault secret name; the value lives in the vault. The deploy layer left this repository (TODO.md T-504).
+f59121bb29919559858d49d6357ac086d106fa5e:infra/terraform/environments/azure/dev/workload/main.tf:hashicorp-tf-password:135
+f59121bb29919559858d49d6357ac086d106fa5e:infra/terraform/environments/azure/prod/workload/main.tf:hashicorp-tf-password:135
+
+# E. REFACTOR_APP.md, 2 hits. Two 40-hex strings that are the commit SHAs of actions/checkout (9c091bb2) and actions/setup-python (5fda3b95),
+# public commits of those actions' repositories.
+bd03e57ac994288b0e6bb11372a72f517d27b3b5:REFACTOR_APP.md:sourcegraph-access-token:425
