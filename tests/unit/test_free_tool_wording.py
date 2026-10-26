@@ -25,12 +25,19 @@ argument ``EDITION``, ``CNA_EDITION``, the module ``edition.py`` and the JSON ke
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+# The guard reads the list of tracked files from git. The `cna-test` service in docker-compose.yml builds from a
+# context without `.git`, where there is nothing to list; skip there instead of raising. A worktree has `.git` as a
+# file, so the check is `exists()`, not `is_dir()`. In CI the checkout has `.git`, and
+# `test_the_scan_reads_the_places_it_guards` fails loudly if the list ever comes back empty.
+if shutil.which("git") is None or not (REPO_ROOT / ".git").exists():
+    pytest.skip("needs a git checkout and the git program", allow_module_level=True)
 THIS_FILE = "tests/unit/test_free_tool_wording.py"
 
 #: History is never rewritten.
