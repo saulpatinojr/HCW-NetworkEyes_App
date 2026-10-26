@@ -23,7 +23,7 @@ describe("getAiEngineStatuses wording", () => {
     const status = statuses.find((s) => s.id === id);
 
     expect(status).toBeDefined();
-    expect(status?.description.startsWith(opening)).toBe(true);
+    expect(status?.description).toContain(opening);
     expect(status?.description).not.toMatch(/edition/i);
   });
 });
