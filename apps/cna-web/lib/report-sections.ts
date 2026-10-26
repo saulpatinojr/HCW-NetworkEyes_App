@@ -473,7 +473,7 @@ export function inventoryCounts(topologyJson?: string | null): InventoryRow[] {
 
 export function buildEnvironmentSnapshot(input: SectionInput): string {
   const lines = ["=== ENVIRONMENT SNAPSHOT (shared context — the whole estate at a glance) ==="];
-  lines.push(`Client: ${input.clientOrg} | Engagement: ${input.engagementName}`);
+  lines.push(`Organization: ${input.clientOrg} | Engagement: ${input.engagementName}`);
 
   const inv = inventoryCounts(input.topologyJson);
   for (const row of inv) {
@@ -761,7 +761,7 @@ export const COMPREHENSIVE_SECTIONS: SectionSpec[] = [
       "Prioritize every finding by risk (severity, exploitability, blast radius) vs effort",
       "30/60/90-day phased roadmap with concrete tasks",
       "Dependencies between remediation tasks",
-      "Validation step for each phase (how the client proves the fix landed)",
+      "Validation step for each phase (how the organization proves the fix landed)",
     ],
     maxCompletionTokens: 6000,
     slice(input) {
