@@ -10,6 +10,14 @@
 #   - Actions: weekly, grouped — keeps CI action SHAs current
 #   - Docker: weekly — keeps base image digests current in /, apps/cna-api,
 #     apps/cna-worker, apps/cna-web
+#
+# Cooldown: the uv, npm and github-actions entries set `cooldown.default-days: 7`, so a release must be 7 days old before
+# Dependabot opens a version-update pull request for it (Dependabot's own default, with no `cooldown` key, is 3 days). The
+# docker entry keeps 3 days, see below. Only `default-days`
+# is set: the `semver-*-days` keys are not supported for github-actions and docker. GitHub documents that `cooldown`
+# is available for version updates, not security updates, so a security update for uv, npm or github-actions is not
+# delayed. Docker is different: Dependabot has no security updates for it, so a longer wait would slow every base-image fix.
+# https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference#cooldown
 
 version: 2
 updates:
@@ -25,6 +33,8 @@ updates:
       day: monday
       time: "06:00"
       timezone: America/Chicago
+    cooldown:
+      default-days: 7
     assignees:
       - saulpatinojr
     reviewers:
@@ -71,6 +81,8 @@ updates:
       day: monday
       time: "06:00"
       timezone: America/Chicago
+    cooldown:
+      default-days: 7
     assignees:
       - saulpatinojr
     labels:
@@ -95,6 +107,10 @@ updates:
       day: monday
       time: "06:00"
       timezone: America/Chicago
+    # No Dependabot security updates exist for docker, and a base-image digest bump is how a Docker Scout finding on a base
+    # image is fixed (CLAUDE.md), so this entry keeps Dependabot's own default of 3 days instead of 7.
+    cooldown:
+      default-days: 3
     assignees:
       - saulpatinojr
     labels:
@@ -120,6 +136,8 @@ updates:
       day: monday
       time: "06:00"
       timezone: America/Chicago
+    cooldown:
+      default-days: 7
     assignees:
       - saulpatinojr
     reviewers:
