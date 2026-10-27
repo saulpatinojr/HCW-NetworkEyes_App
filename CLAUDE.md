@@ -27,7 +27,7 @@ History: this repository was the original Cloud Network Assessment repository. O
 separate core repository, and on 2026-10-10 the owner merged that lineage back here, so this repository is again the
 implementation target of `REFACTOR_APP.md` (the HCW App-to-AddOn plan; its lab build is
 `saulpatinojr/HCW-NetworkEyes_AddOn`). **The earlier core repository is reference only: nothing for this repository is
-written there (owner, 2026-10-11)**; its wiki pages move here (`REVIEW.md` → R-023). Issue and pull-request numbers in
+written there (owner, 2026-10-11)**; its wiki pages were to move here (`REVIEW.md` → R-023; this repository's wiki was deleted on 2026-10-27, see R-031). Issue and pull-request numbers in
 the documents older than that date name threads of the original or the earlier core repository.
 
 Deployment is not this repository's job. There is no Terraform and no deploy workflow in this repository; it keeps
@@ -132,8 +132,8 @@ change under `Changed` in `CHANGELOG.md` (and in the release notes) where a cons
   release-push document, and the community files GitHub reads from `.github/`:
   `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `PULL_REQUEST_TEMPLATE.md` and `ISSUE_TEMPLATE/`; never at the root).
   `scripts/validate_documentation_model.py` enforces
-  this in CI. Long-form docs go to the GitHub Wiki. Content determines
-  destination, not filename.
+  this in CI. Long-form docs have no destination since the GitHub Wiki was deleted
+  (`REVIEW.md` R-031); do not add markdown files to work around that.
 - **Never hardcode a value at a call site.** Declare it (`DiscoveryOptions`
   field, module-level constant, setting) and resolve at runtime.
 - **Python dependencies are locked.** `uv.lock` is the resolution every Python

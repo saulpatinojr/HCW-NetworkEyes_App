@@ -10,7 +10,8 @@ This works in one direction only. An image built before this change reads only t
 side by side, and when rolling back, set both names to the same value.
 
 To end the fallback, delete this module and the call in ``network_assessment/__init__.py`` and the matching ones in the web
-app's ``lib/legacy-env.ts`` and ``instrumentation.ts``. The worker needs nothing: it imports this package.
+app's ``lib/legacy-env.ts`` and ``instrumentation.ts``. The worker's code imports this package and needs nothing more
+(its image does not contain the package today, so it cannot start; see R-016 in ``REVIEW.md``).
 """
 
 from __future__ import annotations
