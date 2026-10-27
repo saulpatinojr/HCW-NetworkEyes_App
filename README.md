@@ -27,7 +27,7 @@ its lab build. It stands alone: it builds, signs and publishes its own container
 A multi-user web app for cloud network assessments across AWS and Azure.
 Analysts run network discoveries, AI-powered analysis, and generate presentation-ready
 deliverables including an encyclopedia-grade network report. Users share deliverables through
-a time-limited authenticated portal. The platform deploys as three containerized services behind a
+a time-limited authenticated portal. The app deploys as three containerized services behind a
 managed edge, backed by PostgreSQL and authenticated via Microsoft Entra ID.
 
 ---

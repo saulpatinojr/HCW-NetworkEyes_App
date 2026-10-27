@@ -34,6 +34,8 @@ _LONG = "Cloud" + r"\s+Network\s+Assessment"
 RETIRED_NAME = re.compile(
     rf"(?<![A-Za-z0-9]){_SHORT}(?:['’]s)?[\W_]{{0,16}}{_SECOND_WORD}", re.IGNORECASE
 )
+# Known gaps, accepted: more than 16 separator characters, markup between the words (tags, `&#32;`, `%20`), and a
+# letter-prefixed camelCase form. A hit means: reword the sentence.
 # The same name written out: the long form, with or without the short form in brackets before the second word.
 RETIRED_LONG_FORM = re.compile(
     rf"{_LONG}[\W_]{{0,16}}(?:{_SHORT}[\W_]{{0,16}})?{_SECOND_WORD}", re.IGNORECASE
@@ -175,7 +177,7 @@ def test_the_two_word_pattern_catches_every_split_and_spares_the_one_word_name()
         f"{first}-{second}",
         f"{first.lower()}_{second.lower()}",
         f"{first}&nbsp;{second}",
-        f"{first} {second}",
+        f"{first}{chr(0xA0)}{second}",
         f"**{first}** {second}",
     ):
         assert TWO_WORDS.search(text), repr(text)
