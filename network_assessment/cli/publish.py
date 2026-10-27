@@ -40,7 +40,7 @@ def run(engagement_id, cloud, bucket, s3_prefix, storage_account, container, ttl
       network-assessment publish run \\
         --engagement-id acme-20260305-a3f2 \\
         --cloud aws \\
-        --bucket cna-deliverables-prod \\
+        --bucket network-assessment-deliverables-prod \\
         --ttl-hours 168
 
       # Azure Blob Storage

@@ -17,7 +17,7 @@ overview, and `TODO.md` is the work queue.
 ## What lives where
 
 - **Product code:** `apps/network-assessment-web` (Next.js), `apps/network-assessment-api` and `apps/network-assessment-worker` (Python), the `network_assessment` package, and
-  `packages/cna-azure-network-engine`. Deployment is not done here: this repository only builds and publishes the
+  `packages/network-assessment-azure-engine`. Deployment is not done here: this repository only builds and publishes the
   images. A change to the image tags, the signing identity or
   the runtime environment settings changes what consumers rely on; `CLAUDE.md` explains how to record it.
 - **Documents:** the repository keeps `README.md`, `CHANGELOG.md`, `REVIEW.md` and `TODO.md` (plus `CLAUDE.md`, and two
@@ -36,7 +36,7 @@ Python 3.14 and [uv](https://docs.astral.sh/uv/) are needed. From the repository
 uv sync --frozen --all-packages
 uv run --frozen --extra dev ruff check .
 uv run --frozen --extra dev ruff format --check .
-uv run --frozen --extra dev pytest tests/unit tests/security tests/packaging packages/cna-azure-network-engine/tests -q -p no:cacheprovider
+uv run --frozen --extra dev pytest tests/unit tests/security tests/packaging packages/network-assessment-azure-engine/tests -q -p no:cacheprovider
 python scripts/validate_documentation_model.py
 ```
 

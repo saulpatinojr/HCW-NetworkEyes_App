@@ -4,7 +4,7 @@ Consumes AWSTopology and AzureTopology checkpoints from EngagementStore.
 Produces a versioned FindingsReport written back to EngagementStore.
 
 The AWS rules (AWS-NET-*) live here. The Azure rules live in the engine package
-(cna_azure_network_engine: AZ-NET-*, AZ-BCDR-*, AZ-COST-*); run() evaluates them through
+(network_assessment_azure_engine: AZ-NET-*, AZ-BCDR-*, AZ-COST-*); run() evaluates them through
 network_assessment.modules.network.analysis.evaluate_azure and merges the result, so the CLI, the API and
 the downstream lab edition produce the same Azure findings from the same rule set.
 
@@ -650,7 +650,7 @@ class AnalysisEngine:
                     progress("aws", i + 1, total, f"{region_topo.account_id}/{region_topo.region}")
                 self._analyze_aws_region(region_topo)
 
-        # Azure — the engine's typed rule registry (cna_azure_network_engine)
+        # Azure — the engine's typed rule registry (network_assessment_azure_engine)
         if azure_topology and self.opts.load_azure:
             self._analyze_azure(azure_topology)
 

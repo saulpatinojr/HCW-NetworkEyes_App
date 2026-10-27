@@ -4,7 +4,7 @@ Produces a PDF executive report from a reviewed FindingsReport.
 Target audience: C-suite, CISO, VP Engineering.
 
 Content:
-  - Cover page: client name, engagement date, CNA branding
+  - Cover page: client name, engagement date, NetworkEyes branding
   - Executive summary: scope, methodology, key findings by severity
   - Finding highlights: CRITICAL and HIGH findings, one paragraph each
   - Recommendations summary: top 5 prioritised by severity

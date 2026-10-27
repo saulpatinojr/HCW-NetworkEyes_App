@@ -7,7 +7,7 @@ JSON array of vendor recommendations, which this client parses into
 ``FindingRecommendation`` objects.
 
 This is an alternative transport to ``network_assessment.ai_engine.mcp_client.MCPRouter`` — the agent +
-its tools + its instructions all live in the Foundry portal; CNA only references the agent
+its tools + its instructions all live in the Foundry portal; NetworkEyes only references the agent
 by id. See docs/adr/0001 (Azure OpenAI on the same account) and the plan for context.
 
 Config (env):

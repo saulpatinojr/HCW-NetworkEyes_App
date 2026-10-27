@@ -181,7 +181,7 @@ class TestSetupLogging:
 
 
 class TestGetLogger:
-    def test_returns_logger_with_cna_prefix(self):
+    def test_returns_logger_with_network_assessment_prefix(self):
         logger = get_logger("modules.network")
         assert logger.name == "network_assessment.modules.network"
 

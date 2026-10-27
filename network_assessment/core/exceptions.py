@@ -21,7 +21,7 @@ from __future__ import annotations
 
 
 class NetworkAssessmentBaseError(Exception):
-    """Base for all CNA errors. Carries an optional remediation hint."""
+    """Base for all NetworkEyes errors. Carries an optional remediation hint."""
 
     def __init__(self, message: str, remediation: str = ""):
         super().__init__(message)

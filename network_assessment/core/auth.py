@@ -46,7 +46,9 @@ class AWSCredentials:
     Session duration: 1 hour (AWS default for cross-account roles).
     """
 
-    def __init__(self, role_arn: str, external_id: str, session_name: str = "CNA-Discovery"):
+    def __init__(
+        self, role_arn: str, external_id: str, session_name: str = "NetworkAssessment-Discovery"
+    ):
         self.role_arn = role_arn
         self.external_id = external_id
         self.session_name = session_name
@@ -176,7 +178,7 @@ class AzureCredentials:
 
 
 class KeyVaultCredentialProvider:
-    """Fetches CNA operational secrets from Azure Key Vault at runtime.
+    """Fetches NetworkEyes operational secrets from Azure Key Vault at runtime.
 
     Contractor workflow:
       1. Operator runs `network-assessment auth login` — device flow to authenticate to Key Vault.
@@ -185,9 +187,9 @@ class KeyVaultCredentialProvider:
       4. No secrets are written to disk, logged, or serialized.
 
     Secret names in Key Vault (conventional):
-      cna-aws-role-arn-<engagement_id>
-      cna-aws-external-id-<engagement_id>
-      cna-azure-sp-secret-<engagement_id>
+      network-assessment-aws-role-arn-<engagement_id>
+      network-assessment-aws-external-id-<engagement_id>
+      network-assessment-azure-sp-secret-<engagement_id>
     """
 
     def __init__(self, vault_url: str | None = None):

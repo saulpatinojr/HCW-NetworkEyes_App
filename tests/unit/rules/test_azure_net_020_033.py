@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import pytest
 
-from cna_azure_network_engine.rules import RULES, evaluate
 from network_assessment.core.findings_schema import FindingSeverity
 from network_assessment.core.topology.azure import (
     ApplicationGateway,
@@ -32,6 +31,7 @@ from network_assessment.core.topology.azure import (
     NSGSecurityRule,
     VNet,
 )
+from network_assessment_azure_engine.rules import RULES, evaluate
 
 SUB = "00000000-0000-0000-0000-000000000001"
 RG = "hcw-sample-rg"

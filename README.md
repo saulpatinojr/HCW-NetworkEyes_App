@@ -64,7 +64,7 @@ apps/
 ├── network-assessment-web/          Next.js web platform (8-step journey, encyclopedia, copilot)
 ├── network-assessment-api/          FastAPI — metrics, chat, reports, discovery routers
 └── network-assessment-worker/       Python background worker — discovery + report generation
-packages/             cna-azure-network-engine — the Azure engine (model, typed rules, classifier,
+packages/             network-assessment-azure-engine — the Azure engine (model, typed rules, classifier,
                       Resource Graph normalizer, renderers); a uv workspace member the network_assessment package consumes
 network_assessment/   Python package, installed as the `network-assessment` CLI (the old `cna` command still works)
 ├── core/             topology/{common,azure,aws} · findings_schema · stat_masters · engagement

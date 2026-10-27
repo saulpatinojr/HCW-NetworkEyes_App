@@ -627,7 +627,7 @@ No image is published from this repository, so there is nothing to scan, sign, r
 ## R-016 — Retire `apps/network-assessment-worker` and its image and service
 
 **Problem**
-`apps/network-assessment-worker/main.py` is a 101-line placeholder: it writes a "CNA publish placeholder" HTML
+`apps/network-assessment-worker/main.py` is a 101-line placeholder: it writes a "NetworkEyes publish placeholder" HTML
 file for a hard-coded `sample-engagement` and exits. `POST /publish` superseded it
 (`CHANGELOG.md`, "The client-portal publish story is real"). A deployment of the images still runs it as an
 always-on service, so it exits and restarts continuously, and its image is built and scanned on every push.

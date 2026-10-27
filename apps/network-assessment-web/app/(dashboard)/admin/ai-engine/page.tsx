@@ -211,7 +211,7 @@ export default async function AiEnginePage() {
               <>
                 <p className="mt-2">
                   Azure OpenAI is the cloud-native GenAI provider here: a private endpoint into the
-                  CNA VNet, RBAC via the app&apos;s managed identity, the model deployment, and the
+                  NetworkEyes VNet, RBAC via the app&apos;s managed identity, the model deployment, and the
                   app environment variables are all expected from your deployment.
                 </p>
                 <p className="mt-2">

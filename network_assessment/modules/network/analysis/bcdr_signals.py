@@ -1,6 +1,6 @@
 """BC/DR signals — AZ-BCDR-* resilience findings from discovery checkpoints.
 
-The rules live in the engine package (``cna_azure_network_engine.rules.azure_bcdr``,
+The rules live in the engine package (``network_assessment_azure_engine.rules.azure_bcdr``,
 ``AZ-BCDR-001..007``); ``generate_bcdr_findings`` evaluates them over a topology and returns the
 monorepo's findings, for callers that want the BC/DR set on its own. Pure post-processing
 over an existing AzureTopology (DD-008: data store only).
@@ -8,8 +8,10 @@ over an existing AzureTopology (DD-008: data store only).
 
 from __future__ import annotations
 
-from cna_azure_network_engine.rules import evaluate
-from cna_azure_network_engine.rules.azure_bcdr import (
+from network_assessment.core.findings_schema import Finding
+from network_assessment.core.topology.azure import AzureTopology
+from network_assessment_azure_engine.rules import evaluate
+from network_assessment_azure_engine.rules.azure_bcdr import (
     R_AZ_BCDR_APPGW_NOT_ZONE_REDUNDANT,
     R_AZ_BCDR_FW_NOT_ZONE_REDUNDANT,
     R_AZ_BCDR_GW_NOT_ZONE_REDUNDANT,
@@ -18,8 +20,6 @@ from cna_azure_network_engine.rules.azure_bcdr import (
     R_AZ_BCDR_SINGLE_FIREWALL_SPOF,
     R_AZ_BCDR_VPN_ACTIVE_PASSIVE,
 )
-from network_assessment.core.findings_schema import Finding
-from network_assessment.core.topology.azure import AzureTopology
 
 __all__ = [
     "R_AZ_BCDR_APPGW_NOT_ZONE_REDUNDANT",

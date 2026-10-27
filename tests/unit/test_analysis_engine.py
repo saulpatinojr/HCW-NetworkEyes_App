@@ -20,7 +20,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from cna_azure_network_engine.rules.registry import evaluate
 from network_assessment.ai_engine.analysis_engine import AnalysisEngine, AnalysisOptions
 from network_assessment.ai_engine.observed_state_enforcer import (
     ObservedStateEnforcer,
@@ -55,6 +54,7 @@ from network_assessment.core.topology.azure import (
     VNetPeering,
 )
 from network_assessment.core.topology.common import PeeringState
+from network_assessment_azure_engine.rules.registry import evaluate
 
 
 @pytest.fixture

@@ -178,7 +178,7 @@ change under `Changed` in `CHANGELOG.md` (and in the release notes) where a cons
   documents and this file, seven root documents at most, until their work has shipped.
 - **Tell the lab build what changed.** `saulpatinojr/HCW-NetworkEyes_AddOn` keeps a "what's new"
   file, `docs/whats-new-upstream.md`, that its agents read before changing anything. When a change lands
-  here that reaches it (the engine package `packages/cna-azure-network-engine`, the rules, an
+  here that reaches it (the engine package `packages/network-assessment-azure-engine`, the rules, an
   `engine-v*` release, or anything it ports or pins), add an entry to that file in the same change set,
   or say in the pull request why none is needed.
 - Start with `TODO.md` when picking up work; check `REVIEW.md` when blocked on a

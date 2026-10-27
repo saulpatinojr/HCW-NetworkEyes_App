@@ -2,7 +2,7 @@
 
 The contract (``ObservedState`` with its ``state``, ``Finding`` with ``rule_version``,
 ``remediation`` and ``learn_url``, ``Unknown``, ``FindingsReport`` with ``rules_version``,
-``model_version`` and ``unknowns``) lives in ``cna_azure_network_engine.findings.schema``
+``model_version`` and ``unknowns``) lives in ``network_assessment_azure_engine.findings.schema``
 (REFACTOR_APP.md section 9). This module subclasses it with the fields only the monorepo's web
 tier, report engine and review flow read: MCP recommendations (DD-003), the review flags
 (DD-009), the legacy flat recommendation and the static cost estimate the FinOps annotation
@@ -18,7 +18,7 @@ import enum
 
 from pydantic import BaseModel, Field
 
-from cna_azure_network_engine.findings.schema import (
+from network_assessment_azure_engine.findings.schema import (
     FINDINGS_SCHEMA_VERSION,
     EvidenceState,
     FindingSeverity,
@@ -26,10 +26,10 @@ from cna_azure_network_engine.findings.schema import (
     ObservedState,
     Unknown,
 )
-from cna_azure_network_engine.findings.schema import Finding as EngineFinding
-from cna_azure_network_engine.findings.schema import FindingsReport as EngineFindingsReport
-from cna_azure_network_engine.model.azure import TOPOLOGY_MODEL_VERSION
-from cna_azure_network_engine.rules.registry import RULES_VERSION
+from network_assessment_azure_engine.findings.schema import Finding as EngineFinding
+from network_assessment_azure_engine.findings.schema import FindingsReport as EngineFindingsReport
+from network_assessment_azure_engine.model.azure import TOPOLOGY_MODEL_VERSION
+from network_assessment_azure_engine.rules.registry import RULES_VERSION
 
 __all__ = [
     "FINDINGS_SCHEMA_VERSION",

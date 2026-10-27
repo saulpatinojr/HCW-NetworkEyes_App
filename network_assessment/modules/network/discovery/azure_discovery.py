@@ -35,11 +35,6 @@ from dataclasses import dataclass, field
 
 from azure.core.exceptions import HttpResponseError
 
-from cna_azure_network_engine.discovery.resource_graph import (
-    ResourceGraphDiscovery,
-    Scope,
-    parse_scopes,
-)
 from network_assessment.api_errors import redact_exception
 from network_assessment.core.exceptions import NetworkAssessmentAuthError
 from network_assessment.core.persistence import EngagementStore
@@ -91,6 +86,11 @@ from network_assessment.core.topology.azure import (
     VNetPeering,
 )
 from network_assessment.core.topology.common import SubnetType
+from network_assessment_azure_engine.discovery.resource_graph import (
+    ResourceGraphDiscovery,
+    Scope,
+    parse_scopes,
+)
 
 logger = logging.getLogger("network_assessment.discovery.azure")
 
