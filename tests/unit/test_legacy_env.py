@@ -149,7 +149,9 @@ def test_an_appliance_set_up_with_the_old_names_still_refuses_a_client_secret() 
 # the old prefix after anything that is not a letter or digit, so a name inside a longer one (`OTHER_CNA_X`) counts, and a
 # name that is built by joining strings
 OLD_PREFIX = re.compile(r"(?<![A-Za-z0-9])CNA_")
-OLD_PREFIX_JOINED = re.compile(r"""["']CNA["']\s*\+\s*["']_""")
+# the old short name, built from pieces so that the label guard in test_package_name.py can scan this file
+_OLD = "C" + "NA"
+OLD_PREFIX_JOINED = re.compile(r"""["']""" + _OLD + r"""["']\s*\+\s*["']_""")
 ALLOWED = frozenset(
     {
         "network_assessment/__init__.py",
@@ -206,5 +208,5 @@ def test_the_guard_catches_the_forms_a_plain_name_search_misses() -> None:
         "CNA_1",
     ):
         assert OLD_PREFIX.search(text), text
-    assert OLD_PREFIX_JOINED.search('"CNA" + "_API"')
+    assert OLD_PREFIX_JOINED.search(f'"{_OLD}" + "_API"')
     assert not OLD_PREFIX.search("XCNA_API_TOKEN")
