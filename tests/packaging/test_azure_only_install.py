@@ -1,4 +1,4 @@
-"""``pip install network-assessment`` installs no boto3 (change set K of REFACTOR_APP.md).
+"""``pip install .`` installs no boto3 (change set K of REFACTOR_APP.md).
 
 Read from the single source of truth and the lock rather than from a throwaway install:
 ``pyproject.toml`` declares ``boto3`` under the ``aws`` extra only, the lock's base export
@@ -69,7 +69,7 @@ def test_the_guard_names_the_extra_when_boto3_is_absent(monkeypatch):
     monkeypatch.delitem(sys.modules, "boto3", raising=False)
     monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
     assert aws_extra.aws_extra_installed() is False
-    with pytest.raises(ImportError, match=r'pip install "network-assessment\[aws\]"'):
+    with pytest.raises(ImportError, match=r'pip install "\.\[aws\]"'):
         aws_extra.require_aws_extra()
 
 

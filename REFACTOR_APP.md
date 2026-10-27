@@ -6,7 +6,7 @@
 | Program | HCW App-to-AddOn initiative (Pair 3, NetworkEyes) |
 | This repository | `saulpatinojr/HCW-NetworkEyes_App` — retired on 2026-09-18, **restored on 2026-10-10** by the owner's decision (the earlier core repository's lineage merged back here) |
 | Implementation target | **this repository** (owner decision 2026-10-10; written for the earlier core repository, whose paths are identical here) |
-| Evidence commit | `5d3b914` (last `main` commit before retirement, read with `git show` and `git ls-tree` only) |
+| Evidence commit | `5d3b914` (last `main` commit before retirement, read with `git show` and `git ls-tree` only; the paths under `network_assessment/` below were `cna/` at that commit) |
 | Downstream consumer | `saulpatinojr/HCW-NetworkEyes_AddOn` (lab build, id `network-assessment`) |
 
 > **Owner decision 2026-10-10:** this repository is the implementation target. The paragraph that stood here said the repository was archived and the target was the earlier core repository; its lineage has since been merged back here, so every path below applies to this tree unchanged. **Owner decision 2026-10-25 (standalone):** this repository depends on no other repository, so every statement below about appliance repositories, a build manifest (`latest-build.json`, `.deployment-catalog/`) or a dispatch to other repositories is the 2026-10-10 plan as written and no longer applies: the record of a build is the digest table in the step summary of `200-build-images.yml` and the five digests in the `310` release notes (`CLAUDE.md`, *The image contract*).
@@ -528,9 +528,9 @@ In `200-build-images.yml`: replace the `login-action` step's `password: ${{ secr
 
 **Current behavior.** `boto3` is a base dependency (`pyproject.toml:13`) and is installed in the API image (`apps/cna-api/Dockerfile:30`); AWS classes (A), `_check_aws_*` rules (`analysis_engine.py:198-638`), `network_assessment/modules/network/discovery/{aws_discovery,aws_network}.py`, `network_assessment/modules/security/discovery/aws_security.py`, `network_assessment/delivery_portal/s3_deployer.py`, `network_assessment/ai_engine/mcp_client/aws_mcp_client.py`, the Bedrock branches in `chat_agent.py` and `apps/cna-web/lib/ai-engine.ts`, `network_assessment/diagram_engine/data/aws_shapes.json`, `network_assessment/modules/network/diagrams/{vpc_topology,tgw_topology,account_hierarchy}.py`, Prisma migration `20260828000014_aws_credentials`, `CRITICAL_TRIGGERS_AWS` (`escalation_engine.py:9`), `tests/unit/test_aws_discovery.py`, `test_aws_security.py`.
 
-**Required behavior.** `pip install network-assessment` installs no `boto3`; `pip install "network-assessment[aws]"` enables every AWS path; shared files separate the two clouds.
+**Required behavior.** `pip install .` installs no `boto3`; `pip install ".[aws]"` enables every AWS path; shared files separate the two clouds.
 
-**Exact change.** `pyproject.toml`: move `boto3` to `optional-dependencies.aws`; new `network_assessment/aws/__init__.py` raising `ImportError("install network-assessment[aws]")` when `boto3` is absent; move the listed modules under `network_assessment/aws/` with re-export shims at the old paths for one release; `module.yaml` splits `required_permissions.aws` into `network_assessment/modules/network/module.aws.yaml`; `.env.example` and `README.md` gain an "AWS (optional)" section; `/discovery/test-connection-aws` (`main.py:1495`) and `_run_aws_discovery` (1710) return `501 aws_not_installed` when the extra is missing.
+**Exact change.** `pyproject.toml`: move `boto3` to `optional-dependencies.aws`; new `network_assessment/aws/__init__.py` raising `ImportError("install the aws extra: pip install '.[aws]'")` when `boto3` is absent; move the listed modules under `network_assessment/aws/` with re-export shims at the old paths for one release; `module.yaml` splits `required_permissions.aws` into `network_assessment/modules/network/module.aws.yaml`; `.env.example` and `README.md` gain an "AWS (optional)" section; `/discovery/test-connection-aws` (`main.py:1495`) and `_run_aws_discovery` (1710) return `501 aws_not_installed` when the extra is missing.
 
 - **Components affected.** Packaging, discovery, rules, diagrams, delivery portal, AI engine, API, docs.
 - **Tests.** `tests/packaging/test_azure_only_install.py`: a clean venv with `pip install .` has no `boto3`; AWS tests are marked `@pytest.mark.aws` and skipped without the extra.
@@ -833,7 +833,7 @@ Live acceptance (R-008), bash, after `az login` as an identity holding only Read
 
 | ID | Assumption | If wrong |
 |---|---|---|
-| A-1 | Core paths equal the `5d3b914` paths (retirement README: created by merging this history) | Section 7 needs a path-mapping pass; validation uses `git grep` for symbols, so the commands still work |
+| A-1 | Core paths equal the `5d3b914` paths, except that `cna/` there is `network_assessment/` since the rename of 2026-10-27 (retirement README: created by merging this history) | Section 7 needs a path-mapping pass; validation uses `git grep` for symbols, so the commands still work |
 | A-2 | `python:3.14-slim` digest `cae66f2e...` is still the Core's pin or has been bumped deliberately | Use the Core's current pin; the `EDITION` change is independent of the base image |
 | A-3 | Resource Graph `Resources`, `ResourceContainers`, `SecurityResources` tables and `skipToken` paging behave as at the time of writing `[VERIFY]` | Adjust the KQL in 7.D; the normalizer contract is unchanged |
 | A-4 | Container Apps Consumption `min_replicas = 1` cost is on the order of US$5 to 15 per month `[VERIFY]` | Owner may choose scale-to-zero with a persisted snapshot |

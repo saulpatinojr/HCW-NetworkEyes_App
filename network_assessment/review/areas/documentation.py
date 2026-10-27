@@ -13,9 +13,9 @@ findings so the plan captures what was checked, not only what broke:
   * **Version.** ``README``/quick-start imply the platform version; the
     packaged version in ``pyproject.toml`` is ``0.8.0b0`` and the spec/intro
     calls the platform ``v0.8.0b0`` — consistent.
-  * **CLI entry point.** ``README`` documents the ``cna`` CLI
+  * **CLI entry point.** ``README`` documents the ``network-assessment`` CLI
     (``pip install -e .[dev]`` → ``network-assessment --help``); ``pyproject.toml`` declares
-    ``[project.scripts] cna = "network_assessment.cli.main:cli"`` — consistent.
+    ``[project.scripts] network-assessment = "network_assessment.cli.main:cli"`` — consistent.
   * **Four-document model.** ``README``'s documentation map claims exactly four
     required markdown files plus at most one optional temporary working
     document. The repository root carries exactly ``README.md``,
@@ -87,10 +87,10 @@ def _accuracy_findings() -> list[Finding]:
             area=_AREA,
             severity=Severity.INFORMATIONAL,
             proposed_action=(
-                "Verified compliant: README documents the `cna` CLI "
+                "Verified compliant: README documents the `network-assessment` CLI "
                 "(pip install -e .[dev] -> network-assessment --help) and pyproject.toml "
                 "declares the matching entry point "
-                '[project.scripts] cna = "network_assessment.cli.main:cli". No inaccuracy.'
+                '[project.scripts] network-assessment = "network_assessment.cli.main:cli". No inaccuracy.'
             ),
             dedup_key="documentation:cli-entry-point-accurate",
             subject="README.md / pyproject.toml::[project.scripts]",
@@ -248,8 +248,8 @@ def _verify_findings() -> list[Finding]:
         references by name (``200-build-images.yml``, ``300-test-codebase.yml``,
         ``310-release-version.yml``, ``320-release-engine.yml``, ``370-registry-cleanup.yml``) exists under
         ``.github/workflows/``, and the
-        documented ``cna`` CLI command resolves to a declared entry point
-        (``pyproject.toml`` ``[project.scripts] cna = "network_assessment.cli.main:cli"`` with
+        documented ``network-assessment`` CLI command resolves to a declared entry point
+        (``pyproject.toml`` ``[project.scripts] network-assessment = "network_assessment.cli.main:cli"`` with
         the ``network_assessment/cli/main.py`` module present). Running ``network-assessment --help`` itself
         needs the documented ``pip install -e .[dev]`` step first (task 13.1
         recorded this executable-status caveat), so the command-name check is
@@ -294,8 +294,8 @@ def _verify_findings() -> list[Finding]:
                 "by name (200-build-images.yml, 300-test-codebase.yml, "
                 "310-release-version.yml, 320-release-engine.yml, 370-registry-cleanup.yml) exists under "
                 ".github/workflows/, and the "
-                "documented `cna` command resolves to its declared entry point "
-                '(pyproject.toml [project.scripts] cna = "network_assessment.cli.main:cli", '
+                "documented `network-assessment` command resolves to its declared entry point "
+                '(pyproject.toml [project.scripts] network-assessment = "network_assessment.cli.main:cli", '
                 "module network_assessment/cli/main.py present). Running `network-assessment --help` still "
                 "requires the documented install step first (executable-status "
                 "caveat recorded in the audit)."

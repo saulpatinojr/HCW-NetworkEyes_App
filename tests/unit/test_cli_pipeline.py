@@ -1,6 +1,6 @@
 """End-to-end CLI pipeline tests (TODO.md T-412).
 
-The registered `cna` commands were stubs that printed "Phase X: TODO" while
+The registered `network-assessment` commands were stubs that printed "Phase X: TODO" while
 the real implementations sat unwired in `network_assessment/cli/*.py` behind
 NotImplementedError guards. These tests drive the now-wired registry with
 `click.testing.CliRunner` against a real `EngagementStore` on `tmp_path` —

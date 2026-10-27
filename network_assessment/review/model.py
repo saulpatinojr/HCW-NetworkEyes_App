@@ -49,7 +49,7 @@ AREAS: frozenset[str] = frozenset(
         "terraform-aws",  # AWS Terraform (left this repository; T-504)
         "cicd",  # .github/workflows (200, 300, 310, 370)
         "security-secrets",  # detect-secrets, gitleaks, pip-audit, npm audit
-        "containers-packaging",  # Dockerfiles, docker-compose, cna CLI packaging
+        "containers-packaging",  # Dockerfiles, docker-compose, network-assessment CLI packaging
         "observability",  # structured logging, AI-path coverage
         "documentation",  # README/CHANGELOG/TODO accuracy, executable paths
     }

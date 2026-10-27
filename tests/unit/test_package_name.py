@@ -18,6 +18,8 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 OLD_IMPORT = re.compile(r"(?m)^\s*(?:from|import) cna\b")
+# a dotted module path inside a string, as in a patch target or an import_module call
+OLD_DOTTED = re.compile(r"""["']cna[.][a-z_]""")
 
 
 def test_the_package_imports_under_its_new_name() -> None:
@@ -26,8 +28,8 @@ def test_the_package_imports_under_its_new_name() -> None:
 
 
 def test_the_old_package_name_does_not_import() -> None:
-    assert importlib.util.find_spec("cna") is None
-    assert not (REPO_ROOT / "cna").exists()
+    # the directory may survive as an untracked __pycache__ on a developer checkout; its package marker may not
+    assert not (REPO_ROOT / "cna" / "__init__.py").exists()
 
 
 def test_no_tracked_python_file_imports_the_old_package_name() -> None:
@@ -44,7 +46,10 @@ def test_no_tracked_python_file_imports_the_old_package_name() -> None:
         n
         for n in names
         if (REPO_ROOT / n).exists()
-        and OLD_IMPORT.search((REPO_ROOT / n).read_text(encoding="utf-8", errors="replace"))
+        and (
+            (text := (REPO_ROOT / n).read_text(encoding="utf-8", errors="replace"))
+            and (OLD_IMPORT.search(text) or OLD_DOTTED.search(text))
+        )
     ]
     assert not offenders, f"these files still import the old package name: {offenders}"
 

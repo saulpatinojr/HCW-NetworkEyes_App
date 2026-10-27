@@ -2,7 +2,7 @@
 
 This is a *verify-then-close-gaps* record for the platform's logging and
 telemetry across the three reviewed surfaces — the ``apps/cna-api`` FastAPI
-service, the ``apps/cna-web`` Next.js front end, and the ``cna`` Core_Engine —
+service, the ``apps/cna-web`` Next.js front end, and the network_assessment Core_Engine —
 with emphasis on the AI analysis path (the least-proven capability, design
 section "8. Observability").
 

@@ -1,6 +1,6 @@
 """The AWS extra (change set K of REFACTOR_APP.md).
 
-``pip install network-assessment`` installs no ``boto3``; ``pip install "network-assessment[aws]"`` enables every AWS path
+``pip install .`` (from a checkout; the project is not published on PyPI) installs no ``boto3``; ``pip install ".[aws]"`` enables every AWS path
 (discovery, Security Hub, the S3 delivery portal, Bedrock chat, the ``/discovery/*-aws``
 routes). Every module that imports ``boto3`` at import time wraps it in ``try`` / ``except
 ImportError`` and re-raises :data:`INSTALL_HINT`; the lazy call sites call
@@ -14,7 +14,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 
-INSTALL_HINT = 'the AWS paths need boto3: pip install "network-assessment[aws]"'
+INSTALL_HINT = 'the AWS paths need boto3: install the aws extra from the repository checkout (pip install ".[aws]")'
 AWS_NOT_INSTALLED = "aws_not_installed"
 
 

@@ -4,7 +4,7 @@ Where :mod:`network_assessment.review.areas.python_engine_api` records the audit
 verify-then-close-gaps findings (the ``/intake`` honest-501 (2.1), the single
 outcome->status mapping (2.2/2.4), and the worker retirement decision (2.5)),
 this module records the *verification suite* result for the area — the design's
-"Verification" line for section 2: ``ruff check cna apps``, ``ty check cna``,
+"Verification" line for section 2: ``ruff check network_assessment apps``, ``ty check network_assessment``,
 and ``pytest`` under the 80% coverage gate. Failures are recorded as
 ``Finding`` records rather than swallowed (design "Error Handling": a failing
 verification command is itself a finding; a missing tool is a coverage gap).
@@ -14,7 +14,7 @@ plus the API runtime deps (``fastapi``/``starlette``/``httpx``/``psycopg2``) so
 the FastAPI ``TestClient`` error-path tests execute rather than skip. What the
 tools reported, and what this module records:
 
-  * **ruff (verified compliant).** ``ruff check cna apps`` -> ``All checks
+  * **ruff (verified compliant).** ``ruff check network_assessment apps`` -> ``All checks
     passed!``. ``ruff format --check`` (the CI/pre-commit gate,
     ``300-test-codebase.yml`` + ``.pre-commit-config.yaml``) initially flagged
     ten files this feature's work introduced (``network_assessment/api_status.py``,
@@ -24,7 +24,7 @@ tools reported, and what this module records:
     rule was silenced and no gate weakened); both ``ruff check`` and ``ruff
     format --check`` are clean afterward. Recorded ``INFORMATIONAL``.
 
-  * **ty (residual gap, fixable).** ``ty check cna`` reports two
+  * **ty (residual gap, fixable).** ``ty check network_assessment`` reports two
     ``unresolved-attribute`` diagnostics, both in
     ``network_assessment/ai_engine/foundry_agent_client.py`` (``AIProjectClient.agents``), which
     is the exact azure-ai-projects 1.x surface documented in ``pyproject.toml``
@@ -73,7 +73,7 @@ def python_engine_api_verify_findings() -> list[Finding]:
     """Return the verification-suite findings for the ``python-engine-api`` area.
 
     Records the result of running the design's section-2 verification suite —
-    ``ruff check cna apps`` / ``ruff format --check``, ``ty check cna``, and
+    ``ruff check network_assessment apps`` / ``ruff format --check``, ``ty check network_assessment``, and
     ``pytest`` under the 80% coverage gate. Clean/passing outcomes are recorded
     ``INFORMATIONAL`` (verified compliant); the residual ``ty`` gap is a fixable
     ``LOW`` finding; the two observability Property-16 test failures surfaced by
@@ -89,7 +89,7 @@ def python_engine_api_verify_findings() -> list[Finding]:
             area=_AREA,
             severity=Severity.INFORMATIONAL,
             proposed_action=(
-                "Verified compliant (ruff): 'ruff check cna apps' passes with no "
+                "Verified compliant (ruff): 'ruff check network_assessment apps' passes with no "
                 "findings. 'ruff format --check' (the CI/pre-commit gate) flagged "
                 "ten feature-introduced files (network_assessment/api_status.py, "
                 "apps/cna-api/main.py, network_assessment/review/model.py, and seven "
@@ -100,13 +100,13 @@ def python_engine_api_verify_findings() -> list[Finding]:
                 "(300-test-codebase.yml) and pre-commit."
             ),
             dedup_key="python-engine-api:verify-ruff-clean",
-            subject="cna, apps",
+            subject="network_assessment, apps",
         ),
         Finding(
             area=_AREA,
             severity=Severity.LOW,
             proposed_action=(
-                "'ty check cna' reports two unresolved-attribute diagnostics, "
+                "'ty check network_assessment' reports two unresolved-attribute diagnostics, "
                 "both in network_assessment/ai_engine/foundry_agent_client.py "
                 "(AIProjectClient.agents) — the azure-ai-projects 1.x surface "
                 "documented in pyproject.toml (T-413) and tracked not-yet-green in "
@@ -114,7 +114,7 @@ def python_engine_api_verify_findings() -> list[Finding]:
                 "(network_assessment/api_status.py, network_assessment/api_errors.py, network_assessment/review/*); the "
                 "Python-area work introduced no type error. Resolve the two "
                 "foundry_agent_client findings (T-410) rather than widening any "
-                "ignore list, so 'ty check cna' becomes green."
+                "ignore list, so 'ty check network_assessment' becomes green."
             ),
             dedup_key="python-engine-api:verify-ty-foundry-agents-gap",
             subject="network_assessment/ai_engine/foundry_agent_client.py",

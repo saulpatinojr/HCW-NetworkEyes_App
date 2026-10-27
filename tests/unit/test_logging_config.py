@@ -111,7 +111,7 @@ class TestEngagementFilter:
 
 class TestSetupLogging:
     def teardown_method(self):
-        """Clear cna logger state between tests."""
+        """Clear network_assessment logger state between tests."""
         logger = logging.getLogger("network_assessment")
         logger.handlers.clear()
         logger.filters.clear()
@@ -150,7 +150,7 @@ class TestSetupLogging:
         logger = logging.getLogger("network_assessment")
         file_handlers = [h for h in logger.handlers if hasattr(h, "baseFilename")]
         assert len(file_handlers) == 1
-        assert (log_dir / "network_assessment.log").exists() or log_dir.exists()
+        assert (log_dir / "network_assessment.log").exists()
 
     def test_setup_logging_clears_existing_handlers(self):
         """Calling setup_logging twice should not accumulate handlers."""

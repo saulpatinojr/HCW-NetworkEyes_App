@@ -1021,7 +1021,10 @@ class TestCollectPublicIps:
                 public_ip_allocation_method="Static",
                 ip_address="20.1.2.3",
                 public_ip_address_version="IPv4",
-                dns_settings=_Arm(domain_name_label="cna", fqdn="cna.eastus.cloudapp.azure.com"),
+                dns_settings=_Arm(
+                    domain_name_label="network-assessment",
+                    fqdn="network-assessment.eastus.cloudapp.azure.com",
+                ),
                 ddos_settings=_Arm(protection_mode="Enabled"),
                 zones=["1", "2"],
                 idle_timeout_in_minutes=15,
@@ -1038,7 +1041,7 @@ class TestCollectPublicIps:
         pip = pips[0]
         assert pip.resource_group == "rg-net"
         assert pip.sku_name == "Standard"
-        assert pip.dns_label == "cna"
+        assert pip.dns_label == "network-assessment"
         assert pip.zones == ["1", "2"]
         assert pip.idle_timeout_minutes == 15
         assert pip.ddos_protection_mode == "Enabled"

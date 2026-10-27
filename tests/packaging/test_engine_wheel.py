@@ -2,7 +2,7 @@
 
 Plan 7.C acceptance: ``pip install ./packages/cna-azure-network-engine`` in a clean venv installs
 pydantic only; ``import cna_azure_network_engine`` leaves ``azure`` out of ``sys.modules``; no
-distribution named ``azure-*``, ``msal``, ``boto3``, ``psycopg2`` or ``cna`` is present. The
+distribution named ``azure-*``, ``msal``, ``boto3``, ``psycopg2`` or ``network-assessment`` is present. The
 build uses ``uv`` when it is on PATH (the developer and image path) and falls back to the
 interpreter's ``pip`` (the CI test job).
 """
@@ -19,7 +19,13 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = REPO_ROOT / "packages" / "cna-azure-network-engine"
-FORBIDDEN_PREFIXES = ("azure-", "msal", "boto3", "psycopg2", "network_assessment")
+FORBIDDEN_PREFIXES = (
+    "azure-",
+    "msal",
+    "boto3",
+    "psycopg2",
+    "network-assessment",
+)  # distribution names, hyphenated
 _TIMEOUT = 600
 
 
@@ -117,7 +123,9 @@ class TestWheel:
             "print('\\n'.join(sorted(d.metadata['Name'] for d in m.distributions())))",
         )
         assert result.returncode == 0, result.stderr[-2000:]
-        names = [n.strip().lower() for n in result.stdout.splitlines() if n.strip()]
+        names = [
+            n.strip().lower().replace("_", "-") for n in result.stdout.splitlines() if n.strip()
+        ]
         assert "cna-azure-network-engine" in names
         offenders = [
             n for n in names if n.startswith(FORBIDDEN_PREFIXES) and n != "cna-azure-network-engine"

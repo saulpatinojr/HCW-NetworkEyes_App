@@ -6,7 +6,7 @@ worker-retirement entry. This test lives in its own module — separate from the
 ``TestClient`` suite — because it only reads the review findings via
 :func:`network_assessment.review.areas.python_engine_api_findings` and therefore has **no**
 dependency on the API's runtime stack (fastapi / httpx / psycopg2). It runs in
-every environment, including the minimal ``cna``-only checkout where the
+every environment, including the minimal ``network_assessment``-only checkout where the
 ``TestClient`` suite is skipped.
 
 Requirement 2.5: where the Worker_Service is confirmed a retirement candidate,

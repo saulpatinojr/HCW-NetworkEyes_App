@@ -20,7 +20,7 @@ by file/module path rather than as an installed package.
 
 **Environment.** The API module imports ``fastapi`` and ``psycopg2`` at import
 time, and ``TestClient`` needs ``httpx``/``starlette``. When any of those are not
-installed in the current interpreter (e.g. a minimal ``cna``-only checkout), the
+installed in the current interpreter (e.g. a minimal ``network_assessment``-only checkout), the
 whole module is skipped with a clear reason — the tests are still collected and
 run in the full dev environment / CI (workflow 300), which installs the API
 dependencies. Nothing here mocks the framework itself; only the downstream SDKs
@@ -64,7 +64,7 @@ def _load_api_module() -> types.ModuleType:
     the file directly under a synthetic, import-safe name. ``main.py`` itself
     prepends its own directory to ``sys.path`` so its ``routers.*`` imports
     resolve, so no extra path wiring is needed here — but we ensure the repo
-    root is importable first so the top-level ``from cna...`` imports resolve
+    root is importable first so the top-level ``from network_assessment...`` imports resolve
     when the package is not installed.
     """
     if str(_REPO_ROOT) not in sys.path:

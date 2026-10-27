@@ -90,7 +90,7 @@ def setup_logging(
     engagement_id: str | None = None,
     log_dir: Path | None = None,
 ) -> None:
-    """Configure root CNA logger.
+    """Configure the root network_assessment logger.
 
     Args:
         engagement_id: If provided, injected into every log line.
@@ -137,7 +137,7 @@ def setup_logging(
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Return a cna-namespaced logger."""
+    """Return a logger in the network_assessment namespace."""
     if not name.startswith("network_assessment."):
         name = f"network_assessment.{name}"
     return logging.getLogger(name)

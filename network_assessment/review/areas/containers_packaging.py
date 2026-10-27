@@ -2,7 +2,7 @@
 
 This is a *verify-then-close-gaps* record for the four service Dockerfiles
 (root ``Dockerfile``, ``apps/cna-api``, ``apps/cna-web``, ``apps/cna-worker``),
-``docker-compose.yml``, and the ``cna`` CLI packaging. The audit against
+``docker-compose.yml``, and the ``network-assessment`` CLI packaging. The audit against
 Requirement 7 confirmed:
 
   * **7.4 — non-root final ``USER`` (verified compliant).** Every service
@@ -14,7 +14,7 @@ Requirement 7 confirmed:
     ``INFORMATIONAL`` verified-compliant finding is recorded per image to guard
     against regression to a root/unset ``USER``.
   * **7.2 — docker-compose Web_Service fallback (gap closed here).** The
-    committed ``docker-compose.yml`` only defined the Python ``cna`` CLI
+    committed ``docker-compose.yml`` only defined the Python ``network-assessment`` CLI
     services (``cna``, ``cna-dev``, ``cna-test``); there was no fallback path to
     run the Web_Service (``apps/cna-web``) locally. A ``cna-web`` service was
     added to the compose file and a ``MEDIUM`` finding records the gap that was
@@ -275,7 +275,7 @@ def containers_packaging_findings(
             severity=Severity.MEDIUM,
             proposed_action=(
                 "docker-compose.yml had no fallback path to run the Web_Service "
-                "(apps/cna-web) locally — only the Python cna CLI services were "
+                "(apps/cna-web) locally — only the Python network-assessment CLI services were "
                 "defined. Add a cna-web service that builds apps/cna-web so the "
                 "local stack can run the web front end without the cloud."
             ),
@@ -371,15 +371,15 @@ def _packaging_finding(results: VerificationResults) -> Finding:
             area=_AREA,
             severity=Severity.INFORMATIONAL,
             proposed_action=(
-                "Verified compliant (7.3): the cna wheel builds, installs into a "
+                "Verified compliant (7.3): the network-assessment wheel builds, installs into a "
                 "clean virtualenv, and `network-assessment --help` runs from that install with "
-                "exit code 0 (the CLI entry point cna = network_assessment.cli.main:cli resolves "
+                "exit code 0 (the CLI entry point network-assessment = network_assessment.cli.main:cli resolves "
                 "from the packaged distribution). Re-run this packaging check on "
                 "every evaluation of the Core_Engine package and guard against a "
                 "regression in the entry point or wheel metadata."
             ),
             dedup_key="containers-packaging:cli-packaging-verified",
-            subject="pyproject.toml::cna",
+            subject="pyproject.toml::network-assessment",
         )
     steps = []
     if not results.wheel_build_ok:
@@ -398,7 +398,7 @@ def _packaging_finding(results: VerificationResults) -> Finding:
             "distribution; fix the entry point / wheel metadata so it does."
         ),
         dedup_key="containers-packaging:cli-packaging-gap",
-        subject="pyproject.toml::cna",
+        subject="pyproject.toml::network-assessment",
     )
 
 
@@ -572,7 +572,7 @@ def containers_packaging_verify_findings(
     ``Finding`` records so the consolidated plan captures *what was verified* and
     *what remained a coverage gap*, not only what broke:
 
-      * **7.3 — CLI packaging (verified).** Builds the ``cna`` wheel, installs it
+      * **7.3 — CLI packaging (verified).** Builds the ``network-assessment`` wheel, installs it
         into a clean virtualenv, and runs ``network-assessment --help`` — the most portable
         check and the behavioural core of Requirement 7.3.
       * **7.1 — ``docker build`` per image (verified).** Every service image
