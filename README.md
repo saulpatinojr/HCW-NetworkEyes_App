@@ -16,7 +16,7 @@ finding names the fact it came from. A free, upload-only version that needs no c
 image is published. NetworkEyes is a free tool for followers of Hybrid Cloud Works, shared through GitHub. There is no
 paid edition.
 
-This repository is the **product** of the Cloud Network Assessment platform: the single home
+This repository is the **product** of NetworkEyes, a Cloud Network Assessment tool: the single home
 of the application code and of the pipeline that builds and publishes its container images. It
 is the NetworkEyes App of the HCW App-to-AddOn initiative: `REFACTOR_APP.md` is its refactoring
 plan and [`HCW-NetworkEyes_AddOn`](https://github.com/saulpatinojr/HCW-NetworkEyes_AddOn) is
@@ -24,7 +24,7 @@ its lab build. It stands alone: it builds, signs and publishes its own container
 (`docker.io/hybridcloudworks/img-ne-appliance-app`), deploys nothing and notifies no one; see
 [Publishing the images](#publishing-the-images).
 
-A CNA-branded, multi-user web platform for cloud network assessments across AWS and Azure.
+A multi-user web app for cloud network assessments across AWS and Azure.
 Analysts run network discoveries, AI-powered analysis, and generate presentation-ready
 deliverables including an encyclopedia-grade network report. Users share deliverables through
 a time-limited authenticated portal. The platform deploys as three containerized services behind a

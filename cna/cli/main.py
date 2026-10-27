@@ -16,7 +16,7 @@ console = Console()
 @click.group()
 @click.version_option(version=__version__)
 def cli():
-    """CNA — Cloud Network Assessment Platform
+    """NetworkEyes — Cloud Network Assessment
 
     Multi-cloud network and security architecture discovery,
     AI-assisted analysis, diagram generation, and delivery.
