@@ -79,6 +79,7 @@ def test_notice_says_the_names_and_every_logo_file_are_not_covered_by_the_licenc
         "and the Hybrid Cloud Works logo"
     ) in text
     assert "The Apache License does not cover these names or the logo" in text
+    assert "This does not take away anything the Apache License gives you for the code" in text
     assert "Section 6 of it (Trademarks) grants no permission to use them" in text
     # section 6 of LICENSE has an exception; NOTICE quotes it in the licence's own words rather than paraphrasing it
     assert (
