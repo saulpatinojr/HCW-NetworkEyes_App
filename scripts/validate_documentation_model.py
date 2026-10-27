@@ -6,7 +6,7 @@ run locally.
 
 The model (README.md → "Repository conventions"): the repository keeps four
 required documents — README.md, CHANGELOG.md, REVIEW.md, TODO.md — and long-form
-documentation lives in the GitHub Wiki. Three more root documents are allowed
+documentation has no destination since the GitHub Wiki was deleted (REVIEW.md R-031). Three more root documents are allowed
 but not required: CLAUDE.md, the agent-instruction file that states the rules an
 AI coding agent must not infer wrongly (the image contract above
 all), and two temporary working documents with a planned retirement,
@@ -214,16 +214,19 @@ def validate() -> bool:
             "FUNDING.md and the files in .github/ISSUE_TEMPLATE/).",
             file=sys.stderr,
         )
-        print("Long-form documentation belongs in the GitHub Wiki.", file=sys.stderr)
+        print("Long-form documentation has no destination yet (REVIEW.md R-031).", file=sys.stderr)
         print(file=sys.stderr)
         for violation in violations:
             print(f"  {violation}", file=sys.stderr)
         print(file=sys.stderr)
         print(
-            "Move the content to one of the allowed documents or the Wiki",
+            "Move the content to one of the allowed documents",
             file=sys.stderr,
         )
-        print("(content determines destination), then delete the file.", file=sys.stderr)
+        print(
+            "(or ask the owner where it belongs, REVIEW.md R-031), then delete the file.",
+            file=sys.stderr,
+        )
 
     if missing or violations:
         return False
