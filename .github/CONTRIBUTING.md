@@ -22,8 +22,9 @@ overview, and `TODO.md` is the work queue.
   the runtime environment settings changes what consumers rely on; `CLAUDE.md` explains how to record it.
 - **Documents:** the repository keeps `README.md`, `CHANGELOG.md`, `REVIEW.md` and `TODO.md` (plus `CLAUDE.md`, and two
   temporary working documents). `scripts/validate_documentation_model.py` fails the build on any other markdown file.
-  Long-form documentation goes to the GitHub Wiki. The only exception is the community files GitHub itself reads from
-  `.github/` (this guide, the security policy, the code of conduct, the pull request template and the issue forms).
+  Long-form documentation has no destination since the GitHub Wiki was deleted (`REVIEW.md`, R-031). The only other
+  markdown is the community files GitHub itself reads from `.github/` (this guide, the security policy, the code of
+  conduct, the pull request template and the issue forms).
 - **Workflows:** `.github/workflows/` holds only the numbered workflows `200`, `300`, `310`, `320`, `370` and `390`.
   Add a job to an existing workflow rather than a new file. Never rename a job in `300-test-codebase.yml`: the job
   names are the required checks of the `main` ruleset.

@@ -38,6 +38,7 @@ Anything an engineer can solve without external input belongs in [`TODO.md`](TOD
 | [R-028](#r-028--should-the-default-model-ids-of-the-bring-your-own-engines-follow-the-vendors-current-models) | Should the default model ids of the bring-your-own engines follow the vendors' current models? | Product owner | Open — not blocking |
 | [R-029](#r-029--the-appliance-and-core-repositories-are-out-of-board-scope) | The two appliance repositories and the earlier core repository (the other owner's, named on ticket #249): their state, and whether they belong on the HCW Field Applications board | Repository owner | Decided 2026-10-25 — out of board scope; nothing is written there |
 | [R-030](#r-030--name-the-copyright-holder) | Name the copyright holder of the code in this repository | Repository owner | Decided 2026-10-26 — Hybrid Cloud Works (owner's statement); the name NetworkEyes was added to `NOTICE` on 2026-10-27 (owner's answer `names yes`), and the owner confirmed the logo exclusion (answer `logo ok`); nothing is open (see R-030) |
+| [R-031](#r-031--where-long-form-documentation-lives-now) | Decide where long-form documentation lives now that the GitHub Wiki is deleted | Repository owner | Open — not blocking |
 
 ---
 
@@ -631,6 +632,9 @@ No image is published from this repository, so there is nothing to scan, sign, r
 file for a hard-coded `sample-engagement` and exits. `POST /publish` superseded it
 (`CHANGELOG.md`, "The client-portal publish story is real"). A deployment of the images still runs it as an
 always-on service, so it exits and restarts continuously, and its image is built and scanned on every push.
+Observed 2026-10-27 by building and running the image: it cannot reach even that placeholder, because its Dockerfile
+copies only `apps/network-assessment-worker`, not the `network_assessment` package that `main.py` imports, so the container
+stops at start with `ModuleNotFoundError` (on `main`, before the rename, the same error named the old package).
 
 **Why it needs an owner**
 Removing it changes the published image set (the `worker` image and its `worker-<version>` release tag), which consumers rely on and which `CLAUDE.md`
@@ -936,3 +940,13 @@ A user cannot tell what "1.0" they run; a new `[1.0.0]` heading would collide.
 - **Spelling (owner, 2026-10-27):** the product is written "NetworkEyes", one word. The report title block, the encyclopedia cover and its PDF footer used to print it as two words; they now print "NetworkEyes", and `tests/unit/test_retired_name_guard.py` keeps it that way.
 - **Raised:** 2026-10-25. **Decided:** 2026-10-26 (the product name: 2026-10-27).
 - **Status:** Decided 2026-10-26; the product name was added on 2026-10-27 (owner's answer `names yes`). The owner confirmed on 2026-10-27 (answer `logo ok`) that excluding the logo image files from the Apache grant (decided with `notice yes`) is intended. Nothing further is open here.
+
+## R-031 — Where long-form documentation lives now
+
+- **What this is:** this repository's GitHub Wiki (architecture pages, the Secrets Reference, the Deployment Guide, the Workflows Guide, the ADRs and the runbooks) was deleted on 2026-10-27 at the owner's order (the owner had downloaded a copy, and a full mirror with its history was also made on the owner's machine before the deletion). The documentation model (`README.md`, `CLAUDE.md`, `.github/CONTRIBUTING.md`, `scripts/validate_documentation_model.py`) sent every long-form document to the wiki and forbids other markdown files outside a short list, so long-form documentation now has no home.
+- **What changed with this record:** the links to the wiki and the sentences that sent readers to it were removed or reworded to say that the destination is undecided. Nothing was moved and no document was added.
+- **What stays as it was, because it records history or is owned by the review engine:** `REVIEW.md` items R-009, R-014 and R-023, `TODO.md` items T-103, T-601 and T-602, and the review area `network_assessment/review/areas/documentation.py` still describe publishing to the wiki. They are obsolete, and are closed or removed together with this decision.
+- **Options.** (1) A `docs/` folder in the repository, with the validator changed to allow it (recommended: the documents are versioned with the code and reviewed in pull requests, and the validator already lists what is allowed). (2) Keep only the root documents and fold the few facts that are still needed into them (the settings reference is already `.env.example`). (3) Another wiki or a documentation site.
+- **Recommendation:** option 1, as a separate pull request once the owner has looked at the downloaded copy and chosen which pages to keep.
+- **Answer with:** `docs-folder`, `root-only` or `elsewhere`.
+- **Raised:** 2026-10-27. **Status:** Open — not blocking.
