@@ -11,7 +11,7 @@ describe("adoptLegacyEnvironment", () => {
     expect(env.CNA_API_TOKEN).toBe("a-token");
   });
 
-  it("lets the new name win when both are set", () => {
+  it("lets a new name that has a value win over the old one", () => {
     const env: Record<string, string | undefined> = {
       CNA_AI_MODE: "saas",
       NETWORK_ASSESSMENT_AI_MODE: "byo-api",
@@ -20,9 +20,18 @@ describe("adoptLegacyEnvironment", () => {
     expect(env.NETWORK_ASSESSMENT_AI_MODE).toBe("byo-api");
   });
 
-  it("counts an empty new value as set", () => {
+  it("does not let a blank new name hide a non-blank old one", () => {
     const env: Record<string, string | undefined> = {
-      CNA_LOG_LEVEL: "DEBUG",
+      CNA_APPLIANCE_CLOUD: "azure",
+      NETWORK_ASSESSMENT_APPLIANCE_CLOUD: "",
+    };
+    expect(adoptLegacyEnvironment(env)).toEqual(["NETWORK_ASSESSMENT_APPLIANCE_CLOUD"]);
+    expect(env.NETWORK_ASSESSMENT_APPLIANCE_CLOUD).toBe("azure");
+  });
+
+  it("leaves a blank new name blank when the old one is blank too", () => {
+    const env: Record<string, string | undefined> = {
+      CNA_LOG_LEVEL: "",
       NETWORK_ASSESSMENT_LOG_LEVEL: "",
     };
     expect(adoptLegacyEnvironment(env)).toEqual([]);

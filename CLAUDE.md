@@ -84,7 +84,9 @@ change under `Changed` in `CHANGELOG.md` (and in the release notes) where a cons
    `NETWORK_ASSESSMENT_IMAGE_REGISTRY_TOKEN`, optional `NETWORK_ASSESSMENT_IMAGE_UPDATE_CHECK_INTERVAL_MINUTES`). `NETWORK_ASSESSMENT_BUILD_SHA` is baked into every
    image by `200-build-images.yml`, never injected. The authoritative inventory is
    `.env.example`. Until a later release removes it, the images also accept the old `CNA_<NAME>` spelling of each setting
-   (the new name wins when both are set; `network_assessment/_legacy_env.py` and the web tier's `lib/legacy-env.ts` do the copy).
+   (a new name that has a value wins, a blank one does not hide an old one; `network_assessment/_legacy_env.py` and the web tier's
+   `lib/legacy-env.ts` do the copy). That works one way only: an image from before the rename reads only the old names, so
+   while old and new images run side by side, and when rolling back, set both names to the same value.
 5. **Image signatures and provenance.** `200-build-images.yml` signs every
    published digest with cosign, keyless, under its own OIDC identity
    `https://github.com/<owner>/<this repo>/.github/workflows/200-build-images.yml@refs/heads/main`
