@@ -39,20 +39,20 @@ class TestAWSCredentials:
             creds.get_session()
 
     def test_from_env_reads_env_vars(self, monkeypatch):
-        monkeypatch.setenv("CNA_AWS_ROLE_ARN", "arn:aws:iam::999:role/Test")
-        monkeypatch.setenv("CNA_AWS_EXTERNAL_ID", "test-ext-id")
+        monkeypatch.setenv("NETWORK_ASSESSMENT_AWS_ROLE_ARN", "arn:aws:iam::999:role/Test")
+        monkeypatch.setenv("NETWORK_ASSESSMENT_AWS_EXTERNAL_ID", "test-ext-id")
         creds = AWSCredentials.from_env()
         assert creds.role_arn == "arn:aws:iam::999:role/Test"
         assert creds.external_id == "test-ext-id"
 
     def test_from_env_raises_if_role_arn_not_set(self, monkeypatch):
-        monkeypatch.delenv("CNA_AWS_ROLE_ARN", raising=False)
-        with pytest.raises(OSError, match="CNA_AWS_ROLE_ARN"):
+        monkeypatch.delenv("NETWORK_ASSESSMENT_AWS_ROLE_ARN", raising=False)
+        with pytest.raises(OSError, match="NETWORK_ASSESSMENT_AWS_ROLE_ARN"):
             AWSCredentials.from_env()
 
     def test_from_env_external_id_optional(self, monkeypatch):
-        monkeypatch.setenv("CNA_AWS_ROLE_ARN", "arn:aws:iam::123:role/R")
-        monkeypatch.delenv("CNA_AWS_EXTERNAL_ID", raising=False)
+        monkeypatch.setenv("NETWORK_ASSESSMENT_AWS_ROLE_ARN", "arn:aws:iam::123:role/R")
+        monkeypatch.delenv("NETWORK_ASSESSMENT_AWS_EXTERNAL_ID", raising=False)
         creds = AWSCredentials.from_env()
         assert creds.external_id == ""
 

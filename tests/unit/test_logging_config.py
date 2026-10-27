@@ -132,13 +132,13 @@ class TestSetupLogging:
         assert not any(isinstance(f, EngagementFilter) for f in logger.filters)
 
     def test_setup_logging_respects_log_level_env(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("CNA_LOG_LEVEL", "DEBUG")
+        monkeypatch.setenv("NETWORK_ASSESSMENT_LOG_LEVEL", "DEBUG")
         setup_logging()
         logger = logging.getLogger("network_assessment")
         assert logger.level == logging.DEBUG
 
     def test_setup_logging_invalid_level_falls_back_to_info(self, monkeypatch):
-        monkeypatch.setenv("CNA_LOG_LEVEL", "NOTAVALIDLEVEL")
+        monkeypatch.setenv("NETWORK_ASSESSMENT_LOG_LEVEL", "NOTAVALIDLEVEL")
         setup_logging()
         logger = logging.getLogger("network_assessment")
         # getattr on unknown level returns INFO (10 is DEBUG, 20 is INFO)

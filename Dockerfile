@@ -14,7 +14,7 @@
 #   2. Builder stage: installs deps only, not full source (smaller final layer)
 #   3. Non-root user (network-assessment:network-assessment uid/gid 1001) — CI smoke test verifies this
 #   4. COPY --chown so files are owned by non-root user
-#   5. Build arg CNA_VERSION (default `dev`): only a local `docker build --build-arg CNA_VERSION=...` sets it;
+#   5. Build arg NETWORK_ASSESSMENT_VERSION (default `dev`): only a local `docker build --build-arg NETWORK_ASSESSMENT_VERSION=...` sets it;
 #      the images 200-build-images.yml publishes (and 310 promotes) are built without it
 #   6. HEALTHCHECK added (required for ECS/AKS task definitions)
 #   7. .dockerignore referenced — see .dockerignore in repo root
@@ -30,7 +30,7 @@ FROM ghcr.io/astral-sh/uv:0.13.6@sha256:af22a52f5eafef3d78e551599d405c02df61919d
 
 FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS builder
 
-ARG CNA_VERSION=dev
+ARG NETWORK_ASSESSMENT_VERSION=dev
 WORKDIR /build
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -118,17 +118,17 @@ RUN python -m pip uninstall -y pip \
 # Numeric uid: an orchestrator can prove a numeric user is not root, a name it cannot (hadolint DL3066).
 # 1001 is the `network-assessment` user created above; Docker takes its group from /etc/passwd.
 USER 1001
-ENV CNA_EDITION=lab
+ENV NETWORK_ASSESSMENT_EDITION=lab
 # Exit 0 when azure is NOT importable and no identity variable is set; exit 1 otherwise.
 CMD ["python", "-m", "cna_azure_network_engine.edition"]
 
 # ---- final stage: appliance ----
 FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS final-appliance
 
-ARG CNA_VERSION=dev
+ARG NETWORK_ASSESSMENT_VERSION=dev
 LABEL org.opencontainers.image.title="NetworkEyes" \
       org.opencontainers.image.description="Cloud Network Assessment CLI" \
-      org.opencontainers.image.version="${CNA_VERSION}" \
+      org.opencontainers.image.version="${NETWORK_ASSESSMENT_VERSION}" \
       org.opencontainers.image.source="https://github.com/saulpatinojr/HCW-NetworkEyes_App" \
       org.opencontainers.image.licenses="Apache-2.0"
 
@@ -178,12 +178,12 @@ RUN python -m pip uninstall -y pip virtualenv
 # Commit the image was built from (200-build-images passes github.sha). The web
 # tier compares it with the newest published build (Admin → Updates); empty
 # for local builds, which report the running build as unknown.
-ARG CNA_BUILD_SHA=
-ENV CNA_BUILD_SHA=${CNA_BUILD_SHA}
+ARG NETWORK_ASSESSMENT_BUILD_SHA=
+ENV NETWORK_ASSESSMENT_BUILD_SHA=${NETWORK_ASSESSMENT_BUILD_SHA}
 
 # Numeric uid, see the lab stage (hadolint DL3066).
 USER 1001
-ENV CNA_EDITION=appliance
+ENV NETWORK_ASSESSMENT_EDITION=appliance
 
 # Exec form (hadolint DL3025): no shell between Docker and the process.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

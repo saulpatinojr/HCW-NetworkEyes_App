@@ -1935,7 +1935,7 @@ signature and the SLSA provenance subject before deploying.
   `psycopg2.connect(` call site remains outside `db.py`); `_log()` therefore reuses one pooled
   connection per progress line instead of leaking one. The pool is lazy (no connection on import,
   `/health` or in tests) and closed by the lifespan on shutdown. A caller that waits past
-  `CNA_DB_POOL_TIMEOUT_SECONDS` for one of `CNA_DB_POOL_MAX` connections gets a 503 with
+  `NETWORK_ASSESSMENT_DB_POOL_TIMEOUT_SECONDS` for one of `NETWORK_ASSESSMENT_DB_POOL_MAX` connections gets a 503 with
   `Retry-After` (new `Outcome.UNAVAILABLE`) rather than a 41st connection on the server. Both
   variables are optional with code defaults (10 / 10; `.env.example`); a deployment has
   to inject nothing new. 18 tests (23 parametrised cases) in `tests/unit/test_network_assessment_api_db_pool.py`.
@@ -1968,12 +1968,12 @@ written by every admin/destructive action and encrypt or drop the OAuth token co
 ### T-709 — Cloud-aware core for AWS engagements (UX-001, ARCH-015, ARCH-109)
 Inventory, diagram and FinOps pages, remediation links (`learn.microsoft.com`), the SP help modal
 and `summarize-error.ts` are Azure-shaped; `POST /publish` hard-codes `AzureBlobDeployer`. Branch
-on `CNA_APPLIANCE_CLOUD` / the credential platform and add the S3 path (the CLI's `s3_deployer.py`
+on `NETWORK_ASSESSMENT_APPLIANCE_CLOUD` / the credential platform and add the S3 path (the CLI's `s3_deployer.py`
 exists) so an AWS deployment can upload documents and publish portals.
 
 ### T-710 — Align the storage-account variable name (ARCH-003)
 The API reads `AZURE_STORAGE_ACCOUNT_NAME` (`apps/network-assessment-api/main.py`); a deployment that sets
-`CNA_STORAGE_ACCOUNT_NAME` instead gets a 503 from in-app portal publish. Pick one name in
+`NETWORK_ASSESSMENT_STORAGE_ACCOUNT_NAME` instead gets a 503 from in-app portal publish. Pick one name in
 `.env.example` and record it under `Changed` in `CHANGELOG.md`.
 
 ### T-711 — Regenerate the runtime environment inventory (DOC-003, DOC-002, PROD-003)
@@ -1985,7 +1985,7 @@ guard test that fails on drift.
 ### T-712 — Local-admin limiter and break-glass parity (SEC-004, ARCH-010)
 `app/api/local-admin/route.ts` keys its limiter on `x-azure-clientip`, which is absent on AWS and
 spoofable off Front Door, and the limiter is per replica. Key on the edge-provided client IP for
-each cloud (`CNA_APPLIANCE_CLOUD`), or move the limit to the database.
+each cloud (`NETWORK_ASSESSMENT_APPLIANCE_CLOUD`), or move the limit to the database.
 
 ### T-713 — Deliverable and diagram HTML injection (SEC-006)
 draw.io `html=1` labels are single-escaped and the encyclopedia embeds the exported SVG with
@@ -2133,19 +2133,19 @@ Prisma's `spClientId`/`spSecretEnc` and `AZURE_CLIENT_SECRET` are gone (`CHANGEL
 - `[REVIEW REQUIRED]` The credential chain keeps workload identity, managed identity, Azure CLI, Azure
   PowerShell and Azure Developer CLI (owner instruction: `DefaultAzureCredential` with exclusions, not
   `ManagedIdentityCredential` alone, so `az login` works locally). Confirm that the developer paths are
-  acceptable inside the appliance image, or exclude them there too behind `CNA_APPLIANCE_CLOUD`.
+  acceptable inside the appliance image, or exclude them there too behind `NETWORK_ASSESSMENT_APPLIANCE_CLOUD`.
 - The web tier's `@azure/identity` (Blob, AI) is unchanged and already uses `DefaultAzureCredential`
   without exclusions; align it with the factory's exclusions when the web tier is next touched.
 
 ### T-724 — Entra bearer on the internal routes: app registration, role and web identity in the deployment (change set H)
-`apps/network-assessment-api/entra.py` validates Entra tokens for `CNA_ENTRA_AUDIENCE` and the `internal` router requires
-the `Discovery.Run` role; the shared token `CNA_API_TOKEN` stays accepted so a deployment can move one
+`apps/network-assessment-api/entra.py` validates Entra tokens for `NETWORK_ASSESSMENT_ENTRA_AUDIENCE` and the `internal` router requires
+the `Discovery.Run` role; the shared token `NETWORK_ASSESSMENT_API_TOKEN` stays accepted so a deployment can move one
 container at a time (`CHANGELOG.md` `[Unreleased]`; `tests/unit/test_network_assessment_api_auth.py`,
 `tests/security/test_profile_refused.py`). Open:
 - Deployment note (outside this repository): an Azure deployment creates the api's app registration with
   `identifier_uris = ["api://<name>"]` and an app role `Discovery.Run`, assigns that role to the web
-  container's user-assigned identity, and sets `CNA_ENTRA_TENANT_ID` and `CNA_ENTRA_AUDIENCE` on the api
-  and `CNA_ENTRA_AUDIENCE` on the web container; once both are in place it may drop `CNA_API_TOKEN` from
+  container's user-assigned identity, and sets `NETWORK_ASSESSMENT_ENTRA_TENANT_ID` and `NETWORK_ASSESSMENT_ENTRA_AUDIENCE` on the api
+  and `NETWORK_ASSESSMENT_ENTRA_AUDIENCE` on the web container; once both are in place it may drop `NETWORK_ASSESSMENT_API_TOKEN` from
   both containers (the api refuses to start with neither). An AWS deployment has no Entra
   tenant and keeps the shared token.
 - Checked 2026-10-25: the two accepted issuers (`https://login.microsoftonline.com/<tenant>/v2.0` for v2.0 tokens and
@@ -2174,7 +2174,7 @@ container at a time (`CHANGELOG.md` `[Unreleased]`; `tests/unit/test_network_ass
   `tests/packaging/test_engine_wheel.py` is the stronger proof and already imports in a clean venv.
 
 ### T-726 — Resource Graph discovery: acceptance run, live collectors into the package, remove the ARM loop (change set D)
-`cna_azure_network_engine.discovery.resource_graph` builds the model; `CNA_DISCOVERY_BACKEND=arm` keeps the
+`cna_azure_network_engine.discovery.resource_graph` builds the model; `NETWORK_ASSESSMENT_DISCOVERY_BACKEND=arm` keeps the
 old loop for one release (`CHANGELOG.md` `[Unreleased]`). Open:
 - `[VERIFY]` Acceptance with a Reader-only identity (the T-722 role set, no write role): zero
   `HttpResponseError` from list calls, every live-only rule in `unknowns[]` until the optional roles are
@@ -2205,8 +2205,8 @@ old loop for one release (`CHANGELOG.md` `[Unreleased]`). Open:
   and the mocked tests assert `Linux`. Nothing reads the value yet (the web inventory page only declares the
   field). Fix with `getattr(os_type, "value", os_type)`, or drop it with the loop; tighten `_os_family` in the
   guard when it is fixed.
-- Deployment note (outside this repository): a deployment may set `CNA_SCOPES` (space-separated scopes) and
-  `CNA_DISCOVERY_BACKEND`; the Azure identity needs no `Microsoft.Compute` or
+- Deployment note (outside this repository): a deployment may set `NETWORK_ASSESSMENT_SCOPES` (space-separated scopes) and
+  `NETWORK_ASSESSMENT_DISCOVERY_BACKEND`; the Azure identity needs no `Microsoft.Compute` or
   `Microsoft.Security` SDK permissions beyond Reader for the Resource Graph tables.
 
 ### T-727 — Lab boundary image: first CI build, and the API Dockerfile into the root file (change set I)
@@ -2452,10 +2452,10 @@ remove the ignore, and check the grid in the browser (sorting, grouping, scrolli
 cover behaviour.
 
 ### T-735 — Note for deployers: the draw.io route is now protected
-Since ticket #245 the route `/api/drawio-mcp/*` on the web container answers `401` without `Authorization: Bearer <CNA_API_TOKEN>`, and the
-Python draw.io client sends that header from its own `CNA_API_TOKEN`. No new setting exists, so nothing in a deployment has to change
-unless it points `CNA_DRAWIO_MCP_URL` at the web tier. For such a deployment: the api container must receive `CNA_API_TOKEN` (the api already
-refuses to start without it in appliance mode) and the web container's `CNA_API_TOKEN` must be the same value. This repository cannot check
+Since ticket #245 the route `/api/drawio-mcp/*` on the web container answers `401` without `Authorization: Bearer <NETWORK_ASSESSMENT_API_TOKEN>`, and the
+Python draw.io client sends that header from its own `NETWORK_ASSESSMENT_API_TOKEN`. No new setting exists, so nothing in a deployment has to change
+unless it points `NETWORK_ASSESSMENT_DRAWIO_MCP_URL` at the web tier. For such a deployment: the api container must receive `NETWORK_ASSESSMENT_API_TOKEN` (the api already
+refuses to start without it in appliance mode) and the web container's `NETWORK_ASSESSMENT_API_TOKEN` must be the same value. This repository cannot check
 other people's deployments; the note is in `CHANGELOG.md` for them.
 
 ### T-736 — Keep the pinned CI tools current

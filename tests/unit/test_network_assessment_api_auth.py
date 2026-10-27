@@ -222,7 +222,10 @@ def test_from_env_is_none_when_unset(entra):
 
 def test_from_env_derives_jwks_and_issuers(entra):
     config = entra.EntraConfig.from_env(
-        {"CNA_ENTRA_TENANT_ID": TENANT, "CNA_ENTRA_AUDIENCE": AUDIENCE}
+        {
+            "NETWORK_ASSESSMENT_ENTRA_TENANT_ID": TENANT,
+            "NETWORK_ASSESSMENT_ENTRA_AUDIENCE": AUDIENCE,
+        }
     )
     assert config is not None
     assert config.jwks_url == f"https://login.microsoftonline.com/{TENANT}/discovery/v2.0/keys"
@@ -235,9 +238,9 @@ def test_from_env_refuses_a_non_https_jwks_url(entra):
     with pytest.raises(SystemExit, match="https://"):
         entra.EntraConfig.from_env(
             {
-                "CNA_ENTRA_TENANT_ID": TENANT,
-                "CNA_ENTRA_AUDIENCE": AUDIENCE,
-                "CNA_ENTRA_JWKS_URL": "http://keys.example/jwks",
+                "NETWORK_ASSESSMENT_ENTRA_TENANT_ID": TENANT,
+                "NETWORK_ASSESSMENT_ENTRA_AUDIENCE": AUDIENCE,
+                "NETWORK_ASSESSMENT_ENTRA_JWKS_URL": "http://keys.example/jwks",
             }
         )
 
@@ -246,10 +249,10 @@ def test_test_profile_reads_keys_from_a_file(entra, signing_key):
     _pem, jwks_file = signing_key
     config = entra.EntraConfig.from_env(
         {
-            "CNA_ENTRA_TENANT_ID": TENANT,
-            "CNA_ENTRA_AUDIENCE": AUDIENCE,
-            "CNA_ENTRA_JWKS_URL": str(jwks_file),
-            "CNA_PROFILE": "test",
+            "NETWORK_ASSESSMENT_ENTRA_TENANT_ID": TENANT,
+            "NETWORK_ASSESSMENT_ENTRA_AUDIENCE": AUDIENCE,
+            "NETWORK_ASSESSMENT_ENTRA_JWKS_URL": str(jwks_file),
+            "NETWORK_ASSESSMENT_PROFILE": "test",
         }
     )
     assert config is not None and config.jwks_from_file is True
@@ -259,10 +262,10 @@ def test_test_profile_needs_an_existing_file(entra, tmp_path):
     with pytest.raises(SystemExit, match="existing JWKS file"):
         entra.EntraConfig.from_env(
             {
-                "CNA_ENTRA_TENANT_ID": TENANT,
-                "CNA_ENTRA_AUDIENCE": AUDIENCE,
-                "CNA_ENTRA_JWKS_URL": str(tmp_path / "missing.json"),
-                "CNA_PROFILE": "test",
+                "NETWORK_ASSESSMENT_ENTRA_TENANT_ID": TENANT,
+                "NETWORK_ASSESSMENT_ENTRA_AUDIENCE": AUDIENCE,
+                "NETWORK_ASSESSMENT_ENTRA_JWKS_URL": str(tmp_path / "missing.json"),
+                "NETWORK_ASSESSMENT_PROFILE": "test",
             }
         )
 
@@ -273,5 +276,5 @@ def test_there_is_no_switch_that_disables_authentication():
         + (_API_DIR / "auth.py").read_text(encoding="utf-8")
         + (_API_DIR / "main.py").read_text(encoding="utf-8")
     )
-    assert "CNA_AUTH_DISABLED" not in source
+    assert "NETWORK_ASSESSMENT_AUTH_DISABLED" not in source
     assert "AUTH_DISABLED" not in source

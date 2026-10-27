@@ -60,7 +60,7 @@ export async function startAllDiscovery(
   // Clean up legacy duplicate findings at this mutation point (see helper).
   await dedupeDiscoveryFindings(engagementId);
 
-  const apiUrl = process.env.CNA_API_INTERNAL_URL;
+  const apiUrl = process.env.NETWORK_ASSESSMENT_API_INTERNAL_URL;
   if (!apiUrl) return { error: "Discovery API is not configured." };
 
   // Create all job records first in a single transaction so the UI
@@ -158,11 +158,11 @@ export async function startDiscovery(
     data: { engagementId, credentialId, status: "QUEUED" },
   });
 
-  const apiUrl = process.env.CNA_API_INTERNAL_URL;
+  const apiUrl = process.env.NETWORK_ASSESSMENT_API_INTERNAL_URL;
   if (!apiUrl) {
     await prisma.discoveryJob.update({
       where: { id: job.id },
-      data: { status: "FAILED", errorMessage: "CNA_API_INTERNAL_URL is not configured." },
+      data: { status: "FAILED", errorMessage: "NETWORK_ASSESSMENT_API_INTERNAL_URL is not configured." },
     });
     return { error: "Discovery API is not configured." };
   }

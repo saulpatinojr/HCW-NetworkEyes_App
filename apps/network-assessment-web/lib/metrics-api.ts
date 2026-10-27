@@ -12,7 +12,7 @@ import type { StatMasterRecord } from "./types/stat-master";
 export async function getStatMasters(
   engagementId: string,
 ): Promise<StatMasterRecord[] | null> {
-  const apiUrl = process.env.CNA_API_INTERNAL_URL;
+  const apiUrl = process.env.NETWORK_ASSESSMENT_API_INTERNAL_URL;
   if (!apiUrl) return null;
 
   try {

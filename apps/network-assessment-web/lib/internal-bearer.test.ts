@@ -10,15 +10,15 @@ function request(authorization?: string): Request {
 }
 
 describe("hasValidInternalBearer", () => {
-  const saved = process.env.CNA_API_TOKEN;
+  const saved = process.env.NETWORK_ASSESSMENT_API_TOKEN;
 
   beforeEach(() => {
-    process.env.CNA_API_TOKEN = TOKEN;
+    process.env.NETWORK_ASSESSMENT_API_TOKEN = TOKEN;
   });
 
   afterEach(() => {
-    if (saved === undefined) delete process.env.CNA_API_TOKEN;
-    else process.env.CNA_API_TOKEN = saved;
+    if (saved === undefined) delete process.env.NETWORK_ASSESSMENT_API_TOKEN;
+    else process.env.NETWORK_ASSESSMENT_API_TOKEN = saved;
   });
 
   it("accepts the configured token, whatever the case of the scheme", () => {
@@ -37,10 +37,10 @@ describe("hasValidInternalBearer", () => {
   });
 
   it("fails closed when no token is configured, even for an empty bearer", () => {
-    delete process.env.CNA_API_TOKEN;
+    delete process.env.NETWORK_ASSESSMENT_API_TOKEN;
     expect(hasValidInternalBearer(request(`Bearer ${TOKEN}`))).toBe(false);
     expect(hasValidInternalBearer(request("Bearer "))).toBe(false);
-    process.env.CNA_API_TOKEN = "";
+    process.env.NETWORK_ASSESSMENT_API_TOKEN = "";
     expect(hasValidInternalBearer(request("Bearer "))).toBe(false);
   });
 });

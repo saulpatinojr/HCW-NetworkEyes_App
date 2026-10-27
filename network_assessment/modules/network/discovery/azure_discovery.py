@@ -100,13 +100,13 @@ DEFAULT_BACKEND = "resource-graph"
 
 
 def backend_from_env(env: Mapping[str, str] | None = None) -> str:
-    """``CNA_DISCOVERY_BACKEND``: ``resource-graph`` (default) or ``arm`` (kept for one
+    """``NETWORK_ASSESSMENT_DISCOVERY_BACKEND``: ``resource-graph`` (default) or ``arm`` (kept for one
     release, change set D). Anything else exits before any query."""
     source = os.environ if env is None else env
-    value = (source.get("CNA_DISCOVERY_BACKEND") or DEFAULT_BACKEND).strip().lower()
+    value = (source.get("NETWORK_ASSESSMENT_DISCOVERY_BACKEND") or DEFAULT_BACKEND).strip().lower()
     if value not in DISCOVERY_BACKENDS:
         raise SystemExit(
-            f"CNA_DISCOVERY_BACKEND={value!r} is not one of {', '.join(DISCOVERY_BACKENDS)}"
+            f"NETWORK_ASSESSMENT_DISCOVERY_BACKEND={value!r} is not one of {', '.join(DISCOVERY_BACKENDS)}"
         )
     return value
 
@@ -118,10 +118,10 @@ class AzureDiscoveryOptions:
     resume: bool = False
     # ``False`` selects the ARM loop; the explicit ``backend`` wins when both are given.
     use_resource_graph: bool = True
-    # ``resource-graph`` (default, from CNA_DISCOVERY_BACKEND) or ``arm``.
+    # ``resource-graph`` (default, from NETWORK_ASSESSMENT_DISCOVERY_BACKEND) or ``arm``.
     backend: str | None = None
     # ``/subscriptions/<id>`` or ``/subscriptions/<id>/resourceGroups/<name>`` scopes
-    # (``CNA_SCOPES``); empty means the subscription ids above, or every accessible one.
+    # (``NETWORK_ASSESSMENT_SCOPES``); empty means the subscription ids above, or every accessible one.
     scopes: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -2590,9 +2590,9 @@ class AzureDiscovery:
     # ---------------------------------------------------------------- arm (one release)
 
     def _run_arm(self, engagement_id: str) -> AzureTopology:
-        """The pre-D per-subscription ARM list loop, behind ``CNA_DISCOVERY_BACKEND=arm``."""
+        """The pre-D per-subscription ARM list loop, behind ``NETWORK_ASSESSMENT_DISCOVERY_BACKEND=arm``."""
         self._progress(
-            "Backend: arm (deprecated; CNA_DISCOVERY_BACKEND=resource-graph is the default)"
+            "Backend: arm (deprecated; NETWORK_ASSESSMENT_DISCOVERY_BACKEND=resource-graph is the default)"
         )
         topology = AzureTopology(
             engagement_id=engagement_id,

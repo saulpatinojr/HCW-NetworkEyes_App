@@ -1,3 +1,12 @@
+// Runs once when the server starts, before any request is handled (Next.js `register` hook): accept the old
+// CNA_<NAME> setting names for a while by copying each one to NETWORK_ASSESSMENT_<NAME> when that is not set.
+export async function register() {
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    const { adoptLegacyEnvironment } = await import("./lib/legacy-env");
+    adoptLegacyEnvironment();
+  }
+}
+
 // Server-side error reporting (Next.js `onRequestError` hook).
 // Production builds redact Server Component errors in the browser and replace
 // them with a digest; this hook logs the full error + digest to stderr as one

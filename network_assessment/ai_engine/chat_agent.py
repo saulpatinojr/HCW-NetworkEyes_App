@@ -8,10 +8,10 @@ already persisted by discovery + analysis.
 
 Engine selection mirrors apps/network-assessment-web/lib/ai-engine.ts exactly — same engine
 ids, same env vars, same resolution rules. The appliance's deploy-time AI mode
-(``CNA_AI_MODE``) decides which family of engines is allowed:
+(``NETWORK_ASSESSMENT_AI_MODE``) decides which family of engines is allowed:
 
   saas      — the cloud-native engine for this appliance's cloud
-              (``CNA_APPLIANCE_CLOUD``): ``azure-openai`` on Azure (Azure
+              (``NETWORK_ASSESSMENT_APPLIANCE_CLOUD``): ``azure-openai`` on Azure (Azure
               OpenAI via managed identity — ``build_azure_credential`` bearer
               token, same scope as lib/ai-engine.ts getAzureClient()), or
               ``bedrock`` on AWS (Bedrock Converse via the task role).
@@ -23,7 +23,7 @@ ids, same env vars, same resolution rules. The appliance's deploy-time AI mode
 
 Resolution (byo-api): exactly one key configured → that provider is active
 regardless of the stored setting; both configured → the stored
-``ai.activeEngine`` wins, then ``CNA_AI_ENGINE_DEFAULT``, then ``anthropic``;
+``ai.activeEngine`` wins, then ``NETWORK_ASSESSMENT_AI_ENGINE_DEFAULT``, then ``anthropic``;
 none → ChatConfigError (503). A stored value from another mode is skipped,
 never fatal.
 
@@ -77,10 +77,10 @@ DEFAULT_AZURE_API_VERSION = "2024-12-01-preview"
 # then env) so a deployment never has to edit code to move models.
 DEFAULT_ANTHROPIC_MODEL = "claude-opus-5"
 DEFAULT_OPENAI_MODEL = "gpt-5.4"
-ANTHROPIC_MODEL_ENV = "CNA_ANTHROPIC_MODEL"
-OPENAI_MODEL_ENV = "CNA_OPENAI_MODEL"
-BEDROCK_MODEL_ENV = "CNA_BEDROCK_MODEL_ID"
-BEDROCK_PROFILE_ENV = "CNA_BEDROCK_INFERENCE_PROFILE_ARN"
+ANTHROPIC_MODEL_ENV = "NETWORK_ASSESSMENT_ANTHROPIC_MODEL"
+OPENAI_MODEL_ENV = "NETWORK_ASSESSMENT_OPENAI_MODEL"
+BEDROCK_MODEL_ENV = "NETWORK_ASSESSMENT_BEDROCK_MODEL_ID"
+BEDROCK_PROFILE_ENV = "NETWORK_ASSESSMENT_BEDROCK_INFERENCE_PROFILE_ARN"
 
 MAX_COMPLETION_TOKENS = 1200
 REQUEST_TIMEOUT_SECONDS = 60.0
@@ -115,14 +115,16 @@ def _clean(value: str | None) -> str:
 
 
 def resolve_ai_mode(value: str | None = None) -> str:
-    """Normalise the AI mode (argument, else env CNA_AI_MODE). Unset ⇒ saas."""
-    mode = _clean(value if value is not None else os.environ.get("CNA_AI_MODE"))
+    """Normalise the AI mode (argument, else env NETWORK_ASSESSMENT_AI_MODE). Unset ⇒ saas."""
+    mode = _clean(value if value is not None else os.environ.get("NETWORK_ASSESSMENT_AI_MODE"))
     return MODE_BYO_API if mode == MODE_BYO_API else MODE_SAAS
 
 
 def resolve_appliance_cloud(value: str | None = None) -> str:
     """Normalise the appliance cloud (argument, else env). Unset ⇒ azure."""
-    cloud = _clean(value if value is not None else os.environ.get("CNA_APPLIANCE_CLOUD"))
+    cloud = _clean(
+        value if value is not None else os.environ.get("NETWORK_ASSESSMENT_APPLIANCE_CLOUD")
+    )
     return CLOUD_AWS if cloud == CLOUD_AWS else CLOUD_AZURE
 
 
@@ -162,7 +164,7 @@ def resolve_engine(
       are irrelevant (one engine per appliance); configuration is checked by
       the caller, which raises ChatConfigError when it is missing.
     * byo-api — among the configured BYO engines: one ⇒ it wins outright;
-      two ⇒ stored AppSetting, then CNA_AI_ENGINE_DEFAULT, then the first of
+      two ⇒ stored AppSetting, then NETWORK_ASSESSMENT_AI_ENGINE_DEFAULT, then the first of
       BYO_ENGINES; none ⇒ ChatConfigError.
 
     A stored value that is not allowed in the current mode is ignored.
@@ -187,7 +189,7 @@ def resolve_engine(
     stored = _clean(stored_engine)
     if stored in candidates:
         return stored
-    env_default = _clean(os.environ.get("CNA_AI_ENGINE_DEFAULT"))
+    env_default = _clean(os.environ.get("NETWORK_ASSESSMENT_AI_ENGINE_DEFAULT"))
     if env_default in candidates:
         return env_default
     return candidates[0]

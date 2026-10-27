@@ -112,7 +112,7 @@ class TestScopes:
         ],
     )
     def test_anything_else_exits_at_startup(self, bad: str):
-        with pytest.raises(SystemExit, match="CNA_SCOPES"):
+        with pytest.raises(SystemExit, match="NETWORK_ASSESSMENT_SCOPES"):
             parse_scopes(bad)
 
     def test_empty_value_is_no_scopes(self):

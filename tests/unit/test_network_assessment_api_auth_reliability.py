@@ -3,12 +3,12 @@
 These cover the remediations layered onto ``apps/network-assessment-api`` for the
 production-readiness review:
 
-  * **SEC-001 — bearer auth.** When ``CNA_API_TOKEN`` is configured the API
+  * **SEC-001 — bearer auth.** When ``NETWORK_ASSESSMENT_API_TOKEN`` is configured the API
     rejects any request without ``Authorization: Bearer <token>`` (401), except
     the ``/health`` and ``/ready`` probes. With no token *and* no appliance
     cloud (local dev) it serves unauthenticated.
   * **PY-001 — fail-fast config.** In appliance mode
-    (``CNA_APPLIANCE_CLOUD`` set) a missing token or database is a ``SystemExit``
+    (``NETWORK_ASSESSMENT_APPLIANCE_CLOUD`` set) a missing token or database is a ``SystemExit``
     at startup, never a silent no-op.
   * **PY-008 — readiness.** ``/ready`` is 200 only when ``SELECT 1`` succeeds and
     503 when the database is unreachable/unconfigured; ``/health`` stays liveness.
@@ -93,7 +93,7 @@ def authed_client(api_main: types.ModuleType):
     """The real app fronted by the bearer middleware with a known token.
 
     The module-level app carries no auth middleware in the test environment
-    (``CNA_API_TOKEN`` unset at import), so we wrap the real ASGI app with the
+    (``NETWORK_ASSESSMENT_API_TOKEN`` unset at import), so we wrap the real ASGI app with the
     middleware directly — this exercises the real routes, the real exempt-path
     list, and the real middleware together without mutating shared app state.
     """
@@ -153,8 +153,8 @@ def test_ready_is_exempt_from_auth(authed_client, api_main, monkeypatch):
 
 
 def test_unauthenticated_allowed_when_token_and_cloud_unset(plain_client, api_main):
-    """Local dev: no CNA_API_TOKEN and no appliance cloud → no auth middleware."""
-    assert api_main.CNA_API_TOKEN == ""
+    """Local dev: no NETWORK_ASSESSMENT_API_TOKEN and no appliance cloud → no auth middleware."""
+    assert api_main.NETWORK_ASSESSMENT_API_TOKEN == ""
     resp = plain_client.post("/intake", json={"x": 1})  # no header
     assert resp.status_code != 401
     assert resp.status_code == 501
@@ -166,22 +166,24 @@ def test_unauthenticated_allowed_when_token_and_cloud_unset(plain_client, api_ma
 def test_appliance_mode_without_token_exits(api_main):
     with pytest.raises(SystemExit) as exc:
         api_main._validate_startup_config(
-            {"CNA_APPLIANCE_CLOUD": "azure", "DATABASE_URL": "postgresql://x"}
+            {"NETWORK_ASSESSMENT_APPLIANCE_CLOUD": "azure", "DATABASE_URL": "postgresql://x"}
         )
-    assert "CNA_API_TOKEN" in str(exc.value)
+    assert "NETWORK_ASSESSMENT_API_TOKEN" in str(exc.value)
 
 
 def test_appliance_mode_without_database_exits(api_main):
     with pytest.raises(SystemExit) as exc:
-        api_main._validate_startup_config({"CNA_APPLIANCE_CLOUD": "azure", "CNA_API_TOKEN": "t"})
+        api_main._validate_startup_config(
+            {"NETWORK_ASSESSMENT_APPLIANCE_CLOUD": "azure", "NETWORK_ASSESSMENT_API_TOKEN": "t"}
+        )
     assert "DATABASE_URL" in str(exc.value)
 
 
 def test_appliance_mode_fully_configured_does_not_exit(api_main):
     api_main._validate_startup_config(
         {
-            "CNA_APPLIANCE_CLOUD": "azure",
-            "CNA_API_TOKEN": "t",
+            "NETWORK_ASSESSMENT_APPLIANCE_CLOUD": "azure",
+            "NETWORK_ASSESSMENT_API_TOKEN": "t",
             "DATABASE_URL": "postgresql://x",
         }
     )
@@ -348,7 +350,7 @@ def test_health_version_is_not_a_literal(plain_client, api_main):
 def test_stale_job_minutes_rejects_invalid_values(api_main, raw):
     with pytest.raises(SystemExit) as excinfo:
         api_main._parse_stale_job_minutes(raw)
-    assert "CNA_STALE_JOB_MINUTES" in str(excinfo.value)
+    assert "NETWORK_ASSESSMENT_STALE_JOB_MINUTES" in str(excinfo.value)
 
 
 @pytest.mark.parametrize(("raw", "expected"), [(None, 30), ("", 30), (" 45 ", 45), ("1", 1)])

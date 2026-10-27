@@ -101,8 +101,8 @@ def test_health_handles_failure_gracefully():
 
 
 def test_requests_carry_the_shared_bearer(monkeypatch):
-    """Ticket #245: the route is internal only, so every call sends CNA_API_TOKEN."""
-    monkeypatch.setenv("CNA_API_TOKEN", "test-shared-token-not-a-secret")
+    """Ticket #245: the route is internal only, so every call sends NETWORK_ASSESSMENT_API_TOKEN."""
+    monkeypatch.setenv("NETWORK_ASSESSMENT_API_TOKEN", "test-shared-token-not-a-secret")
     expected = {"Authorization": "Bearer test-shared-token-not-a-secret"}
     client = DrawioMCPClient(base_url="http://test/api/drawio-mcp")
     with patch("network_assessment.ai_engine.mcp_client.drawio_mcp_client.httpx.post") as post:
@@ -116,7 +116,7 @@ def test_requests_carry_the_shared_bearer(monkeypatch):
 
 
 def test_no_token_sends_no_header_and_still_degrades_gracefully(monkeypatch):
-    monkeypatch.delenv("CNA_API_TOKEN", raising=False)
+    monkeypatch.delenv("NETWORK_ASSESSMENT_API_TOKEN", raising=False)
     client = DrawioMCPClient(base_url="http://test/api/drawio-mcp")
     with patch("network_assessment.ai_engine.mcp_client.drawio_mcp_client.httpx.post") as post:
         post.side_effect = RuntimeError("401 Unauthorized")

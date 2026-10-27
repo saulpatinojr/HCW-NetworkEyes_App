@@ -96,16 +96,16 @@ from routers.diagrams import router as diagrams_router  # noqa: E402
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 # Shared bearer secret the web tier must present (SEC-001). Empty in local dev.
-CNA_API_TOKEN = os.environ.get("CNA_API_TOKEN", "")
+NETWORK_ASSESSMENT_API_TOKEN = os.environ.get("NETWORK_ASSESSMENT_API_TOKEN", "")
 # Set by the deployment ("azure" | "aws"); empty means local dev.
-CNA_APPLIANCE_CLOUD = os.environ.get("CNA_APPLIANCE_CLOUD", "")
+NETWORK_ASSESSMENT_APPLIANCE_CLOUD = os.environ.get("NETWORK_ASSESSMENT_APPLIANCE_CLOUD", "")
 
 # A RUNNING job whose updatedAt (bumped by every progress line — see _log) is
 # older than this has no live owner and is reaped to FAILED (REL-001 / DATA-003).
 
 
 def _parse_stale_job_minutes(raw: str | None) -> int:
-    """Parse ``CNA_STALE_JOB_MINUTES`` as a positive integer.
+    """Parse ``NETWORK_ASSESSMENT_STALE_JOB_MINUTES`` as a positive integer.
 
     A non-integer or non-positive value would either crash import with a bare
     ``ValueError`` or (for zero / negative) make the reaper fail every RUNNING
@@ -116,17 +116,19 @@ def _parse_stale_job_minutes(raw: str | None) -> int:
         minutes = int(text)
     except ValueError as exc:
         raise SystemExit(
-            f"CNA_STALE_JOB_MINUTES must be a positive integer number of minutes, got {text!r}."
+            f"NETWORK_ASSESSMENT_STALE_JOB_MINUTES must be a positive integer number of minutes, got {text!r}."
         ) from exc
     if minutes <= 0:
         raise SystemExit(
-            f"CNA_STALE_JOB_MINUTES must be greater than zero, got {minutes} — a zero or "
+            f"NETWORK_ASSESSMENT_STALE_JOB_MINUTES must be greater than zero, got {minutes} — a zero or "
             "negative threshold would mark every running discovery job as failed."
         )
     return minutes
 
 
-_STALE_JOB_MINUTES = _parse_stale_job_minutes(os.environ.get("CNA_STALE_JOB_MINUTES"))
+_STALE_JOB_MINUTES = _parse_stale_job_minutes(
+    os.environ.get("NETWORK_ASSESSMENT_STALE_JOB_MINUTES")
+)
 _STALE_JOB_ERROR = (
     "Discovery stopped reporting progress (the API restarted or the job was "
     "interrupted). Start discovery again."
@@ -155,14 +157,14 @@ def _api_version() -> str:
 def _validate_startup_config(env: Mapping[str, str]) -> None:
     """Fail fast on a misconfigured appliance deployment (PY-001 / SEC-001).
 
-    Appliance mode is signalled by ``CNA_APPLIANCE_CLOUD``. In that mode both a
+    Appliance mode is signalled by ``NETWORK_ASSESSMENT_APPLIANCE_CLOUD``. In that mode both a
     database and the shared API token are mandatory; booting without them puts
     the API into the silent no-op / unauthenticated states that the audit
     flagged, so the process refuses to start instead. In local dev (no
     appliance cloud) an unauthenticated API is allowed with one warning.
     """
-    appliance = bool(env.get("CNA_APPLIANCE_CLOUD"))
-    token = env.get("CNA_API_TOKEN", "")
+    appliance = bool(env.get("NETWORK_ASSESSMENT_APPLIANCE_CLOUD"))
+    token = env.get("NETWORK_ASSESSMENT_API_TOKEN", "")
     database_url = env.get("DATABASE_URL", "")
     # An appliance build never honours the test profile (change set H); checked
     # before anything else so the exit names the one thing that is wrong.
@@ -177,19 +179,19 @@ def _validate_startup_config(env: Mapping[str, str]) -> None:
 
     if appliance and not database_url:
         raise SystemExit(
-            "DATABASE_URL is not set but CNA_APPLIANCE_CLOUD is — refusing to start. "
+            "DATABASE_URL is not set but NETWORK_ASSESSMENT_APPLIANCE_CLOUD is — refusing to start. "
             "The deployment must supply DATABASE_URL as a container secret."
         )
     if appliance and not token and entra is None:
         raise SystemExit(
-            "Neither CNA_API_TOKEN nor CNA_ENTRA_TENANT_ID/CNA_ENTRA_AUDIENCE is set but "
-            "CNA_APPLIANCE_CLOUD is — refusing to start. The deployment must "
-            "supply CNA_API_TOKEN as a container secret on both the api and the web "
+            "Neither NETWORK_ASSESSMENT_API_TOKEN nor NETWORK_ASSESSMENT_ENTRA_TENANT_ID/NETWORK_ASSESSMENT_ENTRA_AUDIENCE is set but "
+            "NETWORK_ASSESSMENT_APPLIANCE_CLOUD is — refusing to start. The deployment must "
+            "supply NETWORK_ASSESSMENT_API_TOKEN as a container secret on both the api and the web "
             "containers, or configure Entra bearer validation for the web identity."
         )
     if not token and entra is None and not appliance:
         logger.warning(
-            "CNA_API_TOKEN is not set and CNA_APPLIANCE_CLOUD is unset (local dev) — "
+            "NETWORK_ASSESSMENT_API_TOKEN is not set and NETWORK_ASSESSMENT_APPLIANCE_CLOUD is unset (local dev) — "
             "the API will accept UNAUTHENTICATED requests. Never run this way in production."
         )
 
@@ -274,11 +276,11 @@ async def _handle_validation_error(_request, exc: RequestValidationError) -> JSO
 
 
 # Enforce the bearer when either form is configured. In local dev (neither
-# CNA_API_TOKEN nor CNA_ENTRA_* set) no middleware is added — see
+# NETWORK_ASSESSMENT_API_TOKEN nor NETWORK_ASSESSMENT_ENTRA_* set) no middleware is added — see
 # _validate_startup_config, which already refused to start if that happens in
 # appliance mode. There is no variable that disables it.
-if CNA_API_TOKEN or ENTRA is not None:
-    app.add_middleware(BearerTokenMiddleware, token=CNA_API_TOKEN, entra=ENTRA)
+if NETWORK_ASSESSMENT_API_TOKEN or ENTRA is not None:
+    app.add_middleware(BearerTokenMiddleware, token=NETWORK_ASSESSMENT_API_TOKEN, entra=ENTRA)
 
 
 # ─── DB helpers ───────────────────────────────────────────────────────────────
@@ -427,13 +429,13 @@ def _database_ready() -> bool:
 def health() -> dict:
     # Pure liveness probe — no dependency checks (readiness is /ready). Exempt
     # from bearer auth so orchestrators can probe without the shared secret.
-    # CNA_BUILD_SHA is baked into the image by 200-build-images so a deployed
+    # NETWORK_ASSESSMENT_BUILD_SHA is baked into the image by 200-build-images so a deployed
     # instance can say which core commit it runs (Admin → Updates in the web tier).
     return {
         "status": "ok",
         "service": "network-assessment-api",
         "version": _api_version(),
-        "build_sha": os.environ.get("CNA_BUILD_SHA", ""),
+        "build_sha": os.environ.get("NETWORK_ASSESSMENT_BUILD_SHA", ""),
     }
 
 

@@ -6,7 +6,7 @@
  * Nothing inside the containers updates itself.
  *
  * This module gives the web tier a way to *see* that state per deployment:
- * the running build (baked into the image as CNA_BUILD_SHA at build time) is
+ * the running build (baked into the image as NETWORK_ASSESSMENT_BUILD_SHA at build time) is
  * compared with the newest build the registry carries under the floating
  * `*-latest` tag of the same component. The comparison is registry-agnostic
  * (OCI distribution API) and every deployment checks on its own with the

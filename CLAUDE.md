@@ -76,14 +76,15 @@ change under `Changed` in `CHANGELOG.md` (and in the release notes) where a cons
 3. **No push notification.** `200-build-images.yml` calls nothing outside this repository and its
    Docker Hub repository: it sends no dispatch event and reads no variable naming another
    repository.
-4. **Runtime environment contract** the images read, set by whoever deploys them: `CNA_AI_MODE` (`saas` |
-   `byo-api`), `CNA_APPLIANCE_CLOUD` (`azure` | `aws`), `CNA_AI_ENGINE_DEFAULT`, the SaaS engine variables
-   (`AZURE_OPENAI_*` on Azure, `CNA_BEDROCK_*` on AWS), and
+4. **Runtime environment contract** the images read, set by whoever deploys them: `NETWORK_ASSESSMENT_AI_MODE` (`saas` |
+   `byo-api`), `NETWORK_ASSESSMENT_APPLIANCE_CLOUD` (`azure` | `aws`), `NETWORK_ASSESSMENT_AI_ENGINE_DEFAULT`, the SaaS engine variables
+   (`AZURE_OPENAI_*` on Azure, `NETWORK_ASSESSMENT_BEDROCK_*` on AWS), and
    `CREDENTIAL_ENCRYPTION_KEY` (web always; api in `byo-api`), and the image-update
-   check inputs the web tier reads (`CNA_WEB_IMAGE`, `CNA_IMAGE_REGISTRY_USERNAME`,
-   `CNA_IMAGE_REGISTRY_TOKEN`, optional `CNA_IMAGE_UPDATE_CHECK_INTERVAL_MINUTES`). `CNA_BUILD_SHA` is baked into every
+   check inputs the web tier reads (`NETWORK_ASSESSMENT_WEB_IMAGE`, `NETWORK_ASSESSMENT_IMAGE_REGISTRY_USERNAME`,
+   `NETWORK_ASSESSMENT_IMAGE_REGISTRY_TOKEN`, optional `NETWORK_ASSESSMENT_IMAGE_UPDATE_CHECK_INTERVAL_MINUTES`). `NETWORK_ASSESSMENT_BUILD_SHA` is baked into every
    image by `200-build-images.yml`, never injected. The authoritative inventory is
-   `.env.example`.
+   `.env.example`. Until a later release removes it, the images also accept the old `CNA_<NAME>` spelling of each setting
+   (the new name wins when both are set; `network_assessment/_legacy_env.py` and the web tier's `lib/legacy-env.ts` do the copy).
 5. **Image signatures and provenance.** `200-build-images.yml` signs every
    published digest with cosign, keyless, under its own OIDC identity
    `https://github.com/<owner>/<this repo>/.github/workflows/200-build-images.yml@refs/heads/main`

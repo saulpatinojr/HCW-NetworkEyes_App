@@ -5,7 +5,7 @@ Closes TODO_PhaseA: No Logging Infrastructure.
 Sets up:
   - Structured JSON log lines to file: <engagement_dir>/network_assessment.log
   - Rich console output (human-readable) via Rich handler
-  - Log level from CNA_LOG_LEVEL env var (default: INFO)
+  - Log level from NETWORK_ASSESSMENT_LOG_LEVEL env var (default: INFO)
   - Correlation ID per engagement injected into every log record
   - Audit log (JSONL) for human review gate actions via EngagementStore
 
@@ -96,7 +96,7 @@ def setup_logging(
         engagement_id: If provided, injected into every log line.
         log_dir: If provided, write network_assessment.log JSON file here.
     """
-    level_name = os.environ.get("CNA_LOG_LEVEL", "INFO").upper()
+    level_name = os.environ.get("NETWORK_ASSESSMENT_LOG_LEVEL", "INFO").upper()
     level = getattr(logging, level_name, logging.INFO)
 
     root_logger = logging.getLogger("network_assessment")

@@ -1,28 +1,28 @@
 """Entra ID bearer validation for the internal routes (change set H).
 
 The internal routes (``/discovery/*``, ``/intake``, ``/publish``) are called by the
-web tier only. With a shared secret (``CNA_API_TOKEN``) every caller that holds the
+web tier only. With a shared secret (``NETWORK_ASSESSMENT_API_TOKEN``) every caller that holds the
 secret is equal; with Entra the caller is the web tier's own managed identity, the
 token is short-lived, signed by the tenant, scoped to this API's app registration
-(``CNA_ENTRA_AUDIENCE``, its ``api://`` identifier URI) and carries the app role
+(``NETWORK_ASSESSMENT_ENTRA_AUDIENCE``, its ``api://`` identifier URI) and carries the app role
 ``Discovery.Run`` that the deployment assigns to that identity.
 
 Configuration (all read once at start-up):
 
-``CNA_ENTRA_TENANT_ID``
+``NETWORK_ASSESSMENT_ENTRA_TENANT_ID``
     The tenant that issues the tokens. Set together with the audience or not at all.
-``CNA_ENTRA_AUDIENCE``
+``NETWORK_ASSESSMENT_ENTRA_AUDIENCE``
     The ``aud`` claim to require: the app registration's identifier URI.
-``CNA_ENTRA_JWKS_URL``
+``NETWORK_ASSESSMENT_ENTRA_JWKS_URL``
     Where the signing keys come from. Derived from the tenant when unset. Under the
     test profile it names a local JWKS file instead.
-``CNA_ENTRA_REQUIRED_ROLE``
+``NETWORK_ASSESSMENT_ENTRA_REQUIRED_ROLE``
     The app role (``roles`` claim) or delegated scope (``scp`` claim) a token must
     carry. Default ``Discovery.Run``.
-``CNA_PROFILE``
-    ``test`` makes the JWKS come from the file named by ``CNA_ENTRA_JWKS_URL``. It is
+``NETWORK_ASSESSMENT_PROFILE``
+    ``test`` makes the JWKS come from the file named by ``NETWORK_ASSESSMENT_ENTRA_JWKS_URL``. It is
     honoured only under pytest or outside the appliance edition; an appliance image
-    started with ``CNA_PROFILE`` set to anything exits before serving
+    started with ``NETWORK_ASSESSMENT_PROFILE`` set to anything exits before serving
     (:func:`refuse_profile_in_appliance`). There is no variable that turns
     authentication off.
 
@@ -63,15 +63,17 @@ class AuthError(Exception):
 
 
 def is_appliance_edition(env: Mapping[str, str]) -> bool:
-    """True when this process is an appliance build (``CNA_EDITION=appliance``) or runs
-    in an appliance deployment (``CNA_APPLIANCE_CLOUD`` set)."""
-    return env.get("CNA_EDITION", "") == "appliance" or bool(env.get("CNA_APPLIANCE_CLOUD"))
+    """True when this process is an appliance build (``NETWORK_ASSESSMENT_EDITION=appliance``) or runs
+    in an appliance deployment (``NETWORK_ASSESSMENT_APPLIANCE_CLOUD`` set)."""
+    return env.get("NETWORK_ASSESSMENT_EDITION", "") == "appliance" or bool(
+        env.get("NETWORK_ASSESSMENT_APPLIANCE_CLOUD")
+    )
 
 
 def refuse_profile_in_appliance(env: Mapping[str, str]) -> None:
-    """Exit when an appliance process is started with ``CNA_PROFILE`` set to any value."""
-    if is_appliance_edition(env) and env.get("CNA_PROFILE", "") != "":
-        raise SystemExit("appliance edition: CNA_PROFILE is not accepted")
+    """Exit when an appliance process is started with ``NETWORK_ASSESSMENT_PROFILE`` set to any value."""
+    if is_appliance_edition(env) and env.get("NETWORK_ASSESSMENT_PROFILE", "") != "":
+        raise SystemExit("appliance edition: NETWORK_ASSESSMENT_PROFILE is not accepted")
 
 
 def test_profile_allowed(env: Mapping[str, str]) -> bool:
@@ -92,26 +94,26 @@ class EntraConfig:
     def from_env(cls, env: Mapping[str, str] | None = None) -> EntraConfig | None:
         """``None`` when Entra is not configured; ``SystemExit`` when half-configured."""
         source = os.environ if env is None else env
-        tenant = source.get("CNA_ENTRA_TENANT_ID", "").strip()
-        audience = source.get("CNA_ENTRA_AUDIENCE", "").strip()
+        tenant = source.get("NETWORK_ASSESSMENT_ENTRA_TENANT_ID", "").strip()
+        audience = source.get("NETWORK_ASSESSMENT_ENTRA_AUDIENCE", "").strip()
         if not tenant and not audience:
             return None
         if not tenant or not audience:
             raise SystemExit(
-                "CNA_ENTRA_TENANT_ID and CNA_ENTRA_AUDIENCE are set together or not at all — "
+                "NETWORK_ASSESSMENT_ENTRA_TENANT_ID and NETWORK_ASSESSMENT_ENTRA_AUDIENCE are set together or not at all — "
                 "refusing to start with only one of them."
             )
-        profile = source.get("CNA_PROFILE", "")
+        profile = source.get("NETWORK_ASSESSMENT_PROFILE", "")
         jwks_from_file = profile == "test" and test_profile_allowed(source)
-        jwks_url = source.get("CNA_ENTRA_JWKS_URL", "").strip() or (
+        jwks_url = source.get("NETWORK_ASSESSMENT_ENTRA_JWKS_URL", "").strip() or (
             f"https://login.microsoftonline.com/{tenant}/discovery/v2.0/keys"
         )
         if jwks_from_file and not Path(jwks_url).is_file():
             raise SystemExit(
-                "CNA_PROFILE=test: CNA_ENTRA_JWKS_URL must name an existing JWKS file."
+                "NETWORK_ASSESSMENT_PROFILE=test: NETWORK_ASSESSMENT_ENTRA_JWKS_URL must name an existing JWKS file."
             )
         if not jwks_from_file and not jwks_url.startswith("https://"):
-            raise SystemExit("CNA_ENTRA_JWKS_URL must be an https:// URL.")
+            raise SystemExit("NETWORK_ASSESSMENT_ENTRA_JWKS_URL must be an https:// URL.")
         return cls(
             tenant_id=tenant,
             audience=audience,
@@ -126,7 +128,7 @@ class EntraConfig:
                 f"https://login.microsoftonline.com/{tenant}/v2.0",
                 f"https://sts.windows.net/{tenant}/",
             ),
-            required_role=source.get("CNA_ENTRA_REQUIRED_ROLE", "").strip()
+            required_role=source.get("NETWORK_ASSESSMENT_ENTRA_REQUIRED_ROLE", "").strip()
             or DEFAULT_REQUIRED_ROLE,
             jwks_from_file=jwks_from_file,
         )

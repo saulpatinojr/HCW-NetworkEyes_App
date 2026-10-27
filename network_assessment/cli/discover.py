@@ -134,14 +134,14 @@ def discover_aws(  # noqa: PLR0913
     "--no-resource-graph",
     is_flag=True,
     default=False,
-    help="Use the ARM list loop (CNA_DISCOVERY_BACKEND=arm; kept for one release).",
+    help="Use the ARM list loop (NETWORK_ASSESSMENT_DISCOVERY_BACKEND=arm; kept for one release).",
 )
 @click.option(
     "--scope",
     "scopes",
     multiple=True,
     help="Assess only this scope: /subscriptions/<id> or /subscriptions/<id>/resourceGroups/<name>. "
-    "Repeatable; also CNA_SCOPES (space-separated).",
+    "Repeatable; also NETWORK_ASSESSMENT_SCOPES (space-separated).",
 )
 @click.option(
     "--data-dir", default="./engagements", help="Engagement data directory (default: ./engagements)"
@@ -181,7 +181,7 @@ def discover_azure(  # noqa: PLR0913
 
     sub_list = [s.strip() for s in subscriptions.split(",")] if subscriptions else []
 
-    scope_list = list(scopes) or os.environ.get("CNA_SCOPES", "").split()
+    scope_list = list(scopes) or os.environ.get("NETWORK_ASSESSMENT_SCOPES", "").split()
     opts = AzureDiscoveryOptions(
         tenant_id=tenant_id,
         subscription_ids=sub_list,

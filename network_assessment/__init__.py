@@ -8,6 +8,11 @@ source checkout where the package is not installed.
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 
+from network_assessment._legacy_env import adopt_legacy_environment
+
+# Accept the old CNA_<NAME> setting names for a while: runs before any module reads its settings.
+adopt_legacy_environment()
+
 try:
     __version__ = _pkg_version("network-assessment")
 except PackageNotFoundError:  # running from source without an installed dist
