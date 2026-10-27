@@ -18,12 +18,12 @@ Anything an engineer can solve without external input belongs in [`TODO.md`](TOD
 | [R-006](#r-006--runtime-secrets-have-no-defaults-and-must-be-supplied) | Runtime secrets supplied at apply time | Security / secret owner | Not tracked here — left this repository on 2026-09-15 (`TODO.md` T-507) |
 | [R-007](#r-007--azure-subscription-resource-provider-registration) | `Microsoft.AlertsManagement` provider registration | Azure subscription owner | Resolved — no longer required |
 | [R-008](#r-008--live-azure-beta-acceptance-sign-off) | 0.8 beta exit — live Azure acceptance sign-off | Product owner | Not tracked here — deploy done 2026-08-28, acceptance outstanding; left this repository on 2026-09-15 (`TODO.md` T-507) |
-| [R-009](#r-009--github-wiki-write-access-for-documentation-migration) | GitHub Wiki write access to publish prepared pages | Repository owner | Open — not blocking |
+| [R-009](#r-009--github-wiki-write-access-for-documentation-migration) | GitHub Wiki write access to publish prepared pages | Repository owner | Superseded 2026-10-27 — the wiki is deleted and long-form documentation goes in `docs/` (R-031); nothing is left to publish |
 | [R-010](#r-010--the-dev-environment-has-no-protection-against-out-of-band-deletion) | Dev environment deleted out of band; no protection against a repeat | Azure subscription owner | Not tracked here — left this repository on 2026-09-15 (`TODO.md` T-507) |
 | [R-011](#r-011--security-review-of-the-bring-your-own-ai-key-path-and-provider-egress) | Security review: bring-your-own AI key handling + firewall egress to Anthropic/OpenAI | Security | Open — before the first `byo-api` deploy |
 | [R-012](#r-012--token-for-a-shared-project-board) | Token type for a shared project board (PAT vs GitHub App / organization) | Repository owner | Open — not blocking |
 | [R-013](#r-013--bring-this-repository-live-the-docker-hub-repository-its-oidc-connection-and-the-first-publish) | Bring this repository live: the Docker Hub repository, its OIDC connection, the variables and the first publish | Repository owner | Open — blocks the first image publish from this repository (T-728) |
-| [R-014](#r-014--move-the-wiki-and-delete-the-original-repository) | Move the Wiki, then delete the original repository | Repository owner | Superseded 2026-10-11 — this repository (the renamed original) is the product and is not deleted; the Wiki moves here (R-023) |
+| [R-014](#r-014--move-the-wiki-and-delete-the-original-repository) | Move the Wiki, then delete the original repository | Repository owner | Superseded 2026-10-11 — this repository (the renamed original) is the product and is not deleted; the Wiki was to move here (R-023, itself superseded 2026-10-27 by R-031) |
 | [R-015](#r-015--decide-the-customer-facing-appliance-repository-names) | Decide the customer-facing appliance repository names | Repository owner | Withdrawn 2026-10-25 — not this repository's decision |
 | [R-016](#r-016--retire-appsnetwork-assessment-worker-and-its-image-and-service) | Retire `apps/network-assessment-worker` — placeholder that runs as an always-on service in a deployment | Repository owner | Open — v1.0 review finding IMG-003 / ARCH-101 |
 | [R-017](#r-017--stop-publishing-the-cli-image-on-every-push) | Stop building/publishing the CLI image `sha-<7>` (nothing in this repository pulls it except the release) | Repository owner | Open — not blocking |
@@ -38,7 +38,7 @@ Anything an engineer can solve without external input belongs in [`TODO.md`](TOD
 | [R-028](#r-028--should-the-default-model-ids-of-the-bring-your-own-engines-follow-the-vendors-current-models) | Should the default model ids of the bring-your-own engines follow the vendors' current models? | Product owner | Open — not blocking |
 | [R-029](#r-029--the-appliance-and-core-repositories-are-out-of-board-scope) | The two appliance repositories and the earlier core repository (the other owner's, named on ticket #249): their state, and whether they belong on the HCW Field Applications board | Repository owner | Decided 2026-10-25 — out of board scope; nothing is written there |
 | [R-030](#r-030--name-the-copyright-holder) | Name the copyright holder of the code in this repository | Repository owner | Decided 2026-10-26 — Hybrid Cloud Works (owner's statement); the name NetworkEyes was added to `NOTICE` on 2026-10-27 (owner's answer `names yes`), and the owner confirmed the logo exclusion (answer `logo ok`); nothing is open (see R-030) |
-| [R-031](#r-031--where-long-form-documentation-lives-now) | Decide where long-form documentation lives now that the GitHub Wiki is deleted | Repository owner | Open — not blocking |
+| [R-031](#r-031--where-long-form-documentation-lives-now) | Decide where long-form documentation lives now that the GitHub Wiki is deleted | Repository owner | Decided 2026-10-27 — a `docs/` folder (owner's answer `docs-folder`), implemented; which of the old pages come back is still the owner's choice (see R-031) |
 
 ---
 
@@ -391,44 +391,14 @@ asserted by workflow `100-validate-prereqs.yml`, which should be run first regar
 
 ## R-009 — GitHub Wiki write access for documentation migration
 
-**Problem**
-The documentation model designates the GitHub Wiki as the destination for all long-form
-documentation. Seven validated pages were prepared during the consolidation and cannot be
-published: the wiki remote returns HTTP 401 to the automation performing the work, while the
-repository itself authenticates normally. Wiki write access is scoped out.
-
-**Why it blocks progress**
-This no longer blocks the repository — it converged on the four-document end state without the
-Wiki. The long-form content that had nowhere else to go was migrated into `TODO.md` handoff notes
-instead (T-304 carries the Log Analytics state-migration runbook, T-401 the `migrate/` reference),
-and both source files were deleted after that migration was verified. What remains blocked is
-putting that documentation in its proper home. Until then, operational runbook content lives in
-the engineering backlog, which is the right fallback but the wrong destination.
-
-**Required owner**
-Repository owner.
-
-**Required action**
-Either grant Wiki write access to the account performing documentation consolidation, or publish
-the seven prepared pages manually. The validated page content is attached to the pull request that
-introduced this file. The corresponding tasks are `TODO.md` → T-601 (publish) and T-602 (trim the
-inline copies once the Wiki has them).
-
-**Impact if unresolved**
-Low and contained. No information is lost and no competing source of truth exists — every fact is
-either in the repository or in a TODO item's handoff notes. The cost is discoverability: an
-operator looking for a state-migration runbook will not think to look in the engineering backlog,
-and `TODO.md` carries roughly 80 lines of procedure that do not belong in a work queue.
-
-**References**
-- [`TODO.md`](TODO.md) → T-304, T-401 (the content), T-601, T-602 (the cleanup)
-- [`README.md`](README.md) → documentation map, where the Wiki links belong
-
-**Recommended next step**
-Confirm the Wiki page names before publishing so the cross-links resolve — in particular
-`Runbook: Log Analytics Workspace State Migration` and `Legacy AWS Migrate Root`. `Workflows
-Guide` and `Secrets Reference` are already referenced by `.env.example` and may already exist;
-merge rather than create.
+> **Superseded 2026-10-27.** This item asked for write access to the GitHub Wiki so that seven prepared pages could be
+> published there. The wiki was deleted on 2026-10-27 at the owner's order, and the owner decided (R-031, answer
+> `docs-folder`) that long-form documentation lives in the `docs/` folder of this repository, changed in pull
+> requests like code. There is no wiki to write to and nothing to publish, so no access is needed. The earlier steps
+> were removed with `TODO.md` T-601 and T-602 (both withdrawn); T-103 is withdrawn too. The facts that the seven
+> pages were meant to carry are still where this item said they were: in the repository, or in the handoff notes of
+> `TODO.md` T-304 (the Log Analytics state-migration runbook) and T-401 (the `migrate/` reference). Which of the old
+> wiki pages come back into `docs/` is a separate, later choice of the owner; it is recorded in R-031.
 
 ---
 
@@ -473,7 +443,8 @@ permission gaps are now codified in `scripts/Initialize-CnaGitHubSecrets.ps1`, s
 would be materially faster — but it would still be a rebuild, with a fresh, empty database.
 
 **References**
-- [`CNA-0.90-updates.md`](CNA-0.90-updates.md) → §5 (the full rebuild record)
+- `CNA-0.90-updates.md` → §5 (the full rebuild record). That document was removed on 2026-10-27; its last version is in
+  Git history, at commit a9312f15a98d9d54c0fff90f897eb5207e306e90 (for example `git show a9312f15a98d9d54c0fff90f897eb5207e306e90:CNA-0.90-updates.md`)
 - [`TODO.md`](TODO.md) → T-416 (the drift check that detected this and told no one)
 - The deployment record of that run (the rebuild's evidence; removed from this repository with T-504)
 
@@ -614,6 +585,8 @@ No image is published from this repository, so there is nothing to scan, sign, r
 > the Wiki move survives, reversed in direction: the pages on the earlier core repository's wiki come back to this
 > repository's wiki (R-023). The earlier plan (delete the original after repointing other repositories' variables and
 > migrating the legacy container packages) is withdrawn; this repository sets nothing in any other repository.
+> **The Wiki move that survived is superseded too (2026-10-27):** this repository's wiki was deleted, so the pages do
+> not move there (R-023), and long-form documentation goes in the `docs/` folder instead (R-031).
 
 ---
 
@@ -856,19 +829,17 @@ A user cannot tell what "1.0" they run; a new `[1.0.0]` heading would collide.
 
 ## R-023 — Wiki content after the restore
 
-- **Decision (owner, 2026-10-11):** this repository's wiki (<https://github.com/saulpatinojr/HCW-NetworkEyes_App/wiki>)
-  is the home; the earlier core repository is reference only and receives nothing. The pages (architecture, ADRs,
-  runbooks, workflow reference) still live on that repository's wiki until the owner moves them. PowerShell, any
-  folder (create one page in this repository's wiki first so its wiki repository exists). The command asks for the
-  address of the earlier core repository's wiki, which its **Wiki** tab shows and which ends in `.wiki.git`:
-
-  ```powershell
-  $source = Read-Host "Address of the earlier core repository's wiki (ends in .wiki.git)"; git clone -q $source $env:TEMP\hcw-ne-wiki; git -C $env:TEMP\hcw-ne-wiki remote add app https://github.com/saulpatinojr/HCW-NetworkEyes_App.wiki.git; git -C $env:TEMP\hcw-ne-wiki -c user.email=34853639+saulpatinojr@users.noreply.github.com -c user.name=saulpatinojr push app master --force
-  ```
-
-  Success looks like: the page count at the App wiki equals the earlier wiki's. The earlier wiki is left as is.
+- **Decision (owner, 2026-10-11):** this repository's wiki is the home of the long-form pages (architecture, ADRs,
+  runbooks, workflow reference); the earlier core repository is reference only and receives nothing. The owner was to
+  move the pages from the earlier core repository's wiki into this repository's wiki.
+- **Superseded (owner, 2026-10-27):** this repository's wiki was deleted, so there is no wiki to move the pages into,
+  and the move is not to be run. The command that this entry used to carry (it cloned the earlier core repository's
+  wiki and force-pushed it over this repository's wiki) was removed with this note: it would now try to recreate a
+  deleted wiki. Long-form documentation goes in the `docs/` folder of this repository (R-031); which of the old pages
+  are restored there is the owner's choice, and nothing has been copied. The earlier core repository is still reference
+  only.
 - **Raised:** 2026-10-10, with the restore of the Core lineage into this repository.
-- **Status:** Decided; the move is an owner step
+- **Status:** Superseded 2026-10-27 (by R-031)
 
 ## R-024 — Image signing identity after the restore
 
@@ -943,10 +914,11 @@ A user cannot tell what "1.0" they run; a new `[1.0.0]` heading would collide.
 
 ## R-031 — Where long-form documentation lives now
 
-- **What this is:** this repository's GitHub Wiki (architecture pages, the Secrets Reference, the Deployment Guide, the Workflows Guide, the ADRs and the runbooks) was deleted on 2026-10-27 at the owner's order (the owner had downloaded a copy, and a full mirror with its history was also made on the owner's machine before the deletion). The documentation model (`README.md`, `CLAUDE.md`, `.github/CONTRIBUTING.md`, `scripts/validate_documentation_model.py`) sent every long-form document to the wiki and forbids other markdown files outside a short list, so long-form documentation now has no home.
-- **What changed with this record:** the links to the wiki and the sentences that sent readers to it were removed or reworded to say that the destination is undecided. Nothing was moved and no document was added.
-- **What stays as it was, because it records history or is owned by the review engine:** `REVIEW.md` items R-009, R-014 and R-023, `TODO.md` items T-103, T-601 and T-602, and the review area `network_assessment/review/areas/documentation.py` still describe publishing to the wiki. They are obsolete, and are closed or removed together with this decision.
-- **Options.** (1) A `docs/` folder in the repository, with the validator changed to allow it (recommended: the documents are versioned with the code and reviewed in pull requests, and the validator already lists what is allowed). (2) Keep only the root documents and fold the few facts that are still needed into them (the settings reference is already `.env.example`). (3) Another wiki or a documentation site.
-- **Recommendation:** option 1, as a separate pull request once the owner has looked at the downloaded copy and chosen which pages to keep.
-- **Answer with:** `docs-folder`, `root-only` or `elsewhere`.
-- **Raised:** 2026-10-27. **Status:** Open — not blocking.
+- **What this is:** this repository's GitHub Wiki (architecture pages, the Secrets Reference, the Deployment Guide, the Workflows Guide, the ADRs and the runbooks) was deleted on 2026-10-27 at the owner's order (the owner had downloaded a copy, and a full mirror with its history was also made on the owner's machine before the deletion). The documentation model (`README.md`, `CLAUDE.md`, `.github/CONTRIBUTING.md`, `scripts/validate_documentation_model.py`) sent every long-form document to the wiki and forbids other markdown files outside a short list, so until this decision long-form documentation had no home.
+- **Decision (owner's answer `docs-folder`, 2026-10-27):** option 1 below. Long-form documentation lives in a `docs/` folder of this repository, versioned with the code and reviewed in pull requests, and the validator allows it.
+- **What now applies:** `scripts/validate_documentation_model.py` allows document files in the folder named exactly `docs` at the top of the repository, at any depth, and requires nothing to exist in it. It still refuses lookalikes (`doc/`, `documentation/`, `Docs/`, a `docs` folder nested elsewhere such as `src/docs/`, a root file `docs.md`), and it still refuses the community-file names (`SECURITY.md` and the rest) directly in `docs/`, because GitHub reads those from `docs/` as well as `.github/` and ticket #247 keeps them in `.github/` only. The model is now written out in one place, the *Documentation map* of `README.md`; `CLAUDE.md` and `.github/CONTRIBUTING.md` point to it. `docs/README.md` is the folder's index: what belongs there, the naming and review rules, and that there are no pages yet. `tests/unit/test_guardrail_scripts.py` runs the validator against good, bad and lookalike trees, and `tests/unit/test_documentation_model_statement.py` keeps the README's statement in step with the validator.
+- **What was closed with the decision:** the items that still described publishing to the wiki. R-009 and R-023 are superseded, R-014 (whose surviving part was the wiki move) is superseded again, `TODO.md` T-103, T-601 and T-602 are withdrawn, and the review area `network_assessment/review/areas/documentation.py` no longer records a wiki-publication escalation (it was owned by R-009) or an open task for T-103; its other findings were reworded to the new model.
+- **Still open, and the owner's:** which of the old wiki pages come back into `docs/`. The owner holds a downloaded copy of the wiki and a mirror of its history, both made before the deletion. Nothing was imported, because that choice has not been made. When the owner names the pages, an engineer adds each one as a document under `docs/` in a pull request, and may then replace the inline runbook text in `TODO.md` T-304 and T-401 with a link to the page that carries it (that text is the only copy in the repository until then).
+- **Options considered.** (1) A `docs/` folder in the repository, with the validator changed to allow it: **chosen** (the documents are versioned with the code and reviewed in pull requests, and the validator already lists what is allowed). (2) Keep only the root documents and fold the few facts that are still needed into them (the settings reference is already `.env.example`). (3) Another wiki or a documentation site.
+- **Raised:** 2026-10-27. **Decided:** 2026-10-27.
+- **Status:** Decided 2026-10-27; nothing further is open here except the choice of pages above.

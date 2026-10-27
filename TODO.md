@@ -76,22 +76,16 @@ Each one actively misleads an engineer or a workflow run.
   200/300 bands). Other stale numeric references may exist in scripts — grep for `\b0[0-9]{2}-`
   and `\b1[0-9]{2}-` across `scripts/` and `.github/` when fixing this.
 
-### T-103 — Verify the ADR pages referenced by the changelog exist in the Wiki
+### T-103 — Verify the ADR pages referenced by the changelog exist in the Wiki (withdrawn 2026-10-27)
 
-- **Priority:** Medium
-- **Description:** `CHANGELOG.md` previously claimed ADRs 0001–0005 were added under `docs/adr/`.
-  That directory has never existed in this repository's git history — the `[1.0.0-prep]` entry
-  records that ADRs were migrated to the GitHub Wiki. The changelog references have been corrected
-  to name the Wiki, but the target pages have not been confirmed to exist.
-- **Dependencies:** Wiki read access.
-- **Recommended action:** Confirm ADR-0001 through ADR-0005 exist as Wiki pages (Anthropic
-  removal, smoke-test removal, Entra redirect-URI ownership, Key Vault network hardening target,
-  container image-pull strategy). Recreate any that are missing from the changelog entries that
-  describe them, and link them from the Wiki home page.
-- **Status:** Not started
-- **Notes for future engineers:** The five ADR subjects are fully described in `CHANGELOG.md`
-  under `[Unreleased]` → Added/Removed, so a missing page can be reconstructed from there without
-  archaeology.
+- **Priority:** None
+- **Description:** Withdrawn: the GitHub Wiki was deleted on 2026-10-27 (`REVIEW.md` R-031), so there are no wiki pages
+  left to confirm. Long-form documentation now goes in the `docs/` folder, and which of the old wiki pages come back
+  there is the owner's choice. `CHANGELOG.md` entries that say the ADRs were added to the wiki are dated records and
+  stay as written. If the owner brings the ADRs back, the five subjects (Anthropic removal, smoke-test removal, Entra
+  redirect-URI ownership, Key Vault network hardening target, container image-pull strategy) are described in
+  `CHANGELOG.md` under `[Unreleased]` → Added/Removed, so a page can be rebuilt from there.
+- **Status:** Withdrawn — 2026-10-27.
 
 ### T-104 — Add a `Microsoft.AlertsManagement` registration check to workflow 100
 
@@ -509,8 +503,8 @@ order; do not reorder it.
   `migrate/scripts/Initialize-Migration.ps1` last exists at commit `7a6b1fa` on `main` — read it
   from history (`git show 7a6b1fa:migrate/scripts/Initialize-Migration.ps1`), and remember its
   `iam.tf` neighbour carries the obsolete OIDC thumbprint T-203 says must not be copied forward.
-  The IAM policy mapping and directory inventory preserved in the notes below remain queued for
-  the Wiki under T-601.
+  The IAM policy mapping and directory inventory preserved in the notes below stay here, as the only
+  copy, until the owner chooses which pages come back into `docs/` (`REVIEW.md` R-031; T-601 is withdrawn).
 - **Notes for future engineers:** The current stack supersedes `migrate/` on every axis: eight
   module boundaries mirroring Azure, split platform/workload state, VPC endpoints, X-Ray, Bedrock,
   and autoscaling. `migrate/` has none of those. Treat it as history, not as an alternative. The
@@ -1576,7 +1570,7 @@ order; do not reorder it.
   `REVIEW.md` R-008 and R-010 (the Azure side); and T-416 (both).
 - **Status:** Done — 2026-09-15. Every moved item here is reduced to a pointer in its Status line ("Left this
   repository 2026-09-15 (T-507)"), with the id kept stable so `CHANGELOG.md` references still resolve.
-- **Notes for future engineers:** Application-level items never move; `REVIEW.md` here keeps R-009, R-011 and R-012.
+- **Notes for future engineers:** Application-level items never move; `REVIEW.md` here keeps R-009, R-011 and R-012 (R-009 was superseded on 2026-10-27, see R-031).
 
 ### T-508 — Re-scope the production-readiness review engine to the core
 
@@ -1616,22 +1610,23 @@ order; do not reorder it.
   this repository, which is again the product (`REVIEW.md` R-013, R-014, R-023). On 2026-10-25 it was made to stand
   alone: it depends on no other repository.
 - **Notes for future engineers:** Issue and pull-request numbers of the form `#NNN` that refer to the earlier
-  repositories in `CHANGELOG.md`, `REVIEW.md`, `CNA-0.90-updates.md` and this file are historical citations of threads
-  that no longer exist; they were links and are now plain numbers.
+  repositories in `CHANGELOG.md`, `REVIEW.md` and this file are historical citations of threads
+  that no longer exist; they were links and are now plain numbers. `CNA-0.90-updates.md`, which cited them too, was
+  removed on 2026-10-27; its last version is in Git history, at commit a9312f15a98d9d54c0fff90f897eb5207e306e90. The
+  dated entries of this file, `REVIEW.md` and `CHANGELOG.md` that still name it describe that version.
 
 ---
 
 ## Phase 6 — Documentation improvements
 
-### T-601 — Publish the seven prepared Wiki pages
+### T-601 — Publish the seven prepared Wiki pages (withdrawn 2026-10-27)
 
-- **Priority:** Medium
-- **Description:** The documentation consolidation displaced long-form content from `README.md`
-  and from two non-root documents. Seven validated, ready-to-publish pages were prepared. They are
-  not committed to the repository — publishing requires Wiki write access, which the automation
-  performing the consolidation does not have.
-- **Dependencies:** `REVIEW.md` → R-009 (Wiki write access).
-- **Recommended action:** Publish, or merge into existing pages:
+- **Priority:** None
+- **Description:** Withdrawn: the GitHub Wiki was deleted on 2026-10-27, and the owner decided (`REVIEW.md` R-031,
+  answer `docs-folder`) that long-form documentation lives in the `docs/` folder of this repository. There is no wiki
+  to publish to, so `REVIEW.md` R-009 (wiki write access) is superseded. The seven pages that had been prepared were
+  never committed to the repository. The table is kept only as a record of what they covered, in case the owner
+  chooses to restore any of that material into `docs/`:
 
   | Page | Content |
   |---|---|
@@ -1643,28 +1638,20 @@ order; do not reorder it.
   | `Runbook: Log Analytics Workspace State Migration` | The state-surgery procedure now held in T-304 |
   | `Legacy AWS Migrate Root` | The superseded `migrate/` root, IAM policy mapping preserved |
 
-  Then add the links to `README.md`'s documentation map.
-- **Status:** Blocked on R-009
-- **Notes for future engineers:** `Workflows Guide` and `Secrets Reference` are already referenced
-  by `.env.example`, so those pages likely exist — merge rather than create, and do not duplicate.
-  The page content is attached to the pull request that introduced this backlog. Nothing is lost
-  if it is never published: every fact in those pages is either still in the repository or carried
-  in a TODO item's handoff notes.
+  Nothing has been imported. Which pages come back is the owner's choice (R-031).
+- **Status:** Withdrawn — 2026-10-27.
+- **Notes for future engineers:** Nothing is lost by withdrawing this: every fact in those pages is either still in
+  the repository or carried in the handoff notes of T-304 and T-401.
 
-### T-602 — Trim the long-form runbook content out of TODO.md once the Wiki has it
+### T-602 — Trim the long-form runbook content out of TODO.md once the Wiki has it (withdrawn 2026-10-27)
 
-- **Priority:** Low
-- **Description:** `TODO.md` → T-304 currently carries the full Log Analytics workspace state
-  migration runbook, and T-401 carries the `migrate/` directory reference. That content is
-  operational documentation living in the engineering backlog because the Wiki was unreachable
-  when the two source files were removed. It is the right fallback, not the right home.
-- **Dependencies:** T-601 (the Wiki pages must exist first).
-- **Recommended action:** Once `Runbook: Log Analytics Workspace State Migration` and
-  `Legacy AWS Migrate Root` are published and verified, replace the inline procedures in T-304 and
-  T-401 with a one-line summary plus the Wiki link.
-- **Status:** Blocked on T-601
-- **Notes for future engineers:** Do not trim before the Wiki pages are confirmed published and
-  rendering. These notes are currently the only copy of that content in the repository.
+- **Priority:** None
+- **Description:** Withdrawn together with T-601: there is no wiki to link to. The inline runbook text in T-304 (the
+  Log Analytics workspace state migration) and the `migrate/` reference in T-401 stay where they are, and they are the
+  only copy of that content in the repository. If the owner brings that material back as pages under `docs/`
+  (`REVIEW.md` R-031), the text in T-304 and T-401 can then be replaced with a link to the page, but not before the
+  page exists and renders.
+- **Status:** Withdrawn — 2026-10-27.
 
 ### T-603 — Add a CI guard for the documentation model
 
@@ -1698,7 +1685,8 @@ order; do not reorder it.
 - **Dependencies:** T-603 (the guard's exclusion list encodes this decision).
 - **Recommended action:** Periodically confirm no project-specific documentation has been written
   into either directory. If any appears, classify it by content and move it to `README.md`,
-  `CHANGELOG.md`, `REVIEW.md`, `TODO.md`, or the Wiki as the model requires.
+  `CHANGELOG.md`, `REVIEW.md`, `TODO.md`, or `docs/` (the wiki it used to name was deleted, `REVIEW.md` R-031) as the
+  model requires.
 - **Status:** Done (2026-09-23) — first pass. A sweep of `.claude/`, `.agents/`, `.codex/` and
   `.kiro/` for the platform's own names (repositories, tenants, resource groups, image namespace,
   workflow numbers, `REVIEW.md` ids) found one project-specific tree: `.kiro/specs/production-readiness/`,

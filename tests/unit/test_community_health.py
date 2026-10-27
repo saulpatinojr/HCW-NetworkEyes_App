@@ -1,8 +1,8 @@
 """The GitHub community-health files exist and are well formed (ticket #247).
 
 GitHub reads `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `PULL_REQUEST_TEMPLATE.md` and
-`ISSUE_TEMPLATE/*` from `.github/`. They live there, not at the root, because the documentation model
-(`scripts/validate_documentation_model.py`) allows exactly seven root documents.
+`ISSUE_TEMPLATE/*` from `.github/`. They live there, not at the root and not in `docs/`, because the
+documentation model (`scripts/validate_documentation_model.py`) allows none of them anywhere else.
 
 The issue forms are YAML, so a typo does not fail anything until someone opens the "New issue" page. These
 tests parse each form and check the parts GitHub rejects or silently ignores: unique ids, a label on every

@@ -20,11 +20,11 @@ overview, and `TODO.md` is the work queue.
   `packages/network-assessment-azure-engine`. Deployment is not done here: this repository only builds and publishes the
   images. A change to the image tags, the signing identity or
   the runtime environment settings changes what consumers rely on; `CLAUDE.md` explains how to record it.
-- **Documents:** the repository keeps `README.md`, `CHANGELOG.md`, `REVIEW.md` and `TODO.md` (plus `CLAUDE.md`, and two
-  temporary working documents). `scripts/validate_documentation_model.py` fails the build on any other markdown file.
-  Long-form documentation has no destination since the GitHub Wiki was deleted (`REVIEW.md`, R-031). The only other
-  markdown is the community files GitHub itself reads from `.github/` (this guide, the security policy, the code of
-  conduct, the pull request template and the issue forms).
+- **Documents:** the model is written out once, in the Documentation map of `README.md`, and
+  `scripts/validate_documentation_model.py` fails the build on a document file where the map does not allow one. Write
+  long-form documentation (guides, architecture, runbooks, decision records) under `docs/`; it is reviewed in the pull
+  request like code, and `docs/README.md` says how pages are named. The community files GitHub itself reads (this
+  guide, the security policy, the code of conduct, the pull request template and the issue forms) stay in `.github/`.
 - **Workflows:** `.github/workflows/` holds only the numbered workflows `200`, `300`, `310`, `320`, `370` and `390`.
   Add a job to an existing workflow rather than a new file. Never rename a job in `300-test-codebase.yml`: the job
   names are the required checks of the `main` ruleset.

@@ -657,7 +657,7 @@ Roles table (the single source for 7.F, section 12 and the appliance docs):
 | Network Assessment BGP Reader | custom (`docs/roles/network-assessment-bgp-reader.json`) | six actions, all checked against Microsoft Learn on 2026-10-25 | BGP peer status, learned and advertised routes |
 | Management Group Reader | built-in | `Microsoft.Management/managementGroups/read` | Management-group tree (optional) |
 
-Unchanged by this document and still open: R-011 (BYO AI key path and egress review) and the deploy service principal's least-privilege gaps recorded in `CNA-0.90-updates.md` section 5.
+Unchanged by this document and still open: R-011 (BYO AI key path and egress review) and the deploy service principal's least-privilege gaps recorded in section 5 of `CNA-0.90-updates.md`, a working document that was removed on 2026-10-27 (its last version is in Git history, at commit a9312f15a98d9d54c0fff90f897eb5207e306e90).
 
 ## 14 Testing requirements
 
@@ -729,7 +729,7 @@ One PR per change set, ready for review, following the Core's PR template; `CHAN
 |---|---|---|---|
 | P1 | Entra bearer on `network-assessment-api`; redaction helper | H | new; closes the "no authentication" security observation |
 | P1 | Remove `ClientSecretCredential`, `sp_client_secret`, `spSecretEnc`; UAMI only | G | R-011 (crypto path narrowed to AI keys; the review itself unchanged) |
-| P1 | Least-privilege role table and custom role JSON | F | R-008 (acceptance re-run with the new roles); `CNA-0.90-updates.md` section 5 |
+| P1 | Least-privilege role table and custom role JSON | F | R-008 (acceptance re-run with the new roles); section 5 of `CNA-0.90-updates.md` (removed 2026-10-27; last version in Git history, commit a9312f15a98d9d54c0fff90f897eb5207e306e90) |
 | P1 | Split `topology_schema.py` | A | T-410 (`ty` findings reduced) |
 | P1 | Extract `network-assessment-azure-engine` | C | T-413, T-414 (pins and extras absorbed into the engine's `[azure]` extra) |
 | P1 | Pure `evaluate()`; engine without `EngagementStore` | E | T-412 (store read-side now outside the engine) |
@@ -739,7 +739,7 @@ One PR per change set, ready for review, following the Core's PR template; `CHAN
 | P3 | `320-release-engine.yml`; OIDC login; digests | J | T-503 (withdrawn 2026-10-25); T-504 to T-508 done, unaffected |
 | P3 | AWS behind an extra | K | T-404 (boto3 and azure-mgmt consistency gaps close by separation); T-418 (diagrams stay Azure-only) |
 | P3 | Remove the 52 MB vendored agent configuration from the product tree or move it to a separate repository | hygiene | T-411 (detect-secrets triage shrinks) |
-| Unaffected | R-009 (Wiki access), R-012 (project board token), T-401, T-405 to T-407, T-409, T-415, T-416, T-419, T-501, T-502, T-505 | | Owner items; listed so the mapping is complete |
+| Unaffected | R-009 (Wiki access; superseded 2026-10-27), R-012 (project board token), T-401, T-405 to T-407, T-409, T-415, T-416, T-419, T-501, T-502, T-505 | | Owner items; listed so the mapping is complete |
 
 ## 19 Acceptance criteria
 
