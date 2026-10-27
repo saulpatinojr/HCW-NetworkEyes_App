@@ -1,6 +1,6 @@
 """Unit tests for engagement model."""
 
-from cna.core.engagement import EngagementConfig
+from network_assessment.core.engagement import EngagementConfig
 
 
 def test_review_complete_defaults_false():

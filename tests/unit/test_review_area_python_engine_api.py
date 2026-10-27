@@ -7,8 +7,8 @@ well-formed and drawn from the ``python-engine-api`` owner area so they
 consolidate cleanly (spec task 14.1).
 """
 
-from cna.review import AREAS, Severity, consolidate
-from cna.review.areas import python_engine_api_findings
+from network_assessment.review import AREAS, Severity, consolidate
+from network_assessment.review.areas import python_engine_api_findings
 
 
 def test_findings_are_well_formed_and_in_area():

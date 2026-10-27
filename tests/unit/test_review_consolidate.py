@@ -1,13 +1,13 @@
 """Unit tests for the production-readiness consolidation engine.
 
-Example and edge-case coverage for :func:`cna.review.consolidate` — the merge
+Example and edge-case coverage for :func:`network_assessment.review.consolidate` — the merge
 (union of areas/subjects, max severity), severity-descending ordering,
 idempotence, and fixable-vs-escalation classification described in the design
 ("Consolidation, Deduplication, and Escalation"). The universal invariants for
 ordering and dedup are covered separately by the property tests (tasks 1.4/1.5).
 """
 
-from cna.review import (
+from network_assessment.review import (
     Finding,
     PlanEntry,
     RemediationPlan,

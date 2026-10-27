@@ -9,8 +9,8 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "cna",
     "cna-azure-network-engine",
+    "network-assessment",
 ]
 
 [[package]]
@@ -625,156 +625,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/c7/0e/7fa0ef50764b67090eca4114772a2abf8b6148198475e54c660b97caeee6/click-8.5.0.tar.gz", hash = "sha256:ba0d2089de75ea0310e2dde03160e6ca10009947fb95a182f9b54021bb272e34", size = 382235, upload-time = "2026-08-26T13:33:14.56Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/58/50/6c0d534c5f134586a8e1ba4e330569e32f057e33372ae556463212fb4cd3/click-8.5.0-py3-none-any.whl", hash = "sha256:255bc9599cf7748b4b1a446ccc735421bd08a2ae529a8b88597d3de5664ee360", size = 125251, upload-time = "2026-08-26T13:33:12.928Z" },
-]
-
-[[package]]
-name = "cna"
-version = "0.8.0b0"
-source = { editable = "." }
-dependencies = [
-    { name = "anthropic" },
-    { name = "azure-ai-agents" },
-    { name = "azure-ai-projects" },
-    { name = "azure-identity" },
-    { name = "azure-mgmt-network" },
-    { name = "azure-mgmt-resource" },
-    { name = "azure-mgmt-resourcegraph" },
-    { name = "azure-mgmt-subscription" },
-    { name = "azure-storage-blob" },
-    { name = "click" },
-    { name = "cna-azure-network-engine" },
-    { name = "cryptography" },
-    { name = "defusedxml" },
-    { name = "diagrams" },
-    { name = "httpx" },
-    { name = "jinja2" },
-    { name = "markdown" },
-    { name = "matplotlib" },
-    { name = "n2g" },
-    { name = "openai" },
-    { name = "pandas" },
-    { name = "pydantic" },
-    { name = "python-docx" },
-    { name = "python-dotenv" },
-    { name = "python-pptx" },
-    { name = "pyyaml" },
-    { name = "rich" },
-    { name = "tenacity" },
-    { name = "weasyprint" },
-]
-
-[package.optional-dependencies]
-api = [
-    { name = "azure-mgmt-compute" },
-    { name = "azure-mgmt-loganalytics" },
-    { name = "azure-mgmt-monitor" },
-    { name = "fastapi" },
-    { name = "psycopg2-binary" },
-    { name = "pyjwt", extra = ["crypto"] },
-    { name = "uvicorn", extra = ["standard"] },
-]
-aws = [
-    { name = "boto3" },
-]
-dev = [
-    { name = "detect-secrets" },
-    { name = "hypothesis" },
-    { name = "pre-commit" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-    { name = "ty" },
-]
-enrichment = [
-    { name = "azure-mgmt-compute" },
-    { name = "azure-mgmt-costmanagement" },
-    { name = "azure-mgmt-loganalytics" },
-    { name = "azure-mgmt-managementgroups" },
-    { name = "azure-mgmt-monitor" },
-    { name = "azure-mgmt-privatedns" },
-    { name = "azure-mgmt-security" },
-    { name = "azure-monitor-query" },
-    { name = "cairosvg" },
-    { name = "mcp" },
-]
-
-[package.dev-dependencies]
-build = [
-    { name = "setuptools" },
-    { name = "wheel" },
-]
-worker = [
-    { name = "azure-identity" },
-    { name = "azure-storage-blob" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "anthropic", specifier = ">=2.1.0" },
-    { name = "azure-ai-agents", specifier = ">=1.1.0,<2" },
-    { name = "azure-ai-projects", specifier = ">=1.0.0,<2" },
-    { name = "azure-identity", specifier = ">=1.26.0" },
-    { name = "azure-mgmt-compute", marker = "extra == 'api'", specifier = ">=39.0.0,<40" },
-    { name = "azure-mgmt-compute", marker = "extra == 'enrichment'", specifier = ">=39.0.0,<40" },
-    { name = "azure-mgmt-costmanagement", marker = "extra == 'enrichment'", specifier = ">=5.0.0,<6" },
-    { name = "azure-mgmt-loganalytics", marker = "extra == 'api'", specifier = ">=14.0.0,<15" },
-    { name = "azure-mgmt-loganalytics", marker = "extra == 'enrichment'", specifier = ">=14.0.0,<15" },
-    { name = "azure-mgmt-managementgroups", marker = "extra == 'enrichment'", specifier = ">=2.0.0,<3" },
-    { name = "azure-mgmt-monitor", marker = "extra == 'api'", specifier = ">=7.0.0,<8" },
-    { name = "azure-mgmt-monitor", marker = "extra == 'enrichment'", specifier = ">=7.0.0,<8" },
-    { name = "azure-mgmt-network", specifier = ">=33.1.0" },
-    { name = "azure-mgmt-privatedns", marker = "extra == 'enrichment'", specifier = ">=2.0.0,<3" },
-    { name = "azure-mgmt-resource", specifier = ">=26.0.0" },
-    { name = "azure-mgmt-resourcegraph", specifier = ">=8.0.0,<9" },
-    { name = "azure-mgmt-security", marker = "extra == 'enrichment'", specifier = ">=7.0.0,<8" },
-    { name = "azure-mgmt-subscription", specifier = ">=3.1.1" },
-    { name = "azure-monitor-query", marker = "extra == 'enrichment'", specifier = ">=2.0.0,<3" },
-    { name = "azure-storage-blob", specifier = ">=12.31.0" },
-    { name = "boto3", marker = "extra == 'aws'", specifier = ">=1.43.118" },
-    { name = "cairosvg", marker = "extra == 'enrichment'", specifier = ">=2.9.0,<3" },
-    { name = "click", specifier = ">=8.4.2" },
-    { name = "cna-azure-network-engine", editable = "packages/cna-azure-network-engine" },
-    { name = "cryptography", specifier = ">=50.0.2" },
-    { name = "defusedxml", specifier = ">=0.7.1" },
-    { name = "detect-secrets", marker = "extra == 'dev'", specifier = ">=1.5" },
-    { name = "diagrams", specifier = ">=0.25.1" },
-    { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.161.1" },
-    { name = "httpx", specifier = ">=0.28.1" },
-    { name = "hypothesis", marker = "extra == 'dev'", specifier = ">=6.170.8" },
-    { name = "jinja2", specifier = ">=3.1.6" },
-    { name = "markdown", specifier = ">=3.11.2" },
-    { name = "matplotlib", specifier = ">=3.10.9" },
-    { name = "mcp", marker = "extra == 'enrichment'", specifier = ">=2.3.0,<3" },
-    { name = "n2g", specifier = ">=0.3.3" },
-    { name = "openai", specifier = ">=3.37.0" },
-    { name = "pandas", specifier = ">=3.1.0" },
-    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.7.0" },
-    { name = "psycopg2-binary", marker = "extra == 'api'", specifier = ">=2.9" },
-    { name = "pydantic", specifier = ">=2.14.0" },
-    { name = "pyjwt", extras = ["crypto"], marker = "extra == 'api'", specifier = ">=2.15.1,<3" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.1.1" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.1.0" },
-    { name = "python-docx", specifier = ">=1.2.0" },
-    { name = "python-dotenv", specifier = ">=1.2.4" },
-    { name = "python-pptx", specifier = ">=1.0.2" },
-    { name = "pyyaml", specifier = ">=6.0.3" },
-    { name = "rich", specifier = ">=15.0.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17.2" },
-    { name = "tenacity", specifier = ">=9.2.1" },
-    { name = "ty", marker = "extra == 'dev'", specifier = ">=0.0.91" },
-    { name = "uvicorn", extras = ["standard"], marker = "extra == 'api'", specifier = ">=0.54.0" },
-    { name = "weasyprint", specifier = ">=62.0" },
-]
-provides-extras = ["aws", "enrichment", "api", "dev"]
-
-[package.metadata.requires-dev]
-build = [
-    { name = "setuptools", specifier = ">=84.2.1" },
-    { name = "wheel" },
-]
-worker = [
-    { name = "azure-identity", specifier = ">=1.26.0" },
-    { name = "azure-storage-blob", specifier = ">=12.31.0" },
 ]
 
 [[package]]
@@ -1814,6 +1664,156 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/89/d6/d5bc677554fa7708b2f7cb425e99a7a7a76a86240e1261b35502b24667ca/N2G-0.3.3.tar.gz", hash = "sha256:e19d955291c6baf5bd917c0def1ea1f1b2b9aab00131134fd0cb86d0e227f573", size = 462073, upload-time = "2023-02-11T07:38:48.731Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/59/7a/4213c9c5efdc5f4f85b73819128108186ec1d1b8252bf85087608b331f6d/N2G-0.3.3-py3-none-any.whl", hash = "sha256:20e942c4d0de4412d03fd75e87189304e7c15fc87ab172fb01209eb19b782554", size = 481194, upload-time = "2023-02-11T07:38:45.816Z" },
+]
+
+[[package]]
+name = "network-assessment"
+version = "0.8.0b0"
+source = { editable = "." }
+dependencies = [
+    { name = "anthropic" },
+    { name = "azure-ai-agents" },
+    { name = "azure-ai-projects" },
+    { name = "azure-identity" },
+    { name = "azure-mgmt-network" },
+    { name = "azure-mgmt-resource" },
+    { name = "azure-mgmt-resourcegraph" },
+    { name = "azure-mgmt-subscription" },
+    { name = "azure-storage-blob" },
+    { name = "click" },
+    { name = "cna-azure-network-engine" },
+    { name = "cryptography" },
+    { name = "defusedxml" },
+    { name = "diagrams" },
+    { name = "httpx" },
+    { name = "jinja2" },
+    { name = "markdown" },
+    { name = "matplotlib" },
+    { name = "n2g" },
+    { name = "openai" },
+    { name = "pandas" },
+    { name = "pydantic" },
+    { name = "python-docx" },
+    { name = "python-dotenv" },
+    { name = "python-pptx" },
+    { name = "pyyaml" },
+    { name = "rich" },
+    { name = "tenacity" },
+    { name = "weasyprint" },
+]
+
+[package.optional-dependencies]
+api = [
+    { name = "azure-mgmt-compute" },
+    { name = "azure-mgmt-loganalytics" },
+    { name = "azure-mgmt-monitor" },
+    { name = "fastapi" },
+    { name = "psycopg2-binary" },
+    { name = "pyjwt", extra = ["crypto"] },
+    { name = "uvicorn", extra = ["standard"] },
+]
+aws = [
+    { name = "boto3" },
+]
+dev = [
+    { name = "detect-secrets" },
+    { name = "hypothesis" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+    { name = "ty" },
+]
+enrichment = [
+    { name = "azure-mgmt-compute" },
+    { name = "azure-mgmt-costmanagement" },
+    { name = "azure-mgmt-loganalytics" },
+    { name = "azure-mgmt-managementgroups" },
+    { name = "azure-mgmt-monitor" },
+    { name = "azure-mgmt-privatedns" },
+    { name = "azure-mgmt-security" },
+    { name = "azure-monitor-query" },
+    { name = "cairosvg" },
+    { name = "mcp" },
+]
+
+[package.dev-dependencies]
+build = [
+    { name = "setuptools" },
+    { name = "wheel" },
+]
+worker = [
+    { name = "azure-identity" },
+    { name = "azure-storage-blob" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "anthropic", specifier = ">=2.1.0" },
+    { name = "azure-ai-agents", specifier = ">=1.1.0,<2" },
+    { name = "azure-ai-projects", specifier = ">=1.0.0,<2" },
+    { name = "azure-identity", specifier = ">=1.26.0" },
+    { name = "azure-mgmt-compute", marker = "extra == 'api'", specifier = ">=39.0.0,<40" },
+    { name = "azure-mgmt-compute", marker = "extra == 'enrichment'", specifier = ">=39.0.0,<40" },
+    { name = "azure-mgmt-costmanagement", marker = "extra == 'enrichment'", specifier = ">=5.0.0,<6" },
+    { name = "azure-mgmt-loganalytics", marker = "extra == 'api'", specifier = ">=14.0.0,<15" },
+    { name = "azure-mgmt-loganalytics", marker = "extra == 'enrichment'", specifier = ">=14.0.0,<15" },
+    { name = "azure-mgmt-managementgroups", marker = "extra == 'enrichment'", specifier = ">=2.0.0,<3" },
+    { name = "azure-mgmt-monitor", marker = "extra == 'api'", specifier = ">=7.0.0,<8" },
+    { name = "azure-mgmt-monitor", marker = "extra == 'enrichment'", specifier = ">=7.0.0,<8" },
+    { name = "azure-mgmt-network", specifier = ">=33.1.0" },
+    { name = "azure-mgmt-privatedns", marker = "extra == 'enrichment'", specifier = ">=2.0.0,<3" },
+    { name = "azure-mgmt-resource", specifier = ">=26.0.0" },
+    { name = "azure-mgmt-resourcegraph", specifier = ">=8.0.0,<9" },
+    { name = "azure-mgmt-security", marker = "extra == 'enrichment'", specifier = ">=7.0.0,<8" },
+    { name = "azure-mgmt-subscription", specifier = ">=3.1.1" },
+    { name = "azure-monitor-query", marker = "extra == 'enrichment'", specifier = ">=2.0.0,<3" },
+    { name = "azure-storage-blob", specifier = ">=12.31.0" },
+    { name = "boto3", marker = "extra == 'aws'", specifier = ">=1.43.118" },
+    { name = "cairosvg", marker = "extra == 'enrichment'", specifier = ">=2.9.0,<3" },
+    { name = "click", specifier = ">=8.4.2" },
+    { name = "cna-azure-network-engine", editable = "packages/cna-azure-network-engine" },
+    { name = "cryptography", specifier = ">=50.0.2" },
+    { name = "defusedxml", specifier = ">=0.7.1" },
+    { name = "detect-secrets", marker = "extra == 'dev'", specifier = ">=1.5" },
+    { name = "diagrams", specifier = ">=0.25.1" },
+    { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.161.1" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "hypothesis", marker = "extra == 'dev'", specifier = ">=6.170.8" },
+    { name = "jinja2", specifier = ">=3.1.6" },
+    { name = "markdown", specifier = ">=3.11.2" },
+    { name = "matplotlib", specifier = ">=3.10.9" },
+    { name = "mcp", marker = "extra == 'enrichment'", specifier = ">=2.3.0,<3" },
+    { name = "n2g", specifier = ">=0.3.3" },
+    { name = "openai", specifier = ">=3.37.0" },
+    { name = "pandas", specifier = ">=3.1.0" },
+    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.7.0" },
+    { name = "psycopg2-binary", marker = "extra == 'api'", specifier = ">=2.9" },
+    { name = "pydantic", specifier = ">=2.14.0" },
+    { name = "pyjwt", extras = ["crypto"], marker = "extra == 'api'", specifier = ">=2.15.1,<3" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.1.1" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.1.0" },
+    { name = "python-docx", specifier = ">=1.2.0" },
+    { name = "python-dotenv", specifier = ">=1.2.4" },
+    { name = "python-pptx", specifier = ">=1.0.2" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "rich", specifier = ">=15.0.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17.2" },
+    { name = "tenacity", specifier = ">=9.2.1" },
+    { name = "ty", marker = "extra == 'dev'", specifier = ">=0.0.91" },
+    { name = "uvicorn", extras = ["standard"], marker = "extra == 'api'", specifier = ">=0.54.0" },
+    { name = "weasyprint", specifier = ">=62.0" },
+]
+provides-extras = ["aws", "enrichment", "api", "dev"]
+
+[package.metadata.requires-dev]
+build = [
+    { name = "setuptools", specifier = ">=84.2.1" },
+    { name = "wheel" },
+]
+worker = [
+    { name = "azure-identity", specifier = ">=1.26.0" },
+    { name = "azure-storage-blob", specifier = ">=12.31.0" },
 ]
 
 [[package]]

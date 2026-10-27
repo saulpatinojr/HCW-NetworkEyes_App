@@ -19,7 +19,7 @@ from pathlib import Path
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-MODULES_DIR = REPO_ROOT / "cna" / "modules"
+MODULES_DIR = REPO_ROOT / "network_assessment" / "modules"
 
 
 def load_modules() -> dict[str, dict]:

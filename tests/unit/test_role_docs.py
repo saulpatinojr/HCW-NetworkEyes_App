@@ -15,7 +15,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ROLE_FILE = REPO_ROOT / "docs" / "roles" / "cna-network-bgp-reader.json"
-MODULE_YAML = REPO_ROOT / "cna" / "modules" / "network" / "module.yaml"
+MODULE_YAML = REPO_ROOT / "network_assessment" / "modules" / "network" / "module.yaml"
 ENV_EXAMPLE = REPO_ROOT / ".env.example"
 MODAL = REPO_ROOT / "apps" / "cna-web" / "components" / "ui" / "sp-help-modal.tsx"
 
@@ -49,7 +49,7 @@ def test_no_project_source_recommends_network_contributor():
     offenders = [
         str(p.relative_to(REPO_ROOT))
         for p in _project_files(
-            REPO_ROOT / "apps", REPO_ROOT / "cna", REPO_ROOT / "docs", ENV_EXAMPLE
+            REPO_ROOT / "apps", REPO_ROOT / "network_assessment", REPO_ROOT / "docs", ENV_EXAMPLE
         )
         if WRITE_ROLE in p.read_text(encoding="utf-8", errors="replace")
     ]

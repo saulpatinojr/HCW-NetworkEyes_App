@@ -251,7 +251,7 @@ class TestDocumentationModel:
 
 class TestModuleDependencies:
     def _write_module(self, repo: Path, name: str, **fields: object) -> None:
-        directory = repo / "cna" / "modules" / name
+        directory = repo / "network_assessment" / "modules" / name
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "module.yaml").write_text(yaml.safe_dump({"name": name, **fields}))
 

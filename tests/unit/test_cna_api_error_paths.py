@@ -1,7 +1,7 @@
 """FastAPI ``TestClient`` tests for the ``apps/cna-api`` error paths (Requirement 2).
 
-This is the integration-level companion to the ``cna.api_status`` /
-``cna.api_errors`` unit tests. Where those pin the pure mapping and sanitizer in
+This is the integration-level companion to the ``network_assessment.api_status`` /
+``network_assessment.api_errors`` unit tests. Where those pin the pure mapping and sanitizer in
 isolation, these drive the real FastAPI app end to end and assert the behaviour a
 caller actually observes:
 
@@ -11,7 +11,7 @@ caller actually observes:
     4xx/5xx class and never a ``200``; validation failures are 4xx.
   * **2.3 — downstream SDK sanitization.** When a downstream SDK raises, the
     client response excludes the raw exception text and returns only the
-    generic, category-level message from :mod:`cna.api_errors`.
+    generic, category-level message from :mod:`network_assessment.api_errors`.
 
 **Importing the app.** ``apps/cna-api`` has a hyphen, so ``apps.cna-api.main`` is
 not a valid dotted import. The app is loaded from its file path with
@@ -20,7 +20,7 @@ by file/module path rather than as an installed package.
 
 **Environment.** The API module imports ``fastapi`` and ``psycopg2`` at import
 time, and ``TestClient`` needs ``httpx``/``starlette``. When any of those are not
-installed in the current interpreter (e.g. a minimal ``cna``-only checkout), the
+installed in the current interpreter (e.g. a minimal ``network_assessment``-only checkout), the
 whole module is skipped with a clear reason — the tests are still collected and
 run in the full dev environment / CI (workflow 300), which installs the API
 dependencies. Nothing here mocks the framework itself; only the downstream SDKs
@@ -64,7 +64,7 @@ def _load_api_module() -> types.ModuleType:
     the file directly under a synthetic, import-safe name. ``main.py`` itself
     prepends its own directory to ``sys.path`` so its ``routers.*`` imports
     resolve, so no extra path wiring is needed here — but we ensure the repo
-    root is importable first so the top-level ``from cna...`` imports resolve
+    root is importable first so the top-level ``from network_assessment...`` imports resolve
     when the package is not installed.
     """
     if str(_REPO_ROOT) not in sys.path:
@@ -138,7 +138,7 @@ def test_intake_returns_honest_501_not_200(client):
 
 def test_intake_501_is_server_error_class(client, api_main):
     """2.2/2.4: the /intake status flows through the single outcome mapping."""
-    from cna.api_status import Outcome, OutcomeClass, status_class_of, status_for
+    from network_assessment.api_status import Outcome, OutcomeClass, status_class_of, status_for
 
     resp = client.post("/intake", json={})
     assert resp.status_code == status_for(Outcome.NOT_IMPLEMENTED)
@@ -157,7 +157,7 @@ def test_health_success_is_2xx(client):
 
 def test_publish_missing_database_url_is_503_not_200(client, api_main, monkeypatch):
     """2.2: an unconfigured dependency is a 5xx (503), never a fake 200."""
-    from cna.api_status import Outcome, status_for
+    from network_assessment.api_status import Outcome, status_for
 
     monkeypatch.setattr(api_main, "DATABASE_URL", "", raising=False)
     resp = client.post("/publish", json={"engagement_id": "e-1"})

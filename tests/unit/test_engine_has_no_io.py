@@ -1,7 +1,7 @@
 """The engine package does no I/O (change set E of REFACTOR_APP.md).
 
 ``cna_azure_network_engine`` is the pure half of the platform: a topology in, a findings
-report out. It must import nothing from the monorepo (``cna.*``), no database driver, no
+report out. It must import nothing from the monorepo (``network_assessment.*``), no database driver, no
 socket or HTTP client, and no Azure SDK outside its ``discovery`` subpackage, which is the
 one place that talks to a cloud and lives behind the ``[azure]`` extra. Two checks, as the
 packaging tests do it: the import graph read from the source with ``ast`` (static, every
@@ -25,7 +25,7 @@ SOURCE = PACKAGE_DIR / "cna_azure_network_engine"
 # ``discovery/`` only.
 FORBIDDEN_ROOTS = frozenset(
     {
-        "cna",
+        "network_assessment",
         "psycopg2",
         "psycopg",
         "sqlite3",

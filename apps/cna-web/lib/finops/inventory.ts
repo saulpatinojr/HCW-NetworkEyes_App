@@ -5,7 +5,7 @@
 // estimate ([VERIFY]) and waste flags aligned with Microsoft's FinOps
 // networking best practices (unattached public IPs, idle gateways, orphaned
 // NAT gateways, unlinked private DNS zones, unprovisioned ER circuits).
-// Field shapes mirror cna/core/topology/azure.py.
+// Field shapes mirror network_assessment/core/topology/azure.py.
 
 import {
   appGatewayMonthly,
@@ -19,7 +19,7 @@ import {
   publicIpMonthly,
 } from "./prices";
 
-// ── Topology slices (subset of cna/core/topology/azure.py v1.3.0) ──────────
+// ── Topology slices (subset of network_assessment/core/topology/azure.py v1.3.0) ──────────
 
 interface PublicIP {
   name: string;

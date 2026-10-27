@@ -1,8 +1,8 @@
-"""Unit tests for cna.diagram_engine.shape_catalog."""
+"""Unit tests for network_assessment.diagram_engine.shape_catalog."""
 
 from __future__ import annotations
 
-from cna.diagram_engine.shape_catalog import (
+from network_assessment.diagram_engine.shape_catalog import (
     ALLOWED_LIBS,
     catalog_snapshot,
     is_allowed_style,

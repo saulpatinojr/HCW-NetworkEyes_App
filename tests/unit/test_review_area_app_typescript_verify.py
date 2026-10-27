@@ -9,8 +9,8 @@ fixable app-area record with no ``blocker_id``, and the set consolidates into
 the single Remediation_Plan without escalation.
 """
 
-from cna.review import AREAS, Severity, consolidate
-from cna.review.areas import app_typescript_verify_findings
+from network_assessment.review import AREAS, Severity, consolidate
+from network_assessment.review.areas import app_typescript_verify_findings
 
 
 def test_findings_are_well_formed_and_in_area():

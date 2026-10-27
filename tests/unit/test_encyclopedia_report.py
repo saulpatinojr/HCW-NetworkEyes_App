@@ -1,4 +1,4 @@
-"""Unit tests for cna.report_engine.encyclopedia_report (Phase D)."""
+"""Unit tests for network_assessment.report_engine.encyclopedia_report (Phase D)."""
 
 from __future__ import annotations
 
@@ -6,13 +6,13 @@ from datetime import datetime
 
 import pytest
 
-from cna.core.findings_schema import (
+from network_assessment.core.findings_schema import (
     Finding,
     FindingRecommendation,
     FrameworkMapping,
 )
-from cna.core.stat_masters import build_stat_masters
-from cna.core.topology.azure import (
+from network_assessment.core.stat_masters import build_stat_masters
+from network_assessment.core.topology.azure import (
     AzureFirewall,
     AzurePublicIP,
     AzureSubnet,
@@ -23,9 +23,9 @@ from cna.core.topology.azure import (
     VNet,
     VNetPeering,
 )
-from cna.diagram_engine.future_state import build_future_state
-from cna.modules.network.analysis.topology_classifier import classify_topology
-from cna.report_engine.encyclopedia_report import (
+from network_assessment.diagram_engine.future_state import build_future_state
+from network_assessment.modules.network.analysis.topology_classifier import classify_topology
+from network_assessment.report_engine.encyclopedia_report import (
     EDITION_CONDENSED,
     EDITION_EXPANDED,
     EncyclopediaReportRenderer,
@@ -33,7 +33,7 @@ from cna.report_engine.encyclopedia_report import (
     build_maturity_dimensions,
     normalize_finding,
 )
-from cna.report_engine.radar_chart import radar_chart_svg
+from network_assessment.report_engine.radar_chart import radar_chart_svg
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────
 
@@ -347,7 +347,7 @@ def test_pdf_render_page_count_if_weasyprint_available(findings, topology):
     except Exception as exc:  # noqa: BLE001 — missing GTK DLLs raise OSError
         pytest.skip(f"weasyprint unavailable: {exc}")
     html = _render(findings, topology, EDITION_EXPANDED)
-    from cna.report_engine.encyclopedia_report import _TEMPLATES_DIR
+    from network_assessment.report_engine.encyclopedia_report import _TEMPLATES_DIR
 
     document = weasyprint.HTML(string=html, base_url=str(_TEMPLATES_DIR)).render()
     assert len(document.pages) >= 8  # fixture is small; real estates reach 20+

@@ -2,7 +2,7 @@
 // To change sets, update here AND the Python client AND the build-time filter
 // in scripts/filter-shape-index.mjs.
 //
-// Two icon mechanisms, one per cloud — mirrors cna/diagram_engine/shape_catalog.py,
+// Two icon mechanisms, one per cloud — mirrors network_assessment/diagram_engine/shape_catalog.py,
 // and reflects what draw.io actually renders (verified 2026-08-28 by exporting
 // every catalogued style with the headless draw.io CLI):
 //

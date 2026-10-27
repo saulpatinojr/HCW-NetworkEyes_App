@@ -12,7 +12,7 @@ Third-party material that is NOT covered by the Apache License
 
 Aeonik typeface (Aeonik-Regular.ttf), by Mark Bloom and Joe Leadbeater.
   Files:   apps/cna-web/app/fonts/Aeonik-Regular.ttf
-           cna/report_engine/templates/assets/fonts/Aeonik-Regular.ttf
+           network_assessment/report_engine/templates/assets/fonts/Aeonik-Regular.ttf
   Licence: the owner states no separate licence is required (2026-10-25). This
            repository holds no licence file for the font and has not verified
            that statement. The font file names "This Is Our Shop EULA" as its
@@ -33,7 +33,7 @@ logo.
            own; they appear in the documents and on the screens):
            apps/cna-web/public/hcw-logo-black.png
            apps/cna-web/public/hcw-logo-white.png
-           cna/report_engine/templates/assets/logos/hcw-logo-cover.png
+           network_assessment/report_engine/templates/assets/logos/hcw-logo-cover.png
   Licence: none. The Apache License does not cover these names or the logo.
            Section 6 of it (Trademarks) grants no permission to use them,
            "except as required for reasonable and customary use in

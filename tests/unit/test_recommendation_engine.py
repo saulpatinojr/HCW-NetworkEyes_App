@@ -1,12 +1,12 @@
-"""Unit tests for cna.ai_engine.recommendation_engine."""
+"""Unit tests for network_assessment.ai_engine.recommendation_engine."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
-from cna.ai_engine.recommendation_engine import RecommendationEngine
-from cna.core.findings_schema import (
+from network_assessment.ai_engine.recommendation_engine import RecommendationEngine
+from network_assessment.core.findings_schema import (
     Finding,
     FindingRecommendation,
     FindingsReport,

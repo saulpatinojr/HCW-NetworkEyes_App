@@ -8,7 +8,7 @@ could not answer (``unknowns``).
 
 The web-tier fields of the monorepo's finding (MCP recommendations, review flags, the static
 cost estimate) are not part of this contract; the monorepo subclasses ``Finding`` and
-``FindingsReport`` to add them (``cna.core.findings_schema``). Field names serialise in
+``FindingsReport`` to add them (``network_assessment.core.findings_schema``). Field names serialise in
 snake_case by default and in camelCase with ``by_alias=True``, which is what the downstream
 lab edition's API emits.
 """

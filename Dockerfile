@@ -1,7 +1,7 @@
 # Multi-stage Dockerfile — hardened
 #
 # Two builds from one file (REFACTOR_APP.md change set I):
-#   EDITION=appliance (default)  the CLI image as before: the full cna package, the engine
+#   EDITION=appliance (default)  the CLI image as before: the full network_assessment package, the engine
 #                                with its [azure] extra, graphviz and draw.io.
 #   EDITION=lab                  build-only: the engine package without [azure], no apps/,
 #                                no server; its CMD is the boundary proof (exit 0 only when
@@ -57,9 +57,9 @@ RUN uv export --locked --no-default-groups --no-emit-project --no-emit-workspace
  && uv export --locked --only-group build -o /tmp/build-requirements.txt \
  && uv pip install --system --no-cache --require-hashes --no-deps -r /tmp/build-requirements.txt
 COPY packages/cna-azure-network-engine/ packages/cna-azure-network-engine/
-COPY cna/ cna/
+COPY network_assessment/ network_assessment/
 # The engine package first (a workspace member, excluded from the hash-checked export
-# above), then the cna package itself; both from the tree, both without build isolation.
+# above), then the network_assessment package itself; both from the tree, both without build isolation.
 RUN uv pip install --system --no-cache --no-deps --no-build-isolation --prefix=/install ./packages/cna-azure-network-engine \
  && uv pip install --system --no-cache --no-deps --no-build-isolation --prefix=/install . \
  && rm -f /tmp/requirements.txt /tmp/build-requirements.txt
@@ -89,7 +89,7 @@ RUN uv export --locked --no-default-groups --no-emit-project --no-emit-workspace
 
 # ---- drawio fetch stage ----
 # Pinned draw.io desktop release, verified by checksum before it can reach
-# the final image. The export pipeline (cna/diagram_engine/export_pipeline.py)
+# the final image. The export pipeline (network_assessment/diagram_engine/export_pipeline.py)
 # degrades to XML-only output without it — its own warning promises the CLI
 # is available "inside the Docker container", which is made true here.
 FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS drawio-fetch
@@ -187,9 +187,9 @@ ENV CNA_EDITION=appliance
 
 # Exec form (hadolint DL3025): no shell between Docker and the process.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD ["cna", "--help"]
+    CMD ["network-assessment", "--help"]
 
-ENTRYPOINT ["cna"]
+ENTRYPOINT ["network-assessment"]
 CMD ["--help"]
 
 # ---- the build that was asked for ----

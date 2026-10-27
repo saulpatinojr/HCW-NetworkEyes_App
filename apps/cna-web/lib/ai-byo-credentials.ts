@@ -11,7 +11,7 @@ import { BYO_ENGINES, clean, type ByoProvider } from "./ai-engine-rules";
  * app UI. Stored as AppSetting rows (global singletons, like ai.activeEngine),
  * AES-256-GCM encrypted with the same lib/crypto.ts helper the cloud
  * credentials use. cna-api reads the same rows and decrypts them with
- * cna/core/credential_crypto.py — keep the key names in sync with
+ * network_assessment/core/credential_crypto.py — keep the key names in sync with
  * apps/cna-api/routers/chat.py.
  *
  *   ai.byo.<provider>.apiKey   encrypted blob

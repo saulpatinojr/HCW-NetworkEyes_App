@@ -1,7 +1,7 @@
 """Unit tests for the ``python-engine-api`` verification step (spec task 4.7).
 
 Asserts the recorded result of the design's section-2 verification suite —
-``ruff check cna apps`` / ``ruff format --check``, ``ty check cna``, and
+``ruff check network_assessment apps`` / ``ruff format --check``, ``ty check network_assessment``, and
 ``pytest`` under the 80% coverage gate (Requirements 2.1-2.4). The clean/passing
 outcomes are recorded verified-compliant, the residual ``ty`` gap is a fixable
 finding, and the two observability Property-16 test failures the suite surfaced
@@ -9,9 +9,9 @@ are recorded (owned by the observability area) so they reach the consolidated
 plan. None of these is an escalation — every gap is engineering-fixable.
 """
 
-from cna.review import AREAS, Severity, consolidate
-from cna.review.areas import python_engine_api_verify_findings
-from cna.review.areas.python_engine_api_verify import COVERAGE_GATE, COVERAGE_PERCENT
+from network_assessment.review import AREAS, Severity, consolidate
+from network_assessment.review.areas import python_engine_api_verify_findings
+from network_assessment.review.areas.python_engine_api_verify import COVERAGE_GATE, COVERAGE_PERCENT
 
 
 def test_findings_are_well_formed_and_in_known_areas():

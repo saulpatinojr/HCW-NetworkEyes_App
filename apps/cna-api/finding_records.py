@@ -10,7 +10,7 @@ web-tier fields maps too.
 
 from __future__ import annotations
 
-from cna.core.findings_schema import Finding
+from network_assessment.core.findings_schema import Finding
 
 _DEFAULT_CATEGORY = "General"
 

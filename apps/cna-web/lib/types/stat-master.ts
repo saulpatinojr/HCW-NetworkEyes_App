@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────────────────────────────────────
-// Stat Master record shape (Phase F frontend mirror of cna/core/stat_masters.py,
+// Stat Master record shape (Phase F frontend mirror of network_assessment/core/stat_masters.py,
 // Phase C). Flat fact records: 8 dimensions + 3 measures.
 // ──────────────────────────────────────────────────────────────────────────────
 

@@ -10,9 +10,9 @@ here carries a blocker_id. The deploy and operations workflows left the core
 with the deployment layer (TODO.md T-504) and are reviewed in the appliances.
 """
 
-from cna.review import AREAS, Severity, consolidate
-from cna.review.areas import cicd_findings, cicd_verify_findings
-from cna.review.areas.cicd import (
+from network_assessment.review import AREAS, Severity, consolidate
+from network_assessment.review.areas import cicd_findings, cicd_verify_findings
+from network_assessment.review.areas.cicd import (
     GITHUB_HOSTED_WORKFLOWS,
     SELF_HOSTED_ONLY_WORKFLOWS,
 )

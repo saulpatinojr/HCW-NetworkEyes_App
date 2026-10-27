@@ -1,6 +1,6 @@
 """Unit tests for the production-readiness blocker model and scope gate.
 
-Example and edge-case coverage for :mod:`cna.review.blockers` — parsing the
+Example and edge-case coverage for :mod:`network_assessment.review.blockers` — parsing the
 ``REVIEW.md`` status table, the CLOSED-vs-not-closed status classification
 (Requirement 10.3, where a ``resolved`` label alone is *not* closed), and the
 scope gate that turns a not-closed blocker's finding into an ``Escalation_Record``
@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from cna.review import (
+from network_assessment.review import (
     Blocker,
     BlockerStatus,
     Finding,

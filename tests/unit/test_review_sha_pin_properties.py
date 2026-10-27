@@ -20,7 +20,7 @@ from __future__ import annotations
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from cna.review.areas.cicd_shapin import (
+from network_assessment.review.areas.cicd_shapin import (
     find_unpinned_references,
     is_sha_pinned,
     is_third_party_action,

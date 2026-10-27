@@ -28,18 +28,22 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-# Ensure the repo root is on the path so `cna` package is importable.
+# Ensure the repo root is on the path so `network_assessment` package is importable.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from cna.api_errors import sanitize_downstream_error
-from cna.api_status import Outcome, status_for
-from cna.aws import AWS_NOT_INSTALLED, aws_extra_installed
-from cna.core.auth import refuse_forbidden_credential_env
-from cna.core.finding_taxonomy import classify_traffic_direction
-from cna.core.logging_config import JSONFormatter
-from cna.core.persistence import EngagementStore
-from cna.modules.network.analysis.azure_findings import RULES, RULES_VERSION, evaluate_azure
-from cna.modules.network.discovery.azure_discovery import (
+from network_assessment.api_errors import sanitize_downstream_error
+from network_assessment.api_status import Outcome, status_for
+from network_assessment.aws import AWS_NOT_INSTALLED, aws_extra_installed
+from network_assessment.core.auth import refuse_forbidden_credential_env
+from network_assessment.core.finding_taxonomy import classify_traffic_direction
+from network_assessment.core.logging_config import JSONFormatter
+from network_assessment.core.persistence import EngagementStore
+from network_assessment.modules.network.analysis.azure_findings import (
+    RULES,
+    RULES_VERSION,
+    evaluate_azure,
+)
+from network_assessment.modules.network.discovery.azure_discovery import (
     AzureDiscovery,
     AzureDiscoveryOptions,
 )
@@ -53,7 +57,7 @@ def _configure_structured_logging() -> None:
     lines, so a JSON error surfaced by ``logger.exception(...)`` could not be
     parsed downstream. Attaching the core engine's :class:`JSONFormatter` to a
     stdout handler on the root logger makes every emitted record (including the
-    ``cna-api`` logger and the ``cna`` engine loggers) a parseable JSON object
+    ``cna-api`` logger and the ``network_assessment`` engine loggers) a parseable JSON object
     carrying at least ``level`` and ``message``, so Container Apps / Log
     Analytics can ingest and query them.
     """
@@ -136,14 +140,14 @@ if not DATABASE_URL:
 
 
 def _api_version() -> str:
-    """Report the installed ``cna`` package version, or ``"unknown"``.
+    """Report the installed ``network_assessment`` package version, or ``"unknown"``.
 
     The version is single-sourced from package metadata (pyproject) rather than
     a literal that drifts from the release. A source checkout with no installed
     dist reports ``"unknown"`` instead of a stale hardcoded number.
     """
     try:
-        return _pkg_version("cna")
+        return _pkg_version("network-assessment")
     except PackageNotFoundError:
         return "unknown"
 
@@ -544,7 +548,7 @@ def publish(request: PublishRequest) -> dict:
     """Publish the engagement's published deliverables to a client portal.
 
     Uploads them to a private per-engagement blob container, generates the
-    portal index via cna.delivery_portal, and returns a TTL-capped SAS portal
+    portal index via network_assessment.delivery_portal, and returns a TTL-capped SAS portal
     URL. The signed URL itself is never persisted (AccessManager's contract) —
     only the publication metadata is recorded, so the caller must surface the
     URL immediately. The cna-worker placeholder that once sketched this job is
@@ -575,11 +579,17 @@ def publish(request: PublishRequest) -> dict:
 
     # Lazy: the delivery_portal stack needs azure-storage-blob, which older
     # API images may not carry.
-    from cna.delivery_portal.access_manager import AccessManager
-    from cna.delivery_portal.azure_blob_deployer import AzureBlobDeployer
-    from cna.delivery_portal.portal_generator import PortalGenerator
-    from cna.delivery_portal.retention_engine import RetentionEngine, RetentionExpiredError
-    from cna.report_engine.deliverable_manifest import DeliverableManifest, DeliverableRecord
+    from network_assessment.delivery_portal.access_manager import AccessManager
+    from network_assessment.delivery_portal.azure_blob_deployer import AzureBlobDeployer
+    from network_assessment.delivery_portal.portal_generator import PortalGenerator
+    from network_assessment.delivery_portal.retention_engine import (
+        RetentionEngine,
+        RetentionExpiredError,
+    )
+    from network_assessment.report_engine.deliverable_manifest import (
+        DeliverableManifest,
+        DeliverableRecord,
+    )
 
     # DD-019: the retention clock starts at the FIRST publication.
     first_publication = _load_latest_publication(engagement_id)
@@ -720,7 +730,7 @@ async def test_access(request: TestAccessRequest) -> dict:
     try:
         from azure.mgmt.subscription import SubscriptionClient
 
-        from cna.core.auth import build_azure_credential
+        from network_assessment.core.auth import build_azure_credential
 
         client = SubscriptionClient(build_azure_credential())
         visible = {
@@ -1001,7 +1011,7 @@ def _run_azure_discovery(request: DiscoveryStartRequest) -> None:
 def _run_aws_discovery(request: DiscoveryStartRequest) -> None:
     """AWS counterpart of _run_azure_discovery (CNA-0.90 §3: AWS end-to-end).
 
-    Findings come from the cna package's AnalysisEngine AWS rules; the Azure
+    Findings come from the network_assessment package's AnalysisEngine AWS rules; the Azure
     path evaluates the typed rule registry instead. Both write through
     finding_to_record so every persisted finding carries its rule id.
     """
@@ -1018,11 +1028,11 @@ def _run_aws_discovery(request: DiscoveryStartRequest) -> None:
 
     try:
         # Lazy: keeps Azure-only deployments importable without boto3.
-        from cna.ai_engine.analysis_engine import AnalysisEngine, AnalysisOptions
-        from cna.modules.network.discovery.aws_discovery import (
+        from network_assessment.ai_engine.analysis_engine import AnalysisEngine, AnalysisOptions
+        from network_assessment.modules.network.discovery.aws_discovery import (
             AWSDiscovery,
         )
-        from cna.modules.network.discovery.aws_discovery import (
+        from network_assessment.modules.network.discovery.aws_discovery import (
             DiscoveryOptions as AwsDiscoveryOptions,
         )
 

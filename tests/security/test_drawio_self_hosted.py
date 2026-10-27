@@ -45,7 +45,7 @@ PUBLIC_HOST = re.compile(
 
 #: Where code, configuration and tests live. Documentation and history (markdown) are not scanned: they may name a
 #: host to explain it.
-SCANNED_ROOTS = ("apps", "cna", "packages", "scripts", ".github", "infra", "tests")
+SCANNED_ROOTS = ("apps", "network_assessment", "packages", "scripts", ".github", "infra", "tests")
 SCANNED_FILES = ("Dockerfile", "docker-compose.yml", "pyproject.toml", ".env.example")
 SKIPPED_DIRECTORIES = frozenset(
     {"node_modules", ".next", "__pycache__", ".ruff_cache", ".pytest_cache", ".mypy_cache", ".venv"}
@@ -274,7 +274,7 @@ class TestNoLiveFileNamesAPublicDrawioHost:
             "apps/cna-web/lib/drawio-embed.ts",
             "apps/cna-web/lib/drawio-mcp/server.ts",
             "apps/cna-web/Dockerfile",
-            "cna/ai_engine/mcp_client/drawio_mcp_client.py",
+            "network_assessment/ai_engine/mcp_client/drawio_mcp_client.py",
             "tests/unit/test_drawio_mcp_client.py",
             ".github/workflows/380-drawio-pin-check.yml",
         ):

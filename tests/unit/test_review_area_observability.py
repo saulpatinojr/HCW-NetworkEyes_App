@@ -9,8 +9,8 @@ invariants are that only the live-Bedrock finding is blocker-owned (R-005) and
 that it gates to an ``Escalation_Record``.
 """
 
-from cna.review import AREAS, Severity, consolidate, gate_finding, load_blockers
-from cna.review.areas import observability_findings
+from network_assessment.review import AREAS, Severity, consolidate, gate_finding, load_blockers
+from network_assessment.review.areas import observability_findings
 
 
 def test_findings_are_well_formed_and_in_area():

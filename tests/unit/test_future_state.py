@@ -2,7 +2,7 @@
 
 import xml.etree.ElementTree as ET
 
-from cna.core.topology.azure import (
+from network_assessment.core.topology.azure import (
     AzureRouteServer,
     AzureSubscriptionTopology,
     AzureTopology,
@@ -12,12 +12,12 @@ from cna.core.topology.azure import (
     VNet,
     VNetPeering,
 )
-from cna.diagram_engine.drawio_generator import (
+from network_assessment.diagram_engine.drawio_generator import (
     RECOMMENDED_SUFFIX,
     generate_future_state_topology,
 )
-from cna.diagram_engine.future_state import build_future_state
-from cna.modules.network.analysis import classify_topology
+from network_assessment.diagram_engine.future_state import build_future_state
+from network_assessment.modules.network.analysis import classify_topology
 
 SUB = "00000000-0000-0000-0000-000000000001"
 

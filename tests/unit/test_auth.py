@@ -1,10 +1,14 @@
-"""Unit tests for cna.core.auth — credential constructors and env-var loading."""
+"""Unit tests for network_assessment.core.auth — credential constructors and env-var loading."""
 
 from __future__ import annotations
 
 import pytest
 
-from cna.core.auth import AWSCredentials, AzureCredentials, KeyVaultCredentialProvider
+from network_assessment.core.auth import (
+    AWSCredentials,
+    AzureCredentials,
+    KeyVaultCredentialProvider,
+)
 
 # ── AWSCredentials ─────────────────────────────────────────────────────────────
 
@@ -75,7 +79,7 @@ class TestAzureCredentials:
             captured["env"] = dict(env)
             return "credential"
 
-        monkeypatch.setattr("cna.core.auth.build_azure_credential", fake_build)
+        monkeypatch.setattr("network_assessment.core.auth.build_azure_credential", fake_build)
         monkeypatch.delenv("AZURE_CLIENT_ID", raising=False)
         creds = AzureCredentials(tenant_id="t", client_id="00000000-0000-0000-0000-000000000003")
         assert creds.get_credential() == "credential"

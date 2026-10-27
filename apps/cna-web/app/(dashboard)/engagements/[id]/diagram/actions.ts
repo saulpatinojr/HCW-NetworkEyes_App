@@ -222,7 +222,7 @@ export async function uploadDiagramExport(
 /**
  * Generate a draw.io diagram from the engagement's discovery data.
  *
- * The diagram engine lives in the Python package (cna.diagram_engine), so this
+ * The diagram engine lives in the Python package (network_assessment.diagram_engine), so this
  * calls cna-api and persists the returned XML through the same path the
  * editor's Save button uses — meaning the generated diagram becomes the latest
  * NETWORK_DIAGRAM document and the editor hydrates from it on the next render.

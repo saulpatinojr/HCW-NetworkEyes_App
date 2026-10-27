@@ -11,8 +11,8 @@ deployment model needs no AWS account (design section "4. Terraform AWS"
 escalation boundary).
 """
 
-from cna.review import AREAS, Severity, consolidate
-from cna.review.areas import app_typescript_findings
+from network_assessment.review import AREAS, Severity, consolidate
+from network_assessment.review.areas import app_typescript_findings
 
 
 def test_findings_are_well_formed_and_in_area():

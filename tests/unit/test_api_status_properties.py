@@ -17,7 +17,7 @@ from __future__ import annotations
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from cna.api_status import (
+from network_assessment.api_status import (
     Outcome,
     OutcomeClass,
     class_for,

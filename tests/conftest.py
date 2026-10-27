@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from cna.aws import INSTALL_HINT, aws_extra_installed
+from network_assessment.aws import INSTALL_HINT, aws_extra_installed
 
 
 def pytest_collection_modifyitems(config, items):  # noqa: ARG001

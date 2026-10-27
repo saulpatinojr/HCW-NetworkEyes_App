@@ -2,7 +2,7 @@
 
 Stateless: each POST loads the engagement's persisted Finding rows,
 MetricRecord summary and latest discovery topology from Postgres, builds a
-GroundingContext, and asks cna.ai_engine.chat_agent.GroundedChatAgent for an
+GroundingContext, and asks network_assessment.ai_engine.chat_agent.GroundedChatAgent for an
 answer over that context only. No conversation state is stored server-side —
 the client resends the full message list each turn.
 
@@ -10,7 +10,7 @@ The active AI engine follows the same AppSetting 'ai.activeEngine' switch
 the web tier uses (apps/cna-web/lib/ai-engine.ts). In bring-your-own mode
 (CNA_AI_MODE=byo-api) the admin-entered Anthropic/OpenAI keys are read from
 the same table (ai.byo.<provider>.apiKey, AES-256-GCM blobs written by
-lib/crypto.ts) and decrypted here with cna.core.credential_crypto. Keys never
+lib/crypto.ts) and decrypted here with network_assessment.core.credential_crypto. Keys never
 leave this process and are never logged.
 """
 
@@ -24,10 +24,10 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-# Ensure the repo root is on the path so `cna` package is importable.
+# Ensure the repo root is on the path so `network_assessment` package is importable.
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from cna.ai_engine.chat_agent import (
+from network_assessment.ai_engine.chat_agent import (
     BYO_ENGINES,
     MODE_BYO_API,
     ChatConfigError,
@@ -35,9 +35,9 @@ from cna.ai_engine.chat_agent import (
     build_grounding_context,
     resolve_ai_mode,
 )
-from cna.api_errors import sanitize_downstream_error
-from cna.api_status import Outcome, status_for
-from cna.core.credential_crypto import CredentialCryptoError, decrypt
+from network_assessment.api_errors import sanitize_downstream_error
+from network_assessment.api_status import Outcome, status_for
+from network_assessment.core.credential_crypto import CredentialCryptoError, decrypt
 
 logger = logging.getLogger("cna-api.chat")
 
@@ -143,8 +143,10 @@ def _load_topology_classification(engagement_id: str) -> tuple[str | None, str |
     if not row or not row["topologyJson"]:
         return None, None
     try:
-        from cna.core.topology.azure import AzureTopology
-        from cna.modules.network.analysis.topology_classifier import classify_topology
+        from network_assessment.core.topology.azure import AzureTopology
+        from network_assessment.modules.network.analysis.topology_classifier import (
+            classify_topology,
+        )
 
         classification = classify_topology(AzureTopology.model_validate_json(row["topologyJson"]))
         return classification.pattern, classification.rationale

@@ -94,7 +94,11 @@ class TestDockerfile:
     def test_the_lab_final_stage_ships_no_app_no_server_and_no_pip(self, stages: dict[str, str]):
         body = stages["final-lab"]
         assert "COPY --from=builder-lab /install-lab /usr/local" in body
-        assert "apps/" not in body and "COPY cna/" not in body and "COPY . ." not in body
+        assert (
+            "apps/" not in body
+            and "COPY network_assessment/" not in body
+            and "COPY . ." not in body
+        )
         assert "uvicorn" not in body and "EXPOSE" not in body and "HEALTHCHECK" not in body
         assert "pip uninstall -y pip" in body
         # Numeric USER (hadolint DL3066): uid 1001 is the `cna` user created two lines earlier.
@@ -104,7 +108,7 @@ class TestDockerfile:
 
     def test_the_appliance_stage_is_the_image_as_before(self, stages: dict[str, str]):
         body = stages["final-appliance"]
-        assert 'ENTRYPOINT ["cna"]' in body
+        assert 'ENTRYPOINT ["network-assessment"]' in body
         assert "ENV CNA_EDITION=appliance" in body
         assert "COPY --from=builder --chown=cna:cna /install /usr/local" in body
 

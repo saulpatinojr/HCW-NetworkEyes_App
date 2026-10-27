@@ -1,6 +1,6 @@
 """Unit tests for finding taxonomy traffic-direction classification."""
 
-from cna.core.finding_taxonomy import classify_traffic_direction
+from network_assessment.core.finding_taxonomy import classify_traffic_direction
 
 
 def test_rule_id_east_west():

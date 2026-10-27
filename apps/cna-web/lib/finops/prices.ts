@@ -1,7 +1,7 @@
 // Static Azure networking price table — monthly USD estimates.
 //
 // IMPORTANT: These are static list-price ESTIMATES (East US, pay-as-you-go,
-// 730 hrs/month) mirroring cna/modules/network/analysis/azure_network_prices.py
+// 730 hrs/month) mirroring network_assessment/modules/network/analysis/azure_network_prices.py
 // (keep the two in sync). They do not reflect the client's negotiated rates,
 // reservations, or region. Every figure derived from this table MUST be
 // rendered with a [VERIFY] flag in reports and in text shown to users, per the

@@ -7,8 +7,8 @@ plan entry per still-open doc task among T-103/T-304 while the Done T-401 is
 recorded compliant (9.3), and the R-009 Wiki-publication escalation (9.4).
 """
 
-from cna.review import AREAS, Severity, consolidate, gate_finding, load_blockers
-from cna.review.areas import documentation_findings, documentation_verify_findings
+from network_assessment.review import AREAS, Severity, consolidate, gate_finding, load_blockers
+from network_assessment.review.areas import documentation_findings, documentation_verify_findings
 
 
 def test_findings_are_well_formed_and_in_area():
@@ -28,7 +28,7 @@ def test_records_version_and_cli_accuracy_verified_compliant():
     assert version.severity is Severity.INFORMATIONAL
     assert "0.8.0b0" in version.proposed_action
     assert cli.severity is Severity.INFORMATIONAL
-    assert "cna.cli.main:cli" in cli.proposed_action
+    assert "network_assessment.cli.main:cli" in cli.proposed_action
 
 
 def test_records_four_document_model_and_workflow_accuracy():
@@ -140,7 +140,7 @@ def test_verify_records_validator_link_and_command_checks():
     # The command/workflow entry names a referenced workflow and the CLI entry point.
     commands = by_key["documentation:commands-and-workflows-resolve"].proposed_action
     assert "300-test-codebase.yml" in commands
-    assert "cna.cli.main:cli" in commands
+    assert "network_assessment.cli.main:cli" in commands
 
 
 def test_verify_findings_consolidate_into_ordered_plan():

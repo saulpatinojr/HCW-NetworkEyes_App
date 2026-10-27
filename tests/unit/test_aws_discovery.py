@@ -24,17 +24,20 @@ import pytest
 pytest.importorskip("botocore", reason="needs the [aws] extra")
 import botocore.exceptions  # noqa: E402
 
-from cna.core.exceptions import CNAAuthError, CNARateLimitError  # noqa: E402
-from cna.core.topology.aws import AWSAccount, AWSRegionTopology, AWSTopology  # noqa: E402
-from cna.core.topology.common import AttachmentType, PeeringState  # noqa: E402
-from cna.modules.network.discovery.aws_discovery import (  # noqa: E402
+from network_assessment.core.exceptions import (  # noqa: E402
+    NetworkAssessmentAuthError,
+    NetworkAssessmentRateLimitError,
+)
+from network_assessment.core.topology.aws import AWSAccount, AWSRegionTopology, AWSTopology  # noqa: E402
+from network_assessment.core.topology.common import AttachmentType, PeeringState  # noqa: E402
+from network_assessment.modules.network.discovery.aws_discovery import (  # noqa: E402
     AWSDiscovery,
     DiscoveryOptions,
 )
 
 pytestmark = pytest.mark.aws
 
-MODULE = "cna.modules.network.discovery.aws_discovery"
+MODULE = "network_assessment.modules.network.discovery.aws_discovery"
 
 
 @pytest.fixture
@@ -373,14 +376,14 @@ class TestRun:
         """
         session = MagicMock()
         session.client.return_value.get_caller_identity.side_effect = [
-            CNARateLimitError("Throttling"),
+            NetworkAssessmentRateLimitError("Throttling"),
             {"Account": "111111111111"},
         ]
         with (
             patch(f"{MODULE}.boto3.Session", return_value=session),
             patch.object(discovery, "_list_org_accounts", return_value=[]),
             patch.object(discovery, "_discover_account"),
-            patch("cna.core.throttle.time.sleep") as sleep,
+            patch("network_assessment.core.throttle.time.sleep") as sleep,
         ):
             topology = discovery.run()
 
@@ -390,25 +393,27 @@ class TestRun:
 
     def test_gives_up_after_the_retry_budget_is_exhausted(self, discovery):
         session = MagicMock()
-        session.client.return_value.get_caller_identity.side_effect = CNARateLimitError(
-            "Throttling"
+        session.client.return_value.get_caller_identity.side_effect = (
+            NetworkAssessmentRateLimitError("Throttling")
         )
         with (
             patch(f"{MODULE}.boto3.Session", return_value=session),
             patch.object(discovery, "_discover_account"),
-            patch("cna.core.throttle.time.sleep"),
-            pytest.raises(CNARateLimitError),
+            patch("network_assessment.core.throttle.time.sleep"),
+            pytest.raises(NetworkAssessmentRateLimitError),
         ):
             discovery.run()
 
     def test_propagates_an_auth_failure_rather_than_returning_empty(self, discovery):
-        """The docstring promises CNAAuthError; a silent empty topology would be worse."""
+        """The docstring promises NetworkAssessmentAuthError; a silent empty topology would be worse."""
         session = MagicMock()
-        session.client.return_value.get_caller_identity.side_effect = CNAAuthError("bad creds")
+        session.client.return_value.get_caller_identity.side_effect = NetworkAssessmentAuthError(
+            "bad creds"
+        )
         with (
             patch(f"{MODULE}.boto3.Session", return_value=session),
             patch.object(discovery, "_discover_account") as discover,
-            pytest.raises(CNAAuthError),
+            pytest.raises(NetworkAssessmentAuthError),
         ):
             discovery.run()
 
@@ -480,7 +485,7 @@ class TestAccessDeniedAuditEvent:
     """
 
     def test_records_the_event_instead_of_raising_typeerror(self, discovery, tmp_path):
-        from cna.core.persistence import EngagementStore
+        from network_assessment.core.persistence import EngagementStore
 
         store = EngagementStore(data_dir=tmp_path)
         engagement_id = "test-20260305-0003"
@@ -489,7 +494,9 @@ class TestAccessDeniedAuditEvent:
 
         account = AWSAccount(account_id="222222222222", account_name="denied")
         topology = MagicMock()
-        with patch.object(discovery, "_assume_role", side_effect=CNAAuthError("AssumeRole failed")):
+        with patch.object(
+            discovery, "_assume_role", side_effect=NetworkAssessmentAuthError("AssumeRole failed")
+        ):
             discovery._discover_account(account, "CNA-ReadOnly", topology, engagement_id)
 
         audit = store.engagement_dir(engagement_id) / store.AUDIT_LOG_FILE
@@ -519,7 +526,7 @@ class TestRegionCheckpointWrite:
     """
 
     def test_writes_a_checkpoint_per_region(self, discovery, tmp_path):
-        from cna.core.persistence import EngagementStore
+        from network_assessment.core.persistence import EngagementStore
 
         store = EngagementStore(data_dir=tmp_path)
         engagement_id = "test-20260305-0004"
@@ -627,7 +634,7 @@ class TestAssumeRole:
         sts.assume_role.side_effect = _client_error(code, "not authorized", "AssumeRole")
         discovery._mgmt_session.client.return_value = sts
 
-        with pytest.raises(CNAAuthError, match="AssumeRole failed"):
+        with pytest.raises(NetworkAssessmentAuthError, match="AssumeRole failed"):
             discovery._assume_role("222222222222", "CNA-ReadOnly")
 
     def test_other_client_errors_propagate_unchanged(self, discovery):
@@ -735,7 +742,7 @@ class TestDiscoverRegion:
         session, client = self._session()
         client.get_paginator.side_effect = _client_error("AuthFailure", "token expired")
 
-        with pytest.raises(CNAAuthError, match="Auth failure"):
+        with pytest.raises(NetworkAssessmentAuthError, match="Auth failure"):
             discovery._discover_region(session, "123456789012", "us-east-1")
 
     def test_unexpected_api_error_blocks_the_region_without_raising(self, discovery):
@@ -1342,7 +1349,9 @@ class TestDiscoverAccount:
         """The T-402 regression: `cloud` travels inside the event dict, not positionally."""
         account = AWSAccount(account_id="222222222222")
         topology = self._topology()
-        with patch.object(discovery, "_assume_role", side_effect=CNAAuthError("denied")):
+        with patch.object(
+            discovery, "_assume_role", side_effect=NetworkAssessmentAuthError("denied")
+        ):
             discovery._discover_account(account, "CNA-ReadOnly", topology, "eng-1")
 
         assert topology.regions == []

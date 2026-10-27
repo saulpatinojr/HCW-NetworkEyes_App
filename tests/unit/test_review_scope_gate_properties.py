@@ -24,7 +24,7 @@ from __future__ import annotations
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from cna.review import (
+from network_assessment.review import (
     Blocker,
     BlockerStatus,
     Finding,

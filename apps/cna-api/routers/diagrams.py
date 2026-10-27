@@ -5,8 +5,8 @@ persisted discovery topologies from Postgres, runs them through the diagram
 engine, and returns one multi-page .drawio document that cna-web stores as a
 NETWORK_DIAGRAM document and loads into the embedded editor.
 
-This is the seam that was missing. cna.ai_engine.diagram_authoring
-(`author_engagement_bundle`) and the generators under cna.diagram_engine have
+This is the seam that was missing. network_assessment.ai_engine.diagram_authoring
+(`author_engagement_bundle`) and the generators under network_assessment.diagram_engine have
 existed since Phase B, but nothing called them: the docstring says "the worker
 hooks it after analysis", and the worker is a placeholder. As a result the
 Diagram page only ever offered a blank canvas.
@@ -22,14 +22,14 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-# Ensure the repo root is on the path so `cna` package is importable.
+# Ensure the repo root is on the path so `network_assessment` package is importable.
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from cna.ai_engine.diagram_authoring import author_engagement_bundle
-from cna.core.topology.aws import AWSTopology
-from cna.core.topology.azure import AzureTopology
-from cna.diagram_engine.c4_layering import C4Layer
-from cna.diagram_engine.drawio_generator import merge_diagrams
+from network_assessment.ai_engine.diagram_authoring import author_engagement_bundle
+from network_assessment.core.topology.aws import AWSTopology
+from network_assessment.core.topology.azure import AzureTopology
+from network_assessment.diagram_engine.c4_layering import C4Layer
+from network_assessment.diagram_engine.drawio_generator import merge_diagrams
 
 logger = logging.getLogger("cna-api.diagrams")
 

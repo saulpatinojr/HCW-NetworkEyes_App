@@ -31,7 +31,7 @@ const NORTH_SOUTH_RE =
 const MANAGEMENT_RE =
   /\b(bastion|diagnostic|monitor|flow log|network watcher|log analytics|management|rbac|role.based|policy|governance)\b/i;
 
-/** Deterministic heuristic mirror of cna/core/finding_taxonomy.py (Phase B). */
+/** Deterministic heuristic mirror of network_assessment/core/finding_taxonomy.py (Phase B). */
 export function classifyTrafficDirection(f: FindingLike): TrafficDirection {
   const explicit = (f.trafficDirection ?? "").toLowerCase();
   if (explicit === "east_west" || explicit === "north_south" || explicit === "management") {

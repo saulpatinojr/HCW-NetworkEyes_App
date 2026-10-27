@@ -1,4 +1,4 @@
-"""The split of ``cna.core.topology_schema`` into ``cna.core.topology.{common,azure,aws}``.
+"""The split of ``network_assessment.core.topology_schema`` into ``network_assessment.core.topology.{common,azure,aws}``.
 
 Pins the contract of the split: the old import path resolves to the very same classes,
 Azure and AWS carry their own version constants, the Azure module never loads the AWS
@@ -15,19 +15,19 @@ from pathlib import Path
 
 import pytest
 
-from cna.core import topology
-from cna.core.topology import aws, azure, common
+from network_assessment.core import topology
+from network_assessment.core.topology import aws, azure, common
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SHIM = REPO_ROOT / "cna" / "core" / "topology_schema.py"
-TOPOLOGY_DIR = REPO_ROOT / "cna" / "core" / "topology"
+SHIM = REPO_ROOT / "network_assessment" / "core" / "topology_schema.py"
+TOPOLOGY_DIR = REPO_ROOT / "network_assessment" / "core" / "topology"
 
 
 @pytest.fixture(scope="module")
 def shim():
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
-        import cna.core.topology_schema as module
+        import network_assessment.core.topology_schema as module
     return module
 
 
@@ -74,22 +74,22 @@ class TestModuleBoundaries:
 
     def test_azure_module_imports_nothing_from_aws(self):
         imported = self._imported_modules(TOPOLOGY_DIR / "azure.py")
-        assert "cna.core.topology.aws" not in imported
-        assert "cna.core.topology_schema" not in imported
+        assert "network_assessment.core.topology.aws" not in imported
+        assert "network_assessment.core.topology_schema" not in imported
         # The Azure model lives in the engine package; this module re-exports it.
         assert "cna_azure_network_engine.model.azure" in imported
 
     def test_aws_module_imports_nothing_from_azure(self):
         imported = self._imported_modules(TOPOLOGY_DIR / "aws.py")
-        assert "cna.core.topology.azure" not in imported
-        assert "cna.core.topology_schema" not in imported
-        assert "cna.core.topology.common" in imported
+        assert "network_assessment.core.topology.azure" not in imported
+        assert "network_assessment.core.topology_schema" not in imported
+        assert "network_assessment.core.topology.common" in imported
         assert not any(m.startswith("cna_azure_network_engine") for m in imported)
 
     def test_importing_azure_does_not_load_aws(self):
         code = (
-            "import sys; import cna.core.topology.azure; "
-            "assert 'cna.core.topology.aws' not in sys.modules, sorted(sys.modules)"
+            "import sys; import network_assessment.core.topology.azure; "
+            "assert 'network_assessment.core.topology.aws' not in sys.modules, sorted(sys.modules)"
         )
         result = subprocess.run(
             [sys.executable, "-c", code], capture_output=True, text=True, check=False
@@ -108,10 +108,12 @@ class TestModuleBoundaries:
 class TestNoProjectSourceImportsTheDeprecatedPath:
     def test_only_the_shim_mentions_the_old_import(self):
         offenders = []
-        for top in ("cna", "apps"):
+        for top in ("network_assessment", "apps"):
             for path in (REPO_ROOT / top).rglob("*.py"):
                 if path == SHIM:
                     continue
-                if "cna.core.topology_schema import" in path.read_text(errors="replace"):
+                if "network_assessment.core.topology_schema import" in path.read_text(
+                    errors="replace"
+                ):
                     offenders.append(str(path.relative_to(REPO_ROOT)))
         assert offenders == []

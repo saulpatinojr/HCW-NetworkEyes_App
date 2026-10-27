@@ -7,11 +7,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from cna.delivery_portal.azure_blob_deployer import (
+from network_assessment.delivery_portal.azure_blob_deployer import (
     _MAX_SAS_TTL_HOURS,
     AzureBlobDeployer,
 )
-from cna.delivery_portal.s3_deployer import (
+from network_assessment.delivery_portal.s3_deployer import (
     _MAX_PRESIGNED_TTL_SECONDS,
     S3Deployer,
 )
@@ -45,7 +45,9 @@ def _make_azure_deployer(mock_client: MagicMock | None = None, **kwargs) -> Azur
 
 class TestS3DeployerTTLCap:
     def test_ttl_capped_at_max(self):
-        with patch("cna.delivery_portal.s3_deployer.S3Deployer._make_client") as mock_mk:
+        with patch(
+            "network_assessment.delivery_portal.s3_deployer.S3Deployer._make_client"
+        ) as mock_mk:
             mock_mk.return_value = MagicMock()
             deployer = S3Deployer(
                 bucket="bucket",
@@ -54,7 +56,9 @@ class TestS3DeployerTTLCap:
         assert deployer._ttl == _MAX_PRESIGNED_TTL_SECONDS
 
     def test_ttl_under_cap_unchanged(self):
-        with patch("cna.delivery_portal.s3_deployer.S3Deployer._make_client") as mock_mk:
+        with patch(
+            "network_assessment.delivery_portal.s3_deployer.S3Deployer._make_client"
+        ) as mock_mk:
             mock_mk.return_value = MagicMock()
             deployer = S3Deployer(bucket="bucket", presigned_ttl_seconds=3600)
         assert deployer._ttl == 3600
@@ -185,7 +189,9 @@ class TestS3DeployerMakeClientImportError:
 
 class TestAzureBlobDeployerTTLCap:
     def test_ttl_capped_at_max(self):
-        with patch("cna.delivery_portal.azure_blob_deployer.AzureBlobDeployer._make_client") as mk:
+        with patch(
+            "network_assessment.delivery_portal.azure_blob_deployer.AzureBlobDeployer._make_client"
+        ) as mk:
             mk.return_value = MagicMock()
             deployer = AzureBlobDeployer(
                 account_name="account",
@@ -195,7 +201,9 @@ class TestAzureBlobDeployerTTLCap:
         assert deployer._ttl_hours == _MAX_SAS_TTL_HOURS
 
     def test_ttl_under_cap_unchanged(self):
-        with patch("cna.delivery_portal.azure_blob_deployer.AzureBlobDeployer._make_client") as mk:
+        with patch(
+            "network_assessment.delivery_portal.azure_blob_deployer.AzureBlobDeployer._make_client"
+        ) as mk:
             mk.return_value = MagicMock()
             deployer = AzureBlobDeployer(
                 account_name="account",

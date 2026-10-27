@@ -11,7 +11,7 @@ import path from "node:path";
 import process from "node:process";
 
 // Keep in lockstep with lib/drawio-mcp/allow-list.ts and
-// cna/diagram_engine/shape_catalog.py: Azure icons are SVG image paths
+// network_assessment/diagram_engine/shape_catalog.py: Azure icons are SVG image paths
 // (there is no mxgraph.azure2 stencil set — it renders as a blank blue box),
 // AWS icons are aws4 stencils.
 const ALLOWED_LIBS = ["azure2", "aws4"];

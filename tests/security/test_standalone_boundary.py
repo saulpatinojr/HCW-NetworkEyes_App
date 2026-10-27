@@ -157,7 +157,7 @@ class TestNoOtherRepositoryIsNamed:
             "Dockerfile",
             "apps/cna-api/Dockerfile",
             "apps/cna-web/lib/image-update.ts",
-            "cna/core/auth.py",
+            "network_assessment/core/auth.py",
             ".env.example",
             "README.md",
             "CLAUDE.md",

@@ -7,7 +7,7 @@ human intro page; this file states the rules an agent must not infer wrongly.
 
 This repository, `saulpatinojr/HCW-NetworkEyes_App`, is the **product** of the NetworkEyes App of the
 HCW App-to-AddOn initiative: the single source of application code — `apps/cna-web`, `apps/cna-api`,
-`apps/cna-worker`, and the `cna` Python package — and the pipeline that builds and publishes their
+`apps/cna-worker`, and the `network_assessment` Python package — and the pipeline that builds and publishes their
 container images (`200-build-images.yml` → Docker Hub `<namespace>/img-ne-appliance-app`).
 
 Users pull the images, not this repository. **NetworkEyes stands alone** (owner decision 2026-10-25): this
@@ -108,13 +108,13 @@ change under `Changed` in `CHANGELOG.md` (and in the release notes) where a cons
 
 - Engine ids are `azure-openai`, `bedrock`, `anthropic`, `openai`. The selection
   rules live in `apps/cna-web/lib/ai-engine-rules.ts` and
-  `cna/ai_engine/chat_agent.py` and are pinned by **one shared vector table**
+  `network_assessment/ai_engine/chat_agent.py` and are pinned by **one shared vector table**
   (`ai-engine-rules.test.ts`, `tests/unit/test_chat_agent.py`). Change both
   files and both tests together.
 - `saas` mode uses the cloud-native engine for the appliance's cloud. `byo-api`
   mode uses admin-entered Anthropic/OpenAI keys. Those keys are the **only**
   secrets entered in the app UI; they are AES-256-GCM encrypted
-  (`apps/cna-web/lib/crypto.ts` ↔ `cna/core/credential_crypto.py`, kept
+  (`apps/cna-web/lib/crypto.ts` ↔ `network_assessment/core/credential_crypto.py`, kept
   byte-compatible by a Node-generated test vector) and stored as `AppSetting`
   rows `ai.byo.<provider>.{apiKey,keyHint,model}`. Never log, return, or
   persist a decrypted key anywhere else; never accept one through env,

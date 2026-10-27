@@ -19,7 +19,7 @@ from __future__ import annotations
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
-from cna.review.areas.security_secrets import secret_location_finding
+from network_assessment.review.areas.security_secrets import secret_location_finding
 
 # A minimum of 100 iterations per the spec's property-test configuration.
 _PROPERTY_SETTINGS = settings(max_examples=200)

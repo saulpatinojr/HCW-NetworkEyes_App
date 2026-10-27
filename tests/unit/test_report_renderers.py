@@ -1,4 +1,4 @@
-"""Unit tests for cna.report_engine.regional_report and presentation_deck."""
+"""Unit tests for network_assessment.report_engine.regional_report and presentation_deck."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
-from cna.core.findings_schema import Finding, FindingsReport, FrameworkMapping
-from cna.report_engine.regional_report import RegionalReportRenderer
+from network_assessment.core.findings_schema import Finding, FindingsReport, FrameworkMapping
+from network_assessment.report_engine.regional_report import RegionalReportRenderer
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────
 
@@ -188,7 +188,7 @@ class TestRegionalReportHTMLRender:
 class TestPresentationDeckBuilder:
     def test_build_skips_gracefully_without_pptx(self, tmp_path):
         """python-pptx not installed → logs warning, returns path without crashing."""
-        from cna.report_engine.presentation_deck import PresentationDeckBuilder
+        from network_assessment.report_engine.presentation_deck import PresentationDeckBuilder
 
         with patch.dict("sys.modules", {"pptx": None, "pptx.util": None}):
             builder = PresentationDeckBuilder()
@@ -205,7 +205,7 @@ class TestPresentationDeckBuilder:
         except ImportError:
             pytest.skip("python-pptx not installed in this environment")
 
-        from cna.report_engine.presentation_deck import PresentationDeckBuilder
+        from network_assessment.report_engine.presentation_deck import PresentationDeckBuilder
 
         builder = PresentationDeckBuilder()
         report = _make_report(
@@ -227,7 +227,7 @@ class TestPresentationDeckBuilder:
         except ImportError:
             pytest.skip("python-pptx not installed in this environment")
 
-        from cna.report_engine.presentation_deck import PresentationDeckBuilder
+        from network_assessment.report_engine.presentation_deck import PresentationDeckBuilder
 
         builder = PresentationDeckBuilder()
         report = _make_report(findings=[])

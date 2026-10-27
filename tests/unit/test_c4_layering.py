@@ -1,8 +1,8 @@
-"""Unit tests for cna.diagram_engine.c4_layering."""
+"""Unit tests for network_assessment.diagram_engine.c4_layering."""
 
 from __future__ import annotations
 
-from cna.diagram_engine.c4_layering import (
+from network_assessment.diagram_engine.c4_layering import (
     AUDIENCE_BY_LAYER,
     C4Diagram,
     C4Layer,

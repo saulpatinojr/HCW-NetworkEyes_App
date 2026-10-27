@@ -23,8 +23,8 @@ from unittest.mock import patch
 
 import pytest
 
-from cna.diagram_engine.export_pipeline import DiagramExporter, ExportPipelineError
-from cna.diagram_engine.naming import diagram_filename
+from network_assessment.diagram_engine.export_pipeline import DiagramExporter, ExportPipelineError
+from network_assessment.diagram_engine.naming import diagram_filename
 
 
 @pytest.fixture
@@ -151,8 +151,12 @@ class TestRealDrawioExport:
     """
 
     def test_export_produces_real_svg(self, tmp_output):
-        from cna.core.topology.azure import AzureSubnet, AzureSubscriptionTopology, VNet
-        from cna.diagram_engine.drawio_generator import generate_vnet_topology
+        from network_assessment.core.topology.azure import (
+            AzureSubnet,
+            AzureSubscriptionTopology,
+            VNet,
+        )
+        from network_assessment.diagram_engine.drawio_generator import generate_vnet_topology
 
         sub = AzureSubscriptionTopology(
             subscription_id="sub-1",
@@ -181,14 +185,16 @@ class TestRealDrawioExport:
         assert "<svg" in svg and len(svg) > 1000
 
     def test_encyclopedia_diagram_svgs_render(self):
-        from cna.core.topology.azure import (
+        from network_assessment.core.topology.azure import (
             AzureSubnet,
             AzureSubscriptionTopology,
             AzureTopology,
             VNet,
         )
-        from cna.modules.network.analysis.topology_classifier import classify_topology
-        from cna.report_engine.encyclopedia_report import generate_diagram_svgs
+        from network_assessment.modules.network.analysis.topology_classifier import (
+            classify_topology,
+        )
+        from network_assessment.report_engine.encyclopedia_report import generate_diagram_svgs
 
         sub = AzureSubscriptionTopology(
             subscription_id="sub-1",

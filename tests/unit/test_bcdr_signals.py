@@ -1,6 +1,6 @@
 """Unit tests for BC/DR AZ-BCDR-* finding generation."""
 
-from cna.core.topology.azure import (
+from network_assessment.core.topology.azure import (
     AzureFirewall,
     AzureSubscriptionTopology,
     AzureTopology,
@@ -8,7 +8,7 @@ from cna.core.topology.azure import (
     ExpressRouteCircuit,
     VNet,
 )
-from cna.modules.network.analysis import generate_bcdr_findings
+from network_assessment.modules.network.analysis import generate_bcdr_findings
 
 SUB = "00000000-0000-0000-0000-000000000001"
 

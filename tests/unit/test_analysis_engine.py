@@ -20,16 +20,20 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from cna.ai_engine.analysis_engine import AnalysisEngine, AnalysisOptions
-from cna.ai_engine.observed_state_enforcer import ObservedStateEnforcer, ObservedStateViolation
-from cna.core.findings_schema import (
+from cna_azure_network_engine.rules.registry import evaluate
+from network_assessment.ai_engine.analysis_engine import AnalysisEngine, AnalysisOptions
+from network_assessment.ai_engine.observed_state_enforcer import (
+    ObservedStateEnforcer,
+    ObservedStateViolation,
+)
+from network_assessment.core.findings_schema import (
     Finding,
     FindingSeverity,
     FindingStatus,
     FrameworkMapping,
     ObservedState,
 )
-from cna.core.topology.aws import (
+from network_assessment.core.topology.aws import (
     VPC,
     AWSRegionTopology,
     AWSTopology,
@@ -39,7 +43,7 @@ from cna.core.topology.aws import (
     SecurityGroupRule,
     TransitGateway,
 )
-from cna.core.topology.azure import (
+from network_assessment.core.topology.azure import (
     ApplicationGateway,
     AzureFirewall,
     AzureSubnet,
@@ -50,8 +54,7 @@ from cna.core.topology.azure import (
     VNet,
     VNetPeering,
 )
-from cna.core.topology.common import PeeringState
-from cna_azure_network_engine.rules.registry import evaluate
+from network_assessment.core.topology.common import PeeringState
 
 
 @pytest.fixture

@@ -20,10 +20,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 from azure.core.exceptions import HttpResponseError
 
-from cna.core.exceptions import CNAAuthError
-from cna.core.topology.azure import AppGatewayMetric, AzureSubscriptionTopology, NetworkMetrics
-from cna.core.topology.common import SubnetType
-from cna.modules.network.discovery.azure_discovery import (
+from network_assessment.core.exceptions import NetworkAssessmentAuthError
+from network_assessment.core.topology.azure import (
+    AppGatewayMetric,
+    AzureSubscriptionTopology,
+    NetworkMetrics,
+)
+from network_assessment.core.topology.common import SubnetType
+from network_assessment.modules.network.discovery.azure_discovery import (
     AzureDiscovery,
     AzureDiscoveryOptions,
     _classify_subnet,
@@ -33,7 +37,7 @@ from cna.modules.network.discovery.azure_discovery import (
     _sub_from_id,
 )
 
-MODULE = "cna.modules.network.discovery.azure_discovery"
+MODULE = "network_assessment.modules.network.discovery.azure_discovery"
 
 
 @pytest.fixture
@@ -501,7 +505,9 @@ class TestInitCredentials:
             patch.dict(
                 "sys.modules", {"azure.mgmt.subscription": MagicMock(SubscriptionClient=subclient)}
             ),
-            patch("cna.core.auth.build_azure_credential", return_value=credential) as factory,
+            patch(
+                "network_assessment.core.auth.build_azure_credential", return_value=credential
+            ) as factory,
         ):
             discovery._init_credentials()
         factory.assert_called_once_with()
@@ -530,7 +536,7 @@ class TestInitCredentials:
     def test_missing_sdk_raises_a_named_auth_error_naming_the_install(self, discovery):
         with (
             patch.dict("sys.modules", {"azure.identity": None}),
-            pytest.raises(CNAAuthError, match="pip install azure-identity"),
+            pytest.raises(NetworkAssessmentAuthError, match="pip install azure-identity"),
         ):
             discovery._init_credentials()
 
@@ -547,7 +553,7 @@ class TestValidateAccess:
     def test_token_failure_is_fatal(self, discovery):
         with patch.object(discovery, "_init_credentials"):
             self._wire(discovery, token_ok=False)
-            with pytest.raises(CNAAuthError, match="cannot obtain ARM token"):
+            with pytest.raises(NetworkAssessmentAuthError, match="cannot obtain ARM token"):
                 discovery.validate_access()
 
     def test_returns_early_when_no_subscription_filter_is_set(self, store):
@@ -1015,7 +1021,10 @@ class TestCollectPublicIps:
                 public_ip_allocation_method="Static",
                 ip_address="20.1.2.3",
                 public_ip_address_version="IPv4",
-                dns_settings=_Arm(domain_name_label="cna", fqdn="cna.eastus.cloudapp.azure.com"),
+                dns_settings=_Arm(
+                    domain_name_label="network-assessment",
+                    fqdn="network-assessment.eastus.cloudapp.azure.com",
+                ),
                 ddos_settings=_Arm(protection_mode="Enabled"),
                 zones=["1", "2"],
                 idle_timeout_in_minutes=15,
@@ -1032,7 +1041,7 @@ class TestCollectPublicIps:
         pip = pips[0]
         assert pip.resource_group == "rg-net"
         assert pip.sku_name == "Standard"
-        assert pip.dns_label == "cna"
+        assert pip.dns_label == "network-assessment"
         assert pip.zones == ["1", "2"]
         assert pip.idle_timeout_minutes == 15
         assert pip.ddos_protection_mode == "Enabled"
@@ -1335,7 +1344,7 @@ class TestCollectBastionHosts:
 
 class TestPrivateEndpointDns:
     """The scanner host no longer resolves customer FQDNs (change set D): the field is
-    ``None`` — unknown — and nothing under ``cna/`` or ``packages/`` calls ``gethostbyname``."""
+    ``None`` — unknown — and nothing under ``network_assessment/`` or ``packages/`` calls ``gethostbyname``."""
 
     def test_the_dns_field_is_unknown(self, discovery):
         net = MagicMock()
@@ -1368,7 +1377,7 @@ class TestPrivateEndpointDns:
         root = Path(__file__).resolve().parents[2]
         hits = [
             str(path.relative_to(root))
-            for base in ("cna", "packages")
+            for base in ("network_assessment", "packages")
             for path in (root / base).rglob("*.py")
             if "gethostbyname" in path.read_text(encoding="utf-8", errors="replace")
         ]
@@ -2392,7 +2401,7 @@ class TestResourceGraphBackend:
     SUB = "00000000-0000-0000-0000-000000000011"
 
     def _rg_topology(self):
-        from cna.core.topology.azure import AzureTopology
+        from network_assessment.core.topology.azure import AzureTopology
 
         return AzureTopology(
             source="discovery",
@@ -2421,7 +2430,7 @@ class TestResourceGraphBackend:
         with (
             patch.object(discovery, "validate_access"),
             patch(
-                "cna.modules.network.discovery.azure_discovery.ResourceGraphDiscovery",
+                "network_assessment.modules.network.discovery.azure_discovery.ResourceGraphDiscovery",
                 return_value=fake,
             ) as factory,
             patch.object(discovery, "_discover_subscription") as arm_loop,
@@ -2451,7 +2460,7 @@ class TestResourceGraphBackend:
         with (
             patch.object(discovery, "validate_access"),
             patch(
-                "cna.modules.network.discovery.azure_discovery.ResourceGraphDiscovery",
+                "network_assessment.modules.network.discovery.azure_discovery.ResourceGraphDiscovery",
                 return_value=fake,
             ) as factory,
             patch.object(discovery, "_run_live_collectors"),
@@ -2467,7 +2476,7 @@ class TestResourceGraphBackend:
         with (
             patch.object(discovery, "validate_access"),
             patch(
-                "cna.modules.network.discovery.azure_discovery.ResourceGraphDiscovery"
+                "network_assessment.modules.network.discovery.azure_discovery.ResourceGraphDiscovery"
             ) as factory,
             pytest.raises(SystemExit, match="CNA_SCOPES"),
         ):
@@ -2487,7 +2496,7 @@ class TestResourceGraphBackend:
                 return_value=[{"id": self.SUB.upper(), "name": "prod", "tenant_id": "t"}],
             ),
             patch(
-                "cna.modules.network.discovery.azure_discovery.ResourceGraphDiscovery",
+                "network_assessment.modules.network.discovery.azure_discovery.ResourceGraphDiscovery",
                 return_value=fake,
             ) as factory,
             patch.object(discovery, "_run_live_collectors"),
@@ -2505,7 +2514,7 @@ class TestResourceGraphBackend:
         with (
             patch.object(discovery, "validate_access"),
             patch(
-                "cna.modules.network.discovery.azure_discovery.ResourceGraphDiscovery",
+                "network_assessment.modules.network.discovery.azure_discovery.ResourceGraphDiscovery",
                 return_value=fake,
             ),
             patch.object(discovery, "_run_live_collectors") as live,
@@ -2538,7 +2547,7 @@ class TestResourceGraphBackend:
         assert topo.network_metrics is None and topo.observability is None
         assert any("Metrics skipped" in m and "HTTP 403" in m for m in messages)
         assert not any("AuthorizationFailed" in m for m in messages)
-        from cna.core.topology.azure import AzureTopology
+        from network_assessment.core.topology.azure import AzureTopology
 
         report = evaluate(AzureTopology(source="discovery", subscriptions=[topo]))
         unknown_ids = {u.rule_id for u in report.unknowns}

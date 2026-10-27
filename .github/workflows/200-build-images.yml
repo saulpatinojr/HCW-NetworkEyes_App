@@ -65,7 +65,7 @@ on:
       - apps/cna-api/**
       - apps/cna-worker/**
       - apps/cna-web/**
-      - cna/**
+      - network_assessment/**
       - scripts/drawio-headless.sh
       - scripts/ci/sign_image.sh
       - pyproject.toml

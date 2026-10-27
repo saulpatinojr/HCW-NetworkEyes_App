@@ -8,7 +8,7 @@ review records a ``Remediation_Plan`` entry identifying the single point of
 failure and carrying a proposed mitigation. Concretely, the pure classifier
 ``is_self_hosted_spof`` returns ``True`` exactly when the runner set is
 ``{"self-hosted"}`` (no GitHub-hosted fallback, no matrix), and the recorded
-SPOF finding is a MEDIUM ``cna.review.model.Finding`` carrying a mitigation in
+SPOF finding is a MEDIUM ``network_assessment.review.model.Finding`` carrying a mitigation in
 its ``proposed_action``.
 
 Validates: Requirements 5.2
@@ -19,12 +19,12 @@ from __future__ import annotations
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from cna.review.areas.cicd import (
+from network_assessment.review.areas.cicd import (
     SELF_HOSTED_RUNNER,
     _spof_finding,
     is_self_hosted_spof,
 )
-from cna.review.model import Severity
+from network_assessment.review.model import Severity
 
 # A minimum of 100 iterations per the spec's property-test configuration.
 _PROPERTY_SETTINGS = settings(max_examples=100)

@@ -9,8 +9,8 @@ to record left the core with the AWS deploy workflow (TODO.md T-504).
 
 from pathlib import Path
 
-from cna.review import AREAS, Severity, consolidate
-from cna.review.areas import (
+from network_assessment.review import AREAS, Severity, consolidate
+from network_assessment.review.areas import (
     cicd_sha_and_escalation_findings,
     find_unpinned_references,
     is_sha_pinned,

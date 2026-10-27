@@ -21,7 +21,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from cna.core.findings_schema import (
+from network_assessment.core.findings_schema import (
     Finding,
     FindingSeverity,
     FindingsReport,
@@ -29,16 +29,19 @@ from cna.core.findings_schema import (
     FrameworkMapping,
     ObservedState,
 )
-from cna.report_engine.deliverable_manifest import DeliverableManifest, DeliverableRecord
-from cna.report_engine.executive_report import ExecutiveReportRenderer
-from cna.report_engine.html_preview import HtmlPreviewRenderer
-from cna.report_engine.render_pipeline import (
+from network_assessment.report_engine.deliverable_manifest import (
+    DeliverableManifest,
+    DeliverableRecord,
+)
+from network_assessment.report_engine.executive_report import ExecutiveReportRenderer
+from network_assessment.report_engine.html_preview import HtmlPreviewRenderer
+from network_assessment.report_engine.render_pipeline import (
     JaReviewGateError,
     RenderOptions,
     RenderPipeline,
     ReviewGateError,
 )
-from cna.report_engine.technical_report import TechnicalReportRenderer
+from network_assessment.report_engine.technical_report import TechnicalReportRenderer
 
 
 def _make_finding(rule_id: str, severity: FindingSeverity, resource_id: str = "r-001") -> Finding:

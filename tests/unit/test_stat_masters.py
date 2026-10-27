@@ -1,8 +1,8 @@
 """Unit tests for the stat-master aggregation builder (Phase C)."""
 
-from cna.core.findings_schema import Finding, FrameworkMapping, ObservedState
-from cna.core.stat_masters import StatMasterRecord, build_stat_masters
-from cna.core.topology.azure import AzureSubscriptionTopology, AzureTopology
+from network_assessment.core.findings_schema import Finding, FrameworkMapping, ObservedState
+from network_assessment.core.stat_masters import StatMasterRecord, build_stat_masters
+from network_assessment.core.topology.azure import AzureSubscriptionTopology, AzureTopology
 
 SUB = "00000000-0000-0000-0000-000000000001"
 

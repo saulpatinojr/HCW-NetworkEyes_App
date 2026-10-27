@@ -7,13 +7,13 @@ tolerance, configuration gating, and that enrichment degrades gracefully.
 
 import pytest
 
-from cna.ai_engine.foundry_agent_client import (
+from network_assessment.ai_engine.foundry_agent_client import (
     FoundryAgentClient,
     FoundryAgentError,
     agent_configured,
 )
-from cna.ai_engine.recommendation_engine import RecommendationEngine
-from cna.core.findings_schema import Finding, FindingRecommendation, FindingsReport
+from network_assessment.ai_engine.recommendation_engine import RecommendationEngine
+from network_assessment.core.findings_schema import Finding, FindingRecommendation, FindingsReport
 
 # ── _parse tolerance ─────────────────────────────────────────────────────────
 
