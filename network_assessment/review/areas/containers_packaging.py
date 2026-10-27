@@ -1,12 +1,12 @@
 """Findings for the ``containers-packaging`` area (Requirement 7).
 
 This is a *verify-then-close-gaps* record for the four service Dockerfiles
-(root ``Dockerfile``, ``apps/cna-api``, ``apps/cna-web``, ``apps/cna-worker``),
+(root ``Dockerfile``, ``apps/network-assessment-api``, ``apps/network-assessment-web``, ``apps/network-assessment-worker``),
 ``docker-compose.yml``, and the ``network-assessment`` CLI packaging. The audit against
 Requirement 7 confirmed:
 
   * **7.4 — non-root final ``USER`` (verified compliant).** Every service
-    Dockerfile ends on a non-root user (``cna`` uid/gid 1001 for the Python
+    Dockerfile ends on a non-root user (``network-assessment`` uid/gid 1001 for the Python
     images, ``nextjs`` uid 1001 for the web image). :func:`effective_final_user`
     parses each Dockerfile's effective final ``USER`` and
     :func:`record_root_user_finding` decides whether a non-root remediation
@@ -15,13 +15,13 @@ Requirement 7 confirmed:
     against regression to a root/unset ``USER``.
   * **7.2 — docker-compose Web_Service fallback (gap closed here).** The
     committed ``docker-compose.yml`` only defined the Python ``network-assessment`` CLI
-    services (``cna``, ``cna-dev``, ``cna-test``); there was no fallback path to
-    run the Web_Service (``apps/cna-web``) locally. A ``cna-web`` service was
+    services (``network-assessment``, ``network-assessment-dev``, ``network-assessment-test``); there was no fallback path to
+    run the Web_Service (``apps/network-assessment-web``) locally. A ``network-assessment-web`` service was
     added to the compose file and a ``MEDIUM`` finding records the gap that was
     closed.
   * **7.1 — container best practices (gaps closed here).** The root
-    ``Dockerfile`` already carries a ``HEALTHCHECK``; the ``cna-api``,
-    ``cna-worker``, and ``cna-web`` images did not. Healthchecks were added to
+    ``Dockerfile`` already carries a ``HEALTHCHECK``; the ``network-assessment-api``,
+    ``network-assessment-worker``, and ``network-assessment-web`` images did not. Healthchecks were added to
     each and a ``LOW`` finding records the residual best-practice gap.
 
 **Fail-hard on an unrecordable root-user finding (7.5).**
@@ -55,9 +55,9 @@ _R006 = "R-006"
 # on the recorded findings. Paths are repo-relative.
 SERVICE_DOCKERFILES: dict[str, str] = {
     "Dockerfile": "Dockerfile",
-    "apps/cna-api/Dockerfile": "apps/cna-api/Dockerfile",
-    "apps/cna-web/Dockerfile": "apps/cna-web/Dockerfile",
-    "apps/cna-worker/Dockerfile": "apps/cna-worker/Dockerfile",
+    "apps/network-assessment-api/Dockerfile": "apps/network-assessment-api/Dockerfile",
+    "apps/network-assessment-web/Dockerfile": "apps/network-assessment-web/Dockerfile",
+    "apps/network-assessment-worker/Dockerfile": "apps/network-assessment-worker/Dockerfile",
 }
 
 # A ``USER`` whose resolved name/uid is one of these is the root account. An
@@ -211,16 +211,16 @@ def _audit_dockerfiles() -> list[_DockerfileAudit]:
     inputs the recorded findings below reflect. Every image resolved to a
     non-root final ``USER``:
 
-      * ``Dockerfile`` → ``cna``      (uid/gid 1001)
-      * ``apps/cna-api/Dockerfile`` → ``cna``  (uid/gid 1001)
-      * ``apps/cna-web/Dockerfile`` → ``nextjs`` (uid 1001)
-      * ``apps/cna-worker/Dockerfile`` → ``cna`` (uid/gid 1001)
+      * ``Dockerfile`` → ``network-assessment``      (uid/gid 1001)
+      * ``apps/network-assessment-api/Dockerfile`` → ``network-assessment``  (uid/gid 1001)
+      * ``apps/network-assessment-web/Dockerfile`` → ``nextjs`` (uid 1001)
+      * ``apps/network-assessment-worker/Dockerfile`` → ``network-assessment`` (uid/gid 1001)
     """
     audited = {
-        "Dockerfile": "cna",
-        "apps/cna-api/Dockerfile": "cna",
-        "apps/cna-web/Dockerfile": "nextjs",
-        "apps/cna-worker/Dockerfile": "cna",
+        "Dockerfile": "network-assessment",
+        "apps/network-assessment-api/Dockerfile": "network-assessment",
+        "apps/network-assessment-web/Dockerfile": "nextjs",
+        "apps/network-assessment-worker/Dockerfile": "network-assessment",
     }
     return [_DockerfileAudit(subject=subject, user=user) for subject, user in audited.items()]
 
@@ -268,15 +268,15 @@ def containers_packaging_findings(
     if sink is collected.append:
         assert all(f in findings for f in collected)
 
-    # 7.2 — docker-compose Web_Service fallback (gap closed by adding cna-web).
+    # 7.2 — docker-compose Web_Service fallback (gap closed by adding network-assessment-web).
     findings.append(
         Finding(
             area=_AREA,
             severity=Severity.MEDIUM,
             proposed_action=(
                 "docker-compose.yml had no fallback path to run the Web_Service "
-                "(apps/cna-web) locally — only the Python network-assessment CLI services were "
-                "defined. Add a cna-web service that builds apps/cna-web so the "
+                "(apps/network-assessment-web) locally — only the Python network-assessment CLI services were "
+                "defined. Add a network-assessment-web service that builds apps/network-assessment-web so the "
                 "local stack can run the web front end without the cloud."
             ),
             dedup_key="containers-packaging:compose-web-fallback",
@@ -290,13 +290,13 @@ def containers_packaging_findings(
             area=_AREA,
             severity=Severity.LOW,
             proposed_action=(
-                "The root Dockerfile carries a HEALTHCHECK but the cna-api, "
-                "cna-web, and cna-worker images did not. Add a HEALTHCHECK to "
+                "The root Dockerfile carries a HEALTHCHECK but the network-assessment-api, "
+                "network-assessment-web, and network-assessment-worker images did not. Add a HEALTHCHECK to "
                 "each so orchestrators (ECS/AKS/Container Apps) can detect an "
                 "unhealthy container."
             ),
             dedup_key="containers-packaging:service-healthchecks",
-            subject="apps/cna-api/Dockerfile,apps/cna-web/Dockerfile,apps/cna-worker/Dockerfile",
+            subject="apps/network-assessment-api/Dockerfile,apps/network-assessment-web/Dockerfile,apps/network-assessment-worker/Dockerfile",
         )
     )
 
@@ -349,15 +349,15 @@ _OBSERVED = VerificationResults(
     docker_available=True,
     docker_build_ok={
         "Dockerfile": True,
-        "apps/cna-api/Dockerfile": True,
-        "apps/cna-web/Dockerfile": True,
-        "apps/cna-worker/Dockerfile": True,
+        "apps/network-assessment-api/Dockerfile": True,
+        "apps/network-assessment-web/Dockerfile": True,
+        "apps/network-assessment-worker/Dockerfile": True,
     },
     inspected_users={
-        "Dockerfile": "cna",
-        "apps/cna-api/Dockerfile": "cna",
-        "apps/cna-web/Dockerfile": "nextjs",
-        "apps/cna-worker/Dockerfile": "cna",
+        "Dockerfile": "network-assessment",
+        "apps/network-assessment-api/Dockerfile": "network-assessment",
+        "apps/network-assessment-web/Dockerfile": "nextjs",
+        "apps/network-assessment-worker/Dockerfile": "network-assessment",
     },
     hadolint_available=False,
 )
@@ -416,7 +416,7 @@ def _docker_build_finding(results: VerificationResults) -> Finding:
                 "builds reproducibly; this step was not a silent pass."
             ),
             dedup_key="containers-packaging:docker-build-coverage-gap",
-            subject="Dockerfile,apps/cna-api/Dockerfile,apps/cna-web/Dockerfile,apps/cna-worker/Dockerfile",
+            subject="Dockerfile,apps/network-assessment-api/Dockerfile,apps/network-assessment-web/Dockerfile,apps/network-assessment-worker/Dockerfile",
         )
     failed = sorted(s for s, ok in results.docker_build_ok.items() if not ok)
     not_attempted = sorted(set(SERVICE_DOCKERFILES) - set(results.docker_build_ok))
@@ -475,7 +475,7 @@ def _built_image_non_root_finding(results: VerificationResults) -> Finding:
                 "available to confirm the built artifact matches the source."
             ),
             dedup_key="containers-packaging:built-image-user-coverage-gap",
-            subject="Dockerfile,apps/cna-api/Dockerfile,apps/cna-web/Dockerfile,apps/cna-worker/Dockerfile",
+            subject="Dockerfile,apps/network-assessment-api/Dockerfile,apps/network-assessment-web/Dockerfile,apps/network-assessment-worker/Dockerfile",
         )
     root_images = sorted(
         subject for subject, user in results.inspected_users.items() if is_root_user(user)
@@ -523,7 +523,7 @@ def _hadolint_finding(results: VerificationResults) -> Finding:
                 "Dockerfile; this step was recorded as a gap, not a silent pass."
             ),
             dedup_key="containers-packaging:hadolint-coverage-gap",
-            subject="Dockerfile,apps/cna-api/Dockerfile,apps/cna-web/Dockerfile,apps/cna-worker/Dockerfile",
+            subject="Dockerfile,apps/network-assessment-api/Dockerfile,apps/network-assessment-web/Dockerfile,apps/network-assessment-worker/Dockerfile",
         )
     return Finding(
         area=_AREA,
@@ -534,7 +534,7 @@ def _hadolint_finding(results: VerificationResults) -> Finding:
             "pipeline and guard against regression."
         ),
         dedup_key="containers-packaging:hadolint-verified",
-        subject="Dockerfile,apps/cna-api/Dockerfile,apps/cna-web/Dockerfile,apps/cna-worker/Dockerfile",
+        subject="Dockerfile,apps/network-assessment-api/Dockerfile,apps/network-assessment-web/Dockerfile,apps/network-assessment-worker/Dockerfile",
     )
 
 
@@ -576,7 +576,7 @@ def containers_packaging_verify_findings(
         into a clean virtualenv, and runs ``network-assessment --help`` — the most portable
         check and the behavioural core of Requirement 7.3.
       * **7.1 — ``docker build`` per image (verified).** Every service image
-        (root, ``cna-api``, ``cna-web``, ``cna-worker``) builds on the local
+        (root, ``network-assessment-api``, ``network-assessment-web``, ``network-assessment-worker``) builds on the local
         Docker daemon. Build-only: **no image is pushed to a live registry.**
       * **7.4 — non-root on the built image.** Reuses :func:`is_root_user` on the
         runtime ``USER`` observed via ``docker inspect`` so the built artifact —

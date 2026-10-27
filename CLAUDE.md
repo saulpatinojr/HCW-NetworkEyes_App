@@ -6,8 +6,8 @@ human intro page; this file states the rules an agent must not infer wrongly.
 ## What this repository is
 
 This repository, `saulpatinojr/HCW-NetworkEyes_App`, is the **product** of the NetworkEyes App of the
-HCW App-to-AddOn initiative: the single source of application code — `apps/cna-web`, `apps/cna-api`,
-`apps/cna-worker`, and the `network_assessment` Python package — and the pipeline that builds and publishes their
+HCW App-to-AddOn initiative: the single source of application code — `apps/network-assessment-web`, `apps/network-assessment-api`,
+`apps/network-assessment-worker`, and the `network_assessment` Python package — and the pipeline that builds and publishes their
 container images (`200-build-images.yml` → Docker Hub `<namespace>/img-ne-appliance-app`).
 
 Users pull the images, not this repository. **NetworkEyes stands alone** (owner decision 2026-10-25): this
@@ -19,7 +19,7 @@ uses a GitHub App (only the owner-approved `390-repository-admin.yml` does, see 
 test). The one carve-out is the lab build, `saulpatinojr/HCW-NetworkEyes_AddOn`: it is a downstream build that
 pulls from this repository, so documents name and link it, this repository calls nothing in it and reads no setting
 from it, and the one rule that reaches into it is a documentation note (*Tell the lab build what changed*, below). `tests/security/test_standalone_boundary.py` (the repository) and
-`apps/cna-web/lib/standalone-boundary.test.ts` (the web tier) fail when that comes back. Whoever deploys the images (a
+`apps/network-assessment-web/lib/standalone-boundary.test.ts` (the web tier) fail when that comes back. Whoever deploys the images (a
 person or a separate project) pulls them from Docker Hub by digest and verifies the cosign signature; this repository
 does not know who that is and notifies no one.
 
@@ -107,14 +107,14 @@ change under `Changed` in `CHANGELOG.md` (and in the release notes) where a cons
 ## AI engine rules
 
 - Engine ids are `azure-openai`, `bedrock`, `anthropic`, `openai`. The selection
-  rules live in `apps/cna-web/lib/ai-engine-rules.ts` and
+  rules live in `apps/network-assessment-web/lib/ai-engine-rules.ts` and
   `network_assessment/ai_engine/chat_agent.py` and are pinned by **one shared vector table**
   (`ai-engine-rules.test.ts`, `tests/unit/test_chat_agent.py`). Change both
   files and both tests together.
 - `saas` mode uses the cloud-native engine for the appliance's cloud. `byo-api`
   mode uses admin-entered Anthropic/OpenAI keys. Those keys are the **only**
   secrets entered in the app UI; they are AES-256-GCM encrypted
-  (`apps/cna-web/lib/crypto.ts` ↔ `network_assessment/core/credential_crypto.py`, kept
+  (`apps/network-assessment-web/lib/crypto.ts` ↔ `network_assessment/core/credential_crypto.py`, kept
   byte-compatible by a Node-generated test vector) and stored as `AppSetting`
   rows `ai.byo.<provider>.{apiKey,keyHint,model}`. Never log, return, or
   persist a decrypted key anywhere else; never accept one through env,
@@ -143,7 +143,7 @@ change under `Changed` in `CHANGELOG.md` (and in the release notes) where a cons
   version is pinned in the `FROM ghcr.io/astral-sh/uv:… AS uv` stage of each
   Python Dockerfile and the `uv==` steps of `300-test-codebase.yml`; when
   Dependabot bumps the stage, move the workflow pins with it.
-- **TypeScript runs side by side in `apps/cna-web`.** `typescript` is the alias `npm:@typescript/typescript6` (the
+- **TypeScript runs side by side in `apps/network-assessment-web`.** `typescript` is the alias `npm:@typescript/typescript6` (the
   TypeScript 6 API that eslint, typescript-eslint and Next.js import) and `@typescript/native` is `npm:typescript@^7`
   (the `tsc` that `npm run typecheck` runs). Never change `typescript` to a plain 7.x: TypeScript 7 has no
   programmatic API until 7.1 and typescript-eslint cannot load against it (Dependabot #209). Dependabot does not track
@@ -160,8 +160,8 @@ change under `Changed` in `CHANGELOG.md` (and in the release notes) where a cons
   new job names in the pull request so the owner can add them to the ruleset. Dockerfiles must pass hadolint (`.hadolint.yaml` lists the only
   ignored rules, each with a written reason) and workflows must pass actionlint; run both with
   `bash scripts/ci/local-container-checks.sh hadolint actionlint`.
-  The `migrator` image runs only the Prisma CLI, so its `node_modules` comes from the `migrator-deps` stage of `apps/cna-web/Dockerfile` (cut out
-  of `package-lock.json` by `apps/cna-web/scripts/migrator-lockfile.mjs`); never copy the builder's `node_modules` into it. The job `Image Scan (Trivy)`
+  The `migrator` image runs only the Prisma CLI, so its `node_modules` comes from the `migrator-deps` stage of `apps/network-assessment-web/Dockerfile` (cut out
+  of `package-lock.json` by `apps/network-assessment-web/scripts/migrator-lockfile.mjs`); never copy the builder's `node_modules` into it. The job `Image Scan (Trivy)`
   checks that in the built image and scans the migrator and web runner for fixable HIGH and CRITICAL findings (`.trivyignore.yaml` holds the one
   narrow suppression, with its reason); `bash scripts/ci/local-container-checks.sh trivy-image <image>` runs the same scan locally.
 - **Every GitHub Action is pinned to a SHA digest.** `detect-secrets` fails the

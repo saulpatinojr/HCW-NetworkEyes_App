@@ -101,8 +101,10 @@ class TestDockerfile:
         )
         assert "uvicorn" not in body and "EXPOSE" not in body and "HEALTHCHECK" not in body
         assert "pip uninstall -y pip" in body
-        # Numeric USER (hadolint DL3066): uid 1001 is the `cna` user created two lines earlier.
-        assert "--uid 1001" in body and "USER 1001" in body and "USER cna" not in body
+        # Numeric USER (hadolint DL3066): uid 1001 is the `network-assessment` user created two lines earlier.
+        assert (
+            "--uid 1001" in body and "USER 1001" in body and "USER network-assessment" not in body
+        )
         assert "ENV CNA_EDITION=lab" in body
         assert 'CMD ["python", "-m", "cna_azure_network_engine.edition"]' in body
 
@@ -110,7 +112,10 @@ class TestDockerfile:
         body = stages["final-appliance"]
         assert 'ENTRYPOINT ["network-assessment"]' in body
         assert "ENV CNA_EDITION=appliance" in body
-        assert "COPY --from=builder --chown=cna:cna /install /usr/local" in body
+        assert (
+            "COPY --from=builder --chown=network-assessment:network-assessment /install /usr/local"
+            in body
+        )
 
     def test_every_base_image_is_digest_pinned(self, dockerfile: str):
         froms = re.findall(r"^FROM\s+(\S+)", dockerfile, flags=re.MULTILINE)
@@ -174,9 +179,9 @@ class TestCi:
         text = (WORKFLOWS / "300-test-codebase.yml").read_text(encoding="utf-8")
         job = text[text.index("  lab-image:") :]
         job = job[: job.index("\n  lockfile:")]
-        assert "docker build --build-arg EDITION=lab -t cna:lab ." in job
-        assert "run: docker run --rm cna:lab" in job
-        assert 'docker run --rm cna:lab python -c "import azure"' in job
+        assert "docker build --build-arg EDITION=lab -t network-assessment:lab ." in job
+        assert "run: docker run --rm network-assessment:lab" in job
+        assert 'docker run --rm network-assessment:lab python -c "import azure"' in job
         assert "IDENTITY_ENDPOINT" in job
         assert "push" not in job and "login" not in job
 

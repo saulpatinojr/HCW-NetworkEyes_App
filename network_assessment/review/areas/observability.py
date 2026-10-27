@@ -1,8 +1,8 @@
 """Findings for the ``observability`` area (Requirement 8).
 
 This is a *verify-then-close-gaps* record for the platform's logging and
-telemetry across the three reviewed surfaces — the ``apps/cna-api`` FastAPI
-service, the ``apps/cna-web`` Next.js front end, and the network_assessment Core_Engine —
+telemetry across the three reviewed surfaces — the ``apps/network-assessment-api`` FastAPI
+service, the ``apps/network-assessment-web`` Next.js front end, and the network_assessment Core_Engine —
 with emphasis on the AI analysis path (the least-proven capability, design
 section "8. Observability").
 
@@ -18,13 +18,13 @@ Structured-logging audit (Requirements 8.1, 8.2)
     least a level and a message (design Property 16). Recorded as
     ``INFORMATIONAL`` so the plan reflects the verified-compliant surface.
 
-  * **Web_Service — verified compliant.** ``apps/cna-web/instrumentation.ts``
+  * **Web_Service — verified compliant.** ``apps/network-assessment-web/instrumentation.ts``
     ``onRequestError`` serialises each server error to a single JSON line
     (``level``, ``message``, ``digest``, ``stack``, ``path``, ``route``) so a
     user-reported error digest can be correlated with the real message in Log
     Analytics. Recorded as ``INFORMATIONAL`` (verified compliant).
 
-  * **API_Service — gap closed here.** ``apps/cna-api/main.py`` previously
+  * **API_Service — gap closed here.** ``apps/network-assessment-api/main.py`` previously
     configured logging with ``logging.basicConfig(level=logging.INFO)``, which
     emits **unstructured plain-text** lines. Its error paths already log with
     ``logger.exception(...)`` (level + message + traceback), but the emitted
@@ -104,7 +104,7 @@ def _structured_logging_findings() -> list[Finding]:
                 "Log Analytics. Keep the onRequestError structured-log path."
             ),
             dedup_key="observability:web-onrequesterror-structured-logging",
-            subject="apps/cna-web/instrumentation.ts",
+            subject="apps/network-assessment-web/instrumentation.ts",
         ),
         Finding(
             area=_AREA,
@@ -120,7 +120,7 @@ def _structured_logging_findings() -> list[Finding]:
                 "a level and a message. Applied by this task."
             ),
             dedup_key="observability:api-structured-json-logging",
-            subject="apps/cna-api/main.py",
+            subject="apps/network-assessment-api/main.py",
         ),
     ]
 
@@ -144,7 +144,7 @@ def _ai_path_coverage_findings() -> list[Finding]:
                 "-> offline library) and the web generateAiCompletion path so a "
                 "single enrichment/answer is followable end to end, and capture "
                 "token usage — both network_assessment.ai_engine.chat_agent._complete_azure and "
-                "apps/cna-web/lib/ai-engine.ts completeWithAzure currently discard "
+                "apps/network-assessment-web/lib/ai-engine.ts completeWithAzure currently discard "
                 "response.usage (prompt/completion/total tokens). Today the path "
                 "logs only fallback-transition warnings and per-source counts. "
                 "Fixable: this coverage does not depend on a live cloud backend."

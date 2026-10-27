@@ -59,13 +59,13 @@ SKIPPED_PATHS = frozenset(
         "tests",  # tests may spell a string out to prove a guard; the web tier has its own (standalone-boundary.test.ts)
         "dist",
         "coverage",
-        "apps/cna-web/coverage",  # test output of the web tier, gitignored
-        "apps/cna-web/dist",
+        "apps/network-assessment-web/coverage",  # test output of the web tier, gitignored
+        "apps/network-assessment-web/dist",
     }
 )
 SKIPPED_FILES = frozenset({"uv.lock", "package-lock.json"})
 #: The web tier's own guard spells the strings out on purpose.
-GUARD_FILES = frozenset({"apps/cna-web/lib/standalone-boundary.test.ts"})
+GUARD_FILES = frozenset({"apps/network-assessment-web/lib/standalone-boundary.test.ts"})
 MAX_BYTES = 2_000_000
 
 #: Publishers whose actions workflows may use. Every other publisher fails the second guard. Add one only with the
@@ -155,8 +155,8 @@ class TestNoOtherRepositoryIsNamed:
             ".github/workflows/370-registry-cleanup.yml",
             "scripts/ci/sign_image.sh",
             "Dockerfile",
-            "apps/cna-api/Dockerfile",
-            "apps/cna-web/lib/image-update.ts",
+            "apps/network-assessment-api/Dockerfile",
+            "apps/network-assessment-web/lib/image-update.ts",
             "network_assessment/core/auth.py",
             ".env.example",
             "README.md",
@@ -219,7 +219,7 @@ class TestNoOtherRepositoryIsNamed:
             "dist/c.txt",  # root dist: skipped
             "packages/y/dist/d.txt",  # scanned
             "coverage/e.txt",  # root coverage: skipped
-            "apps/cna-web/coverage/f.txt",  # known path: skipped
+            "apps/network-assessment-web/coverage/f.txt",  # known path: skipped
             "apps/z/coverage/g.txt",  # scanned
             "local/h.txt",  # skipped
             "docs/local/i.txt",  # scanned

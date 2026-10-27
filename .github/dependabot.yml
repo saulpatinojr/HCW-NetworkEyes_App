@@ -2,14 +2,14 @@
 # Covers: Python packages (uv — pyproject.toml + uv.lock), GitHub Actions,
 # Docker base images (every `FROM` in all four Dockerfiles, including the
 # `FROM ghcr.io/astral-sh/uv:… AS uv` stage the Python images copy uv from —
-# Dependabot does not read `COPY --from=<image>`), npm (cna-web). Minor/patch
+# Dependabot does not read `COPY --from=<image>`), npm (network-assessment-web). Minor/patch
 # updates are grouped per ecosystem.
 #
 # PR strategy:
 #   - Python: weekly, grouped by ecosystem, auto-assign to saulpatinojr
 #   - Actions: weekly, grouped — keeps CI action SHAs current
-#   - Docker: weekly — keeps base image digests current in /, apps/cna-api,
-#     apps/cna-worker, apps/cna-web
+#   - Docker: weekly — keeps base image digests current in /, apps/network-assessment-api,
+#     apps/network-assessment-worker, apps/network-assessment-web
 #
 # Cooldown: the uv, npm and github-actions entries set `cooldown.default-days: 7`, so a release must be 7 days old before
 # Dependabot opens a version-update pull request for it (Dependabot's own default, with no `cooldown` key, is 3 days). The
@@ -99,9 +99,9 @@ updates:
   - package-ecosystem: docker
     directories:
       - "/"
-      - "/apps/cna-api"
-      - "/apps/cna-worker"
-      - "/apps/cna-web"
+      - "/apps/network-assessment-api"
+      - "/apps/network-assessment-worker"
+      - "/apps/network-assessment-web"
     schedule:
       interval: weekly
       day: monday
@@ -126,11 +126,11 @@ updates:
           - minor
           - patch
 
-  # npm — cna-web (Next.js 15, next-auth, Prisma, Azure SDKs)
+  # npm — network-assessment-web (Next.js 15, next-auth, Prisma, Azure SDKs)
   # Previously uncovered — next-auth beta and all Node.js dependencies
   # were not receiving automated update PRs.
   - package-ecosystem: npm
-    directory: "/apps/cna-web"
+    directory: "/apps/network-assessment-web"
     schedule:
       interval: weekly
       day: monday
@@ -147,7 +147,7 @@ updates:
       - npm
     # `typescript` and `@typescript/native` are npm aliases (TypeScript 6 API and TypeScript 7 compiler, side by side).
     # Dependabot only lists direct dependencies that are not aliases, so neither needs an ignore rule;
-    # apps/cna-web/lib/typescript-toolchain.test.ts guards the pairing and says when it can end (TODO.md T-731).
+    # apps/network-assessment-web/lib/typescript-toolchain.test.ts guards the pairing and says when it can end (TODO.md T-731).
     ignore:
       # Prisma 7 requires the new prisma.config.ts datasource model. Keep Prisma
       # major upgrades manual until the schema/runtime migration is implemented.

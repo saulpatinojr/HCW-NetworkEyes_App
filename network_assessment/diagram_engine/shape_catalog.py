@@ -6,8 +6,8 @@ enforces the pinned-library allow-list. The legacy STYLE_* constants in
 catalog refresh (e.g. via the in-app MCP `search_shapes` tool) requires no
 code change.
 
-Triple-enforced pinning (matches apps/cna-web/lib/drawio-mcp/allow-list.ts):
-  1. Build-time filter on apps/cna-web/lib/drawio-mcp/shape-index.json
+Triple-enforced pinning (matches apps/network-assessment-web/lib/drawio-mcp/allow-list.ts):
+  1. Build-time filter on apps/network-assessment-web/lib/drawio-mcp/shape-index.json
   2. Route handler re-filter on each search_shapes response
   3. THIS catalog re-validates every loaded style against ALLOWED_LIBS
 

@@ -39,9 +39,9 @@ _ALL_WORKFLOWS = SELF_HOSTED_ONLY_WORKFLOWS + GITHUB_HOSTED_WORKFLOWS
 # The four service Dockerfiles plus the compose file (Requirement 7.1).
 _SERVICE_DOCKERFILES = (
     "Dockerfile",
-    "apps/cna-api/Dockerfile",
-    "apps/cna-web/Dockerfile",
-    "apps/cna-worker/Dockerfile",
+    "apps/network-assessment-api/Dockerfile",
+    "apps/network-assessment-web/Dockerfile",
+    "apps/network-assessment-worker/Dockerfile",
 )
 _COMPOSE_FILE = "docker-compose.yml"
 

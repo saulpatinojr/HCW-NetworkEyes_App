@@ -228,7 +228,7 @@ def test_image_scan_job_builds_the_migrator_and_runner_targets() -> None:
     run = "\n".join(image_scan_runs().values())
     assert "docker build --target migrator" in run
     assert "docker build --target runner" in run
-    assert "apps/cna-web" in run
+    assert "apps/network-assessment-web" in run
 
 
 def test_image_scan_job_scans_with_the_gating_flags_and_the_hardened_container() -> None:
@@ -279,7 +279,9 @@ def test_image_scan_job_checks_the_migrator_tree_inside_the_built_image() -> Non
         assert required in run, required
     assert "prisma validate" in run
     assert "package-lock.json" in run, "the installed tree is compared with the lockfile"
-    assert "cna-scan-runner:ci" in run, "the runner is checked for the absence of the Prisma CLI"
+    assert "network-assessment-scan-runner:ci" in run, (
+        "the runner is checked for the absence of the Prisma CLI"
+    )
 
 
 def trivy_ignore() -> dict:
@@ -482,9 +484,9 @@ def test_the_four_dockerfiles_are_tracked() -> None:
     names = sorted(p.relative_to(REPO_ROOT).as_posix() for p in tracked_dockerfiles())
     assert names == [
         "Dockerfile",
-        "apps/cna-api/Dockerfile",
-        "apps/cna-web/Dockerfile",
-        "apps/cna-worker/Dockerfile",
+        "apps/network-assessment-api/Dockerfile",
+        "apps/network-assessment-web/Dockerfile",
+        "apps/network-assessment-worker/Dockerfile",
     ]
 
 

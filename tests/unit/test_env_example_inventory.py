@@ -1,6 +1,6 @@
 """`.env.example` lists every setting the code reads (TODO.md T-733, ticket #246).
 
-The root `.env.example` and `apps/cna-web/.env.example` are the operator's inventory of
+The root `.env.example` and `apps/network-assessment-web/.env.example` are the operator's inventory of
 settings. This test collects every environment variable name the code reads, through
 `os.environ` / `os.getenv` in Python and `process.env` in TypeScript, under `network_assessment/`, `apps/`
 and `packages/`, and fails with the names that neither file mentions. A commented-out line
@@ -17,7 +17,10 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCAN_ROOTS = ("network_assessment", "apps", "packages")
-ENV_FILES = (REPO_ROOT / ".env.example", REPO_ROOT / "apps" / "cna-web" / ".env.example")
+ENV_FILES = (
+    REPO_ROOT / ".env.example",
+    REPO_ROOT / "apps" / "network-assessment-web" / ".env.example",
+)
 
 # Directories that hold dependencies, build output or tests, not the code that runs.
 SKIPPED_DIRS = {
@@ -117,7 +120,7 @@ def test_every_setting_the_code_reads_is_listed_in_an_env_example():
     }
     assert not missing, (
         "The code reads these environment variables but neither .env.example nor "
-        "apps/cna-web/.env.example mentions them. Add each one (a commented-out line is "
+        "apps/network-assessment-web/.env.example mentions them. Add each one (a commented-out line is "
         "enough, and is the right form for a secret) or, if the platform sets it, add it to "
         "PLATFORM_SET with a reason:\n"
         + "\n".join(

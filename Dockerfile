@@ -12,7 +12,7 @@
 # Changes from original single-stage:
 #   1. Pinned digest on base image (supply chain)
 #   2. Builder stage: installs deps only, not full source (smaller final layer)
-#   3. Non-root user (cna:cna uid/gid 1001) — CI smoke test verifies this
+#   3. Non-root user (network-assessment:network-assessment uid/gid 1001) — CI smoke test verifies this
 #   4. COPY --chown so files are owned by non-root user
 #   5. Build arg CNA_VERSION (default `dev`): only a local `docker build --build-arg CNA_VERSION=...` sets it;
 #      the images 200-build-images.yml publishes (and 310 promotes) are built without it
@@ -113,10 +113,10 @@ FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6
 
 COPY --from=builder-lab /install-lab /usr/local
 RUN python -m pip uninstall -y pip \
- && groupadd --gid 1001 cna \
- && useradd --uid 1001 --gid cna --no-create-home --shell /usr/sbin/nologin cna
+ && groupadd --gid 1001 network-assessment \
+ && useradd --uid 1001 --gid network-assessment --no-create-home --shell /usr/sbin/nologin network-assessment
 # Numeric uid: an orchestrator can prove a numeric user is not root, a name it cannot (hadolint DL3066).
-# 1001 is the `cna` user created above; Docker takes its group from /etc/passwd.
+# 1001 is the `network-assessment` user created above; Docker takes its group from /etc/passwd.
 USER 1001
 ENV CNA_EDITION=lab
 # Exit 0 when azure is NOT importable and no identity variable is set; exit 1 otherwise.
@@ -154,15 +154,15 @@ RUN apt-get update \
  && drawio --version
 
 # Non-root user — uid/gid 1001
-RUN groupadd --gid 1001 cna \
- && useradd --uid 1001 --gid cna --shell /bin/bash --create-home cna
+RUN groupadd --gid 1001 network-assessment \
+ && useradd --uid 1001 --gid network-assessment --shell /bin/bash --create-home network-assessment
 
 WORKDIR /app
-COPY --from=builder --chown=cna:cna /install /usr/local
-COPY --chown=cna:cna . .
+COPY --from=builder --chown=network-assessment:network-assessment /install /usr/local
+COPY --chown=network-assessment:network-assessment . .
 
 # Engagement data written here — must be writable by non-root user
-RUN mkdir -p /app/engagements /app/output && chown -R cna:cna /app/engagements /app/output
+RUN mkdir -p /app/engagements /app/output && chown -R network-assessment:network-assessment /app/engagements /app/output
 
 # pip is unused at runtime and vendors CVE-carrying copies of msgpack and
 # setuptools (declared in its own pip/_vendor/bom.cdx.json) that no

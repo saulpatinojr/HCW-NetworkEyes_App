@@ -42,9 +42,9 @@ def test_records_non_root_verified_for_every_service_image():
     }
     assert subjects == {
         "Dockerfile",
-        "apps/cna-api/Dockerfile",
-        "apps/cna-web/Dockerfile",
-        "apps/cna-worker/Dockerfile",
+        "apps/network-assessment-api/Dockerfile",
+        "apps/network-assessment-web/Dockerfile",
+        "apps/network-assessment-worker/Dockerfile",
     }
     for finding in findings:
         if finding.dedup_key.startswith("containers-packaging:non-root-verified:"):
@@ -63,7 +63,7 @@ def test_records_compose_web_fallback_gap():
     entry = next(f for f in findings if f.dedup_key == "containers-packaging:compose-web-fallback")
     assert entry.subject == "docker-compose.yml"
     assert entry.severity is Severity.MEDIUM
-    assert "cna-web" in entry.proposed_action
+    assert "network-assessment-web" in entry.proposed_action
 
 
 def test_records_service_healthcheck_gap():
@@ -86,8 +86,8 @@ def test_findings_consolidate_into_fixable_entries():
 
 
 def test_effective_final_user_reads_last_user():
-    text = "FROM x\nUSER root\nUSER cna\n"
-    assert effective_final_user(text) == "cna"
+    text = "FROM x\nUSER root\nUSER network-assessment\n"
+    assert effective_final_user(text) == "network-assessment"
 
 
 def test_effective_final_user_none_when_unset():
@@ -99,8 +99,8 @@ def test_effective_final_user_strips_group():
 
 
 def test_effective_final_user_resolves_arg_substitution():
-    text = "FROM x\nARG APP_USER=cna\nUSER ${APP_USER}\n"
-    assert effective_final_user(text) == "cna"
+    text = "FROM x\nARG APP_USER=network-assessment\nUSER ${APP_USER}\n"
+    assert effective_final_user(text) == "network-assessment"
 
 
 @pytest.mark.parametrize(
@@ -110,7 +110,7 @@ def test_effective_final_user_resolves_arg_substitution():
         ("root", True),
         ("0", True),
         ("ROOT", True),
-        ("cna", False),
+        ("network-assessment", False),
         ("nextjs", False),
         ("1001", False),
     ],
@@ -133,7 +133,7 @@ def test_record_root_user_finding_records_when_root():
 
 def test_record_root_user_finding_skips_when_non_root():
     recorded = []
-    finding = record_root_user_finding("svc/Dockerfile", "cna", recorded.append)
+    finding = record_root_user_finding("svc/Dockerfile", "network-assessment", recorded.append)
     assert finding is None
     assert recorded == []
 
@@ -255,13 +255,18 @@ def test_docker_build_failure_recorded():
 def test_built_image_root_flagged_high():
     """7.4: a built image whose runtime USER is root is a HIGH finding."""
     findings = containers_packaging_verify_findings(
-        _results(inspected_users={"apps/cna-api/Dockerfile": "root", "Dockerfile": "cna"})
+        _results(
+            inspected_users={
+                "apps/network-assessment-api/Dockerfile": "root",
+                "Dockerfile": "network-assessment",
+            }
+        )
     )
     root = next(
         f for f in findings if f.dedup_key == "containers-packaging:built-image-runs-as-root"
     )
     assert root.severity is Severity.HIGH
-    assert "apps/cna-api/Dockerfile" in root.subject
+    assert "apps/network-assessment-api/Dockerfile" in root.subject
 
 
 def test_verify_findings_consolidate_into_fixable_entries():

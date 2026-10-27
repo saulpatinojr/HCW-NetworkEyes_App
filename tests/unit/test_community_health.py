@@ -35,9 +35,9 @@ ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 
 # The components an issue can be about. Bug reports and feature requests must offer the same list.
 COMPONENTS = [
-    "Web app (apps/cna-web)",
-    "API (apps/cna-api)",
-    "Worker (apps/cna-worker)",
+    "Web app (apps/network-assessment-web)",
+    "API (apps/network-assessment-api)",
+    "Worker (apps/network-assessment-worker)",
     "CLI and analysis engine (network_assessment package)",
     "Azure network engine package (packages/cna-azure-network-engine)",
     "Container images and the image build",

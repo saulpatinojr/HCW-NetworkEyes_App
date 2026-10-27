@@ -227,7 +227,7 @@ Each one actively misleads an engineer or a workflow run.
   these are currently unowned. The individual advisories were not readable from the review
   environment (no Dependabot access), so the affected packages and ecosystems are unconfirmed —
   the repository ships both a Python dependency set (`pyproject.toml`) and a Node one
-  (`apps/cna-web/package.json`).
+  (`apps/network-assessment-web/package.json`).
 - **Dependencies:** None.
 - **Recommended action:** Open
   [this repository's Dependabot alerts page](https://github.com/saulpatinojr/HCW-NetworkEyes_App/security/dependabot)
@@ -236,7 +236,7 @@ Each one actively misleads an engineer or a workflow run.
   note with a reason. Prioritise anything reachable from the web platform's request path. Check
   whether `.github/dependabot.yml` covers both ecosystems (`pip` and `npm`) and both lockfiles; if
   an ecosystem is unwatched, alerts for it will never be raised in the first place.
-- **Status:** Done — remediated in the `apps/cna-web` npm tree; `npm audit` goes from 4 vulnerable
+- **Status:** Done — remediated in the `apps/network-assessment-web` npm tree; `npm audit` goes from 4 vulnerable
   packages (3 high, 1 moderate) to **0**, and `pip-audit` over `pyproject.toml` reports no known
   vulnerabilities, confirming the advisories were entirely Node-side as the notes below predicted.
   Fixes: `next` 16.2.11 → 16.3.1 and `eslint-config-next` to match (postcss path traversal,
@@ -246,7 +246,7 @@ Each one actively misleads an engineer or a workflow run.
   its mitigation bypass). The two transitive packages are pinned through targeted `overrides`
   entries in `package.json` rather than a blanket tree refresh, per the standard of preferring
   pinned versions in security-sensitive dependencies. `.github/dependabot.yml` was checked as the
-  recommended action asked: it already covers `pip`, `npm` (at `/apps/cna-web`), `github-actions`,
+  recommended action asked: it already covers `pip`, `npm` (at `/apps/network-assessment-web`), `github-actions`,
   and `docker`, so no ecosystem is unwatched. Verified with `npm ci --legacy-peer-deps`,
   `tsc --noEmit`, and a full `next build` (all routes compile). Recorded in
   [`CHANGELOG.md`](CHANGELOG.md) → Unreleased.
@@ -654,15 +654,15 @@ order; do not reorder it.
 
 - **Priority:** Low
 - **Description:** The dead & stale code sweep (gate for #110) removed four verified-dead items
-  from `apps/cna-web/**` (221 lines) and surveyed `network_assessment/**` and `infra/**` without deleting
+  from `apps/network-assessment-web/**` (221 lines) and surveyed `network_assessment/**` and `infra/**` without deleting
   anything further. The remaining findings were classified as wiring gaps and intentional
   scaffold rather than dead code, and were left in place deliberately.
 - **Dependencies:** Best done after T-501, which closes the largest scaffold.
 - **Recommended action:** Re-run the sweep once the AWS deploy path is functional. Anything still
   unreferenced at that point is genuinely dead and can be removed with confidence.
 - **Status:** Done (2026-09-23) — sweep re-run now that the AWS deploy path is authored (the
-  appliance's `210` is real; T-501/AWS T-101). Tools: `vulture network_assessment apps/cna-api --min-confidence 80`
-  and `knip` over `apps/cna-web`. Removed as genuinely dead: `analysis/run-form.tsx`
+  appliance's `210` is real; T-501/AWS T-101). Tools: `vulture network_assessment apps/network-assessment-api --min-confidence 80`
+  and `knip` over `apps/network-assessment-web`. Removed as genuinely dead: `analysis/run-form.tsx`
   (`RunAnalysisForm`, unreferenced since the 2026-04-10 feature commit) and three npm dependencies
   with zero imports (`@azure/keyvault-secrets`, `clsx`, `tailwind-merge`). Classified and kept:
   `prisma/seed-local-admin.js` and `scripts/filter-shape-index.mjs` (knip cannot see the Dockerfile
@@ -1082,7 +1082,7 @@ order; do not reorder it.
 
   | Class | Count | Examples |
   |---|---|---|
-  | Placeholders in `.example` templates | 8 | `apps/cna-web/.env.example`, `migrate/terraform.tfvars.example` — `change-me-…`, `your-…-secret`, `generate-with-openssl-rand-base64-32`, `sk-...` |
+  | Placeholders in `.example` templates | 8 | `apps/network-assessment-web/.env.example`, `migrate/terraform.tfvars.example` — `change-me-…`, `your-…-secret`, `generate-with-openssl-rand-base64-32`, `sk-...` |
   | Secret **names**, not values | 9 | Key Vault secret names in both `workload/main.tf` roots; `$keyVaultSecret = "cna-azure-openai-endpoint"`; `"DOCKERHUB" + "_USERNAME"`, a name built by concatenation specifically to dodge scanners |
   | References to a secret store | 6 | `${{ secrets.* }}` env bindings; `DB_URL=$(terraform output -raw …)`; the Secrets Manager ARN wildcard in `aws/identity/locals.tf` |
   | Connection strings built from variables | 3 | `aws/runtime/main.tf:19`, `migrate/secrets.tf:14`, and a `description` in `azure/runtime/variables.tf` showing the DSN *format* |
@@ -1370,7 +1370,7 @@ order; do not reorder it.
 
 - **Priority:** Medium
 - **Category:** Web app reliability
-- **Description:** `apps/cna-web/app/(dashboard)/engagements/[id]/deliverables/actions.ts` fixed the
+- **Description:** `apps/network-assessment-web/app/(dashboard)/engagements/[id]/deliverables/actions.ts` fixed the
   ingress-timeout problem for one of five generation paths. `generateAllAssessments` dispatches the
   COMPREHENSIVE_ASSESSMENT through `after()` and returns, but then runs the four `SINGLE_SHOT_TYPES`
   (`EXECUTIVE_SUMMARY`, `TECHNICAL_FINDINGS`, `REMEDIATION_PLAN`, `SPECIALIZATION_REPORT`) with
@@ -1435,21 +1435,21 @@ order; do not reorder it.
   not a diagram-only issue. Do not "fix" a duplicate layer by having the router keep both —
   that puts two identical tabs in front of the consultant.
 
-### T-419 — `npm run lint` in `apps/cna-web` is broken: `next lint` no longer exists
+### T-419 — `npm run lint` in `apps/network-assessment-web` is broken: `next lint` no longer exists
 
 - **Priority:** Medium
 - **Description:** `package.json` still defines `"lint": "next lint"`. Next.js 16 removed the
   `next lint` command, so `npm run lint` now fails with `Invalid project directory provided, no
-  such directory: .../apps/cna-web/lint` — the CLI treats `lint` as a path. Nothing in CI runs it
+  such directory: .../apps/network-assessment-web/lint` — the CLI treats `lint` as a path. Nothing in CI runs it
   (workflow 300 lints Python only), so the breakage was invisible; `README.md` → Quick start still
-  advertises the script. There is also no ESLint flat config in `apps/cna-web`, so `eslint` 10
+  advertises the script. There is also no ESLint flat config in `apps/network-assessment-web`, so `eslint` 10
   cannot run directly either.
 - **Dependencies:** None.
 - **Recommended action:** Add an `eslint.config.mjs` using `eslint-config-next`'s flat config,
   point the `lint` script at `eslint .`, and add `npm run lint`, `npm run typecheck` and
   `npm test` (both scripts now exist — `tsc --noEmit` and `vitest run`) to a web job in workflow
   300 so the web tier has the same fast checks the Python package has.
-- **Status:** Done (2026-09-23). `apps/cna-web/eslint.config.mjs` is the flat config
+- **Status:** Done (2026-09-23). `apps/network-assessment-web/eslint.config.mjs` is the flat config
   `eslint-config-next` publishes (`core-web-vitals` + `typescript`) plus one override that lets
   `prisma/seed-local-admin.js` stay the plain CommonJS script the migrator image needs; the `lint`
   script is `eslint .`. ESLint is pinned back to the 9.x line: `eslint-config-next` 16.3.1 bundles
@@ -1927,7 +1927,7 @@ published digest (cosign keyless with the workflow OIDC identity) and have `210`
 signature and the SLSA provenance subject before deploying.
 
 ### T-704 — API database connection handling (PY-002)
-- **Status:** Done 2026-10-03 — `apps/cna-api/db.py` owns one `psycopg2.pool.ThreadedConnectionPool`
+- **Status:** Done 2026-10-03 — `apps/network-assessment-api/db.py` owns one `psycopg2.pool.ThreadedConnectionPool`
   per process behind a bounded-wait semaphore; `db.connection(dsn)` is the only way the API gets a
   connection: psycopg2's `with conn:` semantics (commit on clean exit, rollback on exception), the
   connection returned to the pool in every case and discarded if the server closed it. Every
@@ -1938,8 +1938,8 @@ signature and the SLSA provenance subject before deploying.
   `CNA_DB_POOL_TIMEOUT_SECONDS` for one of `CNA_DB_POOL_MAX` connections gets a 503 with
   `Retry-After` (new `Outcome.UNAVAILABLE`) rather than a 41st connection on the server. Both
   variables are optional with code defaults (10 / 10; `.env.example`); a deployment has
-  to inject nothing new. 18 tests (23 parametrised cases) in `tests/unit/test_cna_api_db_pool.py`.
-- **Original description:** `apps/cna-api` opens a new psycopg2 connection per call and never closes it; `_log()` opens one per
+  to inject nothing new. 18 tests (23 parametrised cases) in `tests/unit/test_network_assessment_api_db_pool.py`.
+- **Original description:** `apps/network-assessment-api` opens a new psycopg2 connection per call and never closes it; `_log()` opens one per
 progress line (dozens per job). Introduce one connection pool (`psycopg2.pool` or a per-job
 connection passed to `_log`) and close connections deterministically.
 
@@ -1972,13 +1972,13 @@ on `CNA_APPLIANCE_CLOUD` / the credential platform and add the S3 path (the CLI'
 exists) so an AWS deployment can upload documents and publish portals.
 
 ### T-710 — Align the storage-account variable name (ARCH-003)
-The API reads `AZURE_STORAGE_ACCOUNT_NAME` (`apps/cna-api/main.py`); a deployment that sets
+The API reads `AZURE_STORAGE_ACCOUNT_NAME` (`apps/network-assessment-api/main.py`); a deployment that sets
 `CNA_STORAGE_ACCOUNT_NAME` instead gets a 503 from in-app portal publish. Pick one name in
 `.env.example` and record it under `Changed` in `CHANGELOG.md`.
 
 ### T-711 — Regenerate the runtime environment inventory (DOC-003, DOC-002, PROD-003)
 `.env.example` declares ~11 variables nothing reads and omits ~12 that are read (including the
-contract variable `CREDENTIAL_ENCRYPTION_KEY`); `apps/cna-web/.env.example` covers 8 of the 34
+contract variable `CREDENTIAL_ENCRYPTION_KEY`); `apps/network-assessment-web/.env.example` covers 8 of the 34
 names the web tier reads. Generate both from a grep of `os.environ` / `process.env` and add a
 guard test that fails on drift.
 
@@ -2009,7 +2009,7 @@ No CI runs `prisma migrate deploy` (empty DB and v0.8 snapshot), starts the API 
 or exercises `210`'s rollback mode. Add a Postgres service job for the migrations, start the
 api/migrator images in `200`'s smoke test, and run `TestRealDrawioExport` inside the API image.
 
-### T-717 — Bound request bodies in cna-api
+### T-717 — Bound request bodies in network-assessment-api
 The adversarial pass (Phase 8 of the v1.0 review) posted a 5 MB authenticated JSON body to
 `POST /chat/{engagement_id}`; the API parsed all of it before truncating the message to
 `MAX_MESSAGE_CHARS`. Nothing in the application bounds a request body — only the edge or load
@@ -2037,7 +2037,7 @@ the split ships (the plan pairs the removal with its AWS gating, change set K; n
 first release carrying the split): delete `network_assessment/core/topology_schema.py`, delete
 `tests/unit/test_topology_shim_warns.py` and the `shim` fixture tests in
 `tests/unit/test_topology_split.py`, and run the unit job with `-W error::DeprecationWarning` scoped to
-`network_assessment.*` so no shim can be imported silently again. `apps/cna-web/lib/finops/inventory.ts` mirrors the
+`network_assessment.*` so no shim can be imported silently again. `apps/network-assessment-web/lib/finops/inventory.ts` mirrors the
 Azure field shapes and already names `network_assessment/core/topology/azure.py`.
 
 ### T-720 — Azure rule registry follow-ups (change set B)
@@ -2138,9 +2138,9 @@ Prisma's `spClientId`/`spSecretEnc` and `AZURE_CLIENT_SECRET` are gone (`CHANGEL
   without exclusions; align it with the factory's exclusions when the web tier is next touched.
 
 ### T-724 — Entra bearer on the internal routes: app registration, role and web identity in the deployment (change set H)
-`apps/cna-api/entra.py` validates Entra tokens for `CNA_ENTRA_AUDIENCE` and the `internal` router requires
+`apps/network-assessment-api/entra.py` validates Entra tokens for `CNA_ENTRA_AUDIENCE` and the `internal` router requires
 the `Discovery.Run` role; the shared token `CNA_API_TOKEN` stays accepted so a deployment can move one
-container at a time (`CHANGELOG.md` `[Unreleased]`; `tests/unit/test_cna_api_auth.py`,
+container at a time (`CHANGELOG.md` `[Unreleased]`; `tests/unit/test_network_assessment_api_auth.py`,
 `tests/security/test_profile_refused.py`). Open:
 - Deployment note (outside this repository): an Azure deployment creates the api's app registration with
   `identifier_uris = ["api://<name>"]` and an app role `Discovery.Run`, assigns that role to the web
@@ -2157,7 +2157,7 @@ container at a time (`CHANGELOG.md` `[Unreleased]`; `tests/unit/test_cna_api_aut
   the role name `Discovery.Run`; the plan's end state is Entra only.
 - The plan's public read routes (`/api/health`, `/api/rules`, `/api/assessments/current/*`, section 8) do
   not exist in the Core yet; when change set D adds them they are registered on `app` (or a `public`
-  router), never on `internal`, and `tests/unit/test_cna_api_auth.py` keeps the protected list.
+  router), never on `internal`, and `tests/unit/test_network_assessment_api_auth.py` keeps the protected list.
 - The web tier's `lib/blob.ts` and `lib/ai-engine.ts` still build `DefaultAzureCredential` without the
   exclusions `network_assessment.core.auth.build_azure_credential` applies (T-723).
 
@@ -2218,11 +2218,11 @@ old loop for one release (`CHANGELOG.md` `[Unreleased]`). Open:
   `lab edition: boundary holds` and exits 0, every `import azure|msal|boto3` and `python -m pip` fails,
   `IDENTITY_ENDPOINT` refuses the start, `id -u` is 1001. The stages were written without a Docker daemon; CI is
   the only place they have run.
-- `apps/cna-api/Dockerfile` still stands alone; the plan folds its body into the root file as the
+- `apps/network-assessment-api/Dockerfile` still stands alone; the plan folds its body into the root file as the
   `final-appliance` stage body and deletes it. The two files share every convention already (uv stage, lock
   export, pip removal, uid 1001, draw.io), so the fold is a move, not a rewrite; `200-build-images.yml`'s
   matrix `file:` entries change with it.
-- `cna:lab` must never appear in a registry: `test_lab_boundary.py` checks `200-build-images.yml`
+- `network-assessment:lab` must never appear in a registry: `test_lab_boundary.py` checks `200-build-images.yml`
   for it; keep that check when the image workflow changes.
 - The AddOn builds its deployable lab image from the published engine with the same pattern (its
   `infrastructure/docker/Dockerfile`); once the engine wheel is released (T-728; the AddOn pins the GitHub Release asset by URL and sha256) its `edition.py` can import
@@ -2425,7 +2425,7 @@ Settings → Rules shows both patterns. Workflow-only change; the pull request n
   `typescript >=4.8.4 <6.1.0`, its issue 10940 is open, and TypeScript 7.1 is only at `7.1.0-beta`; Next.js also
   imports the TypeScript 6 API during `next build`. Nothing in this repository can lift that.
 - **Original description** (written before the Dependabot `typescript` ignore was removed by this change; the step
-  that names it below is already done): `apps/cna-web` keeps `typescript` as `npm:@typescript/typescript6` because typescript-eslint (inside `eslint-config-next`)
+  that names it below is already done): `apps/network-assessment-web` keeps `typescript` as `npm:@typescript/typescript6` because typescript-eslint (inside `eslint-config-next`)
 refuses to load against TypeScript 7, which has no programmatic API until 7.1 (typescript-eslint issue 10940 tracks it).
 `@typescript/native` supplies `tsc` 7. Open: when a typescript-eslint release lists TypeScript 7.1 or later in its
 `typescript` peer range, change `typescript` to the same 7.x as `@typescript/native`, remove `@typescript/native`, the
@@ -2463,15 +2463,15 @@ other people's deployments; the note is in `CHANGELOG.md` for them.
 
 ### T-737 — Clear the development-only npm advisories Trivy reports, and the migrator image's development tree
 Found 2026-10-25 with `scripts/ci/local-container-checks.sh trivy-fs` and a Trivy scan of the built images (Trivy 0.76.1, advisory database of that
-day): with development dependencies included, `apps/cna-web/package-lock.json` had `brace-expansion` 1.1.18 and 5.0.9 (CVE-2026-102276 and
+day): with development dependencies included, `apps/network-assessment-web/package-lock.json` had `brace-expansion` 1.1.18 and 5.0.9 (CVE-2026-102276 and
 CVE-2026-102278, High, GHSA-6j4f-fj2g-mc7p and GHSA-qhr7-859c-m2p7; fixed in 1.1.20 and 5.0.11) and `postcss-selector-parser` 6.0.10
 (CVE-2026-104844, Medium; fixed in 7.1.6). The web runner image had no finding, but the `migrator` target copied the builder's whole `node_modules`
 (526 top-level packages, 1048 MB, every devDependency), so a scan of it reported 19 High findings: 4 for `brace-expansion` and 15 in the Go
 standard library and `golang.org/x/text` compiled into `@typescript/typescript-linux-x64/lib/tsc`. `npm audit --omit=dev`, the CI gate, cannot see them,
 and the Docker Scout gate in `200-build-images.yml` (fixable critical and high) had not yet run on this image because publishing is off.
-Done (branch `ci/migrator-production-only`): the migrator has its own production-only tree. A `migrator-deps` stage in `apps/cna-web/Dockerfile`
+Done (branch `ci/migrator-production-only`): the migrator has its own production-only tree. A `migrator-deps` stage in `apps/network-assessment-web/Dockerfile`
 installs the Prisma CLI, `@prisma/client` and what they need (35 packages, 243 MB) with `npm ci --omit=dev --ignore-scripts` from a lockfile that
-`apps/cna-web/scripts/migrator-lockfile.mjs` cuts out of `package-lock.json` (entries copied as they are, so versions and integrity hashes are the web
+`apps/network-assessment-web/scripts/migrator-lockfile.mjs` cuts out of `package-lock.json` (entries copied as they are, so versions and integrity hashes are the web
 app's), then runs Prisma's two install-time jobs explicitly (engine download, client generation); the `migrator` stage copies that tree and no
 longer depends on the builder. `prisma` moved from `devDependencies` to `dependencies`; the runner copies only `.prisma` and `@prisma` from the
 builder, so it did not change. The two `brace-expansion` `overrides` are gone and the lockfile resolves 1.1.21 and 5.0.12; the full `npm audit` has no

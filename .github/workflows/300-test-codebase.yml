@@ -135,7 +135,7 @@ jobs:
   # ------------------------------------------------------------------
   # 2b. Web tier — lint, type-check, unit tests (TODO.md T-419)
   # ------------------------------------------------------------------
-  # The same fast checks the Python package gets, for apps/cna-web. Runs on
+  # The same fast checks the Python package gets, for apps/network-assessment-web. Runs on
   # the runner's own Node (ubuntu-latest ships a current LTS; the image build
   # in 200 is the authoritative Node 24 run) — actions/setup-node is not used
   # because every action here is SHA-pinned and no audited digest for it
@@ -146,14 +146,14 @@ jobs:
     timeout-minutes: 15
     defaults:
       run:
-        working-directory: apps/cna-web
+        working-directory: apps/network-assessment-web
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Cache npm
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ~/.npm
-          key: web-npm-${{ hashFiles('apps/cna-web/package-lock.json') }}
+          key: web-npm-${{ hashFiles('apps/network-assessment-web/package-lock.json') }}
       - name: Install
         run: |
           node --version
@@ -165,7 +165,7 @@ jobs:
       - name: Unit tests (vitest)
         run: npm test
 
-  # TypeScript canary: type-checks cna-web with the newest published TypeScript (the beta while one is out), so a
+  # TypeScript canary: type-checks network-assessment-web with the newest published TypeScript (the beta while one is out), so a
   # compiler change shows up as a warning here instead of as a red Dependabot pull request. It never blocks a merge:
   # the step is continue-on-error, the job is not a required check, and a failure becomes an annotation plus a
   # summary. The required `web` job above type-checks with the pinned tsc 7 (package.json "@typescript/native").
@@ -175,7 +175,7 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: apps/cna-web
+        working-directory: apps/network-assessment-web
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -184,7 +184,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ~/.npm
-          key: web-npm-${{ hashFiles('apps/cna-web/package-lock.json') }}
+          key: web-npm-${{ hashFiles('apps/network-assessment-web/package-lock.json') }}
       - name: Install
         run: npm ci --no-audit --no-fund
       - name: Type-check with the newest TypeScript
@@ -274,7 +274,7 @@ jobs:
       - name: Install dependencies
         # enrichment is required since tests/unit/test_azure_discovery.py exercises
         # the Log Analytics paths by importing azure.monitor.query directly (T-408).
-        # api installs fastapi/uvicorn/psycopg2-binary so the apps/cna-api
+        # api installs fastapi/uvicorn/psycopg2-binary so the apps/network-assessment-api
         # TestClient tests actually run in CI instead of skipping silently (TEST-001).
         # The engine is a workspace member (packages/); pip cannot resolve it from an
         # index, so it is installed from the tree first and the root's dependency on it
@@ -348,12 +348,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Build image
-        run: docker build -t cna:ci-test .
+        run: docker build -t network-assessment:ci-test .
       - name: Smoke test — network-assessment --help
-        run: docker run --rm cna:ci-test --help
+        run: docker run --rm network-assessment:ci-test --help
       - name: Verify non-root user
         run: |
-          USER=$(docker run --rm --entrypoint whoami cna:ci-test)
+          USER=$(docker run --rm --entrypoint whoami network-assessment:ci-test)
           if [ "$USER" = "root" ]; then
             echo "FAIL: container is running as root"
             exit 1
@@ -374,34 +374,34 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Build the lab target
-        run: docker build --build-arg EDITION=lab -t cna:lab .
+        run: docker build --build-arg EDITION=lab -t network-assessment:lab .
       - name: Boundary proof — the image's CMD exits 0
-        run: docker run --rm cna:lab
+        run: docker run --rm network-assessment:lab
       - name: Boundary proof — import azure fails inside the image
         run: |
-          if docker run --rm cna:lab python -c "import azure"; then
+          if docker run --rm network-assessment:lab python -c "import azure"; then
             echo "::error::azure is importable in the lab image"
             exit 1
           fi
-          if docker run --rm cna:lab python -c "import msal"; then
+          if docker run --rm network-assessment:lab python -c "import msal"; then
             echo "::error::msal is importable in the lab image"
             exit 1
           fi
-          if docker run --rm cna:lab python -c "import boto3"; then
+          if docker run --rm network-assessment:lab python -c "import boto3"; then
             echo "::error::boto3 is importable in the lab image"
             exit 1
           fi
       - name: Boundary proof — an identity endpoint refuses to start, pip is gone, non-root
         run: |
-          if docker run --rm -e IDENTITY_ENDPOINT=http://169.254.169.254 cna:lab; then
+          if docker run --rm -e IDENTITY_ENDPOINT=http://169.254.169.254 network-assessment:lab; then
             echo "::error::the lab image started under an identity endpoint"
             exit 1
           fi
-          if docker run --rm cna:lab python -m pip --version; then
+          if docker run --rm network-assessment:lab python -m pip --version; then
             echo "::error::pip is present in the lab image"
             exit 1
           fi
-          test "$(docker run --rm cna:lab id -u)" = "1001"
+          test "$(docker run --rm network-assessment:lab id -u)" = "1001"
 
   # ------------------------------------------------------------------
   # 6. Python lockfile consistency (TODO.md T-702)
@@ -581,7 +581,7 @@ jobs:
   # off. A finding in an image therefore showed up at the first publish, not in the pull request that caused it:
   # the migrator once copied the builder's whole node_modules (every devDependency, among them the Go-compiled
   # TypeScript 7 compiler), which `npm audit --omit=dev` cannot see. This job builds the `migrator` and `runner`
-  # targets of apps/cna-web/Dockerfile on every pull request and checks them before anything is pushed.
+  # targets of apps/network-assessment-web/Dockerfile on every pull request and checks them before anything is pushed.
   #
   #   1. The migrator holds the Prisma CLI, the client and its engines, and none of the build tooling (checked
   #      against the image, not the Dockerfile text), every package in it is the version and integrity hash
@@ -613,15 +613,15 @@ jobs:
       - name: Build the migrator and web runner images
         run: |
           set -euo pipefail
-          docker build --target migrator -t cna-scan-migrator:ci apps/cna-web
-          docker build --target runner -t cna-scan-runner:ci apps/cna-web
+          docker build --target migrator -t network-assessment-scan-migrator:ci apps/network-assessment-web
+          docker build --target runner -t network-assessment-scan-runner:ci apps/network-assessment-web
       - name: The migrator holds Prisma and no build tooling, and the runner holds no Prisma CLI
         run: |
           set -euo pipefail
           sandbox=(--rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --entrypoint sh)
-          test "$(docker image inspect cna-scan-migrator:ci --format '{{.Config.User}}')" = "1001"
-          top="$(docker run "${sandbox[@]}" cna-scan-migrator:ci -c 'ls -A node_modules')"
-          bins="$(docker run "${sandbox[@]}" cna-scan-migrator:ci -c 'ls -A node_modules/.bin')"
+          test "$(docker image inspect network-assessment-scan-migrator:ci --format '{{.Config.User}}')" = "1001"
+          top="$(docker run "${sandbox[@]}" network-assessment-scan-migrator:ci -c 'ls -A node_modules')"
+          bins="$(docker run "${sandbox[@]}" network-assessment-scan-migrator:ci -c 'ls -A node_modules/.bin')"
           failed=0
           for need in .prisma @prisma prisma; do
             grep -qxF -- "$need" <<<"$top" || { echo "::error::migrator is missing node_modules/$need"; failed=1; }
@@ -633,11 +633,11 @@ jobs:
           for banned in tsc tsserver eslint vitest vite tailwindcss next; do
             if grep -qxF -- "$banned" <<<"$bins"; then echo "::error::migrator ships node_modules/.bin/$banned"; failed=1; fi
           done
-          docker run "${sandbox[@]}" -e DATABASE_URL=postgresql://127.0.0.1:5432/db cna-scan-migrator:ci \
+          docker run "${sandbox[@]}" -e DATABASE_URL=postgresql://127.0.0.1:5432/db network-assessment-scan-migrator:ci \
             -c 'node_modules/.bin/prisma --version && node_modules/.bin/prisma validate' || failed=1
           # Every package in the migrator is the version and integrity hash that package-lock.json names.
-          docker run "${sandbox[@]}" cna-scan-migrator:ci -c 'cat node_modules/.package-lock.json' > "$RUNNER_TEMP/migrator-installed.json"
-          python3 - "$RUNNER_TEMP/migrator-installed.json" apps/cna-web/package-lock.json <<'PY' || failed=1
+          docker run "${sandbox[@]}" network-assessment-scan-migrator:ci -c 'cat node_modules/.package-lock.json' > "$RUNNER_TEMP/migrator-installed.json"
+          python3 - "$RUNNER_TEMP/migrator-installed.json" apps/network-assessment-web/package-lock.json <<'PY' || failed=1
           import json
           import sys
 
@@ -656,7 +656,7 @@ jobs:
           sys.exit(1 if bad or not installed else 0)
           PY
           # The runner copies only the generated client from the builder; prisma moving to dependencies must not change that.
-          docker run "${sandbox[@]}" cna-scan-runner:ci \
+          docker run "${sandbox[@]}" network-assessment-scan-runner:ci \
             -c 'test ! -e node_modules/prisma && test ! -e node_modules/.bin/prisma && test -d node_modules/@prisma/client && test -d node_modules/.prisma/client' \
             || { echo "::error::the web runner image must hold the Prisma client and engine but not the CLI"; failed=1; }
           exit "$failed"
@@ -664,12 +664,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/scan"
-          docker save cna-scan-migrator:ci -o "$RUNNER_TEMP/scan/migrator.tar"
-          docker save cna-scan-runner:ci -o "$RUNNER_TEMP/scan/runner.tar"
+          docker save network-assessment-scan-migrator:ci -o "$RUNNER_TEMP/scan/migrator.tar"
+          docker save network-assessment-scan-runner:ci -o "$RUNNER_TEMP/scan/runner.tar"
           chmod -R a+rX "$RUNNER_TEMP/scan"
-          docker volume create cna-trivy-cache > /dev/null
+          docker volume create network-assessment-trivy-cache > /dev/null
           docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp \
-            -v cna-trivy-cache:/root/.cache "$TRIVY_IMAGE" image --download-db-only --no-progress
+            -v network-assessment-trivy-cache:/root/.cache "$TRIVY_IMAGE" image --download-db-only --no-progress
       - name: Trivy, fixable HIGH and CRITICAL vulnerabilities and secrets (no network)
         run: |
           set -euo pipefail
@@ -677,7 +677,7 @@ jobs:
           for target in migrator runner; do
             echo "::group::trivy image ${target}"
             docker run --rm --read-only --network none --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp \
-              -v cna-trivy-cache:/root/.cache -v "$RUNNER_TEMP/scan:/scan:ro" -v "$PWD:/work:ro" \
+              -v network-assessment-trivy-cache:/root/.cache -v "$RUNNER_TEMP/scan:/scan:ro" -v "$PWD:/work:ro" \
               "$TRIVY_IMAGE" image --input "/scan/${target}.tar" --skip-db-update --skip-java-db-update --no-progress \
               --scanners vuln,secret --severity HIGH,CRITICAL --ignore-unfixed \
               --ignorefile /work/.trivyignore.yaml --exit-code 1 || status=1

@@ -36,7 +36,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-# The guard reads the list of tracked files from git. The `cna-test` service in docker-compose.yml builds from a
+# The guard reads the list of tracked files from git. The `network-assessment-test` service in docker-compose.yml builds from a
 # context without `.git`, where there is nothing to list; skip there instead of raising. A worktree has `.git` as a
 # file, so the check is `exists()`, not `is_dir()`. In CI the checkout has `.git`, and
 # `test_the_scan_reads_the_places_it_guards` fails loudly if the list ever comes back empty.
@@ -51,9 +51,9 @@ GUARD_FILES = frozenset(
     {
         THIS_FILE,
         "tests/security/test_standalone_boundary.py",  # names the other owner's GitHub account
-        "apps/cna-web/lib/standalone-boundary.test.ts",  # the same, for the web tier
-        "apps/cna-web/lib/report-prompts.test.ts",  # the banned-word list of the report prompts
-        "apps/cna-web/lib/logo-url.test.ts",  # spells out the company hosts to prove the logo allow-list rejects them
+        "apps/network-assessment-web/lib/standalone-boundary.test.ts",  # the same, for the web tier
+        "apps/network-assessment-web/lib/report-prompts.test.ts",  # the banned-word list of the report prompts
+        "apps/network-assessment-web/lib/logo-url.test.ts",  # spells out the company hosts to prove the logo allow-list rejects them
     }
 )
 LOCK_FILES = frozenset({"uv.lock", "package-lock.json"})
@@ -73,14 +73,14 @@ BRAND_FILE_NAMES: frozenset[str] = frozenset()
 
 #: The Hybrid Cloud Works logo, made from the owner's logo (HCW-HybridCloudWorks, frontend/public/icons/hcw-logo.png):
 #: black strokes for a light background, white strokes for a dark one, both on a transparent background.
-LOGO_BLACK = "apps/cna-web/public/hcw-logo-black.png"
-LOGO_WHITE = "apps/cna-web/public/hcw-logo-white.png"
+LOGO_BLACK = "apps/network-assessment-web/public/hcw-logo-black.png"
+LOGO_WHITE = "apps/network-assessment-web/public/hcw-logo-white.png"
 #: The encyclopedia cover is dark navy, so it carries the white-stroke logo, at the size WeasyPrint needs for print.
 LOGO_COVER = "network_assessment/report_engine/templates/assets/logos/hcw-logo-cover.png"
 WEB_PAGES_WITH_THE_LOGO = (
-    "apps/cna-web/app/(dashboard)/layout.tsx",
-    "apps/cna-web/app/auth/signin/page.tsx",
-    "apps/cna-web/app/(dashboard)/engagements/[id]/report/page.tsx",
+    "apps/network-assessment-web/app/(dashboard)/layout.tsx",
+    "apps/network-assessment-web/app/auth/signin/page.tsx",
+    "apps/network-assessment-web/app/(dashboard)/engagements/[id]/report/page.tsx",
 )
 MAX_LOGO_BYTES = 100_000
 
@@ -133,7 +133,10 @@ DOC_EXCEPTIONS: tuple[tuple[str, re.Pattern[str], str], ...] = (
 
 #: The files whose text goes to an AI model or into the title block of a report. Identifiers such as ``clientOrg``
 #: and ``customerLogoUrl`` do not match because the pattern needs a word boundary after the word.
-MODEL_FACING_FILES = ("apps/cna-web/lib/openai.ts", "apps/cna-web/lib/report-orchestrator.ts")
+MODEL_FACING_FILES = (
+    "apps/network-assessment-web/lib/openai.ts",
+    "apps/network-assessment-web/lib/report-orchestrator.ts",
+)
 MODEL_FACING_BANNED = re.compile(
     r"\b(?:cbts|paid|paying|payments?|pays?|fees?|consult\w*|customers?|malpractice)\b"
     # "client" as a buyer or a person. A variable called ``client`` (an SDK client) is code and is not matched.
@@ -243,8 +246,8 @@ class TestTheCompanyNameStaysOut:
             ".github/SECURITY.md",
             ".github/ISSUE_TEMPLATE/bug_report.yml",
             "Dockerfile",
-            "apps/cna-web/lib/openai.ts",
-            "apps/cna-web/lib/report-prompts.ts",
+            "apps/network-assessment-web/lib/openai.ts",
+            "apps/network-assessment-web/lib/report-prompts.ts",
             "network_assessment/ai_engine/chat_agent.py",
             *(file for file, _pattern, _reason in BRAND_ASSETS),
         ):
@@ -359,9 +362,11 @@ class TestTheHybridCloudWorksLogo:
             for match in re.finditer(
                 r"""["'](/[A-Za-z0-9_.-]+\.(?:png|svg|jpe?g|webp|ico))["']""", _text(relative) or ""
             ):
-                target = REPO_ROOT / "apps/cna-web/public" / match.group(1).lstrip("/")
+                target = (
+                    REPO_ROOT / "apps/network-assessment-web/public" / match.group(1).lstrip("/")
+                )
                 assert target.is_file(), (
-                    f"{relative} names {match.group(1)}, which is not in apps/cna-web/public"
+                    f"{relative} names {match.group(1)}, which is not in apps/network-assessment-web/public"
                 )
 
     def test_the_encyclopedia_html_embeds_the_cover_logo_so_it_shows_in_a_browser_and_in_the_pdf(

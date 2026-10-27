@@ -67,9 +67,9 @@ _EXPECTED_WORKFLOW_SUBJECTS = frozenset(
 _EXPECTED_CONTAINER_SUBJECTS = frozenset(
     {
         "Dockerfile",
-        "apps/cna-api/Dockerfile",
-        "apps/cna-web/Dockerfile",
-        "apps/cna-worker/Dockerfile",
+        "apps/network-assessment-api/Dockerfile",
+        "apps/network-assessment-web/Dockerfile",
+        "apps/network-assessment-worker/Dockerfile",
         "docker-compose.yml",
     }
 )

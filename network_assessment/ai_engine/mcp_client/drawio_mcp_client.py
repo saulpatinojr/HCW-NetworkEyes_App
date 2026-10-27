@@ -1,15 +1,15 @@
-"""Draw.io MCP Client — same-origin REST surface served by cna-web.
+"""Draw.io MCP Client — same-origin REST surface served by network-assessment-web.
 
 This is the third leg of the triple-enforced icon-library pinning. The first
 two layers (build-time filter on shape-index.json, route-handler allow-list)
-live in apps/cna-web/lib/drawio-mcp. This client re-filters every response so
+live in apps/network-assessment-web/lib/drawio-mcp. This client re-filters every response so
 callers can never receive a shape outside ALLOWED_LIBS, no matter how the
 server is configured at runtime.
 
 Connection:
   - Default URL: http://localhost:3000/api/drawio-mcp (override via
     CNA_DRAWIO_MCP_URL).
-  - HTTP+JSON contract — no MCP SDK required. The cna-web route exposes the
+  - HTTP+JSON contract — no MCP SDK required. The network-assessment-web route exposes the
     same `search_shapes` / `create_diagram` tool shapes as the upstream
     draw.io MCP App Server.
   - The route is internal only (ticket #245): every request carries
@@ -33,8 +33,8 @@ import httpx
 logger = logging.getLogger("network_assessment.mcp.drawio")
 
 # Pinned per the Draw.io integration plan. Update here AND in
-# apps/cna-web/lib/drawio-mcp/allow-list.ts AND in
-# apps/cna-web/scripts/filter-shape-index.mjs when switching libraries.
+# apps/network-assessment-web/lib/drawio-mcp/allow-list.ts AND in
+# apps/network-assessment-web/scripts/filter-shape-index.mjs when switching libraries.
 ALLOWED_LIBS: frozenset[str] = frozenset({"azure2", "aws4"})
 
 _DEFAULT_URL = os.getenv("CNA_DRAWIO_MCP_URL", "http://localhost:3000/api/drawio-mcp").rstrip("/")

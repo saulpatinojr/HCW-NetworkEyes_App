@@ -169,7 +169,7 @@ def test_topology_metadata_is_populated():
 
 
 def test_record_shape_matches_frontend_contract():
-    """Field names must mirror apps/cna-web/lib/types/stat-master.ts."""
+    """Field names must mirror apps/network-assessment-web/lib/types/stat-master.ts."""
     expected = {
         "traffic_direction",
         "severity",

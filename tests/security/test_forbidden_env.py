@@ -109,14 +109,14 @@ class TestApiStartup:
         repo_root = Path(auth.__file__).resolve().parents[2]  # network_assessment/core/auth.py
         sys.path.insert(0, str(repo_root))
         spec = importlib.util.spec_from_file_location(
-            "cna_api_main_forbidden_env",
-            str(repo_root / "apps" / "cna-api" / "main.py"),
+            "network_assessment_api_main_forbidden_env",
+            str(repo_root / "apps" / "network-assessment-api" / "main.py"),
         )
-        module = sys.modules.get("cna_api_main_under_test")
+        module = sys.modules.get("network_assessment_api_main_under_test")
         if module is None:
             assert spec is not None and spec.loader is not None
             module = importlib.util.module_from_spec(spec)
-            sys.modules["cna_api_main_under_test"] = module
+            sys.modules["network_assessment_api_main_under_test"] = module
             spec.loader.exec_module(module)
         env = {
             "CNA_APPLIANCE_CLOUD": "azure",

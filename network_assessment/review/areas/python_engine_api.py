@@ -1,10 +1,10 @@
 """Findings for the ``python-engine-api`` area (Requirement 2 correctness).
 
 This is a *verify-then-close-gaps* record for the ``network_assessment/`` core, the
-``apps/cna-api`` FastAPI service, and the ``apps/cna-worker`` decision. The
+``apps/network-assessment-api`` FastAPI service, and the ``apps/network-assessment-worker`` decision. The
 audit against Requirement 2 confirmed:
 
-  * **2.1 — `/intake` honesty (verified compliant).** ``apps/cna-api/main.py``
+  * **2.1 — `/intake` honesty (verified compliant).** ``apps/network-assessment-api/main.py``
     returns an honest ``501`` (``Outcome.NOT_IMPLEMENTED``) for ``/intake``
     rather than a fabricated ``200``. Recorded as an ``INFORMATIONAL`` finding
     so the plan captures the verified-compliant outcome and guards against a
@@ -17,15 +17,15 @@ audit against Requirement 2 confirmed:
     ``200`` on an error path. Recorded as a ``LOW`` residual gap that this task
     remediates.
 
-  * **2.5 — worker retirement decision (retire).** The ``apps/cna-worker``
+  * **2.5 — worker retirement decision (retire).** The ``apps/network-assessment-worker``
     placeholder was a run-once script that stubbed the publish job against a
-    hardcoded ``sample-engagement``. The ``apps/cna-api`` ``POST /publish``
+    hardcoded ``sample-engagement``. The ``apps/network-assessment-api`` ``POST /publish``
     endpoint now does that job for real (real deliverables -> private
     per-engagement blob container -> portal generation -> TTL-capped SAS URL)
     and its docstring states it supersedes the placeholder. The decision is
     therefore **retire** (not retained with a responsibility). The worker is
     still wired into the Azure and AWS Terraform ``compute`` modules, the
-    ``apps/cna-worker/Dockerfile`` container audit, and the README, so the
+    ``apps/network-assessment-worker/Dockerfile`` container audit, and the README, so the
     removal is a coordinated change carried as the plan action rather than
     performed here. Recorded as a ``LOW`` finding.
 
@@ -52,7 +52,7 @@ def python_engine_api_findings() -> list[Finding]:
                 "fake success."
             ),
             dedup_key="python-engine-api:intake-honest-501",
-            subject="apps/cna-api/main.py::intake",
+            subject="apps/network-assessment-api/main.py::intake",
         ),
         Finding(
             area=_AREA,
@@ -64,14 +64,14 @@ def python_engine_api_findings() -> list[Finding]:
                 "an error path."
             ),
             dedup_key="python-engine-api:single-outcome-status-mapping",
-            subject="apps/cna-api",
+            subject="apps/network-assessment-api",
         ),
         Finding(
             area=_AREA,
             severity=Severity.LOW,
             proposed_action=(
-                "Retire apps/cna-worker: the run-once placeholder (hardcoded "
-                "sample-engagement) is superseded by the apps/cna-api POST "
+                "Retire apps/network-assessment-worker: the run-once placeholder (hardcoded "
+                "sample-engagement) is superseded by the apps/network-assessment-api POST "
                 "/publish endpoint, which performs the real publish job. Remove "
                 "the worker service and its Dockerfile, and drop the worker "
                 "container from the Azure and AWS Terraform compute modules "
@@ -79,6 +79,6 @@ def python_engine_api_findings() -> list[Finding]:
                 "worker is not retained with any responsibility."
             ),
             dedup_key="python-engine-api:worker-retirement",
-            subject="apps/cna-worker",
+            subject="apps/network-assessment-worker",
         ),
     ]

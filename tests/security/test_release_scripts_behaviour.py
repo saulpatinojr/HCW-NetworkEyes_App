@@ -73,7 +73,7 @@ class TestPathsTouchBuild:
         for expected in (
             "Dockerfile",
             "network_assessment/**",
-            "apps/cna-web/**",
+            "apps/network-assessment-web/**",
             "uv.lock",
             ".github/workflows/200-build-images.yml",
         ):
@@ -85,8 +85,8 @@ class TestPathsTouchBuild:
         [
             "Dockerfile",
             "network_assessment/core/auth.py",
-            "apps/cna-web/lib/image-update-rules.ts",
-            "apps/cna-api/Dockerfile",
+            "apps/network-assessment-web/lib/image-update-rules.ts",
+            "apps/network-assessment-api/Dockerfile",
             "scripts/ci/sign_image.sh",
             "pyproject.toml",
             "uv.lock",
@@ -107,11 +107,11 @@ class TestPathsTouchBuild:
             "scripts/ci/find_release_image.sh",
             "tests/security/test_image_repository_name.py",
             "docs/dockerfile.md",
-            "apps/cna-api/main.py",  # apps/cna-api/** is NOT in the filter; only the Dockerfile paths listed are
+            "apps/network-assessment-api/main.py",  # apps/network-assessment-api/** is NOT in the filter; only the Dockerfile paths listed are
         ],
     )
     def test_documentation_the_manifest_and_other_workflows_are_not(self, changed):
-        patterns = [p for p in self.patterns if not p.startswith("apps/cna-api/")]
+        patterns = [p for p in self.patterns if not p.startswith("apps/network-assessment-api/")]
         assert paths_touch_build.touching([changed], patterns) == []
 
     def test_star_stays_within_a_segment_and_double_star_does_not(self):
@@ -1036,7 +1036,7 @@ class TestTagImagesStep:
     @pytest.mark.parametrize(
         "changed",
         [
-            "apps/cna-web/lib/image-update.ts",
+            "apps/network-assessment-web/lib/image-update.ts",
             "Dockerfile",
             "uv.lock",
             ".github/workflows/200-build-images.yml",
@@ -1124,7 +1124,13 @@ class TestTagImagesStep:
     def test_the_step_holds_no_copy_of_the_build_paths(self):
         script = _tag_images_script()
         assert "paths_touch_build.py .github/workflows/200-build-images.yml" in script
-        for fragment in ("apps/cna-web", "apps/cna-api", "uv.lock", "pyproject.toml", "Dockerfile"):
+        for fragment in (
+            "apps/network-assessment-web",
+            "apps/network-assessment-api",
+            "uv.lock",
+            "pyproject.toml",
+            "Dockerfile",
+        ):
             assert fragment not in script, fragment
 
     def test_the_tip_commit_moves_the_latest_tags_too(self, tmp_path):

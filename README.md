@@ -61,9 +61,9 @@ someone, check `REVIEW.md`.
 
 ```
 apps/
-├── cna-web/          Next.js web platform (8-step journey, encyclopedia, copilot)
-├── cna-api/          FastAPI — metrics, chat, reports, discovery routers
-└── cna-worker/       Python background worker — discovery + report generation
+├── network-assessment-web/          Next.js web platform (8-step journey, encyclopedia, copilot)
+├── network-assessment-api/          FastAPI — metrics, chat, reports, discovery routers
+└── network-assessment-worker/       Python background worker — discovery + report generation
 packages/             cna-azure-network-engine — the Azure engine (model, typed rules, classifier,
                       Resource Graph normalizer, renderers); a uv workspace member the network_assessment package consumes
 network_assessment/   Python package, installed as the `network-assessment` CLI (the old `cna` command still works)
@@ -157,7 +157,7 @@ notes.
 ### Web platform, locally
 
 ```bash
-cd apps/cna-web
+cd apps/network-assessment-web
 cp .env.example .env.local
 # Fill in DATABASE_URL, NEXTAUTH_SECRET, AZURE_AD_* values
 npm install
@@ -217,7 +217,7 @@ Configuration comes from three places, in this order of authority:
 `.env.example` at the repository root is the complete inventory of the runtime environment
 contract — every variable the images read, each with a one-line description and which side
 (the deployment or local `.env`) supplies it.
-`apps/cna-web/.env.example` covers the web application specifically. The Wiki's **Secrets
+`apps/network-assessment-web/.env.example` covers the web application specifically. The Wiki's **Secrets
 Reference** explains each value in full.
 
 ---

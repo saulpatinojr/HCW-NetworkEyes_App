@@ -25,7 +25,7 @@ Anything an engineer can solve without external input belongs in [`TODO.md`](TOD
 | [R-013](#r-013--bring-this-repository-live-the-docker-hub-repository-its-oidc-connection-and-the-first-publish) | Bring this repository live: the Docker Hub repository, its OIDC connection, the variables and the first publish | Repository owner | Open — blocks the first image publish from this repository (T-728) |
 | [R-014](#r-014--move-the-wiki-and-delete-the-original-repository) | Move the Wiki, then delete the original repository | Repository owner | Superseded 2026-10-11 — this repository (the renamed original) is the product and is not deleted; the Wiki moves here (R-023) |
 | [R-015](#r-015--decide-the-customer-facing-appliance-repository-names) | Decide the customer-facing appliance repository names | Repository owner | Withdrawn 2026-10-25 — not this repository's decision |
-| [R-016](#r-016--retire-appscna-worker-and-its-image-and-service) | Retire `apps/cna-worker` — placeholder that runs as an always-on service in a deployment | Repository owner | Open — v1.0 review finding IMG-003 / ARCH-101 |
+| [R-016](#r-016--retire-appscna-worker-and-its-image-and-service) | Retire `apps/network-assessment-worker` — placeholder that runs as an always-on service in a deployment | Repository owner | Open — v1.0 review finding IMG-003 / ARCH-101 |
 | [R-017](#r-017--stop-publishing-the-cli-image-on-every-push) | Stop building/publishing the CLI image `sha-<7>` (nothing in this repository pulls it except the release) | Repository owner | Open — not blocking |
 | [R-018](#r-018--remove-network_assessmentreview-from-the-shipped-package) | Move `network_assessment/review/**` out of the shipped package and API image | Repository owner | Open — not blocking |
 | [R-019](#r-019--diagram-editor-sends-network-topology-to-embeddiagramsnet) | Diagram editor posts network topology XML to public `embed.diagrams.net`; no offline path | Product owner / Security | Decided 2026-10-25 — self-host; implemented (ticket #248) |
@@ -491,10 +491,10 @@ user traffic:
 
 1. **Admin-entered API keys stored in the application database.** An admin pastes an Anthropic
    and/or OpenAI key on `/admin/ai-engine`; it is probed against the provider, AES-256-GCM
-   encrypted with the existing `CREDENTIAL_ENCRYPTION_KEY` scheme (`apps/cna-web/lib/crypto.ts`),
+   encrypted with the existing `CREDENTIAL_ENCRYPTION_KEY` scheme (`apps/network-assessment-web/lib/crypto.ts`),
    stored in `AppSetting` (`ai.byo.<provider>.apiKey`), and decrypted server-side only — by the
-   web tier for its own completions and by cna-api (`network_assessment/core/credential_crypto.py`) for chat.
-   Only the last four characters are ever shown back. cna-api therefore receives
+   web tier for its own completions and by network-assessment-api (`network_assessment/core/credential_crypto.py`) for chat.
+   Only the last four characters are ever shown back. network-assessment-api therefore receives
    `CREDENTIAL_ENCRYPTION_KEY` in byo-api deployments, which it did not have before.
 2. **New firewall egress.** The platform root opens `api.anthropic.com` and `api.openai.com` on
    the Azure Firewall application rule when `ai_mode = byo-api` (nothing changes in `saas`). The
@@ -512,7 +512,7 @@ Security.
 **Required action**
 1. Review the key lifecycle: entry (`admin/ai-engine/actions.ts`, admin-only), storage
    (`lib/ai-byo-credentials.ts`), decryption points (`lib/ai-engine.ts`,
-   `apps/cna-api/routers/chat.py`), and that no path logs, returns, or persists a plaintext key.
+   `apps/network-assessment-api/routers/chat.py`), and that no path logs, returns, or persists a plaintext key.
 2. Approve or amend the two egress FQDNs and decide whether an AWS deployment needs an equivalent
    outbound control before its first byo-api deploy.
 3. Confirm the key-probe (a `GET /v1/models` against the provider at save time) is acceptable, or
@@ -624,10 +624,10 @@ No image is published from this repository, so there is nothing to scan, sign, r
 
 ---
 
-## R-016 — Retire `apps/cna-worker` and its image and service
+## R-016 — Retire `apps/network-assessment-worker` and its image and service
 
 **Problem**
-`apps/cna-worker/main.py` is a 101-line placeholder: it writes a "CNA publish placeholder" HTML
+`apps/network-assessment-worker/main.py` is a 101-line placeholder: it writes a "CNA publish placeholder" HTML
 file for a hard-coded `sample-engagement` and exits. `POST /publish` superseded it
 (`CHANGELOG.md`, "The client-portal publish story is real"). A deployment of the images still runs it as an
 always-on service, so it exits and restarts continuously, and its image is built and scanned on every push.
@@ -640,7 +640,7 @@ Removing it changes the published image set (the `worker` image and its `worker-
 Repository owner.
 
 **Required action**
-Approve deleting `apps/cna-worker` and its Dockerfile and build job here, recorded under `Changed` in `CHANGELOG.md`
+Approve deleting `apps/network-assessment-worker` and its Dockerfile and build job here, recorded under `Changed` in `CHANGELOG.md`
 and in the release notes so that whoever deploys the images can drop the worker service.
 
 **Impact if unresolved**
@@ -694,7 +694,7 @@ Larger images and slower CI; no user impact.
 ## R-019 — Diagram editor sends network topology to `embed.diagrams.net`
 
 **Problem**
-`apps/cna-web/components/diagrams/DrawioEmbed.tsx` iframes the public draw.io embed and posts the
+`apps/network-assessment-web/components/diagrams/DrawioEmbed.tsx` iframes the public draw.io embed and posts the
 engagement's `.drawio` XML into it. There is no self-hosted or offline fallback, so an appliance
 without internet egress from the analyst's browser shows a blank editor, and every user's
 network architecture leaves the appliance boundary to a third party.
@@ -708,7 +708,7 @@ dependency as a user opt-in with a data-handling statement.
 
 **Decision (2026-10-25, ticket #248, taken under the owner's instruction to close the open issues): `self-host`.**
 The editor is the draw.io web app (`draw.war` of the jgraph/drawio release, Apache-2.0, pinned by version and sha256 in
-the `drawio-webapp` stage of `apps/cna-web/Dockerfile`), served by the web image under `/drawio/`. Not chosen: a user
+the `drawio-webapp` stage of `apps/network-assessment-web/Dockerfile`), served by the web image under `/drawio/`. Not chosen: a user
 opt-in to the public service (a data-handling statement does not make a user's network layout leave the
 appliance) and disabling the Diagram page (the page is the product's editor).
 
@@ -734,10 +734,10 @@ appliance) and disabling the Diagram page (the page is the product's editor).
   `io.github.saulpatinojr.drawio-webapp.version`.
 - The "Launch draw.io" link to the public site on the Diagram page is gone, and the MCP `create_diagram` result returns
   the same-origin path instead of the public viewer.
-- Guards: `apps/cna-web/lib/drawio-embed.test.ts` (embed URL has no host; every CSP directive has exactly its expected
+- Guards: `apps/network-assessment-web/lib/drawio-embed.test.ts` (embed URL has no host; every CSP directive has exactly its expected
   sources, no bare `*`, host or scheme; the CSP carries the sandbox without `allow-same-origin`; `next.config.ts` sends
   those headers on `/drawio/:path*`; the middleware matcher leaves the path out; no web source or test file names a public
-  host), `apps/cna-web/components/diagrams/DrawioEmbed.test.tsx` (the rendered iframe is sandboxed; messages from another
+  host), `apps/network-assessment-web/components/diagrams/DrawioEmbed.test.tsx` (the rendered iframe is sandboxed; messages from another
   window or another origin are ignored; replies go to the iframe's window only) and
   `tests/security/test_drawio_self_hosted.py` (pin shape, checksum verified before the unzip in one `&&` chain, the trim
   fails closed, read-only files, licence, label, the weekly workflow, no live file names a public host).
@@ -763,7 +763,7 @@ Resolved: no network topology leaves the deployment through the editor.
 ## R-020 — Aeonik font licence and OCI licence label
 
 **Problem**
-`apps/cna-web/app/fonts/Aeonik-Regular.ttf` and `network_assessment/report_engine/templates/assets/fonts/` ship a
+`apps/network-assessment-web/app/fonts/Aeonik-Regular.ttf` and `network_assessment/report_engine/templates/assets/fonts/` ship a
 commercial typeface as a webfont and embedded in PDFs with no licence file in the repository. The
 OCI image label says `licenses="Proprietary"` while the repository `LICENSE` is Apache-2.0.
 
@@ -799,8 +799,8 @@ web image and in PDF reports.
 **Required action**
 None while the owner's statement stands. If it is withdrawn, either record proof of a CoType (or This Is Our Shop)
 desktop and web licence that covers serving the font on the web and embedding it in PDF reports; or replace Aeonik
-with a font under an open licence (for example one under the SIL Open Font License) in `apps/cna-web/app/fonts/`,
-`apps/cna-web/app/layout.tsx`, `apps/cna-web/app/globals.css` and `network_assessment/report_engine/templates/`.
+with a font under an open licence (for example one under the SIL Open Font License) in `apps/network-assessment-web/app/fonts/`,
+`apps/network-assessment-web/app/layout.tsx`, `apps/network-assessment-web/app/globals.css` and `network_assessment/report_engine/templates/`.
 
 **Impact if the statement proves wrong**
 Possible licence non-compliance in a published artifact, since the repository is public and the font file is
@@ -831,7 +831,7 @@ behind a deploy-time flag.
 ## R-022 — Version 1.0.0 release identity
 
 **Problem**
-`pyproject.toml` says `0.8.0b0`, `apps/cna-web/package.json` `0.8.0-beta.0`; `CHANGELOG.md`
+`pyproject.toml` says `0.8.0b0`, `apps/network-assessment-web/package.json` `0.8.0-beta.0`; `CHANGELOG.md`
 already contains `## [1.0.0] - 2026-05-28`, later withdrawn to `[0.8.0-beta]`; the repository has
 no git tags, so `310-release-version` has never run. (The API's hard-coded `0.2.0` was replaced by
 the package metadata version in the v1.0 review.)
@@ -878,7 +878,7 @@ A user cannot tell what "1.0" they run; a new `[1.0.0]` heading would collide.
 
 ## R-025 — The draw.io MCP route is internal only
 
-- **Decision (owner, 2026-10-24, ticket #245):** `internal-only`. The web route `/api/drawio-mcp/*` in `apps/cna-web`
+- **Decision (owner, 2026-10-24, ticket #245):** `internal-only`. The web route `/api/drawio-mcp/*` in `apps/network-assessment-web`
   (it searches a built-in icon list and echoes posted draw.io XML; no database) used to answer anyone who could reach
   the web app, because the middleware excludes `/api` and the handler had no check. Its one caller is the Python client
   `network_assessment/ai_engine/mcp_client/drawio_mcp_client.py`, which sends no cookie, so a sign-in check would have broken it.
@@ -909,7 +909,7 @@ A user cannot tell what "1.0" they run; a new `[1.0.0]` heading would collide.
 
 ## R-028 — Should the default model ids of the bring-your-own engines follow the vendors' current models?
 
-- **Why this is here:** the code defaults are `claude-opus-5` and `gpt-5.4` (`network_assessment/ai_engine/chat_agent.py`, `apps/cna-web/lib/ai-engine.ts`; `.env.example` explains the override variables). The `.env.example` note asked someone to verify they are current. Checked 2026-10-25: both are still available. Anthropic lists Claude Opus 5 as a legacy model that is still available; the current Opus is `claude-opus-5-5` (<https://platform.claude.com/docs/en/models/overview>). OpenAI's deprecations page lists no retirement for `gpt-5.4`, whose flagship successors are `gpt-6-astra` and `gpt-6.1-sol` (<https://developers.openai.com/api/docs/deprecations>, <https://developers.openai.com/api/docs/models>). Nothing is broken, so nothing was changed.
+- **Why this is here:** the code defaults are `claude-opus-5` and `gpt-5.4` (`network_assessment/ai_engine/chat_agent.py`, `apps/network-assessment-web/lib/ai-engine.ts`; `.env.example` explains the override variables). The `.env.example` note asked someone to verify they are current. Checked 2026-10-25: both are still available. Anthropic lists Claude Opus 5 as a legacy model that is still available; the current Opus is `claude-opus-5-5` (<https://platform.claude.com/docs/en/models/overview>). OpenAI's deprecations page lists no retirement for `gpt-5.4`, whose flagship successors are `gpt-6-astra` and `gpt-6.1-sol` (<https://developers.openai.com/api/docs/deprecations>, <https://developers.openai.com/api/docs/models>). Nothing is broken, so nothing was changed.
 - **The decision:** keep the two defaults, or move them to the current models. A move changes the price per assessment and the wording users see, which is why it is yours to decide, not an engineer's.
 - **Recommendation:** keep the defaults until Anthropic or OpenAI announces a retirement date for them, because users who set no override would otherwise see answers change on the day of an upgrade.
 - **How to answer:** reply "keep" or "move to current" on the issue or pull request that links this entry. If "move", an engineer changes the constants in both files together (they are pinned by one shared vector table, see `CLAUDE.md`, "AI engine rules") and updates `.env.example`.

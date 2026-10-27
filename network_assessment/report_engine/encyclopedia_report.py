@@ -397,7 +397,7 @@ def generate_diagram_svgs(
     current_svg: str | None = None
     future_svg: str | None = None
     try:
-        with tempfile.TemporaryDirectory(prefix="cna-ency-diagrams-") as tmp:
+        with tempfile.TemporaryDirectory(prefix="network-assessment-ency-diagrams-") as tmp:
             exporter = DiagramExporter(output_dir=Path(tmp))
             subs = [
                 s
