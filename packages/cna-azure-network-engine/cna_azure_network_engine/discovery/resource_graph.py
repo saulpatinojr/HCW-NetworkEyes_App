@@ -102,7 +102,7 @@ _SCOPE_RE = re.compile(
 
 
 def parse_scopes(value: str) -> list[Scope]:
-    """``CNA_SCOPES``, space-separated. Accepts ``/subscriptions/<sub>`` and
+    """``NETWORK_ASSESSMENT_SCOPES``, space-separated. Accepts ``/subscriptions/<sub>`` and
     ``/subscriptions/<sub>/resourceGroups/<rg>``; anything else is a ``SystemExit`` at
     start-up, before any query."""
     scopes: list[Scope] = []
@@ -110,7 +110,7 @@ def parse_scopes(value: str) -> list[Scope]:
         m = _SCOPE_RE.match(token)
         if not m:
             raise SystemExit(
-                f"CNA_SCOPES: {token!r} is not /subscriptions/<id> or "
+                f"NETWORK_ASSESSMENT_SCOPES: {token!r} is not /subscriptions/<id> or "
                 "/subscriptions/<id>/resourceGroups/<name>"
             )
         rg = m.group("rg")

@@ -19,7 +19,7 @@ function json(body: unknown, status = 200): NextResponse {
 }
 
 // Internal only (ticket #245): the Python engine is the one caller and it sends
-// the shared CNA_API_TOKEN as a bearer. Anything else is refused before any work.
+// the shared NETWORK_ASSESSMENT_API_TOKEN as a bearer. Anything else is refused before any work.
 function unauthorized(): NextResponse {
   return NextResponse.json(
     { error: "unauthorized" },

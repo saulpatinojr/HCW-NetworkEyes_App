@@ -34,9 +34,9 @@ def build_blob_target(engagement_id: str, filename: str) -> str:
 
 
 def upload_to_blob(local_path: Path, container: str, blob_target: str) -> dict:
-    account_name = os.getenv("CNA_STORAGE_ACCOUNT_NAME", "")
-    upload_enabled = os.getenv("CNA_BLOB_UPLOAD_ENABLED", "false").lower() == "true"
-    connection_mode = os.getenv("CNA_BLOB_UPLOAD_MODE", "sdk")
+    account_name = os.getenv("NETWORK_ASSESSMENT_STORAGE_ACCOUNT_NAME", "")
+    upload_enabled = os.getenv("NETWORK_ASSESSMENT_BLOB_UPLOAD_ENABLED", "false").lower() == "true"
+    connection_mode = os.getenv("NETWORK_ASSESSMENT_BLOB_UPLOAD_MODE", "sdk")
 
     if not upload_enabled:
         return {
@@ -52,7 +52,7 @@ def upload_to_blob(local_path: Path, container: str, blob_target: str) -> dict:
         return {
             "status": "error",
             "mode": connection_mode,
-            "reason": "missing CNA_STORAGE_ACCOUNT_NAME",
+            "reason": "missing NETWORK_ASSESSMENT_STORAGE_ACCOUNT_NAME",
             "container": container,
             "blob_target": blob_target,
             "local_path": str(local_path),
@@ -89,7 +89,7 @@ def main() -> None:
     published = publish_placeholder(
         work_dir / "deliverables", work_dir / "static-site", "sample-engagement"
     )
-    blob_container = os.getenv("CNA_STORAGE_STATIC_CONTAINER", "static-site")
+    blob_container = os.getenv("NETWORK_ASSESSMENT_STORAGE_STATIC_CONTAINER", "static-site")
     blob_target = build_blob_target("sample-engagement", published.name)
     upload_result = upload_to_blob(published, blob_container, blob_target)
     print("network-assessment-worker bootstrap ready")

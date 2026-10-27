@@ -1,7 +1,7 @@
 """The appliance refuses a secret-shaped credential variable before any credential exists.
 
 ``network_assessment.core.auth.build_azure_credential`` is the only credential path. In the appliance
-(``CNA_APPLIANCE_CLOUD`` set) each forbidden variable — a client secret, a certificate path,
+(``NETWORK_ASSESSMENT_APPLIANCE_CLOUD`` set) each forbidden variable — a client secret, a certificate path,
 a username/password pair, a federated token file, an authority override — exits the process
 with ``SystemExit`` before ``DefaultAzureCredential`` is constructed; the API's startup
 validation does the same. Outside the appliance the chain still excludes the environment
@@ -19,7 +19,7 @@ import pytest
 from network_assessment.core import auth
 
 APPLIANCE = {
-    "CNA_APPLIANCE_CLOUD": "azure",
+    "NETWORK_ASSESSMENT_APPLIANCE_CLOUD": "azure",
     "AZURE_TENANT_ID": "00000000-0000-0000-0000-000000000002",
 }
 
@@ -119,9 +119,9 @@ class TestApiStartup:
             sys.modules["network_assessment_api_main_under_test"] = module
             spec.loader.exec_module(module)
         env = {
-            "CNA_APPLIANCE_CLOUD": "azure",
+            "NETWORK_ASSESSMENT_APPLIANCE_CLOUD": "azure",
             "DATABASE_URL": "postgresql://user:not-a-real-password@db/cna",
-            "CNA_API_TOKEN": "not-a-real-token",
+            "NETWORK_ASSESSMENT_API_TOKEN": "not-a-real-token",
             "AZURE_FEDERATED_TOKEN_FILE": "/var/run/secrets/token",
         }
         with pytest.raises(SystemExit, match="AZURE_FEDERATED_TOKEN_FILE"):

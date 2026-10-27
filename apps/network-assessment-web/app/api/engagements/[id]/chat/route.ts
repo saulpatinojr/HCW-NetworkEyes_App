@@ -5,7 +5,7 @@ import { apiHeaders } from "@/lib/api-client";
 import { NextResponse } from "next/server";
 
 // Proxy to the network-assessment-api chat router (Phase G). Auth + membership are enforced
-// here; the internal API is only reachable server-side via CNA_API_INTERNAL_URL
+// here; the internal API is only reachable server-side via NETWORK_ASSESSMENT_API_INTERNAL_URL
 // (same pattern as lib/metrics-api.ts).
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -33,10 +33,10 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const apiUrl = process.env.CNA_API_INTERNAL_URL;
+  const apiUrl = process.env.NETWORK_ASSESSMENT_API_INTERNAL_URL;
   if (!apiUrl) {
     return NextResponse.json(
-      { error: "Copilot backend is not configured (CNA_API_INTERNAL_URL unset)." },
+      { error: "Copilot backend is not configured (NETWORK_ASSESSMENT_API_INTERNAL_URL unset)." },
       { status: 503 },
     );
   }

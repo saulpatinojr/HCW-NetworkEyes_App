@@ -99,8 +99,8 @@ RUN python -m pip uninstall -y pip virtualenv
 # Commit the image was built from (200-build-images passes github.sha). The web
 # tier compares it with the newest published build (Admin → Updates); empty
 # for local builds, which report the running build as unknown.
-ARG CNA_BUILD_SHA=
-ENV CNA_BUILD_SHA=${CNA_BUILD_SHA}
+ARG NETWORK_ASSESSMENT_BUILD_SHA=
+ENV NETWORK_ASSESSMENT_BUILD_SHA=${NETWORK_ASSESSMENT_BUILD_SHA}
 
 # Numeric uid, see the root Dockerfile (hadolint DL3066). 1001 is the `network-assessment` user created above.
 USER 1001

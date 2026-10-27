@@ -16,8 +16,8 @@ describe("getAiEngineStatuses wording", () => {
     ["azure", "azure-openai", "SaaS engine for a deployment on Azure."],
     ["aws", "bedrock", "SaaS engine for a deployment on AWS."],
   ] as const)("describes the %s SaaS engine without the word 'edition'", (cloud, id, opening) => {
-    vi.stubEnv("CNA_AI_MODE", "saas");
-    vi.stubEnv("CNA_APPLIANCE_CLOUD", cloud);
+    vi.stubEnv("NETWORK_ASSESSMENT_AI_MODE", "saas");
+    vi.stubEnv("NETWORK_ASSESSMENT_APPLIANCE_CLOUD", cloud);
 
     const statuses = getAiEngineStatuses(null, emptyByoPresence());
     const status = statuses.find((s) => s.id === id);

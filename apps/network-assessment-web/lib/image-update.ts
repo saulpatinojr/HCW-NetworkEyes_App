@@ -11,11 +11,11 @@
  *
  * Runtime contract (all optional — a missing value degrades to "unknown",
  * never to a false "up to date"):
- *   CNA_BUILD_SHA                          commit the image was built from (baked at build time)
- *   CNA_WEB_IMAGE                          image reference the deployment runs (repository + tag); set by whoever deploys the image
- *   CNA_IMAGE_REGISTRY_USERNAME            pull-only registry credential; set by whoever deploys the image
- *   CNA_IMAGE_REGISTRY_TOKEN               pull-only registry credential (secret); set by whoever deploys the image
- *   CNA_IMAGE_UPDATE_CHECK_INTERVAL_MINUTES  cache interval; 0 disables the check
+ *   NETWORK_ASSESSMENT_BUILD_SHA                          commit the image was built from (baked at build time)
+ *   NETWORK_ASSESSMENT_WEB_IMAGE                          image reference the deployment runs (repository + tag); set by whoever deploys the image
+ *   NETWORK_ASSESSMENT_IMAGE_REGISTRY_USERNAME            pull-only registry credential; set by whoever deploys the image
+ *   NETWORK_ASSESSMENT_IMAGE_REGISTRY_TOKEN               pull-only registry credential (secret); set by whoever deploys the image
+ *   NETWORK_ASSESSMENT_IMAGE_UPDATE_CHECK_INTERVAL_MINUTES  cache interval; 0 disables the check
  */
 
 import {
@@ -90,23 +90,23 @@ let cache: Cached | null = null;
 // ---------------------------------------------------------------------------
 
 export function getRunningBuildSha(): string {
-  return clean(process.env.CNA_BUILD_SHA).toLowerCase();
+  return clean(process.env.NETWORK_ASSESSMENT_BUILD_SHA).toLowerCase();
 }
 
 export function getDeployedWebImage(): string {
-  return clean(process.env.CNA_WEB_IMAGE);
+  return clean(process.env.NETWORK_ASSESSMENT_WEB_IMAGE);
 }
 
 export function getCheckIntervalMinutes(): number {
   return parseIntervalMinutes(
-    process.env.CNA_IMAGE_UPDATE_CHECK_INTERVAL_MINUTES,
+    process.env.NETWORK_ASSESSMENT_IMAGE_UPDATE_CHECK_INTERVAL_MINUTES,
     DEFAULT_CHECK_INTERVAL_MINUTES,
   );
 }
 
 function registryCredentials(): { username: string; token: string } | null {
-  const username = clean(process.env.CNA_IMAGE_REGISTRY_USERNAME);
-  const token = clean(process.env.CNA_IMAGE_REGISTRY_TOKEN);
+  const username = clean(process.env.NETWORK_ASSESSMENT_IMAGE_REGISTRY_USERNAME);
+  const token = clean(process.env.NETWORK_ASSESSMENT_IMAGE_REGISTRY_TOKEN);
   return username && token ? { username, token } : null;
 }
 
@@ -143,7 +143,7 @@ async function registryFetch(
     throw new RegistryError(
       auth.basic
         ? `Registry rejected the pull credential (HTTP ${tokenResponse.status}).`
-        : `Registry requires a pull credential (HTTP ${tokenResponse.status}); set CNA_IMAGE_REGISTRY_USERNAME/TOKEN.`,
+        : `Registry requires a pull credential (HTTP ${tokenResponse.status}); set NETWORK_ASSESSMENT_IMAGE_REGISTRY_USERNAME/TOKEN.`,
     );
   }
   const tokenBody = (await tokenResponse.json()) as { token?: string; access_token?: string };
@@ -170,7 +170,7 @@ export async function fetchPublishedBuild(image: string): Promise<{
   createdAt: string;
 }> {
   const ref = parseImageReference(image);
-  if (!ref) throw new RegistryError(`CNA_WEB_IMAGE is not a valid image reference: "${image}".`);
+  if (!ref) throw new RegistryError(`NETWORK_ASSESSMENT_WEB_IMAGE is not a valid image reference: "${image}".`);
 
   const floatingTag = floatingTagFor(ref.tag);
   const base = `https://${distributionApiHost(ref.registry)}/v2/${ref.repository}`;
@@ -247,11 +247,11 @@ function baseState(): ImageUpdateState {
 export async function getImageUpdateState(options: { force?: boolean } = {}): Promise<ImageUpdateState> {
   const state = baseState();
   if (state.intervalMinutes === 0) {
-    state.error = "Update check is switched off (CNA_IMAGE_UPDATE_CHECK_INTERVAL_MINUTES=0).";
+    state.error = "Update check is switched off (NETWORK_ASSESSMENT_IMAGE_UPDATE_CHECK_INTERVAL_MINUTES=0).";
     return state;
   }
   if (!state.running.image) {
-    state.error = "CNA_WEB_IMAGE is not set; the deployment does not know which image it runs.";
+    state.error = "NETWORK_ASSESSMENT_WEB_IMAGE is not set; the deployment does not know which image it runs.";
     return state;
   }
   state.enabled = true;
@@ -273,7 +273,7 @@ export async function getImageUpdateState(options: { force?: boolean } = {}): Pr
     const runningShort = state.running.buildSha || shaOfTag(parseImageReference(state.running.image)?.tag ?? "");
     state.verdict = compareBuilds(runningShort, published.revision);
     if (state.verdict === "unknown") {
-      state.error = "The running build is unknown (CNA_BUILD_SHA is not set and the deployed tag carries no SHA).";
+      state.error = "The running build is unknown (NETWORK_ASSESSMENT_BUILD_SHA is not set and the deployed tag carries no SHA).";
     }
   } catch (error) {
     state.error = error instanceof Error ? error.message : String(error);

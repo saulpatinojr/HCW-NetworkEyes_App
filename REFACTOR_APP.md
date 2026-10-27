@@ -269,7 +269,7 @@ class Scope:
 _SCOPE_RE = re.compile(r"^/subscriptions/(?P<sub>[0-9a-f-]{36})(?:/resourceGroups/(?P<rg>[^/]+))?/?$", re.IGNORECASE)
 
 def parse_scopes(value: str) -> list[Scope]:
-    """CNA_SCOPES, space-separated. Accepts /subscriptions/<sub> and /subscriptions/<sub>/resourceGroups/<rg>;
+    """NETWORK_ASSESSMENT_SCOPES, space-separated. Accepts /subscriptions/<sub> and /subscriptions/<sub>/resourceGroups/<rg>;
     anything else -> SystemExit at startup, before any query."""
 
 def query_all(client, query: str, subscriptions: list[str], page: int = 1000) -> tuple[list[dict], bool]:
@@ -297,12 +297,12 @@ class ResourceGraphDiscovery:
 
 `run()` is the only caller of the four queries: `attach_defender` fills `AzureSubscriptionTopology.defender_assessments` (`DefenderAssessment`, `topology_schema.py:936`) and `attach_nvas` fills `nvas` and `nics` (`AzureNVA`, `AzureNIC`, lines 757 to 798), so the rules and report sections that read them (the NVA checks folded into the live rules under 7.B, the Defender posture summary in `report/markdown.py`) see the same model fields the ARM collectors filled.
 
-`discovery/live_bgp.py`, `live_metrics.py`, `live_diagnostics.py`, `live_cost.py`, `live_law.py` wrap the existing `_collect_bgp_data` (line 1696), `_collect_network_metrics` (1914) with its sub-collectors (1992 to 2329), `_collect_observability` (1777), `_collect_cost_metrics` (2227) and `_collect_nta_metrics` (2163); each takes the normalized topology, fills the same model fields, and sets `ObservedState.state="observed"` only for resources it reached. `_collect_defender_assessments` (2420) moves to `DEFENDER_QUERY`; `_collect_nvas` (1555) to `NVA_QUERY`. `AzureDiscovery.run()` (line 2470) reads `CNA_DISCOVERY_BACKEND` (default `resource-graph`; `arm` keeps the current loop for one release). Remove `_validate_pe_dns` and the `socket` import; `AzurePrivateEndpoint.dns_resolves_to_private_ip` becomes `bool | None = None`.
+`discovery/live_bgp.py`, `live_metrics.py`, `live_diagnostics.py`, `live_cost.py`, `live_law.py` wrap the existing `_collect_bgp_data` (line 1696), `_collect_network_metrics` (1914) with its sub-collectors (1992 to 2329), `_collect_observability` (1777), `_collect_cost_metrics` (2227) and `_collect_nta_metrics` (2163); each takes the normalized topology, fills the same model fields, and sets `ObservedState.state="observed"` only for resources it reached. `_collect_defender_assessments` (2420) moves to `DEFENDER_QUERY`; `_collect_nvas` (1555) to `NVA_QUERY`. `AzureDiscovery.run()` (line 2470) reads `NETWORK_ASSESSMENT_DISCOVERY_BACKEND` (default `resource-graph`; `arm` keeps the current loop for one release). Remove `_validate_pe_dns` and the `socket` import; `AzurePrivateEndpoint.dns_resolves_to_private_ip` becomes `bool | None = None`.
 
 - **Components affected.** `azure_discovery.py` (shrinks to orchestration), `module.yaml` permission list (F), `tests/unit/test_azure_discovery.py`, `VALIDATION.md`.
 - **Tests.** Resource Graph fixtures (`tests/fixtures/resource_graph/*.json`, fictional subscriptions) drive `normalize_resource_graph` and `ResourceGraphDiscovery` with a fake client; `test_scopes.py` parses both scope shapes (`/subscriptions/00000000-0000-0000-0000-000000000001` and `/subscriptions/00000000-0000-0000-0000-000000000001/resourceGroups/RG-Hub`), rejects anything else at startup, asserts the fake client is called with the subscription set only, and asserts `filter_to_scopes` keeps `rg-hub` rows and drops `rg-spoke` rows for the resource-group scope case-insensitively; one test proves paging consumes `skip_token` silently (no warning) and that a page stopped at the cap sets `truncated` and the warning; `test_attach_defender.py` and `test_attach_nvas.py` feed `DEFENDER_QUERY` and `NVA_QUERY` fixture rows and assert the NVA live rules and the Defender report section read them; one proves a Reader-only error from a live collector yields `state="unknown"` and no exception; ARM tests remain only for the live collectors.
 - **Acceptance.** A Reader-only identity completes discovery of a subscription with zero `HttpResponseError` from list calls; wall time for a 500-resource subscription is recorded in `VALIDATION.md` and is seconds, not minutes; `git grep -n "gethostbyname" -- network_assessment packages` is empty.
-- **Priority** P2. **Dependencies** A, C, E. **Rollback** `CNA_DISCOVERY_BACKEND=arm` for one release; the flag is removed in the release after.
+- **Priority** P2. **Dependencies** A, C, E. **Rollback** `NETWORK_ASSESSMENT_DISCOVERY_BACKEND=arm` for one release; the flag is removed in the release after.
 
 ### 7.E Engine independence from `EngagementStore` and Postgres (change set E)
 
@@ -404,7 +404,7 @@ def _init_credentials(self) -> None:
     self._credential = ManagedIdentityCredential(client_id=settings.azure_client_id)
 ```
 
-`DefaultAzureCredential` is not used anywhere in the appliance: its chain honours `AZURE_CLIENT_SECRET`, certificate and username variables, the Azure CLI and developer tools, which is exactly the set of paths the owner decision rules out. `ManagedIdentityCredential(client_id=...)` can only ever obtain a token for the identity the Container App carries, and `ApplianceSettings.from_env()` runs before any client is built, so a deployment that sets `AZURE_CLIENT_SECRET` or `AZURE_TENANT_ID` together with any secret-shaped variable exits 1 instead of silently taking another path. The CLI's developer path (`network-assessment discover azure` after `az login`) uses `AzureCliCredential` explicitly and only under `CNA_PROFILE=developer`, which the appliance image refuses (7.H).
+`DefaultAzureCredential` is not used anywhere in the appliance: its chain honours `AZURE_CLIENT_SECRET`, certificate and username variables, the Azure CLI and developer tools, which is exactly the set of paths the owner decision rules out. `ManagedIdentityCredential(client_id=...)` can only ever obtain a token for the identity the Container App carries, and `ApplianceSettings.from_env()` runs before any client is built, so a deployment that sets `AZURE_CLIENT_SECRET` or `AZURE_TENANT_ID` together with any secret-shaped variable exits 1 instead of silently taking another path. The CLI's developer path (`network-assessment discover azure` after `az login`) uses `AzureCliCredential` explicitly and only under `NETWORK_ASSESSMENT_PROFILE=developer`, which the appliance image refuses (7.H).
 
 `main.py`: delete `TestConnectionRequest.sp_client_id/sp_client_secret` and the `ClientSecretCredential` branch of `/discovery/test-connection`; replace with `POST /discovery/test-access {tenant_id, subscription_ids}` that lists each subscription with the process identity; delete `DiscoveryStartRequest.sp_client_id/sp_client_secret`. Web: remove the SP fields from `cloud-credentials/credential-form.tsx`, the `encrypt(spClientSecret)` calls and the `decrypt(cred.spSecretEnc)` reads; `buildStartPayload` sends `tenant_id` and `subscription_ids` only. Prisma migration `20261010000016_drop_sp_secret`: `ALTER TABLE "CloudCredential" DROP COLUMN "spSecretEnc"; ALTER TABLE "CloudCredential" DROP COLUMN "spClientId";` with a `down.sql` that re-adds both as nullable `TEXT`. `credential_crypto.py` and `lib/crypto.ts` stay for BYO AI keys only (R-011 unchanged). Terraform in the Azure appliance repo: `azurerm_user_assigned_identity`, `azurerm_role_assignment` `for_each` over `assessment_scope_ids` (Reader) plus the optional roles of 7.F; `AZURE_CLIENT_ID` env set to the identity's client id (section 12).
 
@@ -419,11 +419,11 @@ def _init_credentials(self) -> None:
 
 **Required behavior.** The internal routes (`/discovery/*`, `/intake`, `/publish`) require an Entra bearer token for the appliance's app registration **and** the `Discovery.Run` app role (or the declared scope); `/health`, `/api/health`, `/api/rules` and the read routes of section 8 keep their public contract; persisted error text is a status code and class name, full text at debug log only. There is no runtime switch that turns authentication off in an appliance deployment.
 
-**Exact change.** New `apps/network-assessment-api/auth.py` reading `CNA_ENTRA_TENANT_ID`, `CNA_ENTRA_AUDIENCE` (the `api://` identifier URI of the app registration), `CNA_ENTRA_JWKS_URL` (derived from the tenant) and `CNA_ENTRA_REQUIRED_ROLE` (default `Discovery.Run`):
+**Exact change.** New `apps/network-assessment-api/auth.py` reading `NETWORK_ASSESSMENT_ENTRA_TENANT_ID`, `NETWORK_ASSESSMENT_ENTRA_AUDIENCE` (the `api://` identifier URI of the app registration), `NETWORK_ASSESSMENT_ENTRA_JWKS_URL` (derived from the tenant) and `NETWORK_ASSESSMENT_ENTRA_REQUIRED_ROLE` (default `Discovery.Run`):
 
 ```python
 # apps/network-assessment-api/auth.py
-REQUIRED_ROLE = os.environ.get("CNA_ENTRA_REQUIRED_ROLE", "Discovery.Run")
+REQUIRED_ROLE = os.environ.get("NETWORK_ASSESSMENT_ENTRA_REQUIRED_ROLE", "Discovery.Run")
 
 async def require_bearer(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer())) -> dict:
     """Authenticate: signature (cached JWKS), iss, aud, exp -> 401 {error:{code:"unauthenticated"}} on failure.
@@ -447,10 +447,10 @@ def redact_exception(exc: BaseException) -> str:
     return type(exc).__name__ + (f" (HTTP {status})" if status else "")
 ```
 
-`require_bearer` is attached to the `internal` router only, so a public route can never inherit it by accident and a route that must be protected is registered on `internal` by name; `tests/unit/test_network_assessment_api_auth.py` holds the list of protected paths and fails when a `/discovery/*`, `/intake` or `/publish` route is found outside that router. Test profile: `CNA_PROFILE=test` makes `require_bearer` accept a locally signed key (JWKS read from a file named by `CNA_ENTRA_JWKS_URL`) and is honoured only when `pytest` is the running process (`"pytest" in sys.modules`) or the build is not an appliance (`CNA_EDITION != "appliance"`); an appliance image that starts with `CNA_PROFILE` set to any value exits 1 with "appliance edition: CNA_PROFILE is not accepted". There is no `CNA_AUTH_DISABLED` or equivalent. The web tier obtains a token for `CNA_ENTRA_AUDIENCE` with its own user-assigned identity (`@azure/identity` `ManagedIdentityCredential`) and sends `Authorization: Bearer`; the appliance Terraform assigns the `Discovery.Run` app role to that identity's service principal (section 12). Replace the three `str(exc)` / `str(e)` sites with `redact_exception(...)`; the `_run` helper in `_discover_subscription` (lines 423 to 438) records `f"{attr}: {redact_exception(e)}"`.
+`require_bearer` is attached to the `internal` router only, so a public route can never inherit it by accident and a route that must be protected is registered on `internal` by name; `tests/unit/test_network_assessment_api_auth.py` holds the list of protected paths and fails when a `/discovery/*`, `/intake` or `/publish` route is found outside that router. Test profile: `NETWORK_ASSESSMENT_PROFILE=test` makes `require_bearer` accept a locally signed key (JWKS read from a file named by `NETWORK_ASSESSMENT_ENTRA_JWKS_URL`) and is honoured only when `pytest` is the running process (`"pytest" in sys.modules`) or the build is not an appliance (`NETWORK_ASSESSMENT_EDITION != "appliance"`); an appliance image that starts with `NETWORK_ASSESSMENT_PROFILE` set to any value exits 1 with "appliance edition: NETWORK_ASSESSMENT_PROFILE is not accepted". There is no `NETWORK_ASSESSMENT_AUTH_DISABLED` or equivalent. The web tier obtains a token for `NETWORK_ASSESSMENT_ENTRA_AUDIENCE` with its own user-assigned identity (`@azure/identity` `ManagedIdentityCredential`) and sends `Authorization: Bearer`; the appliance Terraform assigns the `Discovery.Run` app role to that identity's service principal (section 12). Replace the three `str(exc)` / `str(e)` sites with `redact_exception(...)`; the `_run` helper in `_discover_subscription` (lines 423 to 438) records `f"{attr}: {redact_exception(e)}"`.
 
 - **Components affected.** `main.py`, `apps/network-assessment-api/auth.py`, `network_assessment/api_errors.py`, `azure_discovery.py`, web `lib/` API client, appliance Terraform (app registration with `identifier_uris`, app role, role assignment to the web identity; section 12).
-- **Tests.** `tests/unit/test_network_assessment_api_auth.py`: 401 without a token, 401 with the wrong audience, 403 `insufficient_role` with a valid token whose `roles` lacks `Discovery.Run` and whose `scp` is empty, 200 with the role in `roles`, 200 with the role in `scp`, every `/discovery/*`, `/intake`, `/publish` route registered on `internal`, `/api/health` and `/api/rules` 200 with no token; `tests/security/test_profile_refused.py`: the app factory exits 1 when `CNA_PROFILE=test` and `CNA_EDITION=appliance`; `tests/unit/test_api_errors.py`: redaction never includes the exception message.
+- **Tests.** `tests/unit/test_network_assessment_api_auth.py`: 401 without a token, 401 with the wrong audience, 403 `insufficient_role` with a valid token whose `roles` lacks `Discovery.Run` and whose `scp` is empty, 200 with the role in `roles`, 200 with the role in `scp`, every `/discovery/*`, `/intake`, `/publish` route registered on `internal`, `/api/health` and `/api/rules` 200 with no token; `tests/security/test_profile_refused.py`: the app factory exits 1 when `NETWORK_ASSESSMENT_PROFILE=test` and `NETWORK_ASSESSMENT_EDITION=appliance`; `tests/unit/test_api_errors.py`: redaction never includes the exception message.
 - **Acceptance.** `curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/discovery/jobs/x` prints `401`; the same request with a valid token lacking the role prints `403`; `GET /api/health` prints `200` with no token; no `errorMessage` row contains a hostname.
 - **Priority** P1 (security; may land first). **Dependencies** none. **Rollback** the previous image digest; authentication configuration is never toggled at runtime.
 
@@ -484,14 +484,14 @@ COPY --from=builder /install /usr/local
 RUN python -m pip uninstall -y pip && groupadd --gid 1001 network-assessment \
  && useradd --uid 1001 --gid network-assessment --no-create-home --shell /usr/sbin/nologin network-assessment
 USER network-assessment
-ENV CNA_EDITION=lab
+ENV NETWORK_ASSESSMENT_EDITION=lab
 # The image's only job: exit 0 when azure is NOT importable, exit 1 when it is.
 CMD ["python", "-c", "import importlib.util, sys; sys.exit(1 if importlib.util.find_spec('azure') else 0)"]
 
 FROM python:3.14-slim@sha256:cae66f2ef0ec51a9891263eeee7f987dacf0a9879e8aa9353d5606e0530619a5 AS final-appliance
 # Body of apps/network-assessment-api/Dockerfile lines 55 to 99 as today: drawio-fetch stage, apt upgrade, non-root uid 1001,
 # COPY --from=builder /install, COPY network_assessment/ and apps/network-assessment-api/, pip removed, HEALTHCHECK on /health, uvicorn on 8080.
-ENV CNA_EDITION=appliance
+ENV NETWORK_ASSESSMENT_EDITION=appliance
 
 FROM final-${EDITION}
 ```
@@ -573,21 +573,21 @@ Headers on every response: `X-Addon-Id: network-assessment`, `X-Addon-Version`, 
 
 | Variable | Build | Default | Purpose | Source at `5d3b914` |
 |---|---|---|---|---|
-| `CNA_EDITION` | appliance; `lab` only in the build-only boundary target | `appliance` | Set by the Dockerfile `ARG EDITION`; the engine's guard refuses `lab` with any Azure SDK present and refuses `appliance` without `AZURE_CLIENT_ID` | new |
-| `CNA_DISCOVERY_BACKEND` | appliance | `resource-graph` | `arm` keeps the old loop for one release (7.D) | new |
-| `CNA_SCOPES` | appliance | required | Space-separated scope ids of the form `/subscriptions/<sub>` or `/subscriptions/<sub>/resourceGroups/<rg>`; parsed at startup (7.D `parse_scopes`, anything else exits 1); the subscription set goes to Resource Graph and rows outside a resource-group scope are dropped case-insensitively before normalization | new |
-| `CNA_REFRESH_SECONDS` | appliance | `900` | Timer-driven refresh interval | new |
-| `CNA_INCLUDE_MANAGEMENT_GROUPS` | appliance | `0` | Enables the Management Group Reader path | new |
+| `NETWORK_ASSESSMENT_EDITION` | appliance; `lab` only in the build-only boundary target | `appliance` | Set by the Dockerfile `ARG EDITION`; the engine's guard refuses `lab` with any Azure SDK present and refuses `appliance` without `AZURE_CLIENT_ID` | new |
+| `NETWORK_ASSESSMENT_DISCOVERY_BACKEND` | appliance | `resource-graph` | `arm` keeps the old loop for one release (7.D) | new |
+| `NETWORK_ASSESSMENT_SCOPES` | appliance | required | Space-separated scope ids of the form `/subscriptions/<sub>` or `/subscriptions/<sub>/resourceGroups/<rg>`; parsed at startup (7.D `parse_scopes`, anything else exits 1); the subscription set goes to Resource Graph and rows outside a resource-group scope are dropped case-insensitively before normalization | new |
+| `NETWORK_ASSESSMENT_REFRESH_SECONDS` | appliance | `900` | Timer-driven refresh interval | new |
+| `NETWORK_ASSESSMENT_INCLUDE_MANAGEMENT_GROUPS` | appliance | `0` | Enables the Management Group Reader path | new |
 | `AZURE_CLIENT_ID` | appliance | required | Client id of the user-assigned managed identity; `ManagedIdentityCredential(client_id=...)` is the only credential; startup exits 1 when absent (7.G) | `.env.example:65` |
 | `AZURE_TENANT_ID` | appliance | required | The tenant being assessed (`AzureDiscoveryOptions.tenant_id`); activates no credential path | `.env.example:64` |
 | `AZURE_CLIENT_SECRET`, `AZURE_CLIENT_CERTIFICATE_PATH`, `AZURE_USERNAME`, `AZURE_PASSWORD`, `AZURE_FEDERATED_TOKEN_FILE`, `AZURE_AUTHORITY_HOST` | none | forbidden | `FORBIDDEN_ENV` (7.G): the appliance refuses to start when any is set; the lab guard refuses `AZURE_CLIENT_SECRET` and `AZURE_FEDERATED_TOKEN_FILE` too. `AZURE_CLIENT_SECRET` was `.env.example:66` | removed |
-| `CNA_ENTRA_TENANT_ID`, `CNA_ENTRA_AUDIENCE`, `CNA_ENTRA_JWKS_URL`, `CNA_ENTRA_REQUIRED_ROLE` | appliance | required; role default `Discovery.Run` | Bearer validation and app-role authorization for the `internal` router (7.H) | new |
-| `CNA_PROFILE` | never in an appliance deployment | unset | `test` is honoured only under pytest or a non-appliance build (local JWKS file); `developer` selects the CLI's `AzureCliCredential` path outside the appliance; the appliance image exits 1 when the variable is set at all (7.G, 7.H) | new |
+| `NETWORK_ASSESSMENT_ENTRA_TENANT_ID`, `NETWORK_ASSESSMENT_ENTRA_AUDIENCE`, `NETWORK_ASSESSMENT_ENTRA_JWKS_URL`, `NETWORK_ASSESSMENT_ENTRA_REQUIRED_ROLE` | appliance | required; role default `Discovery.Run` | Bearer validation and app-role authorization for the `internal` router (7.H) | new |
+| `NETWORK_ASSESSMENT_PROFILE` | never in an appliance deployment | unset | `test` is honoured only under pytest or a non-appliance build (local JWKS file); `developer` selects the CLI's `AzureCliCredential` path outside the appliance; the appliance image exits 1 when the variable is set at all (7.G, 7.H) | new |
 | `NA_FRAME_ANCESTORS` | both | `'none'` | CSP `frame-ancestors` on the public surface | new |
 | `NA_SITE_ORIGINS` | both | empty | Origins the pane may post to; mirrored in `/api/health siteOrigins` | new |
 | `NA_TRUST_PROXY` | both | `0` | Take the first `X-Forwarded-For` for rate limiting | new |
 | `NA_RATE_LIMIT_POSTS`, `NA_RATE_LIMIT_WINDOW_MINUTES` | both | `10`, `10` | Token bucket on `POST /api/refresh` (appliance) and uploads (lab) | new |
-| `DATABASE_URL`, `CNA_API_INTERNAL_URL`, `AZURE_STORAGE_ACCOUNT_NAME` | appliance (network-assessment-api, network-assessment-web) | as today | Unchanged | `.env.example:156,82` |
+| `DATABASE_URL`, `NETWORK_ASSESSMENT_API_INTERNAL_URL`, `AZURE_STORAGE_ACCOUNT_NAME` | appliance (network-assessment-api, network-assessment-web) | as today | Unchanged | `.env.example:156,82` |
 | `CREDENTIAL_ENCRYPTION_KEY` | appliance | as today | BYO AI keys only after 7.G | `.env.example:28` |
 | `PORT` | both | `8080` | Already the API's port (`apps/network-assessment-api/Dockerfile:99`) | unchanged |
 
@@ -620,7 +620,7 @@ Pattern: `/home/user/HCW-AzMigrateOrchestrator_App/infrastructure/terraform/appl
 | Resource | Setting |
 |---|---|
 | `azurerm_container_app.api` | `revision_mode = "Single"`; `template { min_replicas = 1, max_replicas = 1 }` (`CONTRACT-DECISIONS` item 21: scale-to-zero loses the in-memory snapshot; the zero-replica trade is documented as an owner option, not the default); `cpu = 0.5`, `memory = "1Gi"`; `target_port = 8080`; image `docker.io/hybridcloudworks/img-ne-appliance-app@sha256:...` taken from the `api` digest in the `200` step summary or the `310` release notes, never a floating tag |
-| `env` | `CNA_EDITION=appliance`, `CNA_SCOPES`, `CNA_REFRESH_SECONDS=900`, `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `CNA_ENTRA_*`, `NA_FRAME_ANCESTORS`, `NA_SITE_ORIGINS`, `NA_TRUST_PROXY=1` |
+| `env` | `NETWORK_ASSESSMENT_EDITION=appliance`, `NETWORK_ASSESSMENT_SCOPES`, `NETWORK_ASSESSMENT_REFRESH_SECONDS=900`, `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `NETWORK_ASSESSMENT_ENTRA_*`, `NA_FRAME_ANCESTORS`, `NA_SITE_ORIGINS`, `NA_TRUST_PROXY=1` |
 | `azurerm_role_assignment` | `Reader` `for_each` over `assessment_scope_ids`; optional `Security Reader`, `Cost Management Reader`, `Log Analytics Reader` (on `var.log_analytics_workspace_ids`) behind `var.enable_live_rules` |
 | `azurerm_role_definition.bgp_reader` | From `docs/roles/cna-network-bgp-reader.json` with `assignable_scopes = var.assessment_scope_ids`; assigned with the live rules flag |
 | `azuread_application.api` | `identifier_uris` set to the `api://` form of its client id after creation; app role `Discovery.Run` (`allowed_member_types = ["Application"]`) |
@@ -641,7 +641,7 @@ Users set `assessment_scope_ids`, `tenant_id` and `image_digest` in `terraform.t
 | Private-endpoint DNS evidence | D | Scanner-host `gethostbyname` (`azure_discovery.py:1101`) | Removed; field `None`, state `unknown` |
 | Persisted error text | H | `str(exc)` (`main.py:1704,1812`; `azure_discovery.py:441`) | Class name and status only |
 | Lab boundary | I | None | No Azure SDK installed; startup refusal on identity env; image-level `import azure` must fail; `edition: lab` in health |
-| Scope allow-list | D, G | None (any subscription the SP could read) | `CNA_SCOPES` enforced before any query |
+| Scope allow-list | D, G | None (any subscription the SP could read) | `NETWORK_ASSESSMENT_SCOPES` enforced before any query |
 | Supply chain | J | Docker Hub token secret | OIDC connection; digests in the step summary and the release notes; Scout and `pip-audit` gates |
 | AWS surface | K | Always installed | Optional extra |
 | Rate limiting on the public surface | 8 | n/a | Token bucket per client, `X-Forwarded-For` only with `NA_TRUST_PROXY=1`, never `CF-Connecting-IP` |
@@ -670,7 +670,7 @@ Unchanged by this document and still open: R-011 (BYO AI key path and egress rev
 | E | `tests/unit/test_analysis_engine.py` on `evaluate()`; `tests/unit/test_engine_has_no_io.py` | unit |
 | F | `tests/unit/test_role_docs.py` (no "Network Contributor"; JSON lists six actions) | unit |
 | G | `tests/unit/test_azure_discovery.py` credential tests (`ManagedIdentityCredential` only); `tests/security/test_forbidden_env.py` (each forbidden variable, and `AZURE_TENANT_ID` beside a secret, refuses startup before any credential is built; missing `AZURE_CLIENT_ID` refuses); `tests/security/test_no_client_secret.py` (grep includes `DefaultAzureCredential`); web `vitest` credential form; `prisma migrate` in the `migrator` image build | unit + image |
-| H | `tests/unit/test_network_assessment_api_auth.py` (401 no token, 401 wrong audience, 403 `insufficient_role`, 200 role in `roles`, 200 role in `scp`, protected routes all on the `internal` router, public routes 200 without a token); `tests/security/test_profile_refused.py` (`CNA_PROFILE` set in an appliance build exits 1); `tests/unit/test_api_errors.py` | unit |
+| H | `tests/unit/test_network_assessment_api_auth.py` (401 no token, 401 wrong audience, 403 `insufficient_role`, 200 role in `roles`, 200 role in `scp`, protected routes all on the `internal` router, public routes 200 without a token); `tests/security/test_profile_refused.py` (`NETWORK_ASSESSMENT_PROFILE` set in an appliance build exits 1); `tests/unit/test_api_errors.py` | unit |
 | 8 (public API) | `tests/unit/test_public_api.py` (`POST /api/assessments` is 405 with `Allow: GET` and `error.code == "edition_readonly"`; `X-Frame-Options: DENY` present only when `NA_FRAME_ANCESTORS` is exactly `'none'`); `tests/security/test_appliance_boundary.py` (no route under `/api/assessments` accepts a body) | unit |
 | I | `tests/security/test_lab_boundary.py` against the engine venv without `[azure]`; CI `lab-image` job: `docker run --rm network-assessment:lab` exits 0 and `docker run --rm network-assessment:lab python -c "import azure"` exits 1; the lab HTTP checks are the AddOn's | unit + image job |
 | J | `actionlint`; `tests/security/test_standalone_boundary.py` | CI |
@@ -689,7 +689,7 @@ Order: **A -> C -> (B, E) -> D -> F -> G -> H -> I -> J -> K.** F, G and H are i
 | 1 | A | `v0.9.1` | Shim in place; nothing else changes |
 | 2 | C, E | `engine-v0.1.0` (wheel) + `v0.10.0` | First wheel; the AddOn adopts it and deletes its port. **Status 2026-10-24:** `engine-v0.1.0` is published (2026-10-12); the AddOn has not adopted it yet; no `v0.10.0` tag exists (tags: `v0.1.0`, `v0.8.0`, `engine-v0.1.0`) |
 | 3 | B | `engine-v0.2.0` + `v0.10.1` | `RULES_VERSION` bump; web findings gain ids |
-| 4 | D | `v0.11.0` | `CNA_DISCOVERY_BACKEND` defaults to `resource-graph`; `arm` kept one release |
+| 4 | D | `v0.11.0` | `NETWORK_ASSESSMENT_DISCOVERY_BACKEND` defaults to `resource-graph`; `arm` kept one release |
 | 5 | I | `v0.11.1` | Build-only lab boundary target; boundary test in CI; the AddOn ships the deployable lab build |
 | 6 | J | `v0.11.2` | OIDC login; digests in the step summary and the release notes |
 | 7 | K | `v0.12.0` | AWS extra; remove the A shims and the `arm` backend in the same release |
@@ -699,7 +699,7 @@ One PR per change set, ready for review, following the Core's PR template; `CHAN
 ## 16 Compatibility considerations
 
 - **Import shims (A, K).** `network_assessment.core.topology_schema` and the moved AWS module paths keep working for one release with a `DeprecationWarning`; CI runs with `-W error::DeprecationWarning` for the Core's own code only after the shims are deleted.
-- **Discovery backend flag (D).** `CNA_DISCOVERY_BACKEND=arm|resource-graph`; default `resource-graph`; the `arm` value and the old loop are deleted in step 7.
+- **Discovery backend flag (D).** `NETWORK_ASSESSMENT_DISCOVERY_BACKEND=arm|resource-graph`; default `resource-graph`; the `arm` value and the old loop are deleted in step 7.
 - **Consumers of the images.** They pull by digest. From K the published images carry the `[aws]` extra (`TODO.md` T-729).
 - **Web tier.** The findings page reads the rule id from the title prefix (`_finding_model_to_dict`, `main.py:1176`); B keeps that convention until a `ruleId` column is added in a later migration.
 - **AddOn.** `TOPOLOGY_MODEL_VERSION`, `RULES_VERSION`, rule ids and severities in B are the contract the AddOn's interim port already uses; a Core change to any of them is a `[VERIFY]` item in the AddOn's `core-update` PR.
@@ -713,7 +713,7 @@ One PR per change set, ready for review, following the Core's PR template; `CHAN
 | A | Shim keeps old imports; revert the import rewrite commit |
 | B | `git revert` of the `main.py` deletion; the rules module stays and is unused |
 | C | Delete `packages/` and the dependency line; re-exports become the real modules again |
-| D | `CNA_DISCOVERY_BACKEND=arm` (one release); then image digest rollback |
+| D | `NETWORK_ASSESSMENT_DISCOVERY_BACKEND=arm` (one release); then image digest rollback |
 | E | The wrapper class keeps the CLI contract; revert is one commit |
 | F | Text only; revert |
 | G | `down.sql` restores the columns; previous `migrator` and `api` images by digest; no path back to SP secrets by decision |
@@ -749,7 +749,7 @@ One PR per change set, ready for review, following the Core's PR template; `CHAN
 4. `docker build --build-arg EDITION=lab -t network-assessment:lab .` succeeds, `docker run --rm network-assessment:lab` exits 0 and `docker run --rm network-assessment:lab python -c "import azure"` exits 1; the image is never pushed and has no digest row; `docker build --build-arg EDITION=appliance -t network-assessment:appliance .` succeeds.
 5. `GET /api/health` on the appliance returns `edition: "appliance"`, `azureConnectivity: "managed-identity"`, `id: "network-assessment"` and `version` at the top level, with no token. The `lab` form of the envelope is the AddOn's acceptance, on its own image.
 6. `POST /api/assessments` on the appliance returns 405 with header `Allow: GET` and `error.code == "edition_readonly"`.
-7. `GET /discovery/jobs/anything` on `network-assessment-api` without a bearer token returns 401; with a valid token lacking `Discovery.Run` it returns 403 `insufficient_role`; the appliance exits 1 at startup when `CNA_PROFILE` or any `FORBIDDEN_ENV` variable is set.
+7. `GET /discovery/jobs/anything` on `network-assessment-api` without a bearer token returns 401; with a valid token lacking `Discovery.Run` it returns 403 `insufficient_role`; the appliance exits 1 at startup when `NETWORK_ASSESSMENT_PROFILE` or any `FORBIDDEN_ENV` variable is set.
 8. A Reader-only identity completes Resource Graph discovery of a subscription with zero `HttpResponseError` from list calls; live-only rules report `state: "unknown"` with a reason; the timing is recorded in `VALIDATION.md`.
 9. Every finding carries `rule_id`, `rule_version`, `observed_state.state`; every rule title and description passes `ObservedStateEnforcer`; `RULES_VERSION` changes when the id set changes.
 10. The step summary of `200-build-images.yml`'s `tag-images` job carries a digest for every image, and the `310` release notes list all five.
@@ -772,7 +772,7 @@ docker build --build-arg EDITION=lab -t network-assessment:lab .; docker run --r
 # Expected: appliance ok
 docker build --build-arg EDITION=appliance -t network-assessment:appliance .; docker run --rm network-assessment:appliance python -c "import azure.identity, azure.mgmt.resourcegraph; print('appliance ok')"
 # Expected: the container exits 1 within a few seconds and the log says "forbidden credential variables set"
-docker run --rm -e CNA_EDITION=appliance -e AZURE_CLIENT_ID=00000000-0000-0000-0000-000000000001 -e AZURE_CLIENT_SECRET=not-a-real-secret network-assessment:appliance; Write-Host "refusal exit $LASTEXITCODE (expected 1)"
+docker run --rm -e NETWORK_ASSESSMENT_EDITION=appliance -e AZURE_CLIENT_ID=00000000-0000-0000-0000-000000000001 -e AZURE_CLIENT_SECRET=not-a-real-secret network-assessment:appliance; Write-Host "refusal exit $LASTEXITCODE (expected 1)"
 # Expected: 401 (against a running appliance network-assessment-api after H); 200 for /api/health with no token
 (Invoke-WebRequest http://127.0.0.1:8080/discovery/jobs/x -SkipHttpErrorCheck).StatusCode; (Invoke-WebRequest http://127.0.0.1:8080/api/health -SkipHttpErrorCheck).StatusCode
 # Expected: the rules version, then False
@@ -793,7 +793,7 @@ docker build --build-arg EDITION=lab -t network-assessment:lab . && docker run -
 # Expected: appliance ok
 docker build --build-arg EDITION=appliance -t network-assessment:appliance . && docker run --rm network-assessment:appliance python -c "import azure.identity, azure.mgmt.resourcegraph; print('appliance ok')"
 # Expected: the container exits 1 within a few seconds and the log says "forbidden credential variables set"
-docker run --rm -e CNA_EDITION=appliance -e AZURE_CLIENT_ID=00000000-0000-0000-0000-000000000001 -e AZURE_CLIENT_SECRET=not-a-real-secret network-assessment:appliance; echo "refusal exit $? (expected 1)"
+docker run --rm -e NETWORK_ASSESSMENT_EDITION=appliance -e AZURE_CLIENT_ID=00000000-0000-0000-0000-000000000001 -e AZURE_CLIENT_SECRET=not-a-real-secret network-assessment:appliance; echo "refusal exit $? (expected 1)"
 # Expected: 401 (against a running appliance network-assessment-api after H), then 200 for /api/health with no token
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/discovery/jobs/x; curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/api/health
 # Expected: the rules version, then False
@@ -802,7 +802,7 @@ uv build packages/cna-azure-network-engine --out-dir dist && python -m venv .ven
 mkdir -p ./wheel && pip download cna-azure-network-engine --no-deps -d ./wheel && ls ./wheel
 ```
 
-Live acceptance (R-008), bash, after `az login` as an identity holding only Reader on the subscriptions named in `CNA_SCOPES`: `CNA_PROFILE=developer uv run network-assessment discover azure --scopes "$CNA_SCOPES"` (the CLI's `AzureCliCredential` path, which the appliance image refuses); expected: the progress log contains no `WARNING` line with `HTTP 403`; record the wall time in `VALIDATION.md`.
+Live acceptance (R-008), bash, after `az login` as an identity holding only Reader on the subscriptions named in `NETWORK_ASSESSMENT_SCOPES`: `NETWORK_ASSESSMENT_PROFILE=developer uv run network-assessment discover azure --scopes "$NETWORK_ASSESSMENT_SCOPES"` (the CLI's `AzureCliCredential` path, which the appliance image refuses); expected: the progress log contains no `WARNING` line with `HTTP 403`; record the wall time in `VALIDATION.md`.
 
 ## 21 Dependencies on AddOn work
 

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { GET, POST } from "./route";
 
 // Ticket #245: the draw.io tool route is internal only. It answers 401 unless the
-// request carries the shared bearer (CNA_API_TOKEN). The value below is a test
+// request carries the shared bearer (NETWORK_ASSESSMENT_API_TOKEN). The value below is a test
 // placeholder, not a credential.
 const TOKEN = "test-shared-token-not-a-secret";
 
@@ -31,14 +31,14 @@ function post(tool: string, body: unknown, authorization?: string): Promise<Resp
 }
 
 describe("/api/drawio-mcp requires the internal bearer", () => {
-  const original = process.env.CNA_API_TOKEN;
+  const original = process.env.NETWORK_ASSESSMENT_API_TOKEN;
 
   beforeEach(() => {
-    process.env.CNA_API_TOKEN = TOKEN;
+    process.env.NETWORK_ASSESSMENT_API_TOKEN = TOKEN;
   });
   afterEach(() => {
-    if (original === undefined) delete process.env.CNA_API_TOKEN;
-    else process.env.CNA_API_TOKEN = original;
+    if (original === undefined) delete process.env.NETWORK_ASSESSMENT_API_TOKEN;
+    else process.env.NETWORK_ASSESSMENT_API_TOKEN = original;
   });
 
   it("GET health without credentials is 401", async () => {
@@ -86,7 +86,7 @@ describe("/api/drawio-mcp requires the internal bearer", () => {
   });
 
   it("fails closed: with no token configured even a bearer is refused", async () => {
-    delete process.env.CNA_API_TOKEN;
+    delete process.env.NETWORK_ASSESSMENT_API_TOKEN;
     expect((await get("health")).status).toBe(401);
     expect((await get("health", "Bearer ")).status).toBe(401);
     expect((await get("health", "Bearer anything")).status).toBe(401);

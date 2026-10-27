@@ -8,7 +8,7 @@ the client resends the full message list each turn.
 
 The active AI engine follows the same AppSetting 'ai.activeEngine' switch
 the web tier uses (apps/network-assessment-web/lib/ai-engine.ts). In bring-your-own mode
-(CNA_AI_MODE=byo-api) the admin-entered Anthropic/OpenAI keys are read from
+(NETWORK_ASSESSMENT_AI_MODE=byo-api) the admin-entered Anthropic/OpenAI keys are read from
 the same table (ai.byo.<provider>.apiKey, AES-256-GCM blobs written by
 lib/crypto.ts) and decrypted here with network_assessment.core.credential_crypto. Keys never
 leave this process and are never logged.

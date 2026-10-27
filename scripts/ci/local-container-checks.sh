@@ -18,7 +18,7 @@
 #   TRIVY_SEVERITY   severities Trivy reports (default HIGH,CRITICAL)
 #   TRIVY_EXIT_CODE  exit code Trivy returns when it finds something (default 1; use 0 to only report)
 #   TRIVY_IGNORE_UNFIXED  trivy-image reports only findings that have a fix (default 1, like CI); 0 lists all
-#   CNA_CHECKS_ANY_CONTEXT=1   allow a Docker context other than desktop-linux or default (see below)
+#   NETWORK_ASSESSMENT_CHECKS_ANY_CONTEXT=1   allow a Docker context other than desktop-linux or default (see below)
 #
 # How it stays safe: every tool runs in a disposable container (--rm) with all capabilities dropped, no privilege
 # escalation and no Docker socket. The repository is mounted read-only. hadolint and actionlint get no network.
@@ -28,7 +28,7 @@
 #
 # The script stops when `docker context show` names an engine other than your own machine (desktop-linux, or
 # default on Linux), or when DOCKER_HOST is set, because a scan against a shared or remote engine is a different
-# decision. Set CNA_CHECKS_ANY_CONTEXT=1 only when you mean it.
+# decision. Set NETWORK_ASSESSMENT_CHECKS_ANY_CONTEXT=1 only when you mean it.
 #
 # Where the versions come from: each is the newest stable release on the date in the comment, taken from the
 # project's GitHub releases page, pulled by tag and pinned by the digest the registry reported. 300-test-codebase.yml
@@ -64,12 +64,12 @@ fail() { printf 'ERROR: %s\n' "$*" >&2; exit 2; }
 command -v docker >/dev/null 2>&1 || fail "docker was not found on PATH. Start Docker Desktop and try again."
 context="$(docker context show 2>/dev/null || true)"
 say "Docker context: ${context:-unknown}"
-if [ "${CNA_CHECKS_ANY_CONTEXT:-0}" != "1" ]; then
+if [ "${NETWORK_ASSESSMENT_CHECKS_ANY_CONTEXT:-0}" != "1" ]; then
   case "$context" in
     desktop-linux | default) ;;
-    *) fail "Docker context '$context' is not desktop-linux or default. Switch with 'docker context use desktop-linux', or set CNA_CHECKS_ANY_CONTEXT=1 if you really mean this engine." ;;
+    *) fail "Docker context '$context' is not desktop-linux or default. Switch with 'docker context use desktop-linux', or set NETWORK_ASSESSMENT_CHECKS_ANY_CONTEXT=1 if you really mean this engine." ;;
   esac
-  [ -z "${DOCKER_HOST:-}" ] || fail "DOCKER_HOST is set ($DOCKER_HOST); unset it, or set CNA_CHECKS_ANY_CONTEXT=1 if you really mean that engine."
+  [ -z "${DOCKER_HOST:-}" ] || fail "DOCKER_HOST is set ($DOCKER_HOST); unset it, or set NETWORK_ASSESSMENT_CHECKS_ANY_CONTEXT=1 if you really mean that engine."
 fi
 docker info >/dev/null 2>&1 || fail "the Docker engine does not answer. Start Docker Desktop and try again."
 

@@ -69,7 +69,7 @@ class EngagementStore:
     ACCESS_RECORD_FILE = "access_record.json"
 
     def __init__(self, data_dir: Path | None = None, engagement_id: str | None = None):
-        env_dir = os.environ.get("CNA_DATA_DIR", "./engagements")
+        env_dir = os.environ.get("NETWORK_ASSESSMENT_DATA_DIR", "./engagements")
         self.data_dir = data_dir or Path(env_dir)
         self.engagement_id = (
             engagement_id  # optional; set by callers that own a specific engagement

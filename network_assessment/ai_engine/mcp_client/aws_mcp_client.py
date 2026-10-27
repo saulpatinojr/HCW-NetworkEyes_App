@@ -8,7 +8,7 @@ Recommended tool: aws.well-architected.get-recommendation
 
 Connection:
   - Requires a remote MCP server accessible via streamable HTTP
-  - Configured via env vars: CNA_AWS_MCP_ENDPOINT, CNA_AWS_MCP_TRANSPORT
+  - Configured via env vars: NETWORK_ASSESSMENT_AWS_MCP_ENDPOINT, NETWORK_ASSESSMENT_AWS_MCP_TRANSPORT
   - Default transport: streamable-http (public AWS MCP endpoint)
   - Graceful degradation: on ImportError or connection failure, returns []
 """
@@ -25,8 +25,8 @@ from network_assessment.core.findings_schema import FindingRecommendation
 
 logger = logging.getLogger("network_assessment.mcp.aws")
 
-_MCP_ENDPOINT = os.getenv("CNA_AWS_MCP_ENDPOINT", "")
-_MCP_TRANSPORT = os.getenv("CNA_AWS_MCP_TRANSPORT", "streamable-http")
+_MCP_ENDPOINT = os.getenv("NETWORK_ASSESSMENT_AWS_MCP_ENDPOINT", "")
+_MCP_TRANSPORT = os.getenv("NETWORK_ASSESSMENT_AWS_MCP_TRANSPORT", "streamable-http")
 
 
 class AWSMCPClient:

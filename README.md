@@ -118,7 +118,7 @@ The project started as a single repository that held the core until 2026-09-18. 
 (`REVIEW.md` → R-014), so issue and pull-request numbers in documents older than 2026-10-10 name threads of the
 earlier repositories and are historical references only. New work, issues and pull requests belong here.
 
-The AI provider family is chosen at deploy time by `CNA_AI_MODE`: `saas` (Azure OpenAI on Azure, Amazon Bedrock on AWS,
+The AI provider family is chosen at deploy time by `NETWORK_ASSESSMENT_AI_MODE`: `saas` (Azure OpenAI on Azure, Amazon Bedrock on AWS,
 authenticated with the workload identity) or `byo-api` (no cloud AI resources; an admin pastes an Anthropic and/or
 OpenAI API key on the **AI Engine** admin page — the only secrets ever entered in the app, stored encrypted in the
 database).
@@ -241,7 +241,7 @@ licence file for it and has not verified the statement (`REVIEW.md`, R-020). The
   Long-form documentation has no destination since the wiki was deleted (`REVIEW.md`, R-031).
 - **Image contract changes are recorded, never implied.** Any change to the image tag scheme, the
   signed-digest record, or the runtime environment contract
-  (`CNA_AI_MODE`, `CNA_APPLIANCE_CLOUD`, …) is recorded under `Changed` in `CHANGELOG.md` and in the release notes,
+  (`NETWORK_ASSESSMENT_AI_MODE`, `NETWORK_ASSESSMENT_APPLIANCE_CLOUD`, …) is recorded under `Changed` in `CHANGELOG.md` and in the release notes,
   where a consumer will look; nobody is notified — see [`CLAUDE.md`](CLAUDE.md).
 - **Numbered workflows.** Workflows use numeric bands:
   `000` bootstrap, `100` validation, `200` build, `300` test, release, and operations.

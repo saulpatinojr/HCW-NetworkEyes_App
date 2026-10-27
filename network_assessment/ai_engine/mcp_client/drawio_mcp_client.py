@@ -8,12 +8,12 @@ server is configured at runtime.
 
 Connection:
   - Default URL: http://localhost:3000/api/drawio-mcp (override via
-    CNA_DRAWIO_MCP_URL).
+    NETWORK_ASSESSMENT_DRAWIO_MCP_URL).
   - HTTP+JSON contract — no MCP SDK required. The network-assessment-web route exposes the
     same `search_shapes` / `create_diagram` tool shapes as the upstream
     draw.io MCP App Server.
   - The route is internal only (ticket #245): every request carries
-    ``Authorization: Bearer <CNA_API_TOKEN>``, the shared secret the web and api
+    ``Authorization: Bearer <NETWORK_ASSESSMENT_API_TOKEN>``, the shared secret the web and api
     containers already hold. It is read when the request is made and never
     logged. With no token configured nothing is sent, the route answers 401, and
     the client degrades like any other failure.
@@ -37,15 +37,17 @@ logger = logging.getLogger("network_assessment.mcp.drawio")
 # apps/network-assessment-web/scripts/filter-shape-index.mjs when switching libraries.
 ALLOWED_LIBS: frozenset[str] = frozenset({"azure2", "aws4"})
 
-_DEFAULT_URL = os.getenv("CNA_DRAWIO_MCP_URL", "http://localhost:3000/api/drawio-mcp").rstrip("/")
-_DEFAULT_TIMEOUT = float(os.getenv("CNA_DRAWIO_MCP_TIMEOUT", "5"))
+_DEFAULT_URL = os.getenv(
+    "NETWORK_ASSESSMENT_DRAWIO_MCP_URL", "http://localhost:3000/api/drawio-mcp"
+).rstrip("/")
+_DEFAULT_TIMEOUT = float(os.getenv("NETWORK_ASSESSMENT_DRAWIO_MCP_TIMEOUT", "5"))
 
 _STYLE_PREFIX_RE = re.compile(r"shape=mxgraph\.([a-z0-9]+)\.", re.IGNORECASE)
 
 
 def _auth_headers() -> dict[str, str]:
     """The bearer header for the internal route; empty when no token is configured."""
-    token = os.getenv("CNA_API_TOKEN", "")
+    token = os.getenv("NETWORK_ASSESSMENT_API_TOKEN", "")
     return {"Authorization": f"Bearer {token}"} if token else {}
 
 

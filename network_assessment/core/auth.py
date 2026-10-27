@@ -65,11 +65,11 @@ class AWSCredentials:
     @classmethod
     def from_env(cls) -> AWSCredentials:
         """Construct from environment variables (local dev / CI)."""
-        role_arn = os.environ.get("CNA_AWS_ROLE_ARN", "")
-        external_id = os.environ.get("CNA_AWS_EXTERNAL_ID", "")
+        role_arn = os.environ.get("NETWORK_ASSESSMENT_AWS_ROLE_ARN", "")
+        external_id = os.environ.get("NETWORK_ASSESSMENT_AWS_EXTERNAL_ID", "")
         if not role_arn:
             raise OSError(
-                "CNA_AWS_ROLE_ARN not set. Set it in .env or pass --role to `network-assessment discover aws`."
+                "NETWORK_ASSESSMENT_AWS_ROLE_ARN not set. Set it in .env or pass --role to `network-assessment discover aws`."
             )
         return cls(role_arn=role_arn, external_id=external_id)
 
@@ -86,7 +86,7 @@ FORBIDDEN_CREDENTIAL_ENV: tuple[str, ...] = (
     "AZURE_FEDERATED_TOKEN_FILE",
     "AZURE_AUTHORITY_HOST",
 )
-APPLIANCE_ENV = "CNA_APPLIANCE_CLOUD"
+APPLIANCE_ENV = "NETWORK_ASSESSMENT_APPLIANCE_CLOUD"
 
 
 def forbidden_credential_env(env: Mapping[str, str] | None = None) -> list[str]:
@@ -124,7 +124,7 @@ def build_azure_credential(env: Mapping[str, str] | None = None):
     user-assigned identity), the Azure CLI, Azure PowerShell and the Azure Developer CLI —
     the developer paths behind ``az login``. What is excluded: the environment credential
     (client secrets, certificates, username/password), the interactive browser, the shared
-    token cache and Visual Studio Code. In the appliance (``CNA_APPLIANCE_CLOUD`` set) a
+    token cache and Visual Studio Code. In the appliance (``NETWORK_ASSESSMENT_APPLIANCE_CLOUD`` set) a
     forbidden variable exits the process before the credential is built.
     """
     source = os.environ if env is None else env

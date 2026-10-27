@@ -86,20 +86,20 @@ function hostOnly(value: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Mode / cloud (env contract: CNA_AI_MODE and CNA_APPLIANCE_CLOUD, set by the deployment)
+// Mode / cloud (env contract: NETWORK_ASSESSMENT_AI_MODE and NETWORK_ASSESSMENT_APPLIANCE_CLOUD, set by the deployment)
 // ---------------------------------------------------------------------------
 
 export function getAiMode(): AiMode {
-  return normalizeAiMode(process.env.CNA_AI_MODE);
+  return normalizeAiMode(process.env.NETWORK_ASSESSMENT_AI_MODE);
 }
 
 export function getApplianceCloud(): ApplianceCloud {
-  return normalizeApplianceCloud(process.env.CNA_APPLIANCE_CLOUD);
+  return normalizeApplianceCloud(process.env.NETWORK_ASSESSMENT_APPLIANCE_CLOUD);
 }
 
 export function getConfiguredDefaultAiEngine(): AiEngineId {
   const allowed = allowedEngines(getAiMode(), getApplianceCloud());
-  const fromEnv = normalizeAiEngine(process.env.CNA_AI_ENGINE_DEFAULT);
+  const fromEnv = normalizeAiEngine(process.env.NETWORK_ASSESSMENT_AI_ENGINE_DEFAULT);
   return fromEnv && allowed.includes(fromEnv) ? fromEnv : allowed[0];
 }
 
@@ -108,12 +108,12 @@ export function getConfiguredDefaultAiEngine(): AiEngineId {
 // ---------------------------------------------------------------------------
 
 function bedrockModelId(): string {
-  return clean(process.env.CNA_BEDROCK_INFERENCE_PROFILE_ARN) || clean(process.env.CNA_BEDROCK_MODEL_ID);
+  return clean(process.env.NETWORK_ASSESSMENT_BEDROCK_INFERENCE_PROFILE_ARN) || clean(process.env.NETWORK_ASSESSMENT_BEDROCK_MODEL_ID);
 }
 
 function byoModel(provider: "anthropic" | "openai", byo: ByoCredentialPresence): string {
   const fallback = provider === "anthropic" ? DEFAULT_ANTHROPIC_MODEL : DEFAULT_OPENAI_MODEL;
-  const envName = provider === "anthropic" ? "CNA_ANTHROPIC_MODEL" : "CNA_OPENAI_MODEL";
+  const envName = provider === "anthropic" ? "NETWORK_ASSESSMENT_ANTHROPIC_MODEL" : "NETWORK_ASSESSMENT_OPENAI_MODEL";
   return byo[provider].model || clean(process.env[envName]) || fallback;
 }
 
@@ -129,23 +129,23 @@ export function getConfiguredEngines(byo: ByoCredentialPresence): Set<AiEngineId
 }
 
 export function getMcpServerStatuses(): McpServerStatus[] {
-  const azureEndpoint = clean(process.env.CNA_AZURE_MCP_ENDPOINT ?? process.env.AZURE_MCP_SERVER_URL);
-  const awsEndpoint = clean(process.env.CNA_AWS_MCP_ENDPOINT ?? process.env.AWS_MCP_SERVER_URL);
-  const drawioEndpoint = clean(process.env.CNA_DRAWIO_MCP_URL);
+  const azureEndpoint = clean(process.env.NETWORK_ASSESSMENT_AZURE_MCP_ENDPOINT ?? process.env.AZURE_MCP_SERVER_URL);
+  const awsEndpoint = clean(process.env.NETWORK_ASSESSMENT_AWS_MCP_ENDPOINT ?? process.env.AWS_MCP_SERVER_URL);
+  const drawioEndpoint = clean(process.env.NETWORK_ASSESSMENT_DRAWIO_MCP_URL);
 
   return [
     {
       id: "azure-mcp",
       label: "Azure MCP",
       endpoint: azureEndpoint || "Not configured",
-      transport: clean(process.env.CNA_AZURE_MCP_TRANSPORT) || "streamable-http",
+      transport: clean(process.env.NETWORK_ASSESSMENT_AZURE_MCP_TRANSPORT) || "streamable-http",
       configured: Boolean(azureEndpoint),
     },
     {
       id: "aws-mcp",
       label: "AWS MCP",
       endpoint: awsEndpoint || "Not configured",
-      transport: clean(process.env.CNA_AWS_MCP_TRANSPORT) || "streamable-http",
+      transport: clean(process.env.NETWORK_ASSESSMENT_AWS_MCP_TRANSPORT) || "streamable-http",
       configured: Boolean(awsEndpoint),
     },
     {
@@ -188,8 +188,8 @@ export function getAiEngineStatuses(
       };
     },
     bedrock: () => {
-      const profile = clean(process.env.CNA_BEDROCK_INFERENCE_PROFILE_ARN);
-      const model = clean(process.env.CNA_BEDROCK_MODEL_ID);
+      const profile = clean(process.env.NETWORK_ASSESSMENT_BEDROCK_INFERENCE_PROFILE_ARN);
+      const model = clean(process.env.NETWORK_ASSESSMENT_BEDROCK_MODEL_ID);
       return {
         id: "bedrock",
         label: "Amazon Bedrock",
@@ -203,7 +203,7 @@ export function getAiEngineStatuses(
           { label: "Region", value: clean(process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION) || "SDK default" },
           { label: "Authentication", value: "Task role" },
         ],
-        missing: bedrockModelId() ? [] : ["CNA_BEDROCK_MODEL_ID"],
+        missing: bedrockModelId() ? [] : ["NETWORK_ASSESSMENT_BEDROCK_MODEL_ID"],
       };
     },
     anthropic: () => ({
@@ -261,7 +261,7 @@ export async function resolveActiveAiEngine(): Promise<AiEngineId | null> {
       mode: getAiMode(),
       cloud: getApplianceCloud(),
       stored,
-      envDefault: process.env.CNA_AI_ENGINE_DEFAULT,
+      envDefault: process.env.NETWORK_ASSESSMENT_AI_ENGINE_DEFAULT,
       configured: getConfiguredEngines(byo),
     });
   } catch (error) {
@@ -419,7 +419,7 @@ async function completeWithAnthropic(options: AiCompletionOptions, byo: ByoCrede
 
 async function completeWithBedrock(options: AiCompletionOptions): Promise<string> {
   const modelId = bedrockModelId();
-  if (!modelId) throw new AiEngineUnavailableError("CNA_BEDROCK_MODEL_ID is not set");
+  if (!modelId) throw new AiEngineUnavailableError("NETWORK_ASSESSMENT_BEDROCK_MODEL_ID is not set");
 
   const { system, turns } = splitSystem(options);
   const client = new BedrockRuntimeClient({});

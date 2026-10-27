@@ -230,8 +230,8 @@ export async function generateDeliverable(
 
   let content: string;
   if (type in ENCYCLOPEDIA_EDITIONS) {
-    const apiUrl = process.env.CNA_API_INTERNAL_URL;
-    if (!apiUrl) return { error: "Report API is not configured (CNA_API_INTERNAL_URL unset)." };
+    const apiUrl = process.env.NETWORK_ASSESSMENT_API_INTERNAL_URL;
+    if (!apiUrl) return { error: "Report API is not configured (NETWORK_ASSESSMENT_API_INTERNAL_URL unset)." };
     try {
       const res = await fetch(`${apiUrl}/reports/${engagementId}/encyclopedia`, {
         method: "POST",

@@ -30,7 +30,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 THIS_FILE = Path(__file__).resolve()
 
 #: name -> pattern. ``APPLIANCE_`` alone is not used: it would also match the product's own runtime vocabulary
-#: (``CNA_APPLIANCE_CLOUD``, ``APPLIANCE_ENV``), which stays. These are the variables that named the siblings.
+#: (``NETWORK_ASSESSMENT_APPLIANCE_CLOUD``, ``APPLIANCE_ENV``), which stays. These are the variables that named the siblings.
 FORBIDDEN: dict[str, re.Pattern[str]] = {
     "saulpatino-cbts": re.compile(r"saulpatino-cbts"),
     "Work-Cloud_": re.compile(r"Work-Cloud_"),
@@ -173,7 +173,7 @@ class TestNoOtherRepositoryIsNamed:
             ("Work-Cloud_Network_Azure_Appliance", {"Work-Cloud_"}),
             ("vars.APPLIANCE_OWNER", {"APPLIANCE_REPOS/OWNER/REPO"}),
             ("vars.APPLIANCE_REPOS != ''", {"APPLIANCE_REPOS/OWNER/REPO"}),
-            ("CNA_APPLIANCE_REPO", {"APPLIANCE_REPOS/OWNER/REPO"}),
+            ("NETWORK_ASSESSMENT_APPLIANCE_REPO", {"APPLIANCE_REPOS/OWNER/REPO"}),
             ("secrets.GH_APP_ID", {"GH_APP_"}),
             ("secrets.GH_APP_PRIVATE_KEY", {"GH_APP_"}),
             ("on: repository_dispatch", {"repository_dispatch"}),
@@ -188,9 +188,9 @@ class TestNoOtherRepositoryIsNamed:
     @pytest.mark.parametrize(
         "text",
         [
-            "CNA_APPLIANCE_CLOUD=azure",  # the product's own runtime vocabulary stays
-            "APPLIANCE_ENV = 'CNA_APPLIANCE_CLOUD'",
-            "CNA_EDITION=appliance",
+            "NETWORK_ASSESSMENT_APPLIANCE_CLOUD=azure",  # the product's own runtime vocabulary stays
+            "APPLIANCE_ENV = 'NETWORK_ASSESSMENT_APPLIANCE_CLOUD'",
+            "NETWORK_ASSESSMENT_EDITION=appliance",
             "final-appliance",
             "img-ne-appliance-app",
             "CORE_REPOSITORY",
