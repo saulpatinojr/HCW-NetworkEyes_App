@@ -1,11 +1,11 @@
-"""Unit tests for cna.core.topology_models — Pydantic contracts."""
+"""Unit tests for network_assessment.core.topology_models — Pydantic contracts."""
 
 from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
 
-from cna.core.topology_models import (
+from network_assessment.core.topology_models import (
     AWSVPC,
     AWSAccount,
     AWSInternetGateway,

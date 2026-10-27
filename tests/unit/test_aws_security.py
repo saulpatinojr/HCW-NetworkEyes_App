@@ -14,8 +14,8 @@ import pytest
 
 ClientError = pytest.importorskip("botocore.exceptions", reason="needs the [aws] extra").ClientError
 
-from cna.core.topology.aws import AWSSecurityFinding  # noqa: E402
-from cna.modules.security.discovery.aws_security import (  # noqa: E402
+from network_assessment.core.topology.aws import AWSSecurityFinding  # noqa: E402
+from network_assessment.modules.security.discovery.aws_security import (  # noqa: E402
     AWSSecurityDiscovery,
     collect_security_findings,
 )

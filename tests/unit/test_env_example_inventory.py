@@ -2,7 +2,7 @@
 
 The root `.env.example` and `apps/cna-web/.env.example` are the operator's inventory of
 settings. This test collects every environment variable name the code reads, through
-`os.environ` / `os.getenv` in Python and `process.env` in TypeScript, under `cna/`, `apps/`
+`os.environ` / `os.getenv` in Python and `process.env` in TypeScript, under `network_assessment/`, `apps/`
 and `packages/`, and fails with the names that neither file mentions. A commented-out line
 counts as a mention, so a secret such as `CREDENTIAL_ENCRYPTION_KEY` can be listed with no value.
 
@@ -16,7 +16,7 @@ import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCAN_ROOTS = ("cna", "apps", "packages")
+SCAN_ROOTS = ("network_assessment", "apps", "packages")
 ENV_FILES = (REPO_ROOT / ".env.example", REPO_ROOT / "apps" / "cna-web" / ".env.example")
 
 # Directories that hold dependencies, build output or tests, not the code that runs.

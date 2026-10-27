@@ -4,7 +4,7 @@ from shutil import copyfile
 
 from azure.storage.blob import BlobServiceClient, ContentSettings
 
-from cna.core.auth import build_azure_credential
+from network_assessment.core.auth import build_azure_credential
 
 
 def bootstrap_workspace(base: Path) -> dict:

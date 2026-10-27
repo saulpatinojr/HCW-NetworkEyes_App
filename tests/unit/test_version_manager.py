@@ -1,6 +1,6 @@
 """Unit tests for document version manager (DD-012)."""
 
-from cna.core.version_manager import bump_version
+from network_assessment.core.version_manager import bump_version
 
 
 def test_patch_bump():

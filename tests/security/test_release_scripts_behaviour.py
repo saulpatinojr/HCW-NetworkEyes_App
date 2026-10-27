@@ -72,7 +72,7 @@ class TestPathsTouchBuild:
     def test_it_reads_the_real_workflows_path_filter(self):
         for expected in (
             "Dockerfile",
-            "cna/**",
+            "network_assessment/**",
             "apps/cna-web/**",
             "uv.lock",
             ".github/workflows/200-build-images.yml",
@@ -84,7 +84,7 @@ class TestPathsTouchBuild:
         "changed",
         [
             "Dockerfile",
-            "cna/core/auth.py",
+            "network_assessment/core/auth.py",
             "apps/cna-web/lib/image-update-rules.ts",
             "apps/cna-api/Dockerfile",
             "scripts/ci/sign_image.sh",

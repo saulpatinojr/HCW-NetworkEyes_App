@@ -7,7 +7,7 @@ closed set that the consolidation engine relies on.
 
 import pytest
 
-from cna.review import AREAS, Finding, PlanEntry, RemediationPlan, Severity
+from network_assessment.review import AREAS, Finding, PlanEntry, RemediationPlan, Severity
 
 
 def test_severity_is_ordered_informational_to_critical():

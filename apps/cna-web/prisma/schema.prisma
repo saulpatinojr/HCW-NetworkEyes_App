@@ -258,7 +258,7 @@ model DiscoveryJob {
 }
 
 // ─── Stat Masters (Phase C) ───────────────────────────────────────────────────
-// Pre-aggregated fact rows built by cna/core/stat_masters.py via the cna-api
+// Pre-aggregated fact rows built by network_assessment/core/stat_masters.py via the cna-api
 // metrics router. One row per unique dimension tuple per engagement.
 
 model MetricRecord {

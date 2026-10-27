@@ -4,7 +4,7 @@ Task 4.6 pairs the FastAPI ``TestClient`` error-path tests (see
 ``test_cna_api_error_paths.py``) with an assertion of the recorded
 worker-retirement entry. This test lives in its own module — separate from the
 ``TestClient`` suite — because it only reads the review findings via
-:func:`cna.review.areas.python_engine_api_findings` and therefore has **no**
+:func:`network_assessment.review.areas.python_engine_api_findings` and therefore has **no**
 dependency on the API's runtime stack (fastapi / httpx / psycopg2). It runs in
 every environment, including the minimal ``cna``-only checkout where the
 ``TestClient`` suite is skipped.
@@ -18,8 +18,8 @@ retained with a defined responsibility. The design records the decision as
 
 from __future__ import annotations
 
-from cna.review import AREAS, Severity, consolidate
-from cna.review.areas import python_engine_api_findings
+from network_assessment.review import AREAS, Severity, consolidate
+from network_assessment.review.areas import python_engine_api_findings
 
 _WORKER_DEDUP_KEY = "python-engine-api:worker-retirement"
 

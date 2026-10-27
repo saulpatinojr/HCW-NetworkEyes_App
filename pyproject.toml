@@ -3,7 +3,7 @@ requires = ["setuptools>=84.2.1", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cna"
+name = "network-assessment"
 version = "0.8.0b0"
 description = "NetworkEyes Cloud Network Assessment CLI"
 requires-python = ">=3.14"
@@ -53,13 +53,15 @@ dependencies = [
 ]
 
 [project.scripts]
-cna = "cna.cli.main:cli"
+network-assessment = "network_assessment.cli.main:cli"
+# The old command name keeps working for now (owner rename order, 2026-10-27).
+cna = "network_assessment.cli.main:cli"
 
 [project.optional-dependencies]
-# AWS is optional (REFACTOR_APP.md change set K): `pip install cna` installs no boto3;
-# `pip install "cna[aws]"` enables discovery, Security Hub, the S3 delivery portal,
+# AWS is optional (REFACTOR_APP.md change set K): `pip install network-assessment` installs no boto3;
+# `pip install "network-assessment[aws]"` enables discovery, Security Hub, the S3 delivery portal,
 # Bedrock chat and the /discovery/*-aws routes. Every AWS module calls
-# cna.aws.require_aws_extra() before importing boto3.
+# network_assessment.aws.require_aws_extra() before importing boto3.
 aws = [
     "boto3>=1.43.118",
 ]
@@ -138,7 +140,7 @@ build = [
     "wheel",
 ]
 # apps/cna-worker/main.py imports exactly these two SDKs and does not install
-# the cna package, so its image resolves them from the same lock as the CLI and
+# the network_assessment package, so its image resolves them from the same lock as the CLI and
 # API images (same versions everywhere) instead of an unpinned `pip install`.
 worker = [
     "azure-identity>=1.26.0",
@@ -162,7 +164,7 @@ markers = [
 ]
 
 # Type checking (TODO.md T-402). Matches the ruff posture: py314, project
-# source only, no widened ignore lists. `ty check cna/` is NOT yet green — see
+# source only, no widened ignore lists. `ty check network_assessment/` is NOT yet green — see
 # TODO.md T-410 for the remaining findings, which are to be fixed rather than
 # silenced. Nothing here suppresses a rule.
 [tool.ty.environment]
@@ -172,7 +174,7 @@ python-version = "3.14"
 extra-paths = ["packages/cna-azure-network-engine"]
 
 [tool.ty.src]
-include = ["cna", "packages/cna-azure-network-engine/cna_azure_network_engine"]
+include = ["network_assessment", "packages/cna-azure-network-engine/cna_azure_network_engine"]
 exclude = ["local"]
 
 [tool.ruff]
@@ -204,24 +206,24 @@ ignore = [
     "S101",   # use of assert (acceptable in tests)
     "S603",   # subprocess call (needed for diagram export)
     "S607",   # partial executable path (needed for diagram export)
-    "N818",   # exception name without Error suffix — intentional (CNAPartialResult, ObservedStateViolation, etc.)
+    "N818",   # exception name without Error suffix — intentional (NetworkAssessmentPartialResult, ObservedStateViolation, etc.)
     "S108",   # /tmp usage — acceptable in containerised CLI/worker images
     "S311",   # pseudo-random — used for jitter/throttle, not cryptography
 ]
 
 [tool.ruff.lint.isort]
 # The engine is developed in this tree (packages/): group it with the first-party imports.
-known-first-party = ["cna", "cna_azure_network_engine"]
+known-first-party = ["network_assessment", "cna_azure_network_engine"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S", "N"]   # relax security + naming rules in tests
-"cna/diagram_engine/diagrams_generator.py" = ["N811"]  # VPC imported as SubnetNode is a deliberate alias
+"network_assessment/diagram_engine/diagrams_generator.py" = ["N811"]  # VPC imported as SubnetNode is a deliberate alias
 
 [tool.coverage.run]
-source = ["cna", "cna_azure_network_engine"]
+source = ["network_assessment", "cna_azure_network_engine"]
 omit = [
     # CLI entry points — covered by integration tests, not unit tests
-    "cna/cli/*",
+    "network_assessment/cli/*",
     "*/__init__.py",
     "*/migrations/*",
 
@@ -233,12 +235,12 @@ omit = [
 
     # Diagram generation — require graphviz binary + drawio runtime
     # (Round 3: add `apt-get install graphviz` to CI and remove these)
-    "cna/diagram_engine/diagrams_generator.py",
-    "cna/modules/network/diagrams/*",
-    "cna/modules/landingzone/diagrams/*",
+    "network_assessment/diagram_engine/diagrams_generator.py",
+    "network_assessment/modules/network/diagrams/*",
+    "network_assessment/modules/landingzone/diagrams/*",
 
     # Modules registry (pure config, no logic)
-    "cna/modules/registry.py",
+    "network_assessment/modules/registry.py",
 ]
 
 [tool.coverage.report]
@@ -251,10 +253,10 @@ exclude_lines = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["cna*"]
+include = ["network_assessment*"]
 
 # The engine is developed in-tree and consumed as a workspace member, so nothing is
-# duplicated between cna/ and packages/ (uv resolves it from the path; pip installs it
+# duplicated between network_assessment/ and packages/ (uv resolves it from the path; pip installs it
 # first in CI and in the images). Once published, replace the source with an exact version.
 [tool.uv.workspace]
 members = ["packages/cna-azure-network-engine"]

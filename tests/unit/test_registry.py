@@ -13,9 +13,6 @@ import hashlib
 
 import pytest
 
-from cna.ai_engine.observed_state_enforcer import ObservedStateEnforcer, ObservedStateViolation
-from cna.core.findings_schema import FindingSeverity, FrameworkMapping
-from cna.core.topology.azure import AzureSubscriptionTopology, AzureTopology, VNet
 from cna_azure_network_engine.rules import (
     RULES,
     RULES_VERSION,
@@ -27,6 +24,12 @@ from cna_azure_network_engine.rules import (
     rules_digest,
 )
 from cna_azure_network_engine.rules.registry import RULES as _registry_dict
+from network_assessment.ai_engine.observed_state_enforcer import (
+    ObservedStateEnforcer,
+    ObservedStateViolation,
+)
+from network_assessment.core.findings_schema import FindingSeverity, FrameworkMapping
+from network_assessment.core.topology.azure import AzureSubscriptionTopology, AzureTopology, VNet
 
 # Re-pin when a rule is added, removed or re-versioned — and bump RULES_VERSION with it.
 # The table is the digest's input, so rules_digest() is checked without a hex literal
@@ -244,7 +247,7 @@ class TestEvaluate:
             evaluate(self._topology(sub))
 
     def test_rule_emitting_a_foreign_rule_id_is_rejected(self, scratch_registry):
-        from cna.core.findings_schema import Finding, ObservedState
+        from network_assessment.core.findings_schema import Finding, ObservedState
 
         @rule(**_meta())
         def foreign(sub, topo):

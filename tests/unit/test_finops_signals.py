@@ -1,6 +1,6 @@
 """Unit tests for FinOps AZ-COST-* finding generation."""
 
-from cna.core.topology.azure import (
+from network_assessment.core.topology.azure import (
     AzureNatGateway,
     AzurePublicIP,
     AzureSubscriptionTopology,
@@ -9,7 +9,7 @@ from cna.core.topology.azure import (
     GatewayMetric,
     NetworkMetrics,
 )
-from cna.modules.network.analysis import generate_finops_findings
+from network_assessment.modules.network.analysis import generate_finops_findings
 
 SUB = "00000000-0000-0000-0000-000000000001"
 

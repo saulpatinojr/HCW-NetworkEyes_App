@@ -2,7 +2,7 @@
 
 Stateless: POST loads the engagement's persisted Finding rows and latest
 discovery topology from Postgres, builds the stat-master bundle, and renders
-the six-chapter encyclopedia (cna.report_engine.encyclopedia_report) to an
+the six-chapter encyclopedia (network_assessment.report_engine.encyclopedia_report) to an
 HTML string returned to cna-web, which stores it as a Deliverable (same
 content/blob path the COMPREHENSIVE_ASSESSMENT HTML deliverable uses).
 Diagram SVG embedding degrades gracefully when the draw.io CLI is absent.
@@ -18,12 +18,12 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-# Ensure the repo root is on the path so `cna` package is importable.
+# Ensure the repo root is on the path so `network_assessment` package is importable.
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from cna.api_status import Outcome, status_for
-from cna.core.stat_masters import build_stat_masters
-from cna.report_engine.encyclopedia_report import (
+from network_assessment.api_status import Outcome, status_for
+from network_assessment.core.stat_masters import build_stat_masters
+from network_assessment.report_engine.encyclopedia_report import (
     EDITION_CONDENSED,
     EDITION_EXPANDED,
     EncyclopediaReportRenderer,
@@ -81,7 +81,7 @@ def _load_latest_topology(engagement_id: str):
     if not row or not row["topologyJson"]:
         return None
     try:
-        from cna.core.topology.azure import AzureTopology
+        from network_assessment.core.topology.azure import AzureTopology
 
         return AzureTopology.model_validate_json(row["topologyJson"])
     except Exception as exc:  # noqa: BLE001 — degrade to findings-only report

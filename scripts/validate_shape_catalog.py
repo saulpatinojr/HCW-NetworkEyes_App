@@ -4,7 +4,7 @@ icon library (azure2 or aws4). Fails non-zero on any violation so a careless
 edit cannot drift the deliverables into another icon set.
 
 Each cloud has one valid reference form, and they differ (see
-cna/diagram_engine/shape_catalog.py for the full account):
+network_assessment/diagram_engine/shape_catalog.py for the full account):
 
     AWS   shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.<name>
     Azure image=img/lib/azure2/<category>/<File_Name>.svg
@@ -32,8 +32,8 @@ STENCIL_LIBS = {"aws4"}
 
 ROOT = Path(__file__).resolve().parent.parent
 TARGETS = [
-    ROOT / "cna" / "diagram_engine" / "data" / "azure_shapes.json",
-    ROOT / "cna" / "diagram_engine" / "data" / "aws_shapes.json",
+    ROOT / "network_assessment" / "diagram_engine" / "data" / "azure_shapes.json",
+    ROOT / "network_assessment" / "diagram_engine" / "data" / "aws_shapes.json",
     ROOT / "apps" / "cna-web" / "lib" / "drawio-mcp" / "shape-index.json",
 ]
 

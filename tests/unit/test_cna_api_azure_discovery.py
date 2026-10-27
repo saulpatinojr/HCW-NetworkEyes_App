@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from cna.core.topology.azure import AzureSubscriptionTopology, AzureTopology, VNet
+from network_assessment.core.topology.azure import AzureSubscriptionTopology, AzureTopology, VNet
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _API_DIR = _REPO_ROOT / "apps" / "cna-api"
@@ -206,7 +206,7 @@ class TestEngineBIsGone:
             sys.path.insert(0, str(_API_DIR))
         from finding_records import finding_to_record
 
-        from cna.core.findings_schema import Finding, FindingSeverity, ObservedState
+        from network_assessment.core.findings_schema import Finding, FindingSeverity, ObservedState
 
         finding = Finding(
             rule_id="AZ-NET-020",

@@ -8,7 +8,7 @@ resolution, and the answer() flow end-to-end with a fake Azure OpenAI response.
 import httpx
 import pytest
 
-from cna.ai_engine.chat_agent import (
+from network_assessment.ai_engine.chat_agent import (
     ChatConfigError,
     GroundedChatAgent,
     GroundingContext,
@@ -444,7 +444,7 @@ def test_answer_via_mocked_bedrock(monkeypatch):
 def test_transient_classification():
     from botocore.exceptions import ClientError
 
-    from cna.ai_engine.chat_agent import _is_transient
+    from network_assessment.ai_engine.chat_agent import _is_transient
 
     class StatusErr(Exception):
         def __init__(self, code):

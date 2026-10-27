@@ -65,8 +65,8 @@ apps/
 ├── cna-api/          FastAPI — metrics, chat, reports, discovery routers
 └── cna-worker/       Python background worker — discovery + report generation
 packages/             cna-azure-network-engine — the Azure engine (model, typed rules, classifier,
-                      Resource Graph normalizer, renderers); a uv workspace member the cna package consumes
-cna/                  Python package, installed as the `cna` CLI
+                      Resource Graph normalizer, renderers); a uv workspace member the network_assessment package consumes
+network_assessment/                  Python package, installed as the `network-assessment` CLI (the old `cna` command still works)
 ├── core/             topology/{common,azure,aws} · findings_schema · stat_masters · engagement
 ├── modules/          AWS + Azure discovery, FinOps signals, BC/DR signals, topology classifier
 ├── ai_engine/        Azure rule registry (azure_rules), AWS analysis engine, recommendation engine, chat agent
@@ -175,16 +175,16 @@ Requires Python 3.11 or newer.
 pip install -e .[dev]
 pre-commit install
 cp .env.example .env
-cna --help
+network-assessment --help
 ```
 
 **AWS (optional).** The base install carries no `boto3`. `pip install -e ".[dev,aws]"` enables
-`cna discover aws`, Security Hub collection, the S3 delivery portal, Bedrock chat and the API's
+`network-assessment discover aws`, Security Hub collection, the S3 delivery portal, Bedrock chat and the API's
 `/discovery/*-aws` routes (which answer `501 aws_not_installed` without it); every AWS module imports
-`boto3` behind `cna.aws.require_aws_extra()`. The AWS permission list is
-`cna/modules/network/module.aws.yaml`. The appliance images install the extra.
+`boto3` behind `network_assessment.aws.require_aws_extra()`. The AWS permission list is
+`network_assessment/modules/network/module.aws.yaml`. The appliance images install the extra.
 
-Lint and test the Python package with `ruff check cna/`, `ruff format --check`, and `pytest`.
+Lint and test the Python package with `ruff check network_assessment/`, `ruff format --check`, and `pytest`.
 
 The container images do not resolve dependencies at build time: they install the resolution
 committed in `uv.lock` with hash checking. After changing a dependency in `pyproject.toml`, run

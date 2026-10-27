@@ -8,7 +8,7 @@ FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6
 
 WORKDIR /build
 
-# Install the cna package with its API extra. `.[api]` resolves the core
+# Install the network_assessment package with its API extra. `.[api]` resolves the core
 # dependencies plus fastapi/uvicorn/psycopg2-binary and the three azure-mgmt-*
 # enrichment packages the API exercises, from the single source of truth in
 # pyproject.toml — no hand-written pip list to drift out of sync (PY-021). The
@@ -30,10 +30,10 @@ RUN uv export --locked --no-default-groups --no-emit-project --no-emit-workspace
  && uv export --locked --only-group build -o /tmp/build-requirements.txt \
  && uv pip install --system --no-cache --require-hashes --no-deps -r /tmp/build-requirements.txt
 COPY packages/cna-azure-network-engine/ packages/cna-azure-network-engine/
-COPY cna/ cna/
+COPY network_assessment/ network_assessment/
 COPY apps/cna-api/ apps/cna-api/
 # The engine package first (a workspace member, excluded from the hash-checked export
-# above), then the cna package itself; both from the tree, both without build isolation.
+# above), then the network_assessment package itself; both from the tree, both without build isolation.
 RUN uv pip install --system --no-cache --no-deps --no-build-isolation --prefix=/install ./packages/cna-azure-network-engine \
  && uv pip install --system --no-cache --no-deps --no-build-isolation --prefix=/install . \
  && rm -f /tmp/requirements.txt /tmp/build-requirements.txt
@@ -82,7 +82,7 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY --from=builder --chown=cna:cna /install /usr/local
-COPY --chown=cna:cna cna/ /app/cna/
+COPY --chown=cna:cna network_assessment/ /app/network_assessment/
 COPY --chown=cna:cna apps/cna-api/ /app/apps/cna-api/
 
 # pip is unused at runtime and vendors CVE-carrying copies of msgpack and

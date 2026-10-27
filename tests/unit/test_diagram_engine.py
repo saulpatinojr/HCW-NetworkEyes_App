@@ -7,7 +7,7 @@ No draw.io CLI required.
 
 import pytest
 
-from cna.core.topology.aws import (
+from network_assessment.core.topology.aws import (
     VPC,
     AWSNetworkFirewall,
     AWSRegionTopology,
@@ -18,7 +18,7 @@ from cna.core.topology.aws import (
     TransitGateway,
     VpnGateway,
 )
-from cna.core.topology.azure import (
+from network_assessment.core.topology.azure import (
     AzureSubnet,
     AzureSubscriptionTopology,
     AzureTopology,
@@ -27,14 +27,14 @@ from cna.core.topology.azure import (
     ManagementGroup,
     VNet,
 )
-from cna.core.topology.common import SubnetType
-from cna.diagram_engine.drawio_generator import (
+from network_assessment.core.topology.common import SubnetType
+from network_assessment.diagram_engine.drawio_generator import (
     generate_tgw_topology,
     generate_vnet_topology,
     generate_vpc_topology,
     generate_vwan_topology,
 )
-from cna.diagram_engine.mermaid_generator import (
+from network_assessment.diagram_engine.mermaid_generator import (
     generate_aws_account_hierarchy,
     generate_azure_mg_hierarchy,
     generate_landing_zone_diagram,
@@ -270,7 +270,7 @@ class TestVwanTopology:
 
 class TestMermaidGenerators:
     def test_aws_hierarchy_starts_with_flowchart(self):
-        from cna.core.topology.aws import AWSAccount
+        from network_assessment.core.topology.aws import AWSAccount
 
         topology = AWSTopology(
             engagement_id="eng-001",
@@ -341,7 +341,7 @@ class TestMermaidGenerators:
 
 
 def _sub_with_services() -> AzureSubscriptionTopology:
-    from cna.core.topology.azure import AzureBastionHost, AzureFirewall
+    from network_assessment.core.topology.azure import AzureBastionHost, AzureFirewall
 
     return AzureSubscriptionTopology(
         subscription_id="sub-1",
@@ -402,7 +402,7 @@ def test_vnet_topology_renders_discovered_network_services():
 
 
 def test_vnet_topology_colours_subnets_by_type():
-    from cna.diagram_engine.drawio_generator import (
+    from network_assessment.diagram_engine.drawio_generator import (
         STYLE_SUBNET_ISOLATED,
         STYLE_SUBNET_PUBLIC,
     )
@@ -423,8 +423,8 @@ def test_labels_use_escaped_line_breaks():
 
 
 def test_service_band_summarises_overflow_instead_of_drawing_every_icon():
-    from cna.core.topology.azure import AzurePrivateEndpoint
-    from cna.diagram_engine.drawio_generator import MAX_ICONS_PER_TYPE
+    from network_assessment.core.topology.azure import AzurePrivateEndpoint
+    from network_assessment.diagram_engine.drawio_generator import MAX_ICONS_PER_TYPE
 
     sub = _sub_with_services()
     count = MAX_ICONS_PER_TYPE + 3
@@ -456,7 +456,7 @@ def test_subscription_with_no_services_lays_out_unchanged():
 def test_merge_diagrams_makes_one_page_per_input():
     import xml.dom.minidom as minidom
 
-    from cna.diagram_engine.drawio_generator import merge_diagrams
+    from network_assessment.diagram_engine.drawio_generator import merge_diagrams
 
     a = generate_vnet_topology(_sub_with_services())
     merged = merge_diagrams([("Azure sub-1", a), ("Azure sub-2", a)])
@@ -469,7 +469,7 @@ def test_merge_diagrams_makes_one_page_per_input():
 def test_merge_diagrams_skips_unparseable_pages_and_never_returns_empty():
     import xml.dom.minidom as minidom
 
-    from cna.diagram_engine.drawio_generator import merge_diagrams
+    from network_assessment.diagram_engine.drawio_generator import merge_diagrams
 
     good = generate_vnet_topology(_sub_with_services())
     merged = merge_diagrams([("bad", "<not xml"), ("good", good)])
@@ -578,8 +578,8 @@ class TestAwsServicesBand:
 
 class TestEngagementBundleLayers:
     def test_bundle_emits_context_and_one_container_per_scope_only(self, minimal_vpc_region):
-        from cna.ai_engine.diagram_authoring import author_engagement_bundle
-        from cna.diagram_engine.c4_layering import C4Layer
+        from network_assessment.ai_engine.diagram_authoring import author_engagement_bundle
+        from network_assessment.diagram_engine.c4_layering import C4Layer
 
         bundle = author_engagement_bundle(
             "Acme", aws_regions=[minimal_vpc_region], azure_subs=[_sub_with_services()]

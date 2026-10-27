@@ -1,6 +1,6 @@
 """Unit tests for deliverable dependency graph (DD-013)."""
 
-from cna.core.deliverable_dependency import get_stale_deliverables
+from network_assessment.core.deliverable_dependency import get_stale_deliverables
 
 
 def test_gap_analysis_staleness():

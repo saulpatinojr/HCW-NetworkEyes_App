@@ -1,7 +1,7 @@
 """Azure topology data contract — the engine's model (TOPOLOGY_MODEL_VERSION).
 
-Moved from the monorepo's ``cna.core.topology.azure`` (itself the Azure half of the former
-``cna.core.topology_schema``); the monorepo re-exports it. Live discovery and a Resource Graph
+Moved from the monorepo's ``network_assessment.core.topology.azure`` (itself the Azure half of the former
+``network_assessment.core.topology_schema``); the monorepo re-exports it. Live discovery and a Resource Graph
 export both populate it: fields a collector fills stay, fields an export carries were added.
 
 Version 1.4.0 — change set C of REFACTOR_APP.md.

@@ -1,6 +1,6 @@
 """The appliance refuses a secret-shaped credential variable before any credential exists.
 
-``cna.core.auth.build_azure_credential`` is the only credential path. In the appliance
+``network_assessment.core.auth.build_azure_credential`` is the only credential path. In the appliance
 (``CNA_APPLIANCE_CLOUD`` set) each forbidden variable — a client secret, a certificate path,
 a username/password pair, a federated token file, an authority override — exits the process
 with ``SystemExit`` before ``DefaultAzureCredential`` is constructed; the API's startup
@@ -12,10 +12,11 @@ from __future__ import annotations
 
 import sys
 import types
+from pathlib import Path
 
 import pytest
 
-from cna.core import auth
+from network_assessment.core import auth
 
 APPLIANCE = {
     "CNA_APPLIANCE_CLOUD": "azure",
@@ -105,10 +106,11 @@ class TestApiStartup:
             pytest.skip("fastapi not installed")
         import importlib
 
-        sys.path.insert(0, str(auth.__file__).rsplit("/cna/", 1)[0])
+        repo_root = Path(auth.__file__).resolve().parents[2]  # network_assessment/core/auth.py
+        sys.path.insert(0, str(repo_root))
         spec = importlib.util.spec_from_file_location(
             "cna_api_main_forbidden_env",
-            str(auth.__file__).rsplit("/cna/", 1)[0] + "/apps/cna-api/main.py",
+            str(repo_root / "apps" / "cna-api" / "main.py"),
         )
         module = sys.modules.get("cna_api_main_under_test")
         if module is None:

@@ -15,8 +15,10 @@ from pathlib import Path
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-COLLECTOR = REPO_ROOT / "cna" / "modules" / "network" / "discovery" / "aws_discovery.py"
-MANIFEST = REPO_ROOT / "cna" / "modules" / "network" / "module.aws.yaml"
+COLLECTOR = (
+    REPO_ROOT / "network_assessment" / "modules" / "network" / "discovery" / "aws_discovery.py"
+)
+MANIFEST = REPO_ROOT / "network_assessment" / "modules" / "network" / "module.aws.yaml"
 
 # Calls that need no IAM permission (sts:GetCallerIdentity) or are not API calls.
 NO_PERMISSION_NEEDED = {"get_paginator", "get_caller_identity"}

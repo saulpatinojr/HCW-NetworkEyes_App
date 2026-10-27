@@ -32,7 +32,7 @@ from __future__ import annotations
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from cna.review import (
+from network_assessment.review import (
     AREAS,
     Finding,
     RemediationPlan,
@@ -40,7 +40,7 @@ from cna.review import (
     build_remediation_plan,
     consolidate,
 )
-from cna.review.areas.cicd import (
+from network_assessment.review.areas.cicd import (
     GITHUB_HOSTED_WORKFLOWS,
     SELF_HOSTED_ONLY_WORKFLOWS,
 )

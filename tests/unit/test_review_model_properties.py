@@ -19,7 +19,7 @@ import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-from cna.review import AREAS, Finding, Severity
+from network_assessment.review import AREAS, Finding, Severity
 
 # A minimum of 100 iterations per the spec's property-test configuration.
 _PROPERTY_SETTINGS = settings(

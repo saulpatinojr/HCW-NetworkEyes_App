@@ -1,7 +1,7 @@
 """End-to-end CLI pipeline tests (TODO.md T-412).
 
 The registered `cna` commands were stubs that printed "Phase X: TODO" while
-the real implementations sat unwired in `cna/cli/*.py` behind
+the real implementations sat unwired in `network_assessment/cli/*.py` behind
 NotImplementedError guards. These tests drive the now-wired registry with
 `click.testing.CliRunner` against a real `EngagementStore` on `tmp_path` —
 no mocks, no network: init → seeded discovery checkpoints → analyze →
@@ -16,9 +16,9 @@ import json
 import pytest
 from click.testing import CliRunner
 
-from cna.cli.main import cli
-from cna.core.persistence import EngagementStore
-from cna.core.topology.azure import (
+from network_assessment.cli.main import cli
+from network_assessment.core.persistence import EngagementStore
+from network_assessment.core.topology.azure import (
     AzureNSG,
     AzureSubnet,
     AzureSubscriptionTopology,
@@ -153,7 +153,7 @@ class TestAnalyze:
         result = run_analyze(runner, data_dir)
 
         assert result.exit_code == 1
-        assert "Run `cna discover azure` first" in result.output
+        assert "Run `network-assessment discover azure` first" in result.output
 
     def test_requires_a_platform_flag(self, runner, data_dir):
         result = invoke(runner, data_dir, "analyze", "--engagement-id", ENGAGEMENT_ID)
@@ -180,7 +180,7 @@ class TestReviewComplete:
         result = complete_review(runner, data_dir)
 
         assert result.exit_code == 1
-        assert "Run `cna analyze` first" in result.output
+        assert "Run `network-assessment analyze` first" in result.output
 
     def test_signs_off_report_and_audits(self, runner, data_dir, store):
         init_engagement(runner, data_dir)
@@ -223,7 +223,7 @@ class TestReport:
         result = invoke(runner, data_dir, "report", "generate", "--engagement-id", ENGAGEMENT_ID)
 
         assert result.exit_code == 1
-        assert "Run `cna analyze` first" in result.output
+        assert "Run `network-assessment analyze` first" in result.output
 
     def test_generate_is_blocked_before_review(self, runner, data_dir, store):
         """DD-009: the render pipeline refuses an unreviewed report."""
@@ -290,10 +290,10 @@ class TestPublishStatus:
         result = invoke(runner, data_dir, "publish", "status", "--engagement-id", ENGAGEMENT_ID)
 
         assert result.exit_code == 1
-        assert "Run `cna publish run` first" in result.output
+        assert "Run `network-assessment publish run` first" in result.output
 
     def test_reads_back_a_written_access_record(self, runner, data_dir, store):
-        from cna.delivery_portal.access_manager import AccessManager
+        from network_assessment.delivery_portal.access_manager import AccessManager
 
         init_engagement(runner, data_dir)
         record = AccessManager.build_record(

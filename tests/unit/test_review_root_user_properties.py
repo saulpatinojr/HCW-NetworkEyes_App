@@ -22,12 +22,12 @@ from __future__ import annotations
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
-from cna.review.areas.containers_packaging import (
+from network_assessment.review.areas.containers_packaging import (
     effective_final_user,
     is_root_user,
     record_root_user_finding,
 )
-from cna.review.model import Severity
+from network_assessment.review.model import Severity
 
 # A minimum of 100 iterations per the spec's property-test configuration.
 _PROPERTY_SETTINGS = settings(max_examples=200)

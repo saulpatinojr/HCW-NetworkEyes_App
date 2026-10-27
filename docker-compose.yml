@@ -50,7 +50,7 @@ services:
     entrypoint: [
       "python", "-m", "pytest", "tests/unit/",
       "-v", "--tb=short",
-      "--cov=cna", "--cov-report=term-missing"
+      "--cov=network_assessment", "--cov-report=term-missing"
     ]
     networks:
       - cna-internal

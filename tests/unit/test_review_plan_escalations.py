@@ -1,8 +1,8 @@
 """Unit tests for escalation wiring in the consolidated plan (spec task 14.3).
 
 Covers the escalation-wiring assertion layer over
-:func:`cna.review.build_remediation_plan`: :func:`cna.review.escalation_summary`
-and :func:`cna.review.assert_escalations_well_formed`.
+:func:`network_assessment.review.build_remediation_plan`: :func:`network_assessment.review.escalation_summary`
+and :func:`network_assessment.review.assert_escalations_well_formed`.
 
 The invariant under test (Requirements 1.6, 10.4) is that every
 ``Escalation_Record`` entry carries its owning ``REVIEW.md`` blocker id, no
@@ -19,7 +19,7 @@ import re
 
 import pytest
 
-from cna.review import (
+from network_assessment.review import (
     EXPECTED_ESCALATION_BLOCKERS,
     assert_escalations_well_formed,
     build_remediation_plan,

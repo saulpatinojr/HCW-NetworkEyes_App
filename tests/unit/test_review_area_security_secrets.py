@@ -12,8 +12,8 @@ most load-bearing invariant is Property 12: no finding reproduces a secret value
 import json
 from pathlib import Path
 
-from cna.review import AREAS, Severity, consolidate
-from cna.review.areas import security_secrets_findings
+from network_assessment.review import AREAS, Severity, consolidate
+from network_assessment.review.areas import security_secrets_findings
 
 _BASELINE_PATH = Path(__file__).resolve().parents[2] / ".secrets.baseline"
 

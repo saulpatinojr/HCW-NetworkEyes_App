@@ -1,4 +1,4 @@
-"""Unit tests for the single outcome→HTTP-status mapping (``cna.api_status``).
+"""Unit tests for the single outcome→HTTP-status mapping (``network_assessment.api_status``).
 
 Covers the Requirement 2 contract in the one place it is now enforced: a
 success outcome maps to a 2xx status, a client-error outcome to a 4xx, and a
@@ -9,7 +9,7 @@ Property 10 test (task 4.2).
 
 import pytest
 
-from cna.api_status import (
+from network_assessment.api_status import (
     Outcome,
     OutcomeClass,
     class_for,

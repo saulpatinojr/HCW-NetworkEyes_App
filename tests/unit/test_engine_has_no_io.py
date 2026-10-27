@@ -25,7 +25,7 @@ SOURCE = PACKAGE_DIR / "cna_azure_network_engine"
 # ``discovery/`` only.
 FORBIDDEN_ROOTS = frozenset(
     {
-        "cna",
+        "network_assessment",
         "psycopg2",
         "psycopg",
         "sqlite3",

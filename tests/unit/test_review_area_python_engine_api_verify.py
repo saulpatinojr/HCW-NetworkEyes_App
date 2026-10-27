@@ -9,9 +9,9 @@ are recorded (owned by the observability area) so they reach the consolidated
 plan. None of these is an escalation — every gap is engineering-fixable.
 """
 
-from cna.review import AREAS, Severity, consolidate
-from cna.review.areas import python_engine_api_verify_findings
-from cna.review.areas.python_engine_api_verify import COVERAGE_GATE, COVERAGE_PERCENT
+from network_assessment.review import AREAS, Severity, consolidate
+from network_assessment.review.areas import python_engine_api_verify_findings
+from network_assessment.review.areas.python_engine_api_verify import COVERAGE_GATE, COVERAGE_PERCENT
 
 
 def test_findings_are_well_formed_and_in_known_areas():

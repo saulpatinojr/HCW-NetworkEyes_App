@@ -1,6 +1,6 @@
 """Unit tests for the topology pattern classifier."""
 
-from cna.core.topology.azure import (
+from network_assessment.core.topology.azure import (
     AzureFirewall,
     AzureSubnet,
     AzureSubscriptionTopology,
@@ -10,7 +10,7 @@ from cna.core.topology.azure import (
     VNet,
     VNetPeering,
 )
-from cna.modules.network.analysis import classify_topology
+from network_assessment.modules.network.analysis import classify_topology
 
 SUB = "00000000-0000-0000-0000-000000000001"
 

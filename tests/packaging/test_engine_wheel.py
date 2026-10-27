@@ -19,7 +19,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = REPO_ROOT / "packages" / "cna-azure-network-engine"
-FORBIDDEN_PREFIXES = ("azure-", "msal", "boto3", "psycopg2", "cna")
+FORBIDDEN_PREFIXES = ("azure-", "msal", "boto3", "psycopg2", "network_assessment")
 _TIMEOUT = 600
 
 
@@ -104,7 +104,7 @@ class TestWheel:
             clean_venv,
             "import sys, cna_azure_network_engine as e; "
             "print(e.RULES_VERSION, e.TOPOLOGY_MODEL_VERSION, len(e.RULES)); "
-            "assert 'azure' not in sys.modules; assert 'cna' not in sys.modules",
+            "assert 'azure' not in sys.modules; assert 'network_assessment' not in sys.modules",
         )
         assert result.returncode == 0, result.stderr[-2000:]
         version, model, count = result.stdout.split()

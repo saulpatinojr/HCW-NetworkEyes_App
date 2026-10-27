@@ -1,6 +1,6 @@
 """Unit tests for the consolidated ``Remediation_Plan`` builder (spec task 14.1).
 
-Covers :func:`cna.review.build_remediation_plan`, the CONSOLIDATE-stage entry
+Covers :func:`network_assessment.review.build_remediation_plan`, the CONSOLIDATE-stage entry
 point that gathers every owner area's ``Finding`` records, routes each through
 the ``REVIEW.md`` scope gate, and folds them into one severity-ordered
 ``Remediation_Plan``.
@@ -21,14 +21,14 @@ property test; this module asserts the concrete coverage of the real plan.
 
 from __future__ import annotations
 
-from cna.review import (
+from network_assessment.review import (
     AREAS,
     RemediationPlan,
     Severity,
     build_remediation_plan,
     collect_findings,
 )
-from cna.review.areas.cicd import (
+from network_assessment.review.areas.cicd import (
     GITHUB_HOSTED_WORKFLOWS,
     SELF_HOSTED_ONLY_WORKFLOWS,
 )
@@ -159,7 +159,7 @@ def test_deduplication_is_a_union():
 
 def test_consolidation_is_idempotent():
     """Requirement 1.5: consolidating the plan again yields the same plan."""
-    from cna.review import consolidate
+    from network_assessment.review import consolidate
 
     plan = build_remediation_plan()
     again = consolidate(plan.entries)

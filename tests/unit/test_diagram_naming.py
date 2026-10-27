@@ -1,4 +1,4 @@
-"""Unit tests for cna.core.diagram_naming."""
+"""Unit tests for network_assessment.core.diagram_naming."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from cna.core.diagram_naming import (
+from network_assessment.core.diagram_naming import (
     DIAGRAM_TYPES,
     OUTPUT_FORMATS,
     all_format_paths,
@@ -203,7 +203,9 @@ class TestDiagramVersionFromExisting:
     def test_bumps_patch_version(self, tmp_path):
         # Create a fake existing drawio file
         (tmp_path / "aws_vpc_topology_us-east-1_v1.0.0.drawio").touch()
-        with patch("cna.core.version_manager.bump_version", return_value="1.0.1") as mock_bump:
+        with patch(
+            "network_assessment.core.version_manager.bump_version", return_value="1.0.1"
+        ) as mock_bump:
             version = diagram_version_from_existing(tmp_path, "aws_vpc_topology_us-east-1")
             mock_bump.assert_called_once_with("1.0.0", "patch")
             assert version == "1.0.1"
@@ -213,7 +215,9 @@ class TestDiagramVersionFromExisting:
         (tmp_path / "aws_vpc_topology_us-east-1_v1.0.0.drawio").touch()
         (tmp_path / "aws_vpc_topology_us-east-1_v1.0.2.drawio").touch()
         (tmp_path / "aws_vpc_topology_us-east-1_v1.0.1.drawio").touch()
-        with patch("cna.core.version_manager.bump_version", return_value="1.0.3") as mock_bump:
+        with patch(
+            "network_assessment.core.version_manager.bump_version", return_value="1.0.3"
+        ) as mock_bump:
             diagram_version_from_existing(tmp_path, "aws_vpc_topology_us-east-1")
             # sorted() means 1.0.2 is last alphabetically
             call_version = mock_bump.call_args[0][0]

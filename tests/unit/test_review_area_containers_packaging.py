@@ -11,8 +11,8 @@ import dataclasses
 
 import pytest
 
-from cna.review import AREAS, Severity, consolidate
-from cna.review.areas import (
+from network_assessment.review import AREAS, Severity, consolidate
+from network_assessment.review.areas import (
     RootUserFindingError,
     containers_packaging_findings,
     containers_packaging_verify_findings,
@@ -20,7 +20,7 @@ from cna.review.areas import (
     is_root_user,
     record_root_user_finding,
 )
-from cna.review.areas.containers_packaging import _OBSERVED
+from network_assessment.review.areas.containers_packaging import _OBSERVED
 
 
 def test_findings_are_well_formed_and_in_area():
@@ -229,7 +229,7 @@ def test_packaging_gap_recorded_when_cli_help_fails():
     findings = containers_packaging_verify_findings(_results(cli_help_ok=False))
     gap = next(f for f in findings if f.dedup_key == "containers-packaging:cli-packaging-gap")
     assert gap.severity is Severity.HIGH
-    assert "cna --help" in gap.proposed_action
+    assert "network-assessment --help" in gap.proposed_action
     assert not [f for f in findings if f.dedup_key == "containers-packaging:cli-packaging-verified"]
 
 

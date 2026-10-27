@@ -553,13 +553,13 @@ order; do not reorder it.
   starts green.
 - **Status:** Partly done — the tooling is wired; the "starts green" half is **not** achieved, and
   deliberately so. `ty>=0.0.72` is in the `dev` group with a `[tool.ty]` section in
-  `pyproject.toml` (py311, `include = ["cna"]`, vendored packs excluded, **no rule suppressed**),
+  `pyproject.toml` (py311, `include = ["network_assessment"]`, vendored packs excluded, **no rule suppressed**),
   and a `ty` hook was **appended** to the existing `.pre-commit-config.yaml`, which already carried
   13 hooks across 4 repos (gitleaks, detect-secrets, ruff, ruff-format, and eight hygiene hooks
   including `mixed-line-ending --fix=lf` and `no-commit-to-branch --branch main`). The `ty` hook is
   `repo: local` / `language: system` so it runs the version pinned in the `dev` group; the existing
   remote hooks were left exactly as they were.
-  `ty check cna/` reports **96 diagnostics**, so the hook is registered at `stages: [manual]`
+  `ty check network_assessment/` reports **96 diagnostics**, so the hook is registered at `stages: [manual]`
   rather than gating. Forcing it green would have meant widening ignore lists, which this item
   explicitly forbids; the backlog is tracked in T-410 instead and the hook becomes gating by
   deleting one line once that clears. Of the original 98, **45 are `unresolved-import` for packages
@@ -575,7 +575,7 @@ order; do not reorder it.
   `TestAccessDeniedAuditEvent` covers it using a **real** `EngagementStore` rather than a
   `MagicMock`, since a mock accepts any signature and would not have caught it. Verified by
   reverting the fix and watching the test fail.
-- **Notes for future engineers:** `ruff` is already clean across `cna/` (109 files formatted, all
+- **Notes for future engineers:** `ruff` is already clean across `network_assessment/` (109 files formatted, all
   checks passing) with `select = E,W,F,I,B,C4,UP,S,N` and `target-version = "py311"`. Match that
   strictness posture. Do not widen ignore lists to make the first type-check run pass.
   `.pre-commit-config.yaml` already existed — an earlier note under T-406 claiming otherwise was
@@ -597,8 +597,8 @@ order; do not reorder it.
   coverage to **100%**: `AWSDiscovery.run()` 21/21 statements, `AzureDiscovery.run()` 44/44,
   measured with the omit lifted (see T-408). Every cloud SDK collaborator is mocked, so no AWS or
   ARM call is made. Error and retry branches are covered as the notes below require: the AWS suite
-  asserts `get_caller_identity` is actually retried once on `CNARateLimitError` and that the retry
-  budget is eventually exhausted, and that `CNAAuthError` propagates rather than yielding a silently
+  asserts `get_caller_identity` is actually retried once on `NetworkAssessmentRateLimitError` and that the retry
+  budget is eventually exhausted, and that `NetworkAssessmentAuthError` propagates rather than yielding a silently
   empty topology. The Azure suite covers `validate_access` failing before any scan work, the
   network-only-Reader path where `subscriptions.get()` fails and discovery proceeds with the ID as
   the display name, `--resume` both skipping and not skipping, blocked subscriptions still being
@@ -630,7 +630,7 @@ order; do not reorder it.
   then the first explicitly requested region, then the new declared
   `DiscoveryOptions.region_lookup_endpoint` — overridable, and a last resort rather than an inline
   literal. Five tests in `TestRegionLookupEndpoint` cover the order and assert the resolved value
-  actually reaches `session.client()`. A sweep of `cna/` found no other inline region literal, no
+  actually reaches `session.client()`. A sweep of `network_assessment/` found no other inline region literal, no
   hardcoded account ID, and no inline Azure location; the only region literals remaining are the
   `_OPT_IN_REGIONS` set, which is a declared list, not a call-site value. The repository-wide rule
   is now written down in `README.md` → "Repository conventions".
@@ -644,7 +644,7 @@ order; do not reorder it.
   to separate `AccessDenied` from everything else; Azure uses a bare `except Exception` in roughly
   30 places. Converging AWS onto Azure would discard precise discrimination in favour of a catch-all
   that swallows genuine bugs — including the `with_retry` contract defect that prompted this item
-  and T-403. Both paths already agree on what matters (raise `CNAAuthError`, with a message, using
+  and T-403. Both paths already agree on what matters (raise `NetworkAssessmentAuthError`, with a message, using
   `from e`); AWS simply gets there more precisely. If this is revisited, the convergence should run
   the other way — narrow Azure's broad handlers toward AWS's — and that is a separate piece of work
   against a module at 22% coverage, so it needs tests first. Any behavioural change should be
@@ -654,20 +654,20 @@ order; do not reorder it.
 
 - **Priority:** Low
 - **Description:** The dead & stale code sweep (gate for #110) removed four verified-dead items
-  from `apps/cna-web/**` (221 lines) and surveyed `cna/**` and `infra/**` without deleting
+  from `apps/cna-web/**` (221 lines) and surveyed `network_assessment/**` and `infra/**` without deleting
   anything further. The remaining findings were classified as wiring gaps and intentional
   scaffold rather than dead code, and were left in place deliberately.
 - **Dependencies:** Best done after T-501, which closes the largest scaffold.
 - **Recommended action:** Re-run the sweep once the AWS deploy path is functional. Anything still
   unreferenced at that point is genuinely dead and can be removed with confidence.
 - **Status:** Done (2026-09-23) — sweep re-run now that the AWS deploy path is authored (the
-  appliance's `210` is real; T-501/AWS T-101). Tools: `vulture cna apps/cna-api --min-confidence 80`
+  appliance's `210` is real; T-501/AWS T-101). Tools: `vulture network_assessment apps/cna-api --min-confidence 80`
   and `knip` over `apps/cna-web`. Removed as genuinely dead: `analysis/run-form.tsx`
   (`RunAnalysisForm`, unreferenced since the 2026-04-10 feature commit) and three npm dependencies
   with zero imports (`@azure/keyvault-secrets`, `clsx`, `tailwind-merge`). Classified and kept:
   `prisma/seed-local-admin.js` and `scripts/filter-shape-index.mjs` (knip cannot see the Dockerfile
-  that runs them); the two unused CLI arguments in `cna/cli/commands/diagram_cmd.py` and the unused
-  `secret_name` in `cna/core/auth.py` (Phase B/C scaffold, marked as such — the item says not to
+  that runs them); the two unused CLI arguments in `network_assessment/cli/commands/diagram_cmd.py` and the unused
+  `secret_name` in `network_assessment/core/auth.py` (Phase B/C scaffold, marked as such — the item says not to
   treat those as stale); and knip's 16 unused-export groups (`lib/ai-engine.ts`, `lib/image-update*.ts`,
   `lib/finops/prices.ts`, `lib/report-sections.ts`, `components/charts/chart-theme.ts`, …), which are
   module constants and helpers exported for tests and for the features that own them — exporting
@@ -686,7 +686,7 @@ order; do not reorder it.
   `validate_shape_catalog.py`, `validate_documentation_model.py` — and none of them has a single
   test. Two concrete consequences were confirmed during review:
   1. `scripts/validate_module_deps.py` resolves its target as a **relative** path
-     (`MODULES_DIR = Path("cna/modules")`, line 12). Run from anywhere other than the repository
+     (`MODULES_DIR = Path("network_assessment/modules")`, line 12). Run from anywhere other than the repository
      root it finds no `module.yaml` files, prints `OK: 0 installed modules, all dependencies
      satisfied.` and exits 0. Reproduced: `cd /tmp && python3 <repo>/scripts/validate_module_deps.py`
      → exit 0. It passes in CI only because the job happens to start in the workspace root, so a
@@ -769,7 +769,7 @@ order; do not reorder it.
 - **Priority:** Medium
 - **Category:** Test integrity / CI
 - **Description:** `[tool.coverage.run] omit` in `pyproject.toml` excludes
-  `cna/modules/network/discovery/aws_discovery.py` and `azure_discovery.py`, with the comment
+  `network_assessment/modules/network/discovery/aws_discovery.py` and `azure_discovery.py`, with the comment
   *"require live AWS/Azure API calls against real tenants. Covered by integration tests run against
   sandboxed tenants."* That premise is false: `tests/unit/test_aws_discovery.py` and
   `test_azure_discovery.py` already exercise both modules entirely with `MagicMock`/`patch` and make
@@ -819,7 +819,7 @@ order; do not reorder it.
 - **Notes for future engineers:** To measure honestly while the entry is still in place, run
   pytest with `--cov-config` pointing at a copy of the config with the line deleted; that is
   how the figures above were obtained. Also correct the misleading comment when the entries go —
-  and note the same block omits `cna/diagram_engine/diagrams_generator.py` and the diagram modules
+  and note the same block omits `network_assessment/diagram_engine/diagrams_generator.py` and the diagram modules
   for a *genuine* reason (they need the graphviz binary), so do not delete the block wholesale.
 
 ### T-409 — `terraform validate` for the AWS roots: failed on first run, cause unknown
@@ -887,7 +887,7 @@ order; do not reorder it.
 
 - **Priority:** Medium
 - **Category:** Type safety
-- **Description:** T-402 wired `ty` but could not make it green. `ty check cna/` reports 96
+- **Description:** T-402 wired `ty` but could not make it green. `ty check network_assessment/` reports 96
   diagnostics, so the pre-commit hook sits at `stages: [manual]`. Breakdown of the 53
   non-import findings at the time of writing: `unresolved-attribute` 22, `invalid-argument-type`
   17, `unknown-argument` 3, `invalid-parameter-default` 2, and one each of `unsupported-operator`,
@@ -1120,7 +1120,7 @@ order; do not reorder it.
   inspected individually, and the 413 vendored findings are *excluded by path* rather than
   laundered through the baseline as if reviewed.
 
-### T-412 — `cna analyze`, `cna report`, and `cna publish` call EngagementStore methods that do not exist
+### T-412 — `network-assessment analyze`, `network-assessment report`, and `network-assessment publish` call EngagementStore methods that do not exist
 
 - **Priority:** High
 - **Category:** Correctness / broken feature
@@ -1147,10 +1147,10 @@ order; do not reorder it.
   `AttributeError: 'EngagementStore' object has no attribute 'load_aws_topology'`. Worse, the call
   in `analyze.py` sits inside `try: ... except FileNotFoundError:`, which does **not** catch
   `AttributeError`, so the command aborts with an unhandled traceback rather than the intended
-  "run `cna discover` first" message. No `SCAFFOLD` marker or `NotImplementedError` guard exists on
+  "run `network-assessment discover` first" message. No `SCAFFOLD` marker or `NotImplementedError` guard exists on
   any of these paths, so nothing signals that they are unfinished. Found by `ty` on its first run
   (T-402).
-- **Dependencies:** None. Blocks any real use of `cna analyze`, `cna report`, or `cna publish`.
+- **Dependencies:** None. Blocks any real use of `network-assessment analyze`, `network-assessment report`, or `network-assessment publish`.
 - **Recommended action:** Decide first whether these commands are meant to work today or are Phase D
   scaffold — `cli/analyze.py`'s docstring says "Phase D entry point", which suggests the latter, but
   nothing in the code says so. If scaffold, guard each command with an explicit
@@ -1163,7 +1163,7 @@ order; do not reorder it.
 - **Status:** Done as scaffold guards — the repository owner confirmed these commands are Phase D
   scaffold, not intended to work today, so each now fails honestly instead of dying with an
   unhandled `AttributeError`. **Five** commands are guarded, not three: the original survey missed
-  `cna report preview` and `cna publish status`, which live in the same groups and call
+  `network-assessment report preview` and `network-assessment publish status`, which live in the same groups and call
   `load_findings_report()` and `load_access_record()` respectively.
   Each guard raises `NotImplementedError` naming the exact missing `EngagementStore` methods, so
   the message tells a caller what would have to be built. Verified with `click.testing.CliRunner`:
@@ -1197,12 +1197,12 @@ order; do not reorder it.
   (`access_record.json` at the engagement root, metadata only), and `get_delivery_date()`
   (the publish record's `issued_at`, `None` until first publish — DD-019's "clock not started").
   Every missing-file path raises `FileNotFoundError` with a "run X first" message, the exact type
-  the CLI commands catch. The CLI registry (`cna/cli/main.py`) now registers the real commands —
-  including a real `cna init` and a new `cna review complete` (the DD-009 sign-off `cna report`
+  the CLI commands catch. The CLI registry (`network_assessment/cli/main.py`) now registers the real commands —
+  including a real `network-assessment init` and a new `network-assessment review complete` (the DD-009 sign-off `network-assessment report`
   names) — and the superseded "Phase X: TODO" stubs are deleted; `diagram` and `module` remain
   stubs pending their engines' CLI wiring. Two adjacent defects fixed in the process:
   `RenderPipeline._output_dir` hardcoded `./engagements` and ignored `--data-dir`, and
-  `cna publish run` called signing methods against the `S3Deployer | AzureBlobDeployer` union
+  `network-assessment publish run` called signing methods against the `S3Deployer | AzureBlobDeployer` union
   (now per-branch closures). Covered per the recommendation: 13 read-side tests against a real
   store on `tmp_path` in `test_persistence.py`, plus `test_cli_pipeline.py` — 14 tests driving the
   registered CLI end-to-end (init → seeded checkpoints → analyze → review gate → report →
@@ -1215,7 +1215,7 @@ order; do not reorder it.
 
 - **Priority:** High
 - **Category:** Correctness / dependency mismatch
-- **Description:** `cna/ai_engine/foundry_agent_client.py` drives the Foundry agent through
+- **Description:** `network_assessment/ai_engine/foundry_agent_client.py` drives the Foundry agent through
   `agents.threads.create()`, `agents.messages.create()`, and `agents.runs.create_and_process()`.
   Those belong to the **1.x** `azure-ai-projects` agents API. `pyproject.toml` declares
   `azure-ai-projects>=2.3.0`, and 2.x replaced that surface entirely — the installed 2.4.0 exposes
@@ -1261,7 +1261,7 @@ order; do not reorder it.
 
 - **Priority:** High
 - **Category:** Packaging / silent feature loss
-- **Description:** `cna/` imports ten distributions that appear nowhere in `pyproject.toml`:
+- **Description:** `network_assessment/` imports ten distributions that appear nowhere in `pyproject.toml`:
   `azure-mgmt-monitor`, `azure-monitor-query`, `azure-mgmt-compute`, `azure-mgmt-security`,
   `azure-mgmt-privatedns`, `azure-mgmt-managementgroups`, `azure-mgmt-loganalytics`,
   `azure-mgmt-costmanagement`, `cairosvg`, and `mcp`. Confirmed by resolving every import against
@@ -1273,7 +1273,7 @@ order; do not reorder it.
   SVG→PNG conversion, and both MCP clients. A deployment looks healthy while producing a thinner
   assessment than the code can generate.
   *(Correcting an earlier draft of this item: the handlers are **not** silent. All 24 `except
-  ImportError` blocks in `cna/` either log — 18 at warning level, three at debug — record the reason
+  ImportError` blocks in `network_assessment/` either log — 18 at warning level, three at debug — record the reason
   into the model, or are legitimate capability probes. The gap was in the packaging, not the
   handlers.)*
 - **Dependencies:** None. Related to T-413, which is the same class of problem from the other
@@ -1282,7 +1282,7 @@ order; do not reorder it.
   Core ones belong in `[project] dependencies`; optional ones belong in a named extra (say
   `[project.optional-dependencies] enrichment`) with the `except ImportError` path logging a
   message naming the extra to install, rather than passing silently. Pin versions, per the
-  standard for security-sensitive dependencies, and re-run `ty check cna/` afterwards — these ten
+  standard for security-sensitive dependencies, and re-run `ty check network_assessment/` afterwards — these ten
   account for all 15 remaining `unresolved-import` findings under T-410.
 - **Status:** Done — declared as a `[project.optional-dependencies] enrichment` extra, installable
   with `pip install -e .[enrichment]`. An extra rather than core dependencies, because that matches
@@ -1296,14 +1296,14 @@ order; do not reorder it.
   have declared a dependency set the code cannot run against. Each bound was verified by installing
   the version and re-running `ty`; upper bounds are set on all ten, since this failure mode is now
   demonstrated three times over (four with T-413).
-  Declaring them dropped `ty check cna/` from 24 diagnostics to **8**, and surfaced four more real
+  Declaring them dropped `ty check network_assessment/` from 24 diagnostics to **8**, and surfaced four more real
   defects that were invisible while the imports were unresolved — three fixed by the version bounds
   above, one fixed in code (`QueryDefinition` was passed a `dict` where `QueryTimePeriod` is
   declared; it now builds the model with datetimes, which is what its `iso-8601` attribute map
   expects).
 - **Notes for future engineers:** The `except ImportError` blocks are doing real work — they keep a
   partial install running — so do not delete them when the extra is installed by default somewhere.
-  If you bump any of these past its upper bound, re-run `ty check cna/` **with the package
+  If you bump any of these past its upper bound, re-run `ty check network_assessment/` **with the package
   installed**: an unresolved import means the entire module goes unchecked, which is exactly how
   four defects hid here.
 
@@ -1581,7 +1581,7 @@ order; do not reorder it.
 ### T-508 — Re-scope the production-readiness review engine to the core
 
 - **Priority:** Low
-- **Description:** `cna/review/areas/{cicd,cicd_shapin,terraform_aws,terraform_aws_verify,
+- **Description:** `network_assessment/review/areas/{cicd,cicd_shapin,terraform_aws,terraform_aws_verify,
   terraform_azure,security_secrets,documentation}.py` record findings whose subjects are files
   that T-504 removed: `SELF_HOSTED_ONLY_WORKFLOWS` names ten deleted workflows,
   `documentation.py` asserts that fourteen workflows exist, and every `terraform-*` subject is
@@ -1596,8 +1596,8 @@ order; do not reorder it.
   appliances (each appliance reviewing its own Terraform) or are retired here; prune
   `SELF_HOSTED_ONLY_WORKFLOWS` to the four core workflows and re-derive the secret-location list
   from the current `.secrets.baseline`; update the pinned counts in the tests in the same change.
-- **Status:** Done — 2026-09-15. The `terraform-aws`/`terraform-azure` emitters and their tests were retired; each area is represented by one relocation record (`cna/review/areas/terraform_relocated.py`) so the closed nine-area set and Property 2 still hold, and the findings they carried left this repository with the Terraform. `SELF_HOSTED_ONLY_WORKFLOWS` names the three self-hosted core workflows, the documentation area describes the four-workflow tree and the appliance-owned deploy path, the security-secrets location list is regenerated from the current `.secrets.baseline` (12 files), and the R-003/R-006 escalations left with their subjects — `EXPECTED_ESCALATION_BLOCKERS` is now `{R-005, R-009}`. Recorded in [`CHANGELOG.md`](CHANGELOG.md) → Unreleased → Changed.
-- **Notes for future engineers:** `cna/review/blockers.py` parses `REVIEW.md`'s index table at
+- **Status:** Done — 2026-09-15. The `terraform-aws`/`terraform-azure` emitters and their tests were retired; each area is represented by one relocation record (`network_assessment/review/areas/terraform_relocated.py`) so the closed nine-area set and Property 2 still hold, and the findings they carried left this repository with the Terraform. `SELF_HOSTED_ONLY_WORKFLOWS` names the three self-hosted core workflows, the documentation area describes the four-workflow tree and the appliance-owned deploy path, the security-secrets location list is regenerated from the current `.secrets.baseline` (12 files), and the R-003/R-006 escalations left with their subjects — `EXPECTED_ESCALATION_BLOCKERS` is now `{R-005, R-009}`. Recorded in [`CHANGELOG.md`](CHANGELOG.md) → Unreleased → Changed.
+- **Notes for future engineers:** `network_assessment/review/blockers.py` parses `REVIEW.md`'s index table at
   runtime and `test_review_blockers.py` asserts that R-001 – R-010 are present and that only R-007
   is "Resolved" — keep every `R-0NN` row in the table (with a redirect in the Status cell) rather
   than deleting rows when transferring items under T-507.
@@ -1890,7 +1890,7 @@ from the same review are `REVIEW.md` → R-016 – R-022.
 ### T-702 — Python lockfile and pinned floors (PY-020, IMG-004)
 - **Status:** Done 2026-09-30 — `uv.lock` (145 packages, universal, hashed) is committed and every
   Python Dockerfile installs from it: `uv export --locked` (fails on drift) → `uv pip install
-  --require-hashes --no-deps --prefix=/install`, the `cna` wheel built with `--no-build-isolation`
+  --require-hashes --no-deps --prefix=/install`, the `network-assessment` wheel built with `--no-build-isolation`
   against a hash-checked `build` dependency group, and the worker's two SDKs from a `worker`
   group instead of an unpinned `pip install`. uv enters the builder stage from a digest-pinned
   `FROM ghcr.io/astral-sh/uv:0.12.21@sha256:… AS uv` stage (a `FROM` line, so Dependabot's docker
@@ -1956,7 +1956,7 @@ redeploy. Design the durable path (queue + worker, or a `heartbeatAt` lease with
 transitions) and make the multi-step persistence in `_run_*_discovery` transactional.
 
 ### T-707 — Versioned credential-encryption keyring (DATA-006)
-`lib/crypto.ts` / `cna/core/credential_crypto.py` use one static `CREDENTIAL_ENCRYPTION_KEY` and
+`lib/crypto.ts` / `network_assessment/core/credential_crypto.py` use one static `CREDENTIAL_ENCRYPTION_KEY` and
 the ciphertext carries no key id, so rotation makes every stored cloud credential and BYO AI key
 undecryptable at once. Prefix ciphertext with a key id, accept a keyring, add a re-encrypt job.
 
@@ -1994,12 +1994,12 @@ and the Electron renderer. Escape label text for HTML and XML both, and add a te
 resource name.
 
 ### T-714 — Prune dead modules (PY-014)
-26 `cna.*` modules are imported by nothing (`modules.{container,dns,hybrid,iam,landingzone,
+26 `network_assessment.*` modules are imported by nothing (`modules.{container,dns,hybrid,iam,landingzone,
 zerotrust}`, `report_engine.knowledge_transfer`, every `*.diagrams.*`, `core.observed_state_validator`,
-…). Delete them or wire them; pair with `REVIEW.md` → R-018 for `cna/review`.
+…). Delete them or wire them; pair with `REVIEW.md` → R-018 for `network_assessment/review`.
 
 ### T-715 — Retry layer and timeout budgets (PY-006, REL-003, REL-004, REL-005)
-`with_retry` catches only `CNARateLimitError`, which nothing raises; the Bedrock client has no
+`with_retry` catches only `NetworkAssessmentRateLimitError`, which nothing raises; the Bedrock client has no
 botocore `Config` timeout; the AI budget (~210 s) exceeds the web abort (90 s); the draw.io
 `subprocess.run(timeout=60)` kills `xvfb-run` and orphans Electron; `mkdtemp` directories are never
 removed. Fix each at its call site and add the `/tmp` cleanup to the discovery finalisers.
@@ -2026,19 +2026,19 @@ an image tag (`cosign clean --type all` on the digest, or deleting its `sha256-<
 when that is how Docker Hub stores them — confirm on the first signed build which form Docker Hub
 uses), behind the same `dry_run` input.
 
-### T-719 — Remove the `cna.core.topology_schema` deprecation shim
-`cna.core.topology_schema` became a shim when its classes moved verbatim to
-`cna.core.topology.{common,azure,aws}` (`CHANGELOG.md` `[Unreleased]`; change set A of the refactoring
+### T-719 — Remove the `network_assessment.core.topology_schema` deprecation shim
+`network_assessment.core.topology_schema` became a shim when its classes moved verbatim to
+`network_assessment.core.topology.{common,azure,aws}` (`CHANGELOG.md` `[Unreleased]`; change set A of the refactoring
 plan `REFACTOR_APP.md` held in `HCW-NetworkEyes_App`, whose remaining change sets B–K are not yet
 folded into this backlog). The shim re-exports every name, aliases `TOPOLOGY_SCHEMA_VERSION` to
 `AZURE_TOPOLOGY_VERSION` and warns `DeprecationWarning` on import, so an unconverted importer keeps
-working for one release; nothing in `cna/`, `apps/` or `tests/` imports it any more. One release after
+working for one release; nothing in `network_assessment/`, `apps/` or `tests/` imports it any more. One release after
 the split ships (the plan pairs the removal with its AWS gating, change set K; never earlier than the
-first release carrying the split): delete `cna/core/topology_schema.py`, delete
+first release carrying the split): delete `network_assessment/core/topology_schema.py`, delete
 `tests/unit/test_topology_shim_warns.py` and the `shim` fixture tests in
 `tests/unit/test_topology_split.py`, and run the unit job with `-W error::DeprecationWarning` scoped to
-`cna.*` so no shim can be imported silently again. `apps/cna-web/lib/finops/inventory.ts` mirrors the
-Azure field shapes and already names `cna/core/topology/azure.py`.
+`network_assessment.*` so no shim can be imported silently again. `apps/cna-web/lib/finops/inventory.ts` mirrors the
+Azure field shapes and already names `network_assessment/core/topology/azure.py`.
 
 ### T-720 — Azure rule registry follow-ups (change set B)
 The typed Azure rule registry replaced the API's Engine B and Engine A's Azure rules (`CHANGELOG.md`
@@ -2073,7 +2073,7 @@ member (`CHANGELOG.md` `[Unreleased]`). Open:
   `license = "Apache-2.0"`. The wheel stays unpublished until the PyPI step below.
 - `[REVIEW REQUIRED]` The PyPI name `cna-azure-network-engine` and trusted publishing (plan section 22,
   item 2; change set J's `320-release-engine.yml`). Until then the monorepo consumes the workspace member
-  and CI installs it from the tree before `cna`.
+  and CI installs it from the tree before `network-assessment`.
 - Model version: the plan declared `TOPOLOGY_MODEL_VERSION = "1.3.0"`; the engine ships `1.4.0` because
   the lab build's normalizer fills fields 1.3.0 lacks (firewall and WAF policies, flow logs,
   `ip_configuration_count`, export provenance). The lab build's `core-update` PR replaces `lab-1.0.0`
@@ -2090,14 +2090,14 @@ member (`CHANGELOG.md` `[Unreleased]`). Open:
   `Image Scan (Trivy)` and `Python Lockfile Consistency` jobs of `300-test-codebase.yml` are green on `main`
   (https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/runs/40238173093). A published image from
   `200-build-images` is still pending the Docker Hub bring-up (`REVIEW.md` R-013).
-- Keep the monorepo's re-export shims (`cna.core.topology.azure` / `.common`,
-  `cna.ai_engine.observed_state_enforcer`, `cna.modules.network.analysis.topology_classifier`) until change
+- Keep the monorepo's re-export shims (`network_assessment.core.topology.azure` / `.common`,
+  `network_assessment.ai_engine.observed_state_enforcer`, `network_assessment.modules.network.analysis.topology_classifier`) until change
   set K removes `topology_schema` (T-719); then import the engine directly where it is cheaper.
 - Change set D fills `cna_azure_network_engine/discovery/` behind the `[azure]` extra;
   `require_azure_extra()` is the guard today.
 
 ### T-722 — Least-privilege roles: verify the actions, assign them in the deployment (change set F)
-`docs/roles/cna-network-bgp-reader.json`, `cna/modules/network/module.yaml`, `.env.example` and the help
+`docs/roles/cna-network-bgp-reader.json`, `network_assessment/modules/network/module.yaml`, `.env.example` and the help
 modal now carry the roles table of `REFACTOR_APP.md` section 13 (`CHANGELOG.md` `[Unreleased]`). Open:
 - Checked 2026-10-25: every action string in the custom role and in `module.yaml` is listed in the Microsoft Learn
   Azure permissions reference (networking, management-and-governance, monitor and security pages under
@@ -2118,13 +2118,13 @@ modal now carry the roles table of `REFACTOR_APP.md` section 13 (`CHANGELOG.md` 
 - The modal still describes a service principal; change set G turned it into managed-identity guidance.
 
 ### T-723 — Managed identity in the deployment; retire the client-secret contract (change set G)
-`cna.core.auth.build_azure_credential` is the one Azure credential; the service-principal secret path,
+`network_assessment.core.auth.build_azure_credential` is the one Azure credential; the service-principal secret path,
 Prisma's `spClientId`/`spSecretEnc` and `AZURE_CLIENT_SECRET` are gone (`CHANGELOG.md` `[Unreleased]`;
 `tests/security/test_no_client_secret.py`, `tests/security/test_forbidden_env.py`). Open:
 - Deployment note (outside this repository): an Azure deployment creates a user-assigned managed
   identity, attaches it to the api, worker and web Container Apps and sets `AZURE_CLIENT_ID` on each; it
   must not pass any `AZURE_CLIENT_SECRET` secret or set any variable of
-  `cna.core.auth.FORBIDDEN_CREDENTIAL_ENV` (the api refuses to start). An AWS deployment
+  `network_assessment.core.auth.FORBIDDEN_CREDENTIAL_ENV` (the api refuses to start). An AWS deployment
   keeps the STS AssumeRole path (`aws_secret_access_key` on the credential form stays, encrypted at rest).
 - The Prisma migration `20261010000016_drop_sp_secret` drops two columns and is destructive; the migrator
   job runs it on the deployment's next release. Engagements that stored a service principal need the
@@ -2159,16 +2159,16 @@ container at a time (`CHANGELOG.md` `[Unreleased]`; `tests/unit/test_cna_api_aut
   not exist in the Core yet; when change set D adds them they are registered on `app` (or a `public`
   router), never on `internal`, and `tests/unit/test_cna_api_auth.py` keeps the protected list.
 - The web tier's `lib/blob.ts` and `lib/ai-engine.ts` still build `DefaultAzureCredential` without the
-  exclusions `cna.core.auth.build_azure_credential` applies (T-723).
+  exclusions `network_assessment.core.auth.build_azure_credential` applies (T-723).
 
 ### T-725 — Engine independence: keep the no-I/O proof green as discovery and AWS move (change set E)
 `tests/unit/test_engine_has_no_io.py` holds the import boundary of `cna_azure_network_engine`
 (`CHANGELOG.md` `[Unreleased]`). Open:
 - Change set D adds `discovery/` modules that import the Azure SDK; they are the one allowed place, and the
-  test's `CLOUD_ROOTS` check keeps them there. Nothing under `discovery/` may import `cna.*` either.
-- Change set K moves the AWS rules out of `cna/ai_engine/analysis_engine.py`; until then the wrapper is the
+  test's `CLOUD_ROOTS` check keeps them there. Nothing under `discovery/` may import `network_assessment.*` either.
+- Change set K moves the AWS rules out of `network_assessment/ai_engine/analysis_engine.py`; until then the wrapper is the
   only caller of `evaluate()` that also writes to the store (`EngagementStore.write_findings_report`), and
-  `cna analyze` passes the loaded topologies in rather than having `run()` load them (deviation from the
+  `network-assessment analyze` passes the loaded topologies in rather than having `run()` load them (deviation from the
   plan's sketch, recorded in the CHANGELOG entry).
 - The dynamic check runs `python -I` against the workspace-installed package; a wheel built by
   `tests/packaging/test_engine_wheel.py` is the stronger proof and already imports in a clean venv.
@@ -2188,10 +2188,10 @@ old loop for one release (`CHANGELOG.md` `[Unreleased]`). Open:
 - Every bound in the package's `[azure]` extra (`packages/cna-azure-network-engine/pyproject.toml`): checked against PyPI on
   2026-10-25 (each lower bound is the newest release, no next major exists); that the SDK calls behave as coded stays open
   until the acceptance run above, which needs a tenant and so cannot be done from an agent session.
-- The live collector bodies still live in `cna/modules/network/discovery/azure_discovery.py` and run from
+- The live collector bodies still live in `network_assessment/modules/network/discovery/azure_discovery.py` and run from
   `_run_live_collectors`; the plan's `discovery/live_bgp.py`, `live_metrics.py`, `live_diagnostics.py`,
   `live_cost.py` and `live_law.py` in the package are the next move (they need `with_retry` and
-  `redact_exception` or equivalents inside the package first, since the engine imports nothing from `cna`).
+  `redact_exception` or equivalents inside the package first, since the engine imports nothing from `network_assessment`).
 - The registry has no NVA live rule and the renderer no Defender section; `nvas` and `defender_assessments`
   are attached and carried but not yet read by a rule (plan section 7.B/7.D). Add them as rules AZ-NET-034+
   through `scripts/author-rules`-style authoring upstream, never by editing findings by hand.
@@ -2377,20 +2377,20 @@ Nothing publishes until the owner flips the variables below. Open, in order:
   commit is the tip of the default branch or an ancestor of it with nothing between them that `200` builds from; a
   re-run of `tag-images` is the recovery, and they may legitimately stay unmoved when a later commit changed a build path. A consumer pins by digest and verifies the cosign signature.
 
-### T-729 — AWS extra: move the AWS modules under `cna/aws/` with shims (change set K)
-`boto3` is the `[aws]` extra; the AWS paths are guarded by `cna.aws` (`CHANGELOG.md` `[Unreleased]`;
+### T-729 — AWS extra: move the AWS modules under `network_assessment/aws/` with shims (change set K)
+`boto3` is the `[aws]` extra; the AWS paths are guarded by `network_assessment.aws` (`CHANGELOG.md` `[Unreleased]`;
 `tests/packaging/test_azure_only_install.py`). Open:
-- The plan moves `cna/modules/network/discovery/{aws_discovery,aws_network}.py`,
-  `cna/modules/security/discovery/aws_security.py`, `cna/delivery_portal/s3_deployer.py`,
-  `cna/ai_engine/mcp_client/aws_mcp_client.py`, the Bedrock branch of `cna/ai_engine/chat_agent.py`,
-  `cna/diagram_engine/data/aws_shapes.json`, `cna/modules/network/diagrams/{vpc_topology,tgw_topology,
+- The plan moves `network_assessment/modules/network/discovery/{aws_discovery,aws_network}.py`,
+  `network_assessment/modules/security/discovery/aws_security.py`, `network_assessment/delivery_portal/s3_deployer.py`,
+  `network_assessment/ai_engine/mcp_client/aws_mcp_client.py`, the Bedrock branch of `network_assessment/ai_engine/chat_agent.py`,
+  `network_assessment/diagram_engine/data/aws_shapes.json`, `network_assessment/modules/network/diagrams/{vpc_topology,tgw_topology,
   account_hierarchy}.py`, `CRITICAL_TRIGGERS_AWS` and the `_check_aws_*` rules of `analysis_engine.py` under
-  `cna/aws/` with re-export shims at the old paths for one release. This change gated them in place; do the
+  `network_assessment/aws/` with re-export shims at the old paths for one release. This change gated them in place; do the
   move as its own PR, together with the AWS rules leaving `AnalysisEngine` (T-725).
 - Deployment note (outside this repository): the published images carry the extra, so nothing changes for an AWS
   deployment; a future Azure-only image (`--extra api` without `--extra aws`) is the moment an Azure deployment stops
   shipping boto3.
-- Checked 2026-10-25: `cna/modules/network/module.aws.yaml` now lists exactly the IAM actions the network collector
+- Checked 2026-10-25: `network_assessment/modules/network/module.aws.yaml` now lists exactly the IAM actions the network collector
   calls (it had missed the security group, network ACL, region, Network Firewall and WAFv2 calls and listed five
   actions nothing calls), and each name exists in the AWS Service Authorization Reference.
   `tests/unit/test_aws_permissions_match_collector.py` keeps the two in step. The AWS read-only policy of a
@@ -2398,7 +2398,7 @@ Nothing publishes until the owner flips the variables below. Open, in order:
   S3 deployer, the Bedrock client) have no permission manifest yet.
 - Keep `tests/conftest.py`'s skip in step with the marker: an `@pytest.mark.aws` test that runs green
   without `boto3` is not testing the AWS path.
-- The change-set-A shims (`cna/core/topology_schema.py` and the five analysis shims, T-719) and the `arm`
+- The change-set-A shims (`network_assessment/core/topology_schema.py` and the five analysis shims, T-719) and the `arm`
   discovery backend (T-726) are one-release deprecations the plan does not tie to this change; remove each
   in the release its row names.
 

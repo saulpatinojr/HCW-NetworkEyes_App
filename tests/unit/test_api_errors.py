@@ -1,4 +1,4 @@
-"""Unit tests for the downstream-SDK error sanitizer (``cna.api_errors``).
+"""Unit tests for the downstream-SDK error sanitizer (``network_assessment.api_errors``).
 
 Covers the Requirement 2.3 contract in the one place it is now enforced: a
 caught downstream SDK exception is converted to a generic, category-level client
@@ -13,14 +13,14 @@ import logging
 
 import pytest
 
-from cna.api_errors import (
+from network_assessment.api_errors import (
     DownstreamCategory,
     SanitizedError,
     classify_downstream_error,
     redact_exception,
     sanitize_downstream_error,
 )
-from cna.api_status import Outcome, OutcomeClass, class_for
+from network_assessment.api_status import Outcome, OutcomeClass, class_for
 
 # ── Stand-in SDK exception types ──────────────────────────────────────────────
 # The sanitizer detects the SDK family by the exception type's ``__module__``,

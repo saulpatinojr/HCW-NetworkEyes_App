@@ -1,6 +1,6 @@
 """Metrics router — stat-master records per engagement (Phase C).
 
-Builds flat aggregated records (cna.core.stat_masters) from the persisted
+Builds flat aggregated records (network_assessment.core.stat_masters) from the persisted
 Finding rows + latest discovery topology, materializes them into the
 MetricRecord table, and serves them back to cna-web. Record shape matches
 apps/cna-web/lib/types/stat-master.ts so pages can swap from client-side
@@ -21,11 +21,11 @@ import psycopg2
 import psycopg2.extras
 from fastapi import APIRouter, HTTPException, Query
 
-# Ensure the repo root is on the path so `cna` package is importable.
+# Ensure the repo root is on the path so `network_assessment` package is importable.
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from cna.api_status import Outcome, status_for
-from cna.core.stat_masters import StatMasterRecord, build_stat_masters
+from network_assessment.api_status import Outcome, status_for
+from network_assessment.core.stat_masters import StatMasterRecord, build_stat_masters
 
 logger = logging.getLogger("cna-api.metrics")
 
@@ -101,7 +101,7 @@ def _load_latest_topology(engagement_id: str) -> Any | None:
     if not row or not row["topologyJson"]:
         return None
     try:
-        from cna.core.topology.azure import AzureTopology
+        from network_assessment.core.topology.azure import AzureTopology
 
         return AzureTopology.model_validate_json(row["topologyJson"])
     except Exception as exc:  # noqa: BLE001 — metadata only, never fatal

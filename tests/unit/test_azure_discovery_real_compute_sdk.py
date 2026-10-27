@@ -41,7 +41,7 @@ compute = pytest.importorskip(
     "azure.mgmt.compute", reason="needs azure-mgmt-compute (the [enrichment] or [api] extra)"
 )
 
-from cna.modules.network.discovery.azure_discovery import (  # noqa: E402
+from network_assessment.modules.network.discovery.azure_discovery import (  # noqa: E402
     AzureDiscovery,
     AzureDiscoveryOptions,
 )
@@ -275,7 +275,9 @@ def _no_network(monkeypatch):
 @pytest.fixture
 def run(monkeypatch, caplog):
     """Run the real ``_collect_nvas`` once over the real SDK and the stubs."""
-    caplog.set_level(logging.DEBUG, logger="cna.discovery.azure")  # shows what _safe_list swallows
+    caplog.set_level(
+        logging.DEBUG, logger="network_assessment.discovery.azure"
+    )  # shows what _safe_list swallows
     credential = _FakeCredential()
     arm = _StubArm(PAGES)
     session = requests.Session()

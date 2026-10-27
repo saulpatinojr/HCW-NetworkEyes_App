@@ -1,11 +1,11 @@
-"""Unit tests for cna.core.logging_config."""
+"""Unit tests for network_assessment.core.logging_config."""
 
 from __future__ import annotations
 
 import json
 import logging
 
-from cna.core.logging_config import (
+from network_assessment.core.logging_config import (
     EngagementFilter,
     JSONFormatter,
     get_logger,
@@ -18,7 +18,7 @@ from cna.core.logging_config import (
 class TestJSONFormatter:
     def _make_record(self, msg: str = "hello", level=logging.INFO, **extra) -> logging.LogRecord:
         record = logging.LogRecord(
-            name="cna.test",
+            name="network_assessment.test",
             level=level,
             pathname="",
             lineno=0,
@@ -37,7 +37,7 @@ class TestJSONFormatter:
         data = json.loads(output)
         assert data["message"] == "test message"
         assert data["level"] == "INFO"
-        assert data["logger"] == "cna.test"
+        assert data["logger"] == "network_assessment.test"
 
     def test_engagement_id_present_when_set(self):
         fmt = JSONFormatter()
@@ -87,14 +87,14 @@ class TestJSONFormatter:
 class TestEngagementFilter:
     def test_injects_engagement_id(self):
         flt = EngagementFilter("eng-abc-123")
-        record = logging.LogRecord("cna.test", logging.INFO, "", 0, "msg", (), None)
+        record = logging.LogRecord("network_assessment.test", logging.INFO, "", 0, "msg", (), None)
         assert flt.filter(record) is True
         assert record.engagement_id == "eng-abc-123"
 
     def test_does_not_overwrite_existing_engagement_id(self):
         """If engagement_id already on record (from nested filter), leave it alone."""
         flt = EngagementFilter("new-id")
-        record = logging.LogRecord("cna.test", logging.INFO, "", 0, "msg", (), None)
+        record = logging.LogRecord("network_assessment.test", logging.INFO, "", 0, "msg", (), None)
         record.engagement_id = "original-id"
         flt.filter(record)
         assert record.engagement_id == "original-id"
@@ -102,7 +102,7 @@ class TestEngagementFilter:
     def test_always_returns_true(self):
         """Filter must never suppress records."""
         flt = EngagementFilter("x")
-        record = logging.LogRecord("cna.test", logging.DEBUG, "", 0, "msg", (), None)
+        record = logging.LogRecord("network_assessment.test", logging.DEBUG, "", 0, "msg", (), None)
         assert flt.filter(record) is True
 
 
@@ -112,51 +112,51 @@ class TestEngagementFilter:
 class TestSetupLogging:
     def teardown_method(self):
         """Clear cna logger state between tests."""
-        logger = logging.getLogger("cna")
+        logger = logging.getLogger("network_assessment")
         logger.handlers.clear()
         logger.filters.clear()
 
     def test_setup_logging_no_args_adds_handler(self):
         setup_logging()
-        logger = logging.getLogger("cna")
+        logger = logging.getLogger("network_assessment")
         assert len(logger.handlers) >= 1
 
     def test_setup_logging_with_engagement_id_adds_filter(self):
         setup_logging(engagement_id="eng-test-001")
-        logger = logging.getLogger("cna")
+        logger = logging.getLogger("network_assessment")
         assert any(isinstance(f, EngagementFilter) for f in logger.filters)
 
     def test_setup_logging_without_engagement_id_no_filter(self):
         setup_logging()
-        logger = logging.getLogger("cna")
+        logger = logging.getLogger("network_assessment")
         assert not any(isinstance(f, EngagementFilter) for f in logger.filters)
 
     def test_setup_logging_respects_log_level_env(self, monkeypatch, tmp_path):
         monkeypatch.setenv("CNA_LOG_LEVEL", "DEBUG")
         setup_logging()
-        logger = logging.getLogger("cna")
+        logger = logging.getLogger("network_assessment")
         assert logger.level == logging.DEBUG
 
     def test_setup_logging_invalid_level_falls_back_to_info(self, monkeypatch):
         monkeypatch.setenv("CNA_LOG_LEVEL", "NOTAVALIDLEVEL")
         setup_logging()
-        logger = logging.getLogger("cna")
+        logger = logging.getLogger("network_assessment")
         # getattr on unknown level returns INFO (10 is DEBUG, 20 is INFO)
         assert logger.level == logging.INFO
 
     def test_setup_logging_with_log_dir_creates_file_handler(self, tmp_path):
         log_dir = tmp_path / "logs"
         setup_logging(log_dir=log_dir)
-        logger = logging.getLogger("cna")
+        logger = logging.getLogger("network_assessment")
         file_handlers = [h for h in logger.handlers if hasattr(h, "baseFilename")]
         assert len(file_handlers) == 1
-        assert (log_dir / "cna.log").exists() or log_dir.exists()
+        assert (log_dir / "network_assessment.log").exists() or log_dir.exists()
 
     def test_setup_logging_clears_existing_handlers(self):
         """Calling setup_logging twice should not accumulate handlers."""
         setup_logging()
         setup_logging()
-        logger = logging.getLogger("cna")
+        logger = logging.getLogger("network_assessment")
         # Should not have doubled up
         assert len(logger.handlers) <= 2  # console, maybe file
 
@@ -173,7 +173,7 @@ class TestSetupLogging:
 
         monkeypatch.setattr(builtins, "__import__", import_blocker)
         setup_logging()  # Must not raise
-        logger = logging.getLogger("cna")
+        logger = logging.getLogger("network_assessment")
         assert len(logger.handlers) >= 1
 
 
@@ -183,11 +183,11 @@ class TestSetupLogging:
 class TestGetLogger:
     def test_returns_logger_with_cna_prefix(self):
         logger = get_logger("modules.network")
-        assert logger.name == "cna.modules.network"
+        assert logger.name == "network_assessment.modules.network"
 
     def test_does_not_double_prefix_if_already_cna(self):
-        logger = get_logger("cna.modules.network")
-        assert logger.name == "cna.modules.network"
+        logger = get_logger("network_assessment.modules.network")
+        assert logger.name == "network_assessment.modules.network"
 
     def test_returns_logging_logger_instance(self):
         logger = get_logger("test.component")

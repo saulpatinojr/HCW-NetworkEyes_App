@@ -38,7 +38,7 @@ COMPONENTS = [
     "Web app (apps/cna-web)",
     "API (apps/cna-api)",
     "Worker (apps/cna-worker)",
-    "CLI and analysis engine (cna package)",
+    "CLI and analysis engine (network_assessment package)",
     "Azure network engine package (packages/cna-azure-network-engine)",
     "Container images and the image build",
     "CI and repository policy (.github)",

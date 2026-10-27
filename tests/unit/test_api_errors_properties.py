@@ -24,13 +24,13 @@ import logging
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from cna.api_errors import (
+from network_assessment.api_errors import (
     _CLIENT_MESSAGE,
     DownstreamCategory,
     SanitizedError,
     sanitize_downstream_error,
 )
-from cna.api_status import Outcome, OutcomeClass, class_for
+from network_assessment.api_status import Outcome, OutcomeClass, class_for
 
 # A minimum of 100 iterations per the spec's property-test configuration.
 _PROPERTY_SETTINGS = settings(max_examples=100)

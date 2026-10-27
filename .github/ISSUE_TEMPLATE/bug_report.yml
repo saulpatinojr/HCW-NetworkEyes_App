@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in the web app, the API, the worker, the cna package, the engine package, the images or the CI does not work as expected.
+description: Something in the web app, the API, the worker, the network_assessment package, the engine package, the images or the CI does not work as expected.
 title: "[Bug]: "
 labels:
   - bug
@@ -39,7 +39,7 @@ body:
         - Web app (apps/cna-web)
         - API (apps/cna-api)
         - Worker (apps/cna-worker)
-        - CLI and analysis engine (cna package)
+        - CLI and analysis engine (network_assessment package)
         - Azure network engine package (packages/cna-azure-network-engine)
         - Container images and the image build
         - CI and repository policy (.github)

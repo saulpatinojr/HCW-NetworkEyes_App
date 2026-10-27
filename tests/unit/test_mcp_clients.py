@@ -6,10 +6,10 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 
-from cna.ai_engine.mcp_client.aws_mcp_client import AWSMCPClient
-from cna.ai_engine.mcp_client.azure_mcp_client import AzureMCPClient
-from cna.ai_engine.mcp_client.mcp_router import MCPRouter
-from cna.core.findings_schema import FindingRecommendation
+from network_assessment.ai_engine.mcp_client.aws_mcp_client import AWSMCPClient
+from network_assessment.ai_engine.mcp_client.azure_mcp_client import AzureMCPClient
+from network_assessment.ai_engine.mcp_client.mcp_router import MCPRouter
+from network_assessment.core.findings_schema import FindingRecommendation
 
 # ── AWSMCPClient ───────────────────────────────────────────────────────────────
 
@@ -120,7 +120,8 @@ class TestAWSMCPClient:
         )
 
         with patch(
-            "cna.ai_engine.mcp_client.aws_mcp_client.httpx.post", return_value=response
+            "network_assessment.ai_engine.mcp_client.aws_mcp_client.httpx.post",
+            return_value=response,
         ) as post:
             result = client._call_mcp_tool(
                 "aws.well-architected.get-recommendation",
@@ -231,7 +232,8 @@ class TestAzureMCPClient:
         )
 
         with patch(
-            "cna.ai_engine.mcp_client.azure_mcp_client.httpx.post", return_value=response
+            "network_assessment.ai_engine.mcp_client.azure_mcp_client.httpx.post",
+            return_value=response,
         ) as post:
             result = client._call_mcp_tool(
                 "azure.advisor.get-recommendation",

@@ -284,10 +284,10 @@ jobs:
           pip install -e ".[dev,enrichment,api,aws]"
       - name: Run tests with coverage
         # --cov=apps counts the API/router code the TestClient tests now exercise
-        # in the same gate as the cna package (TEST-001).
+        # in the same gate as the network_assessment package (TEST-001).
         run: |
           pytest tests/unit/ tests/security/ tests/packaging/ packages/cna-azure-network-engine/tests/ -v --tb=short \
-            --cov=cna \
+            --cov=network_assessment \
             --cov=apps \
             --cov=cna_azure_network_engine \
             --cov-report=term-missing \
@@ -349,7 +349,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Build image
         run: docker build -t cna:ci-test .
-      - name: Smoke test — cna --help
+      - name: Smoke test — network-assessment --help
         run: docker run --rm cna:ci-test --help
       - name: Verify non-root user
         run: |

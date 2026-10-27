@@ -1,6 +1,6 @@
 """Unit tests for critical finding escalation engine (DD-016)."""
 
-from cna.core.escalation_engine import CriticalFindingEscalationEngine
+from network_assessment.core.escalation_engine import CriticalFindingEscalationEngine
 
 
 def test_no_false_positives_on_empty_resource():

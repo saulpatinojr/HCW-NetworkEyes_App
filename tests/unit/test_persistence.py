@@ -24,8 +24,8 @@ import json
 
 import pytest
 
-from cna.core.engagement import EngagementConfig
-from cna.core.persistence import EngagementStore
+from network_assessment.core.engagement import EngagementConfig
+from network_assessment.core.persistence import EngagementStore
 
 
 @pytest.fixture
@@ -163,7 +163,7 @@ class TestReportWrites:
         """`FindingsReport.model_dump()` keeps enums and datetimes as objects."""
         from datetime import UTC, datetime
 
-        from cna.core.findings_schema import FindingSeverity
+        from network_assessment.core.findings_schema import FindingSeverity
 
         store.init(config)
         path = store.write_findings_report(
@@ -202,14 +202,14 @@ class TestReportWrites:
 class TestReadSideMethods:
     """The eight read-side methods added under TODO.md T-412.
 
-    Before these existed, `cna analyze`, `cna report`, and `cna publish`
+    Before these existed, `network-assessment analyze`, `network-assessment report`, and `network-assessment publish`
     died with AttributeError; each is now exercised against a real store
     on tmp_path, reading back exactly what the discovery/analysis/render
     writers put on disk.
     """
 
     def _write_aws_checkpoint(self, store, engagement_id, account_id, region, **kwargs):
-        from cna.core.topology.aws import AWSRegionTopology
+        from network_assessment.core.topology.aws import AWSRegionTopology
 
         topo = AWSRegionTopology(account_id=account_id, region=region, **kwargs)
         # Same key shape AWSDiscovery uses: aws_{account}_{region}
@@ -218,7 +218,7 @@ class TestReadSideMethods:
         )
 
     def _write_azure_checkpoint(self, store, engagement_id, sub_id, tenant_id, **kwargs):
-        from cna.core.topology.azure import AzureSubscriptionTopology
+        from network_assessment.core.topology.azure import AzureSubscriptionTopology
 
         topo = AzureSubscriptionTopology(subscription_id=sub_id, tenant_id=tenant_id, **kwargs)
         store.write_discovery_checkpoint(
@@ -266,7 +266,7 @@ class TestReadSideMethods:
         assert len(store.load_azure_topology(eid).subscriptions) == 1
 
     def test_missing_checkpoints_raise_file_not_found(self, store, config):
-        """`cna analyze` catches exactly FileNotFoundError for its friendly message."""
+        """`network-assessment analyze` catches exactly FileNotFoundError for its friendly message."""
         store.init(config)
         with pytest.raises(FileNotFoundError):
             store.load_aws_topology(config.engagement_id)
@@ -277,7 +277,7 @@ class TestReadSideMethods:
         """AnalysisEngine writes `model_dump()` (enums + datetimes intact)."""
         from datetime import UTC, datetime
 
-        from cna.core.findings_schema import (
+        from network_assessment.core.findings_schema import (
             Finding,
             FindingSeverity,
             FindingsReport,
@@ -361,7 +361,7 @@ class TestReadSideMethods:
             store.load_access_record(config.engagement_id)
 
     def test_delivery_date_none_until_first_publish(self, store, config):
-        """DD-019: retention clock starts at the first `cna publish run`."""
+        """DD-019: retention clock starts at the first `network-assessment publish run`."""
         eid = config.engagement_id
         assert store.get_delivery_date(eid) is None
 

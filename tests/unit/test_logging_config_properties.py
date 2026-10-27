@@ -5,7 +5,7 @@ Property 16: Emitted errors are captured as structured logs
 
 For any error event emitted by a reviewed service, the produced log record
 parses as a structured record carrying at least a level and a message field.
-The core engine's ``cna.core.logging_config.JSONFormatter`` renders every log
+The core engine's ``network_assessment.core.logging_config.JSONFormatter`` renders every log
 record as a single line of JSON, so for any message, level, and set of extra
 fields the formatter output always parses as JSON and always carries a
 non-empty ``level`` and a ``message`` field.
@@ -21,7 +21,7 @@ import logging
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from cna.core.logging_config import JSONFormatter
+from network_assessment.core.logging_config import JSONFormatter
 
 # A minimum of 100 iterations per the spec's property-test configuration.
 _PROPERTY_SETTINGS = settings(max_examples=200)
@@ -118,7 +118,7 @@ _EXTRA = st.dictionaries(
 def _make_record(msg: str, level: int, extra: dict[str, object]) -> logging.LogRecord:
     """Build a log record the way the stdlib logging machinery would."""
     record = logging.LogRecord(
-        name="cna.test",
+        name="network_assessment.test",
         level=level,
         pathname="",
         lineno=0,
@@ -176,7 +176,7 @@ def test_property16_error_events_carry_level_and_message(
     """
     formatter = JSONFormatter()
     # Route through a real logger to exercise the emit path a service uses.
-    logger = logging.getLogger("cna.test.property16")
+    logger = logging.getLogger("network_assessment.test.property16")
     record = logger.makeRecord(
         logger.name,
         logging.ERROR,

@@ -34,7 +34,7 @@ apps/cna-web/.env.local
 apps/cna-web/.env*.local
 
 # Build artifacts — should not be committed
-cna.egg-info/
+network_assessment.egg-info/
 *.egg-info/
 # setuptools build output (a local `pip install --no-build-isolation .` leaves it behind)
 build/

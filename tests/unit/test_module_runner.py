@@ -1,4 +1,4 @@
-"""Unit tests for cna.core.module_runner."""
+"""Unit tests for network_assessment.core.module_runner."""
 
 from __future__ import annotations
 
@@ -8,12 +8,12 @@ from unittest.mock import MagicMock
 import pytest
 import yaml
 
-from cna.core.exceptions import ModuleDependencyError
-from cna.core.module_runner import ModuleRunner
+from network_assessment.core.exceptions import ModuleDependencyError
+from network_assessment.core.module_runner import ModuleRunner
 
 
 def _make_runner(tmp_path: Path, store=None) -> ModuleRunner:
-    modules_dir = tmp_path / "cna" / "modules"
+    modules_dir = tmp_path / "network_assessment" / "modules"
     modules_dir.mkdir(parents=True)
     mock_store = store or MagicMock()
     mock_store.list_completed_checkpoints.return_value = []

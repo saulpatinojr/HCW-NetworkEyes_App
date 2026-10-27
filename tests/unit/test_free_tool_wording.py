@@ -76,7 +76,7 @@ BRAND_FILE_NAMES: frozenset[str] = frozenset()
 LOGO_BLACK = "apps/cna-web/public/hcw-logo-black.png"
 LOGO_WHITE = "apps/cna-web/public/hcw-logo-white.png"
 #: The encyclopedia cover is dark navy, so it carries the white-stroke logo, at the size WeasyPrint needs for print.
-LOGO_COVER = "cna/report_engine/templates/assets/logos/hcw-logo-cover.png"
+LOGO_COVER = "network_assessment/report_engine/templates/assets/logos/hcw-logo-cover.png"
 WEB_PAGES_WITH_THE_LOGO = (
     "apps/cna-web/app/(dashboard)/layout.tsx",
     "apps/cna-web/app/auth/signin/page.tsx",
@@ -245,7 +245,7 @@ class TestTheCompanyNameStaysOut:
             "Dockerfile",
             "apps/cna-web/lib/openai.ts",
             "apps/cna-web/lib/report-prompts.ts",
-            "cna/ai_engine/chat_agent.py",
+            "network_assessment/ai_engine/chat_agent.py",
             *(file for file, _pattern, _reason in BRAND_ASSETS),
         ):
             assert expected in tracked, f"{expected} is not a tracked file; update this guard"
@@ -371,7 +371,7 @@ class TestTheHybridCloudWorksLogo:
         # "assets/logos/..." points at a page that does not exist. A data: URI works in both places.
         import base64
 
-        from cna.report_engine.encyclopedia_report import EncyclopediaReportRenderer
+        from network_assessment.report_engine.encyclopedia_report import EncyclopediaReportRenderer
 
         html = EncyclopediaReportRenderer(edition="condensed").render_html(
             [],
@@ -392,7 +392,10 @@ class TestTheHybridCloudWorksLogo:
     def test_a_templates_folder_without_the_logo_falls_back_to_the_relative_address(
         self, tmp_path: Path
     ) -> None:
-        from cna.report_engine.encyclopedia_report import _TEMPLATES_DIR, EncyclopediaReportRenderer
+        from network_assessment.report_engine.encyclopedia_report import (
+            _TEMPLATES_DIR,
+            EncyclopediaReportRenderer,
+        )
 
         copy = tmp_path / "templates"
         shutil.copytree(_TEMPLATES_DIR, copy, ignore=shutil.ignore_patterns("hcw-logo-cover.png"))
@@ -403,7 +406,7 @@ class TestTheHybridCloudWorksLogo:
 
     def test_the_cover_logo_file_is_where_weasyprint_looks_for_it(self) -> None:
         # render() gives WeasyPrint base_url=_TEMPLATES_DIR, so the relative address resolves to this file.
-        from cna.report_engine.encyclopedia_report import _COVER_LOGO, _TEMPLATES_DIR
+        from network_assessment.report_engine.encyclopedia_report import _COVER_LOGO, _TEMPLATES_DIR
 
         assert (REPO_ROOT / LOGO_COVER).samefile(_TEMPLATES_DIR / _COVER_LOGO)
 
@@ -427,9 +430,9 @@ class TestTheHybridCloudWorksLogo:
             )
 
     def test_the_cover_is_dark_so_it_needs_the_light_stroke_logo(self) -> None:
-        css = (REPO_ROOT / "cna/report_engine/templates/encyclopedia/encyclopedia.css").read_text(
-            "utf-8"
-        )
+        css = (
+            REPO_ROOT / "network_assessment/report_engine/templates/encyclopedia/encyclopedia.css"
+        ).read_text("utf-8")
         assert re.search(r"@page cover \{\s*background: #012638;", css), (
             "the cover page is no longer dark navy"
         )
@@ -624,7 +627,7 @@ class TestDockerfilesAndPrompts:
         assert not MODEL_FACING_BANNED.search(line)
 
     def test_the_copilot_prompt_names_no_company_and_no_payment(self) -> None:
-        from cna.ai_engine import chat_agent
+        from network_assessment.ai_engine import chat_agent
 
         prompt = chat_agent._SYSTEM_PROMPT
         assert prompt.startswith("You are the Cloud Network Assessment copilot")

@@ -1,4 +1,4 @@
-"""``pip install cna`` installs no boto3 (change set K of REFACTOR_APP.md).
+"""``pip install network-assessment`` installs no boto3 (change set K of REFACTOR_APP.md).
 
 Read from the single source of truth and the lock rather than from a throwaway install:
 ``pyproject.toml`` declares ``boto3`` under the ``aws`` extra only, the lock's base export
@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from cna import aws as aws_extra
+from network_assessment import aws as aws_extra
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -69,7 +69,7 @@ def test_the_guard_names_the_extra_when_boto3_is_absent(monkeypatch):
     monkeypatch.delitem(sys.modules, "boto3", raising=False)
     monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
     assert aws_extra.aws_extra_installed() is False
-    with pytest.raises(ImportError, match=r'pip install "cna\[aws\]"'):
+    with pytest.raises(ImportError, match=r'pip install "network-assessment\[aws\]"'):
         aws_extra.require_aws_extra()
 
 
@@ -81,14 +81,14 @@ def test_the_guard_passes_when_boto3_resolves(monkeypatch):
 def test_every_boto3_importer_calls_the_guard_first():
     """Each module that imports boto3 at import time guards it (the lazy call sites guard inline)."""
     offenders = []
-    for path in sorted((REPO_ROOT / "cna").rglob("*.py")):
+    for path in sorted((REPO_ROOT / "network_assessment").rglob("*.py")):
         text = path.read_text(encoding="utf-8", errors="replace")
         top_level = [
             ln
             for ln in text.splitlines()
             if ln.startswith(("import boto3", "from boto3", "import botocore"))
         ]
-        if top_level and "from cna.aws import" not in text:
+        if top_level and "from network_assessment.aws import" not in text:
             offenders.append(str(path.relative_to(REPO_ROOT)))
     assert offenders == []
 
@@ -96,7 +96,7 @@ def test_every_boto3_importer_calls_the_guard_first():
 def test_the_aws_permission_list_lives_in_its_own_manifest():
     import yaml
 
-    network = REPO_ROOT / "cna" / "modules" / "network"
+    network = REPO_ROOT / "network_assessment" / "modules" / "network"
     main = yaml.safe_load((network / "module.yaml").read_text(encoding="utf-8"))
     assert "aws" not in (main.get("required_permissions") or {})
     aws = yaml.safe_load((network / "module.aws.yaml").read_text(encoding="utf-8"))

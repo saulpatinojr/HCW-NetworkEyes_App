@@ -1,6 +1,6 @@
 /**
  * Pure AI-engine selection rules — no Prisma, no SDKs, no env reads — so the
- * web tier and cna/ai_engine/chat_agent.py can be held to one shared vector
+ * web tier and network_assessment/ai_engine/chat_agent.py can be held to one shared vector
  * table (see ai-engine-rules.test.ts / tests/unit/test_chat_agent.py).
  *
  * The appliance's deploy-time AI mode (CNA_AI_MODE) decides which engine

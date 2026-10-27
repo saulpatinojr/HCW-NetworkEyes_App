@@ -1,6 +1,6 @@
 """Unit tests for findings schema (DD-002)."""
 
-from cna.core.findings_schema import Finding, FrameworkMapping
+from network_assessment.core.findings_schema import Finding, FrameworkMapping
 
 
 def test_finding_requires_observed_state():

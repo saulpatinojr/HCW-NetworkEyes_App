@@ -26,10 +26,16 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from cna.delivery_portal.access_manager import AccessManager, AccessRecord
-from cna.delivery_portal.portal_generator import PortalEntry, PortalGenerator
-from cna.delivery_portal.retention_engine import RetentionEngine, RetentionExpiredError
-from cna.report_engine.deliverable_manifest import DeliverableManifest, DeliverableRecord
+from network_assessment.delivery_portal.access_manager import AccessManager, AccessRecord
+from network_assessment.delivery_portal.portal_generator import PortalEntry, PortalGenerator
+from network_assessment.delivery_portal.retention_engine import (
+    RetentionEngine,
+    RetentionExpiredError,
+)
+from network_assessment.report_engine.deliverable_manifest import (
+    DeliverableManifest,
+    DeliverableRecord,
+)
 
 # ---------------------------------------------------------------- helpers
 
@@ -254,16 +260,16 @@ class TestRetentionEngine:
 
 class TestContentTypeMapping:
     def test_s3_pdf_content_type(self):
-        from cna.delivery_portal.portal_generator import CONTENT_TYPES
+        from network_assessment.delivery_portal.portal_generator import CONTENT_TYPES
 
         assert CONTENT_TYPES[".pdf"] == "application/pdf"
 
     def test_s3_pptx_content_type(self):
-        from cna.delivery_portal.portal_generator import CONTENT_TYPES
+        from network_assessment.delivery_portal.portal_generator import CONTENT_TYPES
 
         assert "presentationml" in CONTENT_TYPES[".pptx"]
 
     def test_s3_html_content_type(self):
-        from cna.delivery_portal.portal_generator import CONTENT_TYPES
+        from network_assessment.delivery_portal.portal_generator import CONTENT_TYPES
 
         assert "text/html" in CONTENT_TYPES[".html"]

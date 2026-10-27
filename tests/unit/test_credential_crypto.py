@@ -1,4 +1,4 @@
-"""Unit tests for cna.core.credential_crypto — the Python twin of lib/crypto.ts.
+"""Unit tests for network_assessment.core.credential_crypto — the Python twin of lib/crypto.ts.
 
 The interop vector below was produced by the TypeScript implementation
 (Node `crypto.createCipheriv("aes-256-gcm", ...)`) with a fixed, obviously fake
@@ -8,7 +8,12 @@ runtime in cna-api.
 
 import pytest
 
-from cna.core.credential_crypto import KEY_ENV, CredentialCryptoError, decrypt, encrypt
+from network_assessment.core.credential_crypto import (
+    KEY_ENV,
+    CredentialCryptoError,
+    decrypt,
+    encrypt,
+)
 
 # 32 bytes of 0x0b — a test fixture, not a credential.
 FIXTURE_KEY_B64 = "CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCws="  # pragma: allowlist secret
