@@ -164,7 +164,7 @@ ALLOWED = frozenset(
         "apps/network-assessment-web/.env.example",
     }
 )
-HISTORY = frozenset({"CHANGELOG.md", "CNA-0.90-updates.md"})
+HISTORY = frozenset({"CHANGELOG.md"})
 
 
 def test_the_old_setting_prefix_is_only_in_the_shims_and_the_dated_prose() -> None:

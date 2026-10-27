@@ -317,7 +317,7 @@ enum DeliverableStatus {
   FAILED
 }
 
-// One row per client-portal publication (CNA-0.90 §3: the publish story).
+// One row per client-portal publication (the 0.9.0 backlog item "the publish story").
 // Metadata only — the SAS portal URL is never stored (AccessManager's
 // contract); the API returns it once and the operator shares it.
 model PortalPublication {

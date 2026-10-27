@@ -3,8 +3,9 @@
 Covers the verify-then-close-gaps record for the documentation audit (spec
 task 13.1): the accuracy cross-checks recorded verified-compliant (9.1), the
 executable-status entries for the documented CLI/AWS deploy paths (9.2), one
-plan entry per still-open doc task among T-103/T-304 while the Done T-401 is
-recorded compliant (9.3), and the R-009 Wiki-publication escalation (9.4).
+plan entry per still-open doc task (T-304 only; T-401 is Done and recorded
+compliant, T-103 is withdrawn) (9.3), and, since 2026-10-27, no escalation: the
+R-009 wiki-publication finding was removed with the wiki (REVIEW.md R-031).
 """
 
 from network_assessment.review import AREAS, Severity, consolidate, gate_finding, load_blockers
@@ -49,50 +50,74 @@ def test_records_executable_status_of_documented_paths():
     assert "not executable" in aws_path.proposed_action.lower()
 
 
-def test_records_open_doc_tasks_t103_and_t304_only():
-    """9.3: T-103 and T-304 are open and recorded; T-401 is Done, not recorded."""
+def test_records_t304_as_the_only_open_doc_task():
+    """9.3: T-304 is open and recorded; T-401 is Done and T-103 is withdrawn, so neither is."""
     by_key = {f.dedup_key: f for f in documentation_findings()}
-    assert "documentation:open-task:T-103" in by_key
     assert "documentation:open-task:T-304" in by_key
+    # T-304 names the Log Analytics migration.
+    assert "T-304" in by_key["documentation:open-task:T-304"].proposed_action
     # T-401 is Done -> no open-task entry, only a verified-compliant record.
     assert "documentation:open-task:T-401" not in by_key
     assert by_key["documentation:t-401-closed"].severity is Severity.INFORMATIONAL
-    # T-103 names ADR pages; T-304 names the Log Analytics migration.
-    assert "ADR" in by_key["documentation:open-task:T-103"].proposed_action
-    assert "T-304" in by_key["documentation:open-task:T-304"].proposed_action
+    # T-103 (confirm the ADR pages on the wiki) was withdrawn on 2026-10-27 with the wiki.
+    assert "documentation:open-task:T-103" not in by_key
+    open_tasks = [key for key in by_key if key.startswith("documentation:open-task:")]
+    assert open_tasks == ["documentation:open-task:T-304"]
 
 
 def test_open_doc_tasks_are_fixable_not_escalations():
-    """The open doc tasks are engineering-tracked, not blocker-owned."""
+    """The open doc task is engineering-tracked, not blocker-owned."""
     by_key = {f.dedup_key: f for f in documentation_findings()}
-    assert by_key["documentation:open-task:T-103"].blocker_id is None
     assert by_key["documentation:open-task:T-304"].blocker_id is None
 
 
-def test_wiki_publication_escalation_references_r009():
-    """9.4: the Wiki-publication escalation carries blocker_id R-009."""
-    esc = next(
-        f for f in documentation_findings() if f.dedup_key == "documentation:wiki-publication-r009"
-    )
-    assert esc.blocker_id == "R-009"
+def test_the_wiki_publication_escalation_is_gone():
+    """The wiki is deleted and R-009 is superseded (REVIEW.md R-031): nothing is left to escalate."""
+    keys = {f.dedup_key for f in documentation_findings()}
+    assert "documentation:wiki-publication-r009" not in keys
 
 
-def test_only_the_wiki_finding_is_blocker_owned():
-    """Every finding except the R-009 escalation is engineering-fixable."""
-    blocker_owned = [f for f in documentation_findings() if f.blocker_id is not None]
-    assert len(blocker_owned) == 1
-    assert blocker_owned[0].blocker_id == "R-009"
+def test_no_documentation_finding_is_blocker_owned():
+    """Every finding of this area is engineering-fixable; none carries a blocker id."""
+    assert all(f.blocker_id is None for f in documentation_findings())
 
 
-def test_r009_finding_gates_to_an_escalation_entry():
-    """Through the scope gate, the R-009 finding becomes an Escalation_Record."""
+def test_the_audit_findings_gate_without_escalation():
+    """Through the scope gate every audit finding stays a fixable entry."""
     blockers = load_blockers()
-    esc = next(
-        f for f in documentation_findings() if f.dedup_key == "documentation:wiki-publication-r009"
-    )
-    entry = gate_finding(esc, blockers)
-    assert entry.is_escalation is True
-    assert entry.blocker_id == "R-009"
+    for finding in documentation_findings():
+        entry = gate_finding(finding, blockers)
+        assert entry.is_escalation is False
+        assert entry.blocker_id is None
+
+
+def test_the_finding_keys_that_still_make_sense_are_unchanged():
+    """The dedup keys are identifiers other records may cite; only the two meaningless ones went."""
+    keys = {f.dedup_key for f in documentation_findings()}
+    assert keys == {
+        "documentation:version-accurate",
+        "documentation:cli-entry-point-accurate",
+        "documentation:four-document-model-accurate",
+        "documentation:workflow-references-accurate",
+        "documentation:t-401-closed",
+        "documentation:cli-path-requires-install",
+        "documentation:aws-deploy-path-not-executable",
+        "documentation:open-task:T-304",
+    }
+
+
+def test_the_findings_describe_the_current_document_model():
+    """The removed working document and the deleted wiki are not offered as the current state."""
+    findings = documentation_findings() + documentation_verify_findings()
+    for finding in findings:
+        text = f"{finding.proposed_action} {finding.subject}"
+        assert "CNA-0.90-updates.md" not in text, finding.dedup_key
+        assert "Wiki" not in text, finding.dedup_key
+    by_key = {f.dedup_key: f for f in findings}
+    model = by_key["documentation:four-document-model-accurate"].proposed_action
+    assert "REFACTOR_APP.md" in model and "CLAUDE.md" in model and "docs/" in model
+    validator = by_key["documentation:model-validator-passes"].proposed_action
+    assert "docs/" in validator and "REFACTOR_APP.md" in validator
 
 
 def test_findings_consolidate_and_are_severity_ordered():

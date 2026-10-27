@@ -27,7 +27,7 @@ History: this repository was the original Cloud Network Assessment repository. O
 separate core repository, and on 2026-10-10 the owner merged that lineage back here, so this repository is again the
 implementation target of `REFACTOR_APP.md` (the HCW App-to-AddOn plan; its lab build is
 `saulpatinojr/HCW-NetworkEyes_AddOn`). **The earlier core repository is reference only: nothing for this repository is
-written there (owner, 2026-10-11)**; its wiki pages were to move here (`REVIEW.md` → R-023; this repository's wiki was deleted on 2026-10-27, see R-031). Issue and pull-request numbers in
+written there (owner, 2026-10-11)**; its wiki pages were to move here (`REVIEW.md` → R-023, superseded: this repository's wiki was deleted on 2026-10-27 and long-form documentation now goes in `docs/`, see R-031). Issue and pull-request numbers in
 the documents older than that date name threads of the original or the earlier core repository.
 
 Deployment is not this repository's job. There is no Terraform and no deploy workflow in this repository; it keeps
@@ -129,13 +129,11 @@ change under `Changed` in `CHANGELOG.md` (and in the release notes) where a cons
 
 ## Repository conventions that agents get wrong
 
-- **Documents:** `README.md`, `CHANGELOG.md`, `REVIEW.md`, `TODO.md`, and this
-  `CLAUDE.md` are the only markdown files (plus at most one temporary
-  release-push document, and the community files GitHub reads from `.github/`:
-  `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `PULL_REQUEST_TEMPLATE.md` and `ISSUE_TEMPLATE/`; never at the root).
-  `scripts/validate_documentation_model.py` enforces
-  this in CI. Long-form docs have no destination since the GitHub Wiki was deleted
-  (`REVIEW.md` R-031); do not add markdown files to work around that.
+- **Documents:** the model is set out in full once, in `README.md` (Documentation map), and
+  `scripts/validate_documentation_model.py` enforces it in CI. Do not restate it elsewhere and do not add a document file
+  where the map does not allow one. Long-form documentation (guides, architecture, runbooks, decision records) goes in
+  `docs/`, reviewed in a pull request like code (`docs/README.md` says how). Do not restore pages from the deleted GitHub
+  Wiki on your own: which pages come back is the owner's choice (`REVIEW.md` R-032).
 - **Never hardcode a value at a call site.** Declare it (`DiscoveryOptions`
   field, module-level constant, setting) and resolve at runtime.
 - **Python dependencies are locked.** `uv.lock` is the resolution every Python
@@ -178,8 +176,7 @@ change under `Changed` in `CHANGELOG.md` (and in the release notes) where a cons
   version control under `local/agent-config/` (gitignored, TODO T-411); it is not project
   source and must never contain project-specific facts.
 - **`REFACTOR_APP.md`** at the root is the owner-approved refactoring plan this repository
-  executes; the documentation model allows it (and the temporary `CNA-0.90-updates.md`) beside the four
-  documents and this file, seven root documents at most, until their work has shipped.
+  executes; the documentation model allows it as the one optional temporary root document, until its work has shipped.
 - **Tell the lab build what changed.** `saulpatinojr/HCW-NetworkEyes_AddOn` keeps a "what's new"
   file, `docs/whats-new-upstream.md`, that its agents read before changing anything. When a change lands
   here that reaches it (the engine package `packages/network-assessment-azure-engine`, the rules, an

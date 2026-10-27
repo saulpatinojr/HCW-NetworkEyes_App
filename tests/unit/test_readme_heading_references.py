@@ -9,8 +9,8 @@ the three forms below and checks it against the headings of ``README.md``:
 * ``README.md`` -> "Heading" or ``README -> *Heading*`` (an arrow and a quoted or emphasised name);
 * more than one heading in one reference, separated by `` / ``.
 
-Only these forms are read; a bare ``README.md -> Quick start`` is not. History (``CHANGELOG.md``,
-``CNA-0.90-updates.md``) is not read: it describes what was true then.
+Only these forms are read; a bare ``README.md -> Quick start`` is not. History (``CHANGELOG.md``) is
+not read: it describes what was true then.
 """
 
 from __future__ import annotations
@@ -29,6 +29,7 @@ SCANNED_GLOBS = (
     "REVIEW.md",
     "TODO.md",
     "REFACTOR_APP.md",
+    "docs/**/*.md",
     ".github/**/*.md",
     ".github/**/*.yml",
     "scripts/**/*.py",

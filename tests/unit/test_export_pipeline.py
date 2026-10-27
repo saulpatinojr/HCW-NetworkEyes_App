@@ -146,7 +146,7 @@ class TestRealDrawioExport:
     The container images install draw.io desktop plus the
     scripts/drawio-headless.sh wrapper (xvfb-run, --no-sandbox, HOME
     fallback); these tests prove that chain produces real SVG rather than
-    silently degrading — the CNA-0.90 gap where encyclopedia diagrams
+    silently degrading — the 0.9.0 gap where encyclopedia diagrams
     never rendered because no image carried the CLI.
     """
 

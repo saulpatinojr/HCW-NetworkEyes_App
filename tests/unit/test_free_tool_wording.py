@@ -45,7 +45,7 @@ if shutil.which("git") is None or not (REPO_ROOT / ".git").exists():
 THIS_FILE = "tests/unit/test_free_tool_wording.py"
 
 #: History is never rewritten.
-HISTORY_FILES = frozenset({"CHANGELOG.md", "CNA-0.90-updates.md"})
+HISTORY_FILES = frozenset({"CHANGELOG.md"})
 #: Files that spell the words out on purpose, to prove a guard. Each is itself a guard.
 GUARD_FILES = frozenset(
     {

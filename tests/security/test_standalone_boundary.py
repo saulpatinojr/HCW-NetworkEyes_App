@@ -6,7 +6,7 @@ repository may name, call, dispatch to or take a setting from the sibling applia
 repositories) or from a GitHub App installed on them. This guard keeps that from coming back:
 
 * ``TestNoOtherRepositoryIsNamed`` scans the repository for the strings below. The scan skips history
-  (``CHANGELOG.md``, ``CNA-0.90-updates.md``), the tests (they may spell a forbidden string out to prove a
+  (``CHANGELOG.md``), the tests (they may spell a forbidden string out to prove a
   guard), dependency and build directories, and this file. There is no exemption list: a live file that
   names one of the strings fails the test.
 * ``TestEveryActionIsFromAnAllowedPublisher`` fails when a workflow or a local action (``*.yml`` and ``*.yaml``)
@@ -43,7 +43,7 @@ FORBIDDEN: dict[str, re.Pattern[str]] = {
 }
 
 #: History, never scanned.
-HISTORY_FILES = frozenset({"CHANGELOG.md", "CNA-0.90-updates.md"})
+HISTORY_FILES = frozenset({"CHANGELOG.md"})
 #: Generated directories, skipped at any depth.
 GENERATED_DIRECTORIES = frozenset(
     {"node_modules", ".next", "__pycache__", ".ruff_cache", ".pytest_cache", ".mypy_cache"}
