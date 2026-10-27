@@ -9,7 +9,7 @@ call, because a pin cannot show that a jq filter, a path glob or a "not found" t
   nothing 200 builds from;
 * ``scripts/ci/verify_signed_digest.sh``: the signature, subject, builder and revision checks, with a stub
   ``cosign`` that records how it was called;
-* ``scripts/ci/release_digests.sh``: the other four images of the build, which the release notes list.
+* ``scripts/ci/release_digests.sh``: the other three images of the build, which the release notes list.
 
 They need ``bash`` and ``jq``. GitHub's runners have both; a machine without them skips these tests, and
 ``test_ci_has_the_tools`` fails on CI if either is missing so a skip can never hide there.
@@ -87,6 +87,7 @@ class TestPathsTouchBuild:
             "network_assessment/core/auth.py",
             "apps/network-assessment-web/lib/image-update-rules.ts",
             "apps/network-assessment-api/Dockerfile",
+            "apps/network-assessment-api/main.py",  # apps/network-assessment-api/** is in the filter
             "scripts/ci/sign_image.sh",
             "pyproject.toml",
             "uv.lock",
@@ -107,12 +108,10 @@ class TestPathsTouchBuild:
             "scripts/ci/find_release_image.sh",
             "tests/security/test_image_repository_name.py",
             "docs/dockerfile.md",
-            "apps/network-assessment-api/main.py",  # apps/network-assessment-api/** is NOT in the filter; only the Dockerfile paths listed are
         ],
     )
     def test_documentation_the_manifest_and_other_workflows_are_not(self, changed):
-        patterns = [p for p in self.patterns if not p.startswith("apps/network-assessment-api/")]
-        assert paths_touch_build.touching([changed], patterns) == []
+        assert paths_touch_build.touching([changed], self.patterns) == []
 
     def test_star_stays_within_a_segment_and_double_star_does_not(self):
         assert paths_touch_build.touching(["a/b.txt"], ["a/*"]) == ["a/b.txt"]
@@ -683,7 +682,6 @@ class TestVerifySignedDigest:
 #: component -> the prefix of its `<prefix><7 hex>` tag, as 200-build-images.yml writes them (the CLI has none).
 OTHER_IMAGES = {
     "api": "api-sha-",
-    "worker": "worker-sha-",
     "web": "web-sha-",
     "migrator": "migrator-sha-",
 }
@@ -705,7 +703,7 @@ esac
 
 
 def _digest_of(component: str) -> str:
-    return "sha256:" + {"api": "1", "worker": "2", "web": "3", "migrator": "4"}[component] * 64
+    return "sha256:" + {"api": "1", "web": "3", "migrator": "4"}[component] * 64
 
 
 @needs_tools
@@ -775,7 +773,7 @@ class TestReleaseDigests:
         calls = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
         return result, outputs, calls
 
-    def test_the_four_other_images_are_resolved_by_their_own_sha_tag_and_verified(self, tmp_path):
+    def test_the_three_other_images_are_resolved_by_their_own_sha_tag_and_verified(self, tmp_path):
         result, out, calls = self._run(tmp_path)
         assert result.returncode == 0, result.stderr
         assert out == {f"digest_{c}": _digest_of(c) for c in OTHER_IMAGES}
@@ -820,7 +818,7 @@ class TestReleaseDigests:
 
     @pytest.mark.parametrize("run_ids", ["111 222", "", "abc", "111,222"])
     def test_anything_but_one_run_id_is_refused(self, tmp_path, run_ids):
-        # The five images of a release must come from one workflow run (the CLI image's), not from any run of the commit.
+        # The four images of a release must come from one workflow run (the CLI image's), not from any run of the commit.
         result, out, calls = self._run(tmp_path, run_ids=run_ids)
         assert result.returncode == 1 and out == {} and calls == []
         assert "single run id" in result.stderr
@@ -864,7 +862,6 @@ def _tag_images_script() -> str:
 COMPONENT_TAGS = {
     "cli": ["latest", "sha-abc1234"],
     "api": ["api-latest", "api-sha-abc1234"],
-    "worker": ["worker-latest", "worker-sha-abc1234"],
     "web": ["web-latest", "web-sha-abc1234"],
     "migrator": ["migrator-latest", "migrator-sha-abc1234"],
 }
@@ -972,19 +969,19 @@ class TestTagImagesStep:
 
         return result, read("docker.log"), read("verify.log"), read("summary.md"), digests
 
-    def test_every_digest_is_verified_then_tagged_and_the_table_lists_all_five(self, tmp_path):
+    def test_every_digest_is_verified_then_tagged_and_the_table_lists_all_four(self, tmp_path):
         result, docker_log, verify_log, summary, digests = self._run(tmp_path)
         assert result.returncode == 0, result.stderr
-        assert len(verify_log) == 5 and len(docker_log) == 5
+        assert len(verify_log) == 4 and len(docker_log) == 4
         assert all("revision=" + "f" * 40 + " runs=4242" in line for line in verify_log)
         assert [line.split()[-1] for line in docker_log] == [
             f"{IMAGE}@{digests[c]}" for c in COMPONENT_TAGS
         ]
         assert summary[0].startswith("### Verified; tagging in progress")
-        assert summary[-1] == "### All five components tagged"
+        assert summary[-1] == "### All four components tagged"
         rows = [line for line in summary if line.startswith("| ") and "Component" not in line]
         rows = [line for line in rows if not line.startswith("| ---")]
-        assert len(rows) == 5
+        assert len(rows) == 4
         for row, component in zip(rows, COMPONENT_TAGS, strict=True):
             tags = ", ".join(f"`{t}`" for t in COMPONENT_TAGS[component])
             assert row == f"| {component} | {tags} | `{digests[component]}` | yes |"
@@ -993,10 +990,10 @@ class TestTagImagesStep:
         result, docker_log, verify_log, summary, _ = self._run(tmp_path, bad="web")
         assert result.returncode == 1
         assert docker_log == [], "a tag was created although a digest did not verify"
-        assert len(verify_log) == 5, "every digest is checked so the table names all that fail"
-        assert "### NOT TAGGED: 1 of 5 digests did not verify" in summary
+        assert len(verify_log) == 4, "every digest is checked so the table names all that fail"
+        assert "### NOT TAGGED: 1 of 4 digests did not verify" in summary
         assert [line for line in summary if line.startswith("| web ")][0].endswith("| no |")
-        assert sum(line.endswith("| yes |") for line in summary) == 4
+        assert sum(line.endswith("| yes |") for line in summary) == 3
         assert "refusing to tag anything" in result.stdout + result.stderr
 
     def test_a_failure_part_way_through_tagging_still_leaves_the_record_and_no_closing_line(
@@ -1006,9 +1003,9 @@ class TestTagImagesStep:
         assert result.returncode != 0
         assert len(docker_log) == 3, "two components were tagged and the third failed"
         assert summary[0].startswith("### Verified; tagging in progress")
-        assert "### All five components tagged" not in summary
+        assert "### All four components tagged" not in summary
         rows = [line for line in summary if line.startswith("| ") and line.endswith("| yes |")]
-        assert len(rows) == 5, "the table was written before the first tag moved"
+        assert len(rows) == 4, "the table was written before the first tag moved"
 
     @staticmethod
     def _ahead(*files, ahead_by=1, status="ahead"):
@@ -1029,8 +1026,8 @@ class TestTagImagesStep:
         )
         result, docker_log, _, summary, _ = self._run(tmp_path, tip="a" * 40, compare=compare)
         assert result.returncode == 0, result.stderr + result.stdout
-        assert len(docker_log) == 5 and self._latest_moved(docker_log) == 5
-        assert summary[-1] == "### All five components tagged"
+        assert len(docker_log) == 4 and self._latest_moved(docker_log) == 4
+        assert summary[-1] == "### All four components tagged"
         assert any("changes nothing this workflow builds from" in line for line in summary)
 
     @pytest.mark.parametrize(
@@ -1052,7 +1049,7 @@ class TestTagImagesStep:
         compare = self._ahead("README.md", changed)
         result, docker_log, _, summary, _ = self._run(tmp_path, tip="a" * 40, compare=compare)
         assert result.returncode == 0, result.stderr + result.stdout
-        assert len(docker_log) == 5, "every component still gets its immutable sha tag"
+        assert len(docker_log) == 4, "every component still gets its immutable sha tag"
         assert self._latest_moved(docker_log) == 0
         for line in docker_log:
             assert "sha-abc1234" in line
@@ -1061,7 +1058,7 @@ class TestTagImagesStep:
             for line in summary
         )
         assert summary[-1].startswith("### Sha tags attached; the *-latest tags were not moved")
-        assert "### All five components tagged" not in summary
+        assert "### All four components tagged" not in summary
         assert "NOT moved" in result.stdout + result.stderr
 
     @pytest.mark.parametrize("status", ["diverged", "behind", "identical"])
@@ -1069,7 +1066,7 @@ class TestTagImagesStep:
         compare = self._ahead("README.md", status=status)
         result, docker_log, *_ = self._run(tmp_path, tip="a" * 40, compare=compare)
         assert (
-            result.returncode == 0 and len(docker_log) == 5 and self._latest_moved(docker_log) == 0
+            result.returncode == 0 and len(docker_log) == 4 and self._latest_moved(docker_log) == 0
         )
         assert f"compare status '{status}'" in result.stdout + result.stderr
 
@@ -1089,7 +1086,7 @@ class TestTagImagesStep:
         result, docker_log, *_ = self._run(
             tmp_path, tip="a" * 40, compare=self._ahead(*files, ahead_by=250)
         )
-        assert result.returncode == 0 and self._latest_moved(docker_log) == 5
+        assert result.returncode == 0 and self._latest_moved(docker_log) == 4
 
     def test_a_failed_compare_tags_nothing(self, tmp_path):
         result, docker_log, verify_log, summary, _ = self._run(
@@ -1097,7 +1094,7 @@ class TestTagImagesStep:
         )
         assert result.returncode == 1 and docker_log == []
         assert "refusing to tag anything" in result.stdout + result.stderr
-        assert not any("All five components tagged" in line for line in summary)
+        assert not any("All four components tagged" in line for line in summary)
 
     @pytest.mark.parametrize("body", ["", "not json", "[]", '{"message": "Not Found"}'])
     def test_an_answer_without_a_status_tags_nothing(self, tmp_path, body):
@@ -1136,13 +1133,13 @@ class TestTagImagesStep:
     def test_the_tip_commit_moves_the_latest_tags_too(self, tmp_path):
         result, docker_log, *_ = self._run(tmp_path)
         assert result.returncode == 0
-        assert sum("-latest" in line or f"{IMAGE}:latest" in line for line in docker_log) == 5
+        assert sum("-latest" in line or f"{IMAGE}:latest" in line for line in docker_log) == 4
 
     def test_an_unreadable_tip_tags_nothing(self, tmp_path):
         result, docker_log, verify_log, summary, _ = self._run(tmp_path, tip="")
         assert result.returncode == 1 and docker_log == []
         assert "refusing to tag anything" in result.stdout + result.stderr
-        assert not any("All five components tagged" in line for line in summary)
+        assert not any("All four components tagged" in line for line in summary)
 
     def test_the_tip_is_asked_of_the_default_branch_of_this_repository(self, tmp_path):
         self._run(tmp_path)
@@ -1154,21 +1151,21 @@ class TestTagImagesStep:
         ]
 
     def test_a_rerun_after_that_failure_tags_everything_again_without_error(self, tmp_path):
-        # imagetools create is idempotent: the second run repeats the verification and all five creates.
+        # imagetools create is idempotent: the second run repeats the verification and all four creates.
         (tmp_path / "first").mkdir()
         (tmp_path / "second").mkdir()
         first = self._run(tmp_path / "first", fail_tag_call=3)
         second = self._run(tmp_path / "second")
         assert first[0].returncode != 0
-        assert second[0].returncode == 0 and len(second[1]) == 5 and len(second[2]) == 5
-        assert second[3][-1] == "### All five components tagged"
+        assert second[0].returncode == 0 and len(second[1]) == 4 and len(second[2]) == 4
+        assert second[3][-1] == "### All four components tagged"
 
     def test_a_missing_digest_fails_before_anything_is_verified_or_tagged(self, tmp_path):
         digests = {c: f"sha256:{str(i) * 64}" for i, c in enumerate(COMPONENT_TAGS, 1)}
-        digests["worker"] = ""
+        digests["migrator"] = ""
         result, docker_log, verify_log, summary, _ = self._run(tmp_path, digests=digests)
         assert result.returncode == 1 and docker_log == [] and verify_log == [] and summary == []
-        assert "No valid digest for 'worker'" in result.stdout + result.stderr
+        assert "No valid digest for 'migrator'" in result.stdout + result.stderr
 
 
 # --- the "Prune stale SHA-tagged images" step of 370-registry-cleanup.yml ---
@@ -1318,6 +1315,30 @@ class TestPruneStep:
         assert "api-sha-ddddddd" in deleted
         assert "api-1.0.0" not in deleted
 
+    def test_the_retired_worker_family_still_ages_out_and_its_release_tags_stay(self, tmp_path):
+        # 200 no longer builds a worker image (REVIEW.md R-016, owner decision 2026-10-27), but its old tags are still
+        # on Docker Hub. The worker pattern stays in 370, so they follow the rule they always had: beyond the newest
+        # KEEP_COUNT, and unless one shares an image with a tag outside the SHA patterns, a worker-sha tag is deleted.
+        # worker-latest and every worker-<version> tag are never candidates. Nothing new is deleted by the retirement.
+        tags = [
+            *self._tags(),
+            _hub_tag("worker-sha-aaaaaaa", 0, "sha256:" + "a1" * 32),
+            _hub_tag("worker-sha-bbbbbbb", 1, "sha256:" + "b2" * 32),
+            _hub_tag(
+                "worker-sha-ccccccc", 2, "sha256:" + "c3" * 32
+            ),  # beyond KEEP_COUNT, own: pruned
+            _hub_tag(
+                "worker-sha-ddddddd", 3, "sha256:" + "d4" * 32, images=["sha256:" + "d5" * 32]
+            ),  # released: kept
+            _hub_tag("worker-latest", 0, "sha256:" + "a1" * 32),
+            _hub_tag("worker-1.0.0", 9, "sha256:" + "d4" * 32, images=["sha256:" + "d5" * 32]),
+        ]
+        result, deleted = self._run(tmp_path, tags=tags)
+        assert result.returncode == 0, result.stderr + result.stdout
+        assert sorted(deleted) == ["sha-c3", "sha-e5", "worker-sha-ccccccc"]
+        assert "keeping: worker-sha-ddddddd (shared:" in result.stdout
+        assert not {"worker-latest", "worker-1.0.0"} & set(deleted)
+
     def test_thousands_of_tags_do_not_hit_the_argument_limit(self, tmp_path):
         # cosign's referrer tags (sha256-<hex>) are never pruned and pile up; the permanent set also grows with every
         # release. Passed as one jq argument, the set passes 128 KiB (Linux) or 32 KiB (Windows) and the job ends with
@@ -1394,14 +1415,12 @@ echo "${line##* }"
 RELEASE_DIGESTS = {
     "cli": "sha256:" + "1" * 64,
     "api": "sha256:" + "2" * 64,
-    "worker": "sha256:" + "3" * 64,
     "web": "sha256:" + "4" * 64,
     "migrator": "sha256:" + "5" * 64,
 }
 RELEASE_TAGS = {
     "cli": "1.2.3",
     "api": "api-1.2.3",
-    "worker": "worker-1.2.3",
     "web": "web-1.2.3",
     "migrator": "migrator-1.2.3",
 }
@@ -1448,7 +1467,6 @@ class TestPromoteStep:
             VERSION="1.2.3",
             DIGEST_CLI=digests["cli"],
             DIGEST_API=digests["api"],
-            DIGEST_WORKER=digests["worker"],
             DIGEST_WEB=digests["web"],
             DIGEST_MIGRATOR=digests["migrator"],
         )
@@ -1459,10 +1477,10 @@ class TestPromoteStep:
         creates = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
         return result, creates, registry.read_text(encoding="utf-8").splitlines()
 
-    def test_all_five_release_tags_are_created_on_the_verified_digests(self, tmp_path):
+    def test_all_four_release_tags_are_created_on_the_verified_digests(self, tmp_path):
         result, creates, registry = self._run(tmp_path)
         assert result.returncode == 0, result.stderr + result.stdout
-        assert len(creates) == 5
+        assert len(creates) == 4
         for component, tag in RELEASE_TAGS.items():
             assert f"{IMAGE}:{tag} {RELEASE_DIGESTS[component]}" in registry, tag
         assert creates[0].endswith(f"-t {IMAGE}:1.2.3 {IMAGE}@{RELEASE_DIGESTS['cli']}")
@@ -1471,7 +1489,7 @@ class TestPromoteStep:
         done = {RELEASE_TAGS[c]: RELEASE_DIGESTS[c] for c in ("cli", "api")}
         result, creates, _ = self._run(tmp_path, existing=done)
         assert result.returncode == 0, result.stderr + result.stdout
-        assert len(creates) == 3 and not any(
+        assert len(creates) == 2 and not any(
             f"{IMAGE}:1.2.3 " in c or "api-1.2.3" in c for c in creates
         )
         assert "already points at" in result.stdout
@@ -1484,11 +1502,11 @@ class TestPromoteStep:
     def test_an_existing_tag_with_another_digest_stops_the_release_before_any_tag_is_created(
         self, tmp_path
     ):
-        clash = {RELEASE_TAGS["worker"]: "sha256:" + "9" * 64}
+        clash = {RELEASE_TAGS["web"]: "sha256:" + "9" * 64}
         result, creates, _ = self._run(tmp_path, existing=clash)
         assert result.returncode == 1
         assert creates == [], "phase 1 checks every tag before phase 2 writes any"
-        assert "worker-1.2.3 already exists" in result.stderr + result.stdout
+        assert "web-1.2.3 already exists" in result.stderr + result.stdout
         assert "a release tag is never moved" in result.stderr + result.stdout
 
     def test_a_registry_error_is_not_read_as_an_absent_tag(self, tmp_path):

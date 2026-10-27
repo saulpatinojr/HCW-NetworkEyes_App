@@ -16,7 +16,7 @@ overview, and `TODO.md` is the work queue.
 
 ## What lives where
 
-- **Product code:** `apps/network-assessment-web` (Next.js), `apps/network-assessment-api` and `apps/network-assessment-worker` (Python), the `network_assessment` package, and
+- **Product code:** `apps/network-assessment-web` (Next.js), `apps/network-assessment-api` (Python), the `network_assessment` package, and
   `packages/network-assessment-azure-engine`. Deployment is not done here: this repository only builds and publishes the
   images. A change to the image tags, the signing identity or
   the runtime environment settings changes what consumers rely on; `CLAUDE.md` explains how to record it.

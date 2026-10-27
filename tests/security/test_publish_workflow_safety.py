@@ -8,7 +8,7 @@ Defects an independent review of ``200-build-images.yml`` found by reading it, k
 * ``tag-images`` verifies that every digest is signed before it moves a tag and records one row per component
   (tags, digest, signed) in the run's step summary: nothing is written back to the repository;
 * ``310-release-version.yml`` promotes the digest ``200`` scanned and signed for the tagged commit, after
-  verifying its signature, lists the digests of all five images in the release notes, and never builds, never
+  verifying its signature, lists the digests of all four images in the release notes, and never builds, never
   pushes layers and never moves ``latest``.
 
 These are static checks of the workflow files; they do not prove a Docker Hub exchange or a registry
@@ -231,7 +231,6 @@ class TestReleasePromotesTheScannedDigest:
             "digest_api",
             "digest_migrator",
             "digest_web",
-            "digest_worker",
             "run_ids",
             "tag",
         ]
@@ -242,7 +241,6 @@ class TestReleasePromotesTheScannedDigest:
             "VERSION": "${{ steps.version.outputs.VERSION }}",
             "DIGEST_CLI": "${{ needs.verify.outputs.digest }}",
             "DIGEST_API": "${{ needs.verify.outputs.digest_api }}",
-            "DIGEST_WORKER": "${{ needs.verify.outputs.digest_worker }}",
             "DIGEST_WEB": "${{ needs.verify.outputs.digest_web }}",
             "DIGEST_MIGRATOR": "${{ needs.verify.outputs.digest_migrator }}",
         }
@@ -276,9 +274,13 @@ class TestReleasePromotesTheScannedDigest:
         header = self.text.split("name:", 1)[0]
         assert "SECOND RULESET" in header and "refs/tags/v*" in header and "Image Push" in header
         assert "Image Pull is not needed" in header
-        assert "WHICH COMMIT TO TAG" in header and "THE FIVE DIGESTS" in header
-        for tag in ("`api-X.Y.Z`", "`worker-X.Y.Z`", "`web-X.Y.Z`", "`migrator-X.Y.Z`"):
+        assert "WHICH COMMIT TO TAG" in header and "THE FOUR DIGESTS" in header
+        for tag in ("`api-X.Y.Z`", "`web-X.Y.Z`", "`migrator-X.Y.Z`"):
             assert tag in header, tag
+        # The retired worker image is explained where a maintainer reads about the tags, and no `worker-X.Y.Z`
+        # is promised any more (REVIEW.md R-016, owner decision 2026-10-27).
+        assert "THE RETIRED WORKER IMAGE" in header and "R-016" in header
+        assert "`worker-X.Y.Z`, `web-X.Y.Z`" not in header
         assert "Only the CLI image gets" not in self.text
         assert "DRY RUN" in header and "POST-CHECK" in header.upper()
 
@@ -738,7 +740,7 @@ class TestTagImagesVerifiesAndRecords:
     def test_the_digest_table_has_one_row_per_component_with_tags_digest_and_signed(self):
         assert "$GITHUB_STEP_SUMMARY" in self.script
         assert "| Component | Tags | Digest | Signed |" in self.script
-        assert 'COMPONENTS="cli api worker web migrator"' in self.script
+        assert 'COMPONENTS="cli api web migrator"' in self.script
         assert "${SIGNED[$c]}" in self.script and "${DIGESTS[$c]}" in self.script
         # The table is written on both paths: when something did not verify (before the refusal) and at the end.
         assert self.script.count("write_table ") == 2
@@ -747,7 +749,7 @@ class TestTagImagesVerifiesAndRecords:
         assert self.job["permissions"] == {"contents": "read", "id-token": "write"}
 
 
-class TestReleaseListsTheFiveDigests:
+class TestReleaseListsTheFourDigests:
     def setup_method(self):
         self.text = RELEASE.read_text(encoding="utf-8")
         self.doc = _load(RELEASE)
@@ -761,7 +763,7 @@ class TestReleaseListsTheFiveDigests:
                     return step
         raise AssertionError(f"no step named like {needle!r}")
 
-    def test_the_other_four_images_are_found_and_verified_before_any_write(self):
+    def test_the_other_three_images_are_found_and_verified_before_any_write(self):
         find = _index_of(self.job, "Find the scanned image")
         verify = _index_of(self.job, "Verify the signature")
         others = _index_of(self.job, "Find and verify the other images")
@@ -781,12 +783,11 @@ class TestReleaseListsTheFiveDigests:
             "RUN_IDS": "${{ steps.cli.outputs.builder_run_id }}",
         }
 
-    def test_the_release_notes_carry_all_five_digests_and_the_verification_command(self):
+    def test_the_release_notes_carry_all_four_digests_and_the_verification_command(self):
         body = self._step("Create GitHub Release")["with"]["body"]
         for expression in (
             "needs.verify.outputs.digest",
             "needs.verify.outputs.digest_api",
-            "needs.verify.outputs.digest_worker",
             "needs.verify.outputs.digest_web",
             "needs.verify.outputs.digest_migrator",
             "needs.verify.outputs.build_commit",
@@ -795,12 +796,19 @@ class TestReleaseListsTheFiveDigests:
         for tag in (
             "`${{ steps.version.outputs.VERSION }}`",
             "`api-${{ steps.version.outputs.VERSION }}`",
-            "`worker-${{ steps.version.outputs.VERSION }}`",
             "`web-${{ steps.version.outputs.VERSION }}`",
             "`migrator-${{ steps.version.outputs.VERSION }}`",
         ):
             assert tag in body, tag
         assert "Only the CLI image" not in body
+        # Nobody is notified when the image set changes, so the notes a deployer reads say that the worker image
+        # is gone and its service can be dropped (REVIEW.md R-016, owner decision 2026-10-27), and list no worker
+        # digest or tag. Whitespace is flattened so a re-wrapped paragraph does not break the pin.
+        flat = " ".join(body.split())
+        assert "There is no `worker` image any more." in flat
+        assert "remove that service. Nothing else in your deployment changes." in flat
+        assert "`worker-` tags of earlier builds and releases stay on Docker Hub" in flat
+        assert "digest_worker" not in body and "`worker-${{" not in body
         assert "cosign verify " in body and "cosign verify-attestation" in body
         assert ".predicate.builder.id" in body, (
             "the release notes check the builder, not only the attestation type"
@@ -808,18 +816,18 @@ class TestReleaseListsTheFiveDigests:
         assert "--certificate-identity" in body and "--certificate-oidc-issuer" in body
         assert "/.github/workflows/200-build-images.yml@refs/heads/main" in body
 
-    def test_the_dry_run_report_lists_all_five_digests_too(self):
+    def test_the_dry_run_report_lists_all_four_digests_too(self):
         step = self._step("Report what a release would promote")
         assert {k: v for k, v in step["env"].items() if k.startswith("DIGEST")} == {
             "DIGEST": "${{ steps.scanned.outputs.digest }}",
             "DIGEST_API": "${{ steps.others.outputs.digest_api }}",
-            "DIGEST_WORKER": "${{ steps.others.outputs.digest_worker }}",
             "DIGEST_WEB": "${{ steps.others.outputs.digest_web }}",
             "DIGEST_MIGRATOR": "${{ steps.others.outputs.digest_migrator }}",
         }
         assert "| Component | Tag | Digest |" in step["run"]
-        for component in ("cli", "api", "worker", "web", "migrator"):
+        for component in ("cli", "api", "web", "migrator"):
             assert f"| {component} |" in step["run"], component
+        assert "| worker |" not in step["run"] and "worker-X.Y.Z" not in step["run"]
 
     def test_the_release_stays_independent_of_any_file_a_build_commits(self):
         assert "latest-build" not in self.text and ".deployment-catalog" not in self.text
@@ -927,10 +935,12 @@ CLEANUP = WORKFLOWS / "370-registry-cleanup.yml"
 SHA_PREFIXES = {
     "cli": "sha-",
     "api": "api-sha-",
-    "worker": "worker-sha-",
     "web": "web-sha-",
     "migrator": "migrator-sha-",
 }
+#: Images 200 no longer builds, whose old ``<prefix><7 hex>`` tags are still on Docker Hub. 370 keeps their
+#: retention pattern on purpose (REVIEW.md R-016, owner decision 2026-10-27; the header of 370 says why).
+RETIRED_SHA_PREFIXES = {"worker": "worker-sha-"}
 
 
 class TestShaTagPrefixes:
@@ -955,3 +965,27 @@ class TestShaTagPrefixes:
         text = CLEANUP.read_text(encoding="utf-8")
         for key, prefix in SHA_PREFIXES.items():
             assert f'["{key}"]="^{prefix}[0-9a-f]+$"' in text, key
+
+    def test_the_retired_worker_family_is_still_aged_out_and_its_latest_tag_still_protected(self):
+        # Dropping the pattern would make every remaining worker-sha tag a permanent tag outside the SHA patterns:
+        # nothing would ever age them out, and one with no digest listed would stop the prune of ALL images (the
+        # "fail closed" check). Keeping it deletes nothing that 370 would not already have deleted.
+        text = CLEANUP.read_text(encoding="utf-8")
+        for key, prefix in RETIRED_SHA_PREFIXES.items():
+            assert f'["{key}"]="^{prefix}[0-9a-f]+$"' in text, key
+        assert 'PROTECTED_RAW="latest api-latest worker-latest web-latest migrator-latest"' in text
+        comment_lines = text.split("\non:\n", 1)[0].splitlines()
+        header = " ".join(" ".join(line.lstrip("#").split()) for line in comment_lines)
+        assert "The retired worker image" in header and "R-016" in header
+        assert "deletes nothing that this workflow would not already have deleted" in header
+
+    def test_200_builds_no_image_with_a_retired_prefix(self):
+        doc = _load(BUILD)
+        matrix = doc["jobs"]["build-images"]["strategy"]["matrix"]["include"]
+        built = {row["sha_prefix"] for row in matrix}
+        web_tags = chr(10).join(
+            str(step.get("with", {}).get("tags", "")) for step in doc["jobs"]["build-web"]["steps"]
+        )
+        for key, prefix in RETIRED_SHA_PREFIXES.items():
+            assert prefix not in built and f"prefix={prefix}" not in web_tags, key
+            assert key not in {row["key"] for row in matrix}

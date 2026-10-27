@@ -11,7 +11,7 @@ What is pinned here and why:
 * The `image-scan` job (TODO.md T-737) builds the migrator and web runner images in every pull request and scans
   them with the same Trivy digest as the local script; `.trivyignore.yaml` suppresses only what it names, by rule
   id and path, with the reason written beside it.
-* The four Dockerfiles keep the properties the lint fixes gave them, so a later edit cannot undo them without a
+* The three Dockerfiles keep the properties the lint fixes gave them, so a later edit cannot undo them without a
   test failing: digests on every base image, numeric `USER`, exec-form `CMD`/`ENTRYPOINT`/`HEALTHCHECK`, and
   `pipefail` wherever a `RUN` has a pipe.
 """
@@ -480,13 +480,14 @@ def test_hadolint_fails_on_every_severity() -> None:
 # --- Dockerfiles ---
 
 
-def test_the_four_dockerfiles_are_tracked() -> None:
+def test_the_three_dockerfiles_are_tracked() -> None:
+    # The worker's Dockerfile is gone on purpose (REVIEW.md R-016, owner decision 2026-10-27): the list is exact, so
+    # one that comes back, or a new one nobody listed here, fails.
     names = sorted(p.relative_to(REPO_ROOT).as_posix() for p in tracked_dockerfiles())
     assert names == [
         "Dockerfile",
         "apps/network-assessment-api/Dockerfile",
         "apps/network-assessment-web/Dockerfile",
-        "apps/network-assessment-worker/Dockerfile",
     ]
 
 

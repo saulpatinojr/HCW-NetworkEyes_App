@@ -1,7 +1,7 @@
 /**
  * Image-update rules — pure functions, no I/O.
  *
- * A deployment runs immutable images (`img-ne-appliance-app:{web,api,worker}-sha-<7>`)
+ * A deployment runs immutable images (`img-ne-appliance-app:{web,api,migrator}-sha-<7>`)
  * and only changes them when whoever deploys it rolls out a newer image set.
  * Nothing inside the containers updates itself.
  *

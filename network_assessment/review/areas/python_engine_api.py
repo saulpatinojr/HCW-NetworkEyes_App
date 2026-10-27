@@ -1,7 +1,7 @@
 """Findings for the ``python-engine-api`` area (Requirement 2 correctness).
 
 This is a *verify-then-close-gaps* record for the ``network_assessment/`` core, the
-``apps/network-assessment-api`` FastAPI service, and the ``apps/network-assessment-worker`` decision. The
+``apps/network-assessment-api`` FastAPI service, and the ``apps/network-assessment-worker`` retirement. The
 audit against Requirement 2 confirmed:
 
   * **2.1 — `/intake` honesty (verified compliant).** ``apps/network-assessment-api/main.py``
@@ -17,17 +17,18 @@ audit against Requirement 2 confirmed:
     ``200`` on an error path. Recorded as a ``LOW`` residual gap that this task
     remediates.
 
-  * **2.5 — worker retirement decision (retire).** The ``apps/network-assessment-worker``
+  * **2.5 — worker retirement decision (retire; carried out 2026-10-27).** The ``apps/network-assessment-worker``
     placeholder was a run-once script that stubbed the publish job against a
     hardcoded ``sample-engagement``. The ``apps/network-assessment-api`` ``POST /publish``
     endpoint now does that job for real (real deliverables -> private
     per-engagement blob container -> portal generation -> TTL-capped SAS URL)
     and its docstring states it supersedes the placeholder. The decision is
-    therefore **retire** (not retained with a responsibility). The worker is
-    still wired into the Azure and AWS Terraform ``compute`` modules, the
-    ``apps/network-assessment-worker/Dockerfile`` container audit, and the README, so the
-    removal is a coordinated change carried as the plan action rather than
-    performed here. Recorded as a ``LOW`` finding.
+    therefore **retire** (not retained with a responsibility). The owner
+    approved it on 2026-10-27 (``REVIEW.md`` R-016) and it is done in this
+    repository: the directory, its Dockerfile, its build job and its image are removed.
+    What remains is outside this repository: whoever deploys the images drops the
+    worker service (the container the Azure and AWS ``compute`` modules ran). Recorded
+    as a ``LOW`` finding that stays until that step is taken.
 
 These records are consumed by the consolidation step (spec task 14.1).
 """
@@ -70,13 +71,14 @@ def python_engine_api_findings() -> list[Finding]:
             area=_AREA,
             severity=Severity.LOW,
             proposed_action=(
-                "Retire apps/network-assessment-worker: the run-once placeholder (hardcoded "
-                "sample-engagement) is superseded by the apps/network-assessment-api POST "
-                "/publish endpoint, which performs the real publish job. Remove "
-                "the worker service and its Dockerfile, and drop the worker "
-                "container from the Azure and AWS Terraform compute modules "
-                "(and the README service list) as a coordinated change; the "
-                "worker is not retained with any responsibility."
+                "Retired (owner decision 2026-10-27, REVIEW.md R-016): the run-once "
+                "placeholder apps/network-assessment-worker (hardcoded sample-engagement) "
+                "is superseded by the apps/network-assessment-api POST /publish endpoint, "
+                "which performs the real publish job. Its directory, Dockerfile, build job "
+                "and image are removed from this repository. Remaining step, outside it: "
+                "whoever deploys the images removes the worker service (the container in "
+                "the Azure and AWS compute modules); the worker is not retained with any "
+                "responsibility."
             ),
             dedup_key="python-engine-api:worker-retirement",
             subject="apps/network-assessment-worker",

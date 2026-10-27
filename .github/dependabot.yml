@@ -1,6 +1,6 @@
 # Dependabot — automated dependency updates
 # Covers: Python packages (uv — pyproject.toml + uv.lock), GitHub Actions,
-# Docker base images (every `FROM` in all four Dockerfiles, including the
+# Docker base images (every `FROM` in all three Dockerfiles, including the
 # `FROM ghcr.io/astral-sh/uv:… AS uv` stage the Python images copy uv from —
 # Dependabot does not read `COPY --from=<image>`), npm (network-assessment-web). Minor/patch
 # updates are grouped per ecosystem.
@@ -9,7 +9,7 @@
 #   - Python: weekly, grouped by ecosystem, auto-assign to saulpatinojr
 #   - Actions: weekly, grouped — keeps CI action SHAs current
 #   - Docker: weekly — keeps base image digests current in /, apps/network-assessment-api,
-#     apps/network-assessment-worker, apps/network-assessment-web
+#     apps/network-assessment-web
 #
 # Cooldown: the uv, npm and github-actions entries set `cooldown.default-days: 7`, so a release must be 7 days old before
 # Dependabot opens a version-update pull request for it (Dependabot's own default, with no `cooldown` key, is 3 days). The
@@ -94,13 +94,12 @@ updates:
           - "*"
 
   # Docker — every Dockerfile, not only the root one. Dependabot's docker
-  # updater scans the listed directories only, so the api/worker/web images
+  # updater scans the listed directories only, so the api/web images
   # were previously unwatched and their pinned base digests went stale.
   - package-ecosystem: docker
     directories:
       - "/"
       - "/apps/network-assessment-api"
-      - "/apps/network-assessment-worker"
       - "/apps/network-assessment-web"
     schedule:
       interval: weekly

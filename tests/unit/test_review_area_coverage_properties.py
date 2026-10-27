@@ -17,7 +17,7 @@ consolidated plan still represents every one of those subjects — deduplication
 severity ordering, and re-consolidation never drop an area or a subject. The
 generative test builds an arbitrary finding set that includes at least the fixed
 expected subjects (the nine areas, the eight AWS module subjects, the 14 workflow
-subjects, the four Dockerfiles + compose), sprinkles in arbitrary extra findings
+subjects, the three Dockerfiles + compose), sprinkles in arbitrary extra findings
 plus deliberate ``dedup_key`` collisions and orderings, consolidates, and asserts
 every expected area appears in some entry's ``referenced_areas`` and every
 expected subject appears in some entry's ``subjects``.
@@ -63,13 +63,12 @@ _EXPECTED_WORKFLOW_SUBJECTS = frozenset(
     f".github/workflows/{workflow}" for workflow in _ALL_WORKFLOWS
 )
 
-# The four service Dockerfiles plus the compose file (Requirement 7.1).
+# The three service Dockerfiles plus the compose file (Requirement 7.1).
 _EXPECTED_CONTAINER_SUBJECTS = frozenset(
     {
         "Dockerfile",
         "apps/network-assessment-api/Dockerfile",
         "apps/network-assessment-web/Dockerfile",
-        "apps/network-assessment-worker/Dockerfile",
         "docker-compose.yml",
     }
 )
@@ -184,7 +183,7 @@ def _covering_findings(draw: st.DrawFn) -> list[Finding]:
             )
         )
 
-    # The four Dockerfiles + compose under the containers-packaging area.
+    # The three Dockerfiles + compose under the containers-packaging area.
     for subject in sorted(_EXPECTED_CONTAINER_SUBJECTS):
         findings.append(
             _covering_finding(
@@ -262,7 +261,7 @@ def test_property2_consolidation_preserves_subject_coverage(
     """Feature: production-readiness, Property 2: Area coverage is complete.
 
     For any finding set that records every fixed expected subject (the eight AWS
-    module subjects, the 14 workflow subjects, and the four Dockerfiles + compose)
+    module subjects, the 14 workflow subjects, and the three Dockerfiles + compose)
     plus arbitrary noise, dedup collisions, and orderings, the consolidated plan
     still represents every one of those subjects across its entries' ``subjects``.
     """
@@ -315,7 +314,7 @@ def test_property2_real_plan_covers_all_core_workflows() -> None:
 def test_property2_real_plan_covers_dockerfiles_and_compose() -> None:
     """Feature: production-readiness, Property 2: Area coverage is complete.
 
-    The real plan represents the four service Dockerfiles and
+    The real plan represents the three service Dockerfiles and
     ``docker-compose.yml`` (Requirement 7.1) as subjects.
     """
     tokens = _subject_tokens(build_remediation_plan())

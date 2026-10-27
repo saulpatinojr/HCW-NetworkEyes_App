@@ -67,8 +67,7 @@ someone, check `REVIEW.md`.
 ```
 apps/
 ├── network-assessment-web/          Next.js web platform (8-step journey, encyclopedia, copilot)
-├── network-assessment-api/          FastAPI — metrics, chat, reports, discovery routers
-└── network-assessment-worker/       Python background worker — discovery + report generation
+└── network-assessment-api/          FastAPI — metrics, chat, reports, discovery, and publishing (`POST /publish`) routers
 packages/             network-assessment-azure-engine — the Azure engine (model, typed rules, classifier,
                       Resource Graph normalizer, renderers); a uv workspace member the network_assessment package consumes
 network_assessment/   Python package, installed as the `network-assessment` CLI (the old `cna` command still works)
@@ -97,19 +96,20 @@ images and depends on nothing but itself and its own Docker Hub repository. It d
 repository and notifies no one. Whoever runs the images (a person or a separate project) takes them from Docker Hub.
 
 - **Where.** One public Docker Hub repository, `docker.io/hybridcloudworks/img-ne-appliance-app` (the owner's
-  `img-<short name>-<job>-<type>` convention). Tags: `<component>-sha-<7>` for `api`, `worker`, `web` and `migrator`,
+  `img-<short name>-<job>-<type>` convention). Tags: `<component>-sha-<7>` for `api`, `web` and `migrator`,
   `sha-<7>` for the CLI image, floating `*-latest` (moved only while the built commit is still current: the tip of the default branch, or an
   ancestor of it with nothing between them that `200` builds from; otherwise only the sha tags are attached), and for a release the version tags `X.Y.Z` on the CLI image and `api-X.Y.Z`,
-  `worker-X.Y.Z`, `web-X.Y.Z` and `migrator-X.Y.Z` on the others.
+  `web-X.Y.Z` and `migrator-X.Y.Z` on the others. There is no `worker` image any more (retired on 2026-10-27, `REVIEW.md` R-016):
+  its old `worker-*` tags stay on Docker Hub and are no longer updated, and a deployment that still runs a worker service can drop it.
 - **How an image is published.** `200-build-images.yml` pushes each image by digest, has Docker Scout scan it, signs it
-  with cosign (keyless, under the workflow's own GitHub identity) and attaches the build provenance; only when all five
+  with cosign (keyless, under the workflow's own GitHub identity) and attaches the build provenance; only when all four
   images pass does it attach the tags. It logs in to Docker Hub through Docker's OIDC connection (the repository
   variable `DOCKERHUB_CONNECTION`), so no Docker Hub password is stored for it. The record of a build is a table in
   the step summary of the run (one row per component: tags, digest, signed); it commits nothing and notifies no other
   repository.
-- **Releases.** A `v*.*.*` tag runs `310-release-version.yml`, which gives the five images `200`
+- **Releases.** A `v*.*.*` tag runs `310-release-version.yml`, which gives the four images `200`
   already built and signed for that commit, or for the last build before it when only documentation, tests or another
-  workflow changed since, their version tags (it checks all five first and creates none if one already exists with
+  workflow changed since, their version tags (it checks all four first and creates none if one already exists with
   another digest), and lists each version tag, its build-time tag and its digest in the release notes. A tag on a commit that
   changed a file `200` builds from fails and names it and the nearest built commit. The Docker Hub connection needs a
   separate tag-only rule (`refs/tags/v*`, Image Push) for this workflow before the first release (`TODO.md` T-728; the connection has not been read from here, so it is
@@ -118,7 +118,7 @@ repository and notifies no one. Whoever runs the images (a person or a separate 
   `main`, leave **dry_run** ticked (the default). It finds and verifies the image of the latest build, prints what it
   would promote and the commit it was built from, and creates nothing. (2) If the summary looks right, tag that
   commit. Bash or PowerShell, in a clone of this repository (use the commit shown in the summary for `<sha>`):
-  `git tag vX.Y.Z <sha>` then `git push origin vX.Y.Z`. (3) The tag run adds the five version tags and creates the GitHub
+  `git tag vX.Y.Z <sha>` then `git push origin vX.Y.Z`. (3) The tag run adds the four version tags and creates the GitHub
   Release. `TODO.md` T-728 has the one-time Docker Hub steps and what to do when a run fails.
 
 The project started as a single repository that held the core until 2026-09-18. Its full history is imported here
@@ -153,7 +153,7 @@ alone does not check it; `scripts/ci/verify_signed_digest.sh` does.
 Pass `--use-signed-timestamps` if you want the signed timestamp from the timestamp authority; without it cosign 3 uses the
 transparency-log time. The identity string must match exactly: renaming or
 transferring the repository, or renaming the workflow file or the default branch, changes it (the change is announced in the
-release notes). `scripts/ci/verify_signed_digest.sh` does the same checks and also binds the digest to a commit. The five
+release notes). `scripts/ci/verify_signed_digest.sh` does the same checks and also binds the digest to a commit. The four
 digests of each build are in the step summary of its `200-build-images.yml` run, and those of a release are in its release
 notes.
 

@@ -129,7 +129,7 @@ dev = [
 # dependencies and extras (TODO.md T-702). Groups are never installed by
 # `pip install .`; the Dockerfiles export them from the lock explicitly.
 [dependency-groups]
-# The build backend the three Python Dockerfiles install into the *builder*
+# The build backend the two Python Dockerfiles (root and API) install into the *builder*
 # stage before building the `network-assessment` wheel with `--no-build-isolation`, so the
 # backend itself is pinned and hash-checked instead of fetched unpinned by pip's
 # isolated build environment. Mirrors [build-system].requires — keep both in
@@ -138,13 +138,6 @@ dev = [
 build = [
     "setuptools>=84.2.1",
     "wheel",
-]
-# apps/network-assessment-worker/main.py imports exactly these two SDKs and does not install
-# the network_assessment package, so its image resolves them from the same lock as the CLI and
-# API images (same versions everywhere) instead of an unpinned `pip install`.
-worker = [
-    "azure-identity>=1.26.0",
-    "azure-storage-blob>=12.31.0",
 ]
 
 # uv.lock is the single resolution every Python image installs from
@@ -207,7 +200,6 @@ ignore = [
     "S603",   # subprocess call (needed for diagram export)
     "S607",   # partial executable path (needed for diagram export)
     "N818",   # exception name without Error suffix — intentional (NetworkAssessmentPartialResult, ObservedStateViolation, etc.)
-    "S108",   # /tmp usage — acceptable in containerised CLI/worker images
     "S311",   # pseudo-random — used for jitter/throttle, not cryptography
 ]
 

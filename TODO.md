@@ -19,7 +19,7 @@ claimed anew). Rows checked since: T-728 and T-730 on 2026-10-24; T-721, T-722, 
 | [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-419 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements + appliance migration | T-501 – T-509 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
-| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-737 |
+| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-739 |
 
 ---
 
@@ -1960,9 +1960,14 @@ on `NETWORK_ASSESSMENT_APPLIANCE_CLOUD` / the credential platform and add the S3
 exists) so an AWS deployment can upload documents and publish portals.
 
 ### T-710 — Align the storage-account variable name (ARCH-003)
-The API reads `AZURE_STORAGE_ACCOUNT_NAME` (`apps/network-assessment-api/main.py`); a deployment that sets
-`NETWORK_ASSESSMENT_STORAGE_ACCOUNT_NAME` instead gets a 503 from in-app portal publish. Pick one name in
-`.env.example` and record it under `Changed` in `CHANGELOG.md`.
+- **Status:** Done 2026-10-27, by the retirement of the worker (`REVIEW.md` R-016, `TODO.md` T-738). The only reader of
+  `NETWORK_ASSESSMENT_STORAGE_ACCOUNT_NAME` was `apps/network-assessment-worker`; it is deleted and the name is gone from
+  `.env.example`, which now lists the one name, `AZURE_STORAGE_ACCOUNT_NAME`, that the API and the web tier read. The
+  removal is recorded under `Changed` in `CHANGELOG.md`. A deployment that still sets the old name gets no error: the
+  name now does nothing.
+- **Original description:** The API reads `AZURE_STORAGE_ACCOUNT_NAME` (`apps/network-assessment-api/main.py`); a
+  deployment that sets `NETWORK_ASSESSMENT_STORAGE_ACCOUNT_NAME` instead gets a 503 from in-app portal publish. Pick one
+  name in `.env.example` and record it under `Changed` in `CHANGELOG.md`.
 
 ### T-711 — Regenerate the runtime environment inventory (DOC-003, DOC-002, PROD-003)
 `.env.example` declares ~11 variables nothing reads and omits ~12 that are read (including the
@@ -2110,7 +2115,8 @@ modal now carry the roles table of `REFACTOR_APP.md` section 13 (`CHANGELOG.md` 
 Prisma's `spClientId`/`spSecretEnc` and `AZURE_CLIENT_SECRET` are gone (`CHANGELOG.md` `[Unreleased]`;
 `tests/security/test_no_client_secret.py`, `tests/security/test_forbidden_env.py`). Open:
 - Deployment note (outside this repository): an Azure deployment creates a user-assigned managed
-  identity, attaches it to the api, worker and web Container Apps and sets `AZURE_CLIENT_ID` on each; it
+  identity, attaches it to the api and web Container Apps (and to the worker only until it is removed, T-738) and sets
+  `AZURE_CLIENT_ID` on each; it
   must not pass any `AZURE_CLIENT_SECRET` secret or set any variable of
   `network_assessment.core.auth.FORBIDDEN_CREDENTIAL_ENV` (the api refuses to start). An AWS deployment
   keeps the STS AssumeRole path (`aws_secret_access_key` on the credential form stays, encrypted at rest).
@@ -2252,9 +2258,9 @@ Nothing publishes until the owner flips the variables below. Open, in order:
      the first) to the same connection: subject claim
      `repo:saulpatinojr@34853639/HCW-NetworkEyes_App@1173847343:ref:refs/tags/v*`, resource
      `hybridcloudworks/img-ne-appliance-app`, scope **Image Push** only (Image Pull is not needed: the repository is
-     public and `310` reads it anonymously). Image Push is push access to the repository, not a limit to five tag
-     names: `310` is written to add only the five version tags (`X.Y.Z`, `api-X.Y.Z`, `worker-X.Y.Z`, `web-X.Y.Z`,
-     `migrator-X.Y.Z`) to digests `200` scanned and signed, and what limits who can run it is the GitHub tag ruleset
+     public and `310` reads it anonymously). Image Push is push access to the repository, not a limit to four tag
+     names: `310` is written to add only the four version tags (`X.Y.Z`, `api-X.Y.Z`, `web-X.Y.Z`,
+     `migrator-X.Y.Z`; the worker image was retired on 2026-10-27, T-738) to digests `200` scanned and signed, and what limits who can run it is the GitHub tag ruleset
      (see "Who can mint the Docker token through a tag" below) and review of the workflow file. Copy the connection id it
      shows.
   3. PowerShell, which reads the id from the prompt so nothing is retyped into the command:
@@ -2301,7 +2307,7 @@ Nothing publishes until the owner flips the variables below. Open, in order:
   Home for the claims Docker received. Docker's guide:
   <https://docs.docker.com/security/authentication/oidc-connections/troubleshoot>. Then close the tickets that
   waited on the connection and set `DOCKERHUB_ENABLED`. What the dry run cannot prove, and the first real build
-  therefore must: the wiring of `tag-images` (its digest table and the verify-before-tag gate), the hand-over of the five
+  therefore must: the wiring of `tag-images` (its digest table and the verify-before-tag gate), the hand-over of the four
   real digests between jobs, the revision label that `docker/metadata-action` puts on the real images, and `310`. None
   of these has run yet.
   Update 2026-10-25: the first real build tagged the CLI image `3762d27`, not `sha-3762d27` (empty `sha_prefix`, now `sha-`); the stray tag can be deleted by hand on Docker Hub, no `370` pattern matches it.
@@ -2322,15 +2328,15 @@ Nothing publishes until the owner flips the variables below. Open, in order:
   `git push origin vX.Y.Z`). `310` accepts a tag on a documentation-only commit after a build, because nothing `200`
   builds from changed since. A tag on a commit that changed a file in `200`'s `on.push.paths` after the last build fails
   with the file names: tag the commit the dry run names instead (the message names that commit). (3) The step `Promote the digests to the
-  release tags` gives the five images their version tags (`X.Y.Z` on the CLI image, `<component>-X.Y.Z` on the others)
-  in two phases: phase 1 checks all five and creates nothing if any tag already exists with another digest (the message
+  release tags` gives the four images their version tags (`X.Y.Z` on the CLI image, `<component>-X.Y.Z` on the others)
+  in two phases: phase 1 checks all four and creates nothing if any tag already exists with another digest (the message
   names the tag and both digests and says that no release tag was created); phase 2 creates the missing ones and reads
   each back. A re-run skips tags that are already correct, so it is safe. If a post-check fails ("After creating it,
   `<component>-X.Y.Z` resolves to ... expected ..."), that tag exists with the wrong digest: delete it on Docker Hub
   (Repository, Tags) and re-run; a re-run refuses to move an existing tag, and so does it if the tag was created by
   something else. The release notes list each version tag, its build-time tag and its digest; the version tags are
   permanent, and `370` keeps the sha tags that share an image with them. A release made before this change tagged
-  only the CLI image, so the other four of its images can still age out.
+  only the CLI image, so the other images of that release can still age out.
 - **Who can mint the Docker token through a tag.** The ruleset "Protect release tags"
   (<https://github.com/saulpatinojr/HCW-NetworkEyes_App/rules/25778333>, read again with
   `gh api repos/saulpatinojr/HCW-NetworkEyes_App/rulesets/25778333` on 2026-10-25, last updated 2026-10-25 10:09
@@ -2473,3 +2479,10 @@ live `Protect main` ruleset (read back 2026-10-25). Still open:
 (3) the first real run of the Docker Scout step in `200-build-images.yml` is the only place Scout itself is exercised, and it cannot be run
 without Docker credentials, so Trivy is the proxy; (4) findings in the base image that have no fix are not covered (`--ignore-unfixed`, like the
 Scout gate's `only-fixed`) and move with the pinned `node:24-alpine` digest.
+
+### T-738 — Note for deployers: the worker image is retired
+Since the owner's decision of 2026-10-27 (`REVIEW.md` R-016, answer `retire`) this repository no longer builds or publishes the `worker` image: `apps/network-assessment-worker` is deleted, a build publishes four images (`cli`, `api`, `web`, `migrator`) and a release gives four version tags. **If your deployment runs a service from the `worker` image (`img-ne-appliance-app:worker-latest`, `worker-sha-<7>` or `worker-<version>`), remove that service; nothing else changes.** The old `worker-` tags stay on Docker Hub, `worker-latest` no longer moves, and the next release's notes say the same (the template is in `310-release-version.yml`). This repository cannot check other people's deployments and notifies no one; the note is in `CHANGELOG.md` for them.
+Open, for the owner: (1) when the old `worker-` tags are not wanted any more, delete them by hand on Docker Hub (repository, Tags), then remove the `worker` pattern and `worker-latest` from `370-registry-cleanup.yml` (it keeps them on purpose so the old sha tags still age out; its header says why) and the matching pins in `tests/security/test_publish_workflow_safety.py` and `tests/security/test_release_scripts_behaviour.py`. (2) The release-notes paragraph about the worker (the bold "There is no `worker` image any more." in the `Create GitHub Release` body of `310-release-version.yml`) is text that goes into every release from now on, and its pins are in `tests/security/test_publish_workflow_safety.py`. Removal trigger: remove the paragraph and its pins after the first release that ships without a worker image has been out for one release cycle. (3) In `apps/network-assessment-web` the two comments that named the worker (`lib/image-update-rules.ts`, the diagram page) were reworded on 2026-10-27, comments only; the one place left is a `worker-latest` row in `lib/image-update-rules.test.ts`, which only tests how a tag is read and stays true.
+
+### T-739 — Harden the build-trigger guard (follow-up to T-738)
+`tests/security/test_image_build_trigger_covers_copies.py` (added with the `packages/**` build trigger on 2026-10-27) is deliberately narrower than it could be. Known limits: (1) the CLI image's `COPY . .` (last stage of the root `Dockerfile`) is on the guard's allow-list, so a NEW top-level directory of code that the path filter of `200-build-images.yml` does not name, and that no explicit `COPY` names, would start no build and would not be found; (2) the guard recognises only `docker/build-push-action` steps in the workflow and `COPY`/`ADD` in a Dockerfile, so a `RUN --mount=type=bind,source=...` in a Dockerfile, or a `run: docker buildx build ...` step in the workflow, would escape it. Suggested hardening: every tracked top-level path must be covered by the filter, excluded by `.dockerignore`, or listed in a small written "does not change the image" list (README.md, LICENSE, NOTICE, docker-compose.yml, docs/ and so on, each with its reason); and the test refuses `--mount=type=bind` in the Dockerfiles and a `docker build` or `docker buildx build` command in a `run:` step. Not built now on purpose: it would fail on every new top-level file until its author classifies it, which is noisy, and the narrower guard already closes the gap that was found (a `COPY` the filter lacks). Narrowing the whole-context copy (`REVIEW.md` R-017) would remove limit 1.

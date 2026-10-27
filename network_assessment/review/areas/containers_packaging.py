@@ -1,9 +1,10 @@
 """Findings for the ``containers-packaging`` area (Requirement 7).
 
-This is a *verify-then-close-gaps* record for the four service Dockerfiles
-(root ``Dockerfile``, ``apps/network-assessment-api``, ``apps/network-assessment-web``, ``apps/network-assessment-worker``),
+This is a *verify-then-close-gaps* record for the three service Dockerfiles
+(root ``Dockerfile``, ``apps/network-assessment-api``, ``apps/network-assessment-web``),
 ``docker-compose.yml``, and the ``network-assessment`` CLI packaging. The audit against
-Requirement 7 confirmed:
+Requirement 7 confirmed (it covered a fourth image, ``apps/network-assessment-worker``, until the owner retired it on
+2026-10-27, ``REVIEW.md`` R-016: its Dockerfile, and with it its non-root, build and lint records, are gone):
 
   * **7.4 — non-root final ``USER`` (verified compliant).** Every service
     Dockerfile ends on a non-root user (``network-assessment`` uid/gid 1001 for the Python
@@ -20,9 +21,9 @@ Requirement 7 confirmed:
     added to the compose file and a ``MEDIUM`` finding records the gap that was
     closed.
   * **7.1 — container best practices (gaps closed here).** The root
-    ``Dockerfile`` already carries a ``HEALTHCHECK``; the ``network-assessment-api``,
-    ``network-assessment-worker``, and ``network-assessment-web`` images did not. Healthchecks were added to
-    each and a ``LOW`` finding records the residual best-practice gap.
+    ``Dockerfile`` already carries a ``HEALTHCHECK``; the ``network-assessment-api``
+    and ``network-assessment-web`` images did not (nor did the worker image, since retired). Healthchecks were
+    added to each and a ``LOW`` finding records the residual best-practice gap.
 
 **Fail-hard on an unrecordable root-user finding (7.5).**
 :func:`record_root_user_finding` is the mandatory recording operation: if it
@@ -51,13 +52,12 @@ _AREA = "containers-packaging"
 # verification record so no duplicate escalation is emitted here.
 _R006 = "R-006"
 
-# The four service Dockerfiles this area owns, keyed by the subject label used
+# The three service Dockerfiles this area owns, keyed by the subject label used
 # on the recorded findings. Paths are repo-relative.
 SERVICE_DOCKERFILES: dict[str, str] = {
     "Dockerfile": "Dockerfile",
     "apps/network-assessment-api/Dockerfile": "apps/network-assessment-api/Dockerfile",
     "apps/network-assessment-web/Dockerfile": "apps/network-assessment-web/Dockerfile",
-    "apps/network-assessment-worker/Dockerfile": "apps/network-assessment-worker/Dockerfile",
 }
 
 # A ``USER`` whose resolved name/uid is one of these is the root account. An
@@ -208,19 +208,18 @@ def _audit_dockerfiles() -> list[_DockerfileAudit]:
     """The audited effective-USER result for each service Dockerfile.
 
     The results are the values observed during task 11.1's audit and are the
-    inputs the recorded findings below reflect. Every image resolved to a
+    inputs the recorded findings below reflect (the retired worker image's row
+    was removed with its Dockerfile). Every image resolved to a
     non-root final ``USER``:
 
       * ``Dockerfile`` → ``network-assessment``      (uid/gid 1001)
       * ``apps/network-assessment-api/Dockerfile`` → ``network-assessment``  (uid/gid 1001)
       * ``apps/network-assessment-web/Dockerfile`` → ``nextjs`` (uid 1001)
-      * ``apps/network-assessment-worker/Dockerfile`` → ``network-assessment`` (uid/gid 1001)
     """
     audited = {
         "Dockerfile": "network-assessment",
         "apps/network-assessment-api/Dockerfile": "network-assessment",
         "apps/network-assessment-web/Dockerfile": "nextjs",
-        "apps/network-assessment-worker/Dockerfile": "network-assessment",
     }
     return [_DockerfileAudit(subject=subject, user=user) for subject, user in audited.items()]
 
@@ -290,13 +289,13 @@ def containers_packaging_findings(
             area=_AREA,
             severity=Severity.LOW,
             proposed_action=(
-                "The root Dockerfile carries a HEALTHCHECK but the network-assessment-api, "
-                "network-assessment-web, and network-assessment-worker images did not. Add a HEALTHCHECK to "
+                "The root Dockerfile carries a HEALTHCHECK but the network-assessment-api "
+                "and network-assessment-web images did not. Add a HEALTHCHECK to "
                 "each so orchestrators (ECS/AKS/Container Apps) can detect an "
                 "unhealthy container."
             ),
             dedup_key="containers-packaging:service-healthchecks",
-            subject="apps/network-assessment-api/Dockerfile,apps/network-assessment-web/Dockerfile,apps/network-assessment-worker/Dockerfile",
+            subject="apps/network-assessment-api/Dockerfile,apps/network-assessment-web/Dockerfile",
         )
     )
 
@@ -341,7 +340,9 @@ class VerificationResults:
 # Python 3.14). The wheel built with ``pip wheel``, installed into a clean venv,
 # and ``network-assessment --help`` ran (exit 0). All four images built and each inspected
 # image ran as its non-root user. ``hadolint`` was not installed, so its step is
-# recorded as a coverage gap rather than a pass.
+# recorded as a coverage gap rather than a pass. The worker image, the fourth of them, was
+# retired on 2026-10-27 (REVIEW.md R-016) and its rows are removed; the rows of the other
+# three are unchanged.
 _OBSERVED = VerificationResults(
     wheel_build_ok=True,
     clean_install_ok=True,
@@ -351,13 +352,11 @@ _OBSERVED = VerificationResults(
         "Dockerfile": True,
         "apps/network-assessment-api/Dockerfile": True,
         "apps/network-assessment-web/Dockerfile": True,
-        "apps/network-assessment-worker/Dockerfile": True,
     },
     inspected_users={
         "Dockerfile": "network-assessment",
         "apps/network-assessment-api/Dockerfile": "network-assessment",
         "apps/network-assessment-web/Dockerfile": "nextjs",
-        "apps/network-assessment-worker/Dockerfile": "network-assessment",
     },
     hadolint_available=False,
 )
@@ -410,13 +409,13 @@ def _docker_build_finding(results: VerificationResults) -> Finding:
             severity=Severity.LOW,
             proposed_action=(
                 "Coverage gap (7.1): Docker was not available in the review "
-                "environment, so `docker build` could not be run for the four "
+                "environment, so `docker build` could not be run for the three "
                 "service Dockerfiles. Run `docker build` per image in an "
                 "environment with a working Docker daemon to confirm each image "
                 "builds reproducibly; this step was not a silent pass."
             ),
             dedup_key="containers-packaging:docker-build-coverage-gap",
-            subject="Dockerfile,apps/network-assessment-api/Dockerfile,apps/network-assessment-web/Dockerfile,apps/network-assessment-worker/Dockerfile",
+            subject="Dockerfile,apps/network-assessment-api/Dockerfile,apps/network-assessment-web/Dockerfile",
         )
     failed = sorted(s for s, ok in results.docker_build_ok.items() if not ok)
     not_attempted = sorted(set(SERVICE_DOCKERFILES) - set(results.docker_build_ok))
@@ -475,7 +474,7 @@ def _built_image_non_root_finding(results: VerificationResults) -> Finding:
                 "available to confirm the built artifact matches the source."
             ),
             dedup_key="containers-packaging:built-image-user-coverage-gap",
-            subject="Dockerfile,apps/network-assessment-api/Dockerfile,apps/network-assessment-web/Dockerfile,apps/network-assessment-worker/Dockerfile",
+            subject="Dockerfile,apps/network-assessment-api/Dockerfile,apps/network-assessment-web/Dockerfile",
         )
     root_images = sorted(
         subject for subject, user in results.inspected_users.items() if is_root_user(user)
@@ -518,23 +517,23 @@ def _hadolint_finding(results: VerificationResults) -> Finding:
             severity=Severity.LOW,
             proposed_action=(
                 "Coverage gap: hadolint was not available in the review "
-                "environment, so the four service Dockerfiles were not linted by "
+                "environment, so the three service Dockerfiles were not linted by "
                 "hadolint. Install hadolint (or run it in CI) and lint each "
                 "Dockerfile; this step was recorded as a gap, not a silent pass."
             ),
             dedup_key="containers-packaging:hadolint-coverage-gap",
-            subject="Dockerfile,apps/network-assessment-api/Dockerfile,apps/network-assessment-web/Dockerfile,apps/network-assessment-worker/Dockerfile",
+            subject="Dockerfile,apps/network-assessment-api/Dockerfile,apps/network-assessment-web/Dockerfile",
         )
     return Finding(
         area=_AREA,
         severity=Severity.INFORMATIONAL,
         proposed_action=(
             "Verified compliant: hadolint reported no blocking findings across "
-            "the four service Dockerfiles. Keep hadolint in the container-build "
+            "the three service Dockerfiles. Keep hadolint in the container-build "
             "pipeline and guard against regression."
         ),
         dedup_key="containers-packaging:hadolint-verified",
-        subject="Dockerfile,apps/network-assessment-api/Dockerfile,apps/network-assessment-web/Dockerfile,apps/network-assessment-worker/Dockerfile",
+        subject="Dockerfile,apps/network-assessment-api/Dockerfile,apps/network-assessment-web/Dockerfile",
     )
 
 
@@ -576,7 +575,7 @@ def containers_packaging_verify_findings(
         into a clean virtualenv, and runs ``network-assessment --help`` — the most portable
         check and the behavioural core of Requirement 7.3.
       * **7.1 — ``docker build`` per image (verified).** Every service image
-        (root, ``network-assessment-api``, ``network-assessment-web``, ``network-assessment-worker``) builds on the local
+        (root, ``network-assessment-api``, ``network-assessment-web``) builds on the local
         Docker daemon. Build-only: **no image is pushed to a live registry.**
       * **7.4 — non-root on the built image.** Reuses :func:`is_root_user` on the
         runtime ``USER`` observed via ``docker inspect`` so the built artifact —

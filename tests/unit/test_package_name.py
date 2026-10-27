@@ -1,7 +1,7 @@
 """The old short name is gone from the package, the apps, the engine, the role names and the labels.
 
 Rename steps 1 to 4 (owner order 2026-10-27): the package is `network_assessment`, the apps are
-`network-assessment-web|api|worker`, the engine package is `network-assessment-azure-engine`, the role names start with
+`network-assessment-web|api` (the worker app was retired on 2026-10-27, REVIEW.md R-016), the engine package is `network-assessment-azure-engine`, the role names start with
 `NetworkAssessment-`, and the product is shown as NetworkEyes. The old command `cna` still works for now, as an alias.
 The old names are built from pieces, so this file does not contain them.
 """
@@ -106,9 +106,12 @@ def test_the_distribution_and_both_commands_point_at_the_same_function() -> None
 
 
 def test_the_apps_use_their_new_names() -> None:
+    # `worker` stays in this loop only for the old name: the old directory must not come back. The worker app itself
+    # is retired (REVIEW.md R-016, owner decision 2026-10-27), so its new name is not expected to exist.
     for app in ("web", "api", "worker"):
-        assert (REPO_ROOT / "apps" / f"network-assessment-{app}").is_dir()
         assert not (REPO_ROOT / "apps" / f"{_SHORT}-{app}").exists()
+    for app in ("web", "api"):
+        assert (REPO_ROOT / "apps" / f"network-assessment-{app}").is_dir()
 
 
 def test_no_tracked_file_or_file_name_uses_an_old_app_name() -> None:

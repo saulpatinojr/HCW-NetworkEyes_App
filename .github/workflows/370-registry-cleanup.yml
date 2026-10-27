@@ -9,8 +9,9 @@ name: "370 · Docker Hub Registry Cleanup"
 # Nothing is read from the repository: the newest build is always among the newest KEEP_COUNT tags of its
 # component, so a rollback source needs no extra protection.
 #
-# Release tags. 310 gives each of the five images of a released build a version tag: `X.Y.Z` (the CLI image) and
-# `api-X.Y.Z`, `worker-X.Y.Z`, `web-X.Y.Z`, `migrator-X.Y.Z`. They match none of the SHA patterns below, so they are
+# Release tags. 310 gives each of the four images of a released build a version tag: `X.Y.Z` (the CLI image) and
+# `api-X.Y.Z`, `web-X.Y.Z`, `migrator-X.Y.Z` (a release made before the worker image was retired also has
+# `worker-X.Y.Z`, and that tag stays). They match none of the SHA patterns below, so they are
 # never listed for deletion, and a `<component>-sha-<7>` tag is also KEPT when an image of it is shared with any
 # tag outside the SHA patterns (the version tags, the `*-latest` tags). The comparison uses the digests Docker Hub
 # lists for each tag (the tag's own `digest` and every `images[].digest`); a SHA tag that lists no digest at all is
@@ -24,7 +25,18 @@ name: "370 · Docker Hub Registry Cleanup"
 # may remove a digest no tag points to (whether and when it does was not checked against its documentation), and
 # cosign signatures are referrers of the digest, so the pin could stop resolving. A consumer that needs an image of
 # an unreleased build should copy it to its own registry at the time it adopts it, or raise KEEP_COUNT here (the cost
-# is Docker Hub storage). A release made before 310 tagged all five images covers only its CLI image.
+# is Docker Hub storage). A release made before 310 tagged every image covers only its CLI image.
+#
+# The retired worker image (REVIEW.md R-016, owner decision 2026-10-27). 200 no longer builds it, so no new
+# `worker-sha-<7>` tag appears, and the `worker` pattern below STAYS on purpose so the old tags keep following the
+# rule they always followed: beyond the newest KEEP_COUNT, and unless one shares an image with `worker-latest` or a
+# `worker-X.Y.Z` tag, a `worker-sha-<7>` tag is deleted. Nothing new arrives to push the newest KEEP_COUNT out, so
+# those stay, and `worker-latest` and every `worker-X.Y.Z` tag are never touched. This change deletes nothing that
+# this workflow would not already have deleted. The alternative, dropping the pattern, would turn every remaining
+# `worker-sha-<7>` tag into a permanent tag outside the SHA patterns: nothing would ever age them out, and one such
+# tag for which Docker Hub lists no digest would make the "fail closed" check below stop the prune of ALL images.
+# Remove the `worker` pattern and `worker-latest` from this file only after the old `worker-` tags are gone from
+# Docker Hub (by hand, by the owner).
 #
 # Not verified: Docker Hub's semantics of `DELETE .../tags/<tag>/` when another tag points at the same manifest. The
 # current Hub API reference (https://docs.docker.com/reference/api/hub/latest/, OpenAPI file
@@ -99,7 +111,7 @@ jobs:
 
           KEEP="${KEEP_COUNT}"
 
-          # Tags that must never be deleted regardless of age.
+          # Tags that must never be deleted regardless of age (`worker-latest` belongs to the retired worker image).
           PROTECTED_RAW="latest api-latest worker-latest web-latest migrator-latest"
 
           echo "Protected: $PROTECTED_RAW"
@@ -151,6 +163,7 @@ jobs:
           declare -A COMPONENT_PATTERNS=(
             ["cli"]="^sha-[0-9a-f]+$"
             ["api"]="^api-sha-[0-9a-f]+$"
+            # Retired image: no new tag appears, the old ones still age out (see the header).
             ["worker"]="^worker-sha-[0-9a-f]+$"
             ["web"]="^web-sha-[0-9a-f]+$"
             ["migrator"]="^migrator-sha-[0-9a-f]+$"

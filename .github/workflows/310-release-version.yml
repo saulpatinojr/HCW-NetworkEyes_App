@@ -11,18 +11,23 @@
 # applies before it moves `latest`. So this workflow never builds, never pushes layers and never touches `latest`
 # (200 owns it, after the scan).
 #
-# THE FIVE DIGESTS. The release notes list the digest of all five images of that build (CLI, api, worker, web,
+# THE FOUR DIGESTS. The release notes list the digest of all four images of that build (CLI, api, web,
 # migrator), each resolved from its own `sha-<7>` tag and verified the same way as the CLI digest
-# (scripts/ci/release_digests.sh). The release job then gives each of the five a version tag: `X.Y.Z` for the CLI
-# image and `api-X.Y.Z`, `worker-X.Y.Z`, `web-X.Y.Z`, `migrator-X.Y.Z` for the others. Those tags match none of
+# (scripts/ci/release_digests.sh). The release job then gives each of the four a version tag: `X.Y.Z` for the CLI
+# image and `api-X.Y.Z`, `web-X.Y.Z`, `migrator-X.Y.Z` for the others. Those tags match none of
 # 370's SHA patterns, so they are never pruned and 370 keeps the sha tags that share an image with them: a released
 # image stays pullable by tag and by digest. Hub tag names are plain names; the OIDC ruleset for `refs/tags/v*`
-# below is about the GitHub ref of this run, and its one Image Push scope on the repository covers all five tags
+# below is about the GitHub ref of this run, and its one Image Push scope on the repository covers all four tags
 # (the release job has no other registry credential than that login). Every tag is checked before any is created,
 # and an existing tag with another digest stops the release (fail closed); a re-run skips tags already correct.
 # Small known gap: between that check and the creation another writer could create the same tag with another digest;
 # the post-check then fails the job, but the tag has been moved. Docker Hub's immutable tags, if the plan offers
 # them, would close it; that was not checked.
+#
+# THE RETIRED WORKER IMAGE (REVIEW.md R-016, owner decision 2026-10-27). 200 no longer builds a worker image, so no
+# `worker-sha-<7>` tag exists for a new build: this workflow neither looks for one nor creates `worker-X.Y.Z`. The
+# release notes below say so, because nobody is notified when the image set changes: whoever deploys the images reads
+# them. Releases made before this change keep their `worker-X.Y.Z` tags, and 370 never prunes those.
 #
 # WHICH COMMIT TO TAG. A commit that changes only documentation, tests or another workflow touches nothing 200 builds
 # from, so the path filter gives it no 200 run. The search therefore walks back from the tagged commit to the nearest
@@ -116,7 +121,6 @@ jobs:
       run_ids: ${{ steps.scanned.outputs.run_ids }}
       tag: ${{ steps.scanned.outputs.tag }}
       digest_api: ${{ steps.others.outputs.digest_api }}
-      digest_worker: ${{ steps.others.outputs.digest_worker }}
       digest_web: ${{ steps.others.outputs.digest_web }}
       digest_migrator: ${{ steps.others.outputs.digest_migrator }}
 
@@ -163,14 +167,14 @@ jobs:
           EMIT_BUILDER_RUN_ID: "true"
         run: bash scripts/ci/verify_signed_digest.sh "${REGISTRY}/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}@${DIGEST}"
 
-      # The other four images of the same build: each must exist under its own `sha-<7>` tag (a missing one means an
+      # The other three images of the same build: each must exist under its own `sha-<7>` tag (a missing one means an
       # incomplete build and stops the release) and must verify like the CLI digest above. No `||`, no `if`: the
       # tests pin that, as for the step above.
       - name: Find and verify the other images of that build
         id: others
         env:
           BUILD_COMMIT: ${{ steps.scanned.outputs.build_commit }}
-          # The ONE run that built the CLI image, not every run of the commit: the five images of a release come
+          # The ONE run that built the CLI image, not every run of the commit: the four images of a release come
           # from the same build even if the commit was built twice.
           RUN_IDS: ${{ steps.cli.outputs.builder_run_id }}
         run: bash scripts/ci/release_digests.sh
@@ -182,7 +186,6 @@ jobs:
           BUILD_COMMIT: ${{ steps.scanned.outputs.build_commit }}
           SHA_TAG: ${{ steps.scanned.outputs.tag }}
           DIGEST_API: ${{ steps.others.outputs.digest_api }}
-          DIGEST_WORKER: ${{ steps.others.outputs.digest_worker }}
           DIGEST_WEB: ${{ steps.others.outputs.digest_web }}
           DIGEST_MIGRATOR: ${{ steps.others.outputs.digest_migrator }}
         run: |
@@ -192,14 +195,13 @@ jobs:
             echo "- head of main: \`${GITHUB_SHA}\`"
             echo "- image found: \`${REGISTRY}/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}:${SHA_TAG}\`"
             echo "- built from commit: \`${BUILD_COMMIT}\`"
-            echo "- signature, provenance and revision label of all five images: verified"
-            echo "- a pushed \`vX.Y.Z\` tag would add the tags \`X.Y.Z\` (CLI), \`api-X.Y.Z\`, \`worker-X.Y.Z\`, \`web-X.Y.Z\` and \`migrator-X.Y.Z\`"
+            echo "- signature, provenance and revision label of all four images: verified"
+            echo "- a pushed \`vX.Y.Z\` tag would add the tags \`X.Y.Z\` (CLI), \`api-X.Y.Z\`, \`web-X.Y.Z\` and \`migrator-X.Y.Z\`"
             echo ""
             echo "| Component | Tag | Digest |"
             echo "| --- | --- | --- |"
             echo "| cli | \`${SHA_TAG}\` | \`${DIGEST}\` |"
             echo "| api | \`api-${SHA_TAG}\` | \`${DIGEST_API}\` |"
-            echo "| worker | \`worker-${SHA_TAG}\` | \`${DIGEST_WORKER}\` |"
             echo "| web | \`web-${SHA_TAG}\` | \`${DIGEST_WEB}\` |"
             echo "| migrator | \`migrator-${SHA_TAG}\` | \`${DIGEST_MIGRATOR}\` |"
           } | tee -a "$GITHUB_STEP_SUMMARY"
@@ -254,8 +256,8 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ vars.DOCKERHUB_NAMESPACE }}
 
-      # Version tags for all five images of the verified build: `X.Y.Z` for the CLI image and `<component>-X.Y.Z`
-      # for api, worker, web and migrator. They are outside the SHA patterns, so 370 never prunes them and keeps
+      # Version tags for all four images of the verified build: `X.Y.Z` for the CLI image and `<component>-X.Y.Z`
+      # for api, web and migrator. They are outside the SHA patterns, so 370 never prunes them and keeps
       # the sha tags that share an image with them. Phase 1 checks every tag before anything is written, so a
       # tag that already points at another digest stops the release before it creates any tag; phase 2 creates the
       # missing ones and reads each back. A re-run after a partial failure repeats phase 1, skips what is done
@@ -266,7 +268,6 @@ jobs:
           VERSION: ${{ steps.version.outputs.VERSION }}
           DIGEST_CLI: ${{ needs.verify.outputs.digest }}
           DIGEST_API: ${{ needs.verify.outputs.digest_api }}
-          DIGEST_WORKER: ${{ needs.verify.outputs.digest_worker }}
           DIGEST_WEB: ${{ needs.verify.outputs.digest_web }}
           DIGEST_MIGRATOR: ${{ needs.verify.outputs.digest_migrator }}
         run: |
@@ -275,14 +276,14 @@ jobs:
           source scripts/ci/registry_digest.sh
           IMAGE="${REGISTRY}/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}"
           declare -A DIGESTS=(
-            [cli]="$DIGEST_CLI" [api]="$DIGEST_API" [worker]="$DIGEST_WORKER"
+            [cli]="$DIGEST_CLI" [api]="$DIGEST_API"
             [web]="$DIGEST_WEB" [migrator]="$DIGEST_MIGRATOR"
           )
           declare -A TAGS=(
-            [cli]="${VERSION}" [api]="api-${VERSION}" [worker]="worker-${VERSION}"
+            [cli]="${VERSION}" [api]="api-${VERSION}"
             [web]="web-${VERSION}" [migrator]="migrator-${VERSION}"
           )
-          COMPONENTS="cli api worker web migrator"
+          COMPONENTS="cli api web migrator"
           for c in $COMPONENTS; do
             if ! [[ "${DIGESTS[$c]}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
               echo "::error::No valid digest for '${c}' (got '${DIGESTS[$c]}'); refusing to create any release tag."
@@ -354,7 +355,7 @@ jobs:
 
             ### Images in this release
 
-            All five images were built from commit `${{ needs.verify.outputs.build_commit }}` by `200-build-images.yml`. Each digest below was
+            All four images were built from commit `${{ needs.verify.outputs.build_commit }}` by `200-build-images.yml`. Each digest below was
             checked before this release was created: signed and attested by that workflow (cosign, keyless), built by one of its runs for that
             commit, and carrying that commit as its `org.opencontainers.image.revision` label. Each image has a version tag that
             `370-registry-cleanup.yml` never prunes. Pull by digest and verify the signature before you run an image.
@@ -363,9 +364,13 @@ jobs:
             | --- | --- | --- | --- |
             | cli | `${{ steps.version.outputs.VERSION }}` | `${{ needs.verify.outputs.tag }}` | `${{ needs.verify.outputs.digest }}` |
             | api | `api-${{ steps.version.outputs.VERSION }}` | `api-${{ needs.verify.outputs.tag }}` | `${{ needs.verify.outputs.digest_api }}` |
-            | worker | `worker-${{ steps.version.outputs.VERSION }}` | `worker-${{ needs.verify.outputs.tag }}` | `${{ needs.verify.outputs.digest_worker }}` |
             | web | `web-${{ steps.version.outputs.VERSION }}` | `web-${{ needs.verify.outputs.tag }}` | `${{ needs.verify.outputs.digest_web }}` |
             | migrator | `migrator-${{ steps.version.outputs.VERSION }}` | `migrator-${{ needs.verify.outputs.tag }}` | `${{ needs.verify.outputs.digest_migrator }}` |
+
+            **There is no `worker` image any more.** It was a placeholder that the API's `POST /publish` endpoint replaced, and the image
+            could not even start. `200-build-images.yml` no longer builds or publishes it (owner decision 2026-10-27), so this release has no
+            `worker-` version tag and no worker digest. **If your deployment still runs a worker service (the container that ran the `worker`
+            image), remove that service. Nothing else in your deployment changes.** The `worker-` tags of earlier builds and releases stay on Docker Hub.
 
             Registry retention: the version tags are permanent. The build-time `sha` tags are pruned after the newest 10 builds per
             component, except those that share an image with a version tag, so a released image stays pullable by tag and by digest.
