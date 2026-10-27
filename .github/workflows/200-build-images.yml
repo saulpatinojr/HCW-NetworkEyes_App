@@ -58,6 +58,13 @@ name: "200 · Build Container Images"
 # The worker image (apps/network-assessment-worker) is retired (owner decision 2026-10-27, REVIEW.md R-016): the
 # directory, its Dockerfile and its build job are gone, so a build publishes four images, not five. The `worker-*`
 # tags it published earlier stay on Docker Hub; 370 still ages the old `worker-sha-<7>` tags out (see its header).
+#
+# The path filter below must name every repository path an image COPYs in, or a commit that changes only that path
+# starts no build (an engine-only commit under packages/ used to be one: no image carried it, and 310 would have
+# accepted a tag on it, because it reads this same list). tests/security/test_image_build_trigger_covers_copies.py
+# derives those paths from the Dockerfiles this workflow builds and fails when one is missing. The one blanket
+# exception, the CLI image's `COPY . .`, is written down there with its reason. This filter applies to `push` only:
+# the workflow has no pull_request trigger, and workflow_dispatch takes no path filter.
 
 on:
   push:
@@ -69,6 +76,7 @@ on:
       - apps/network-assessment-api/**
       - apps/network-assessment-web/**
       - network_assessment/**
+      - packages/**  # the CLI and API Dockerfiles COPY the engine package from here (owner decision 2026-10-27)
       - scripts/drawio-headless.sh
       - scripts/ci/sign_image.sh
       - pyproject.toml
