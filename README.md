@@ -38,8 +38,8 @@ This repository keeps four required documents plus `CLAUDE.md`, and two *optiona
 working documents that are removed when their work ships (`REFACTOR_APP.md`, the refactoring plan, and
 `CNA-0.90-updates.md`). That makes seven root documents at most; `scripts/validate_documentation_model.py`
 enforces the list. The community files GitHub reads (`SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, the pull request template and the issue forms) live in
-[`.github/`](.github), not at the root, and the validator allows exactly those. Everything else lives in the
-[GitHub Wiki](https://github.com/saulpatinojr/HCW-NetworkEyes_App/wiki).
+[`.github/`](.github), not at the root, and the validator allows exactly those. Everything else has no destination yet: the GitHub Wiki that held it was deleted on 2026-10-27, and where long-form
+documentation lives now is an open decision (`REVIEW.md`, R-031).
 
 | Document | Contains |
 |---|---|
@@ -50,7 +50,6 @@ enforces the list. The community files GitHub reads (`SECURITY.md`, `CONTRIBUTIN
 | [`REFACTOR_APP.md`](REFACTOR_APP.md) | The owner-approved refactoring plan this repository executes (HCW App-to-AddOn initiative, 2026-10): change sets A–K, acceptance criteria, validation commands |
 | [`CLAUDE.md`](CLAUDE.md) | Rules for AI coding agents: what this repository is, the image contract, and the conventions agents get wrong |
 | [`CNA-0.90-updates.md`](CNA-0.90-updates.md) | *Optional, temporary* — the one working-document exception to the four required docs: the 0.9.0 pre-demo review, cleanup record, polish plan, and the 2026-08-28 dev rebuild/deployment record (§5); retired when 0.9.0 ships |
-| [GitHub Wiki](https://github.com/saulpatinojr/HCW-NetworkEyes_App/wiki) | Architecture, ADRs, runbooks, workflow reference, security posture, operating notes |
 
 If you are picking up work on this repository, start with `TODO.md`. If you are waiting on
 someone, check `REVIEW.md`.
@@ -217,8 +216,8 @@ Configuration comes from three places, in this order of authority:
 `.env.example` at the repository root is the complete inventory of the runtime environment
 contract — every variable the images read, each with a one-line description and which side
 (the deployment or local `.env`) supplies it.
-`apps/cna-web/.env.example` covers the web application specifically. The Wiki's **Secrets
-Reference** explains each value in full.
+`apps/cna-web/.env.example` covers the web application specifically. Each value is explained by the comment
+next to it.
 
 ---
 
@@ -235,11 +234,11 @@ licence file for it and has not verified the statement (`REVIEW.md`, R-020). The
 
 ## Repository conventions
 
-- **Four documents plus `CLAUDE.md`, one wiki.** `README.md`, `CHANGELOG.md`, `REVIEW.md`,
+- **Four documents plus `CLAUDE.md`.** `README.md`, `CHANGELOG.md`, `REVIEW.md`,
   `TODO.md`, and `CLAUDE.md` (agent instructions) are the only markdown files in the repository, apart
   from the two optional temporary documents named in "Documentation map" (`REFACTOR_APP.md`, `CNA-0.90-updates.md`) and the
   community files in `.github/`.
-  Long-form documentation goes to the Wiki. Content determines destination, not filename.
+  Long-form documentation has no destination since the wiki was deleted (`REVIEW.md`, R-031).
 - **Image contract changes are recorded, never implied.** Any change to the image tag scheme, the
   signed-digest record, or the runtime environment contract
   (`CNA_AI_MODE`, `CNA_APPLIANCE_CLOUD`, …) is recorded under `Changed` in `CHANGELOG.md` and in the release notes,
