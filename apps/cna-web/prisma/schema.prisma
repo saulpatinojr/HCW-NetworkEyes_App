@@ -1,4 +1,4 @@
-// CNA Platform — Prisma schema
+// NetworkEyes — Prisma schema
 // PostgreSQL 16 via Azure Flexible Server (private, VNet-integrated)
 // Run:  npx prisma db push   (dev)
 //       npx prisma migrate deploy   (prod/CI)

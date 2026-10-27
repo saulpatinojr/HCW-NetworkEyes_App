@@ -62,8 +62,8 @@ def _finding(rule_id: str, severity: str, cost: float | None = None) -> Finding:
             )
         ],
         recommendations=[
-            FindingRecommendation(source="CNA Platform", text=f"Remediate {rule_id} step 1"),
-            FindingRecommendation(source="CNA Platform", text=f"Remediate {rule_id} step 2"),
+            FindingRecommendation(source="NetworkEyes", text=f"Remediate {rule_id} step 1"),
+            FindingRecommendation(source="NetworkEyes", text=f"Remediate {rule_id} step 2"),
         ],
     )
 

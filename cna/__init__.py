@@ -1,4 +1,4 @@
-"""CNA — Cloud Network Assessment Platform.
+"""NetworkEyes — Cloud Network Assessment.
 
 The version is derived from the installed package metadata (pyproject.toml
 is the single source of truth). The literal fallback covers running from a

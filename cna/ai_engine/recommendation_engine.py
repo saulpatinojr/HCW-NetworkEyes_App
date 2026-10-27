@@ -224,7 +224,7 @@ class RecommendationEngine:
             rule_id,
             [
                 FindingRecommendation(
-                    source="CNA Platform",
+                    source="NetworkEyes",
                     text="Consult the relevant AWS or Azure Well-Architected Framework guidance "
                     "for this finding type. MCP server was unavailable during enrichment.",
                     reference_url="",

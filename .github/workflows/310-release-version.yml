@@ -342,7 +342,7 @@ jobs:
         with:
           generate_release_notes: true
           body: |
-            ## CNA Platform ${{ github.ref_name }}
+            ## NetworkEyes ${{ github.ref_name }}
 
             Docker image: `${{ env.REGISTRY }}/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}:${{ steps.version.outputs.VERSION }}`
             (digest `${{ needs.verify.outputs.digest }}`: the image `200-build-images.yml` built, scanned and signed from commit `${{ needs.verify.outputs.build_commit }}`)

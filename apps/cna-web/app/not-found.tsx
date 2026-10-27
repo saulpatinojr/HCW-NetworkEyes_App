@@ -5,7 +5,7 @@ import Link from "next/link";
 // (non-member) targets, so the copy is deliberately non-enumerating: it does not
 // reveal whether the resource exists, only that it is unavailable to this user.
 export const metadata = {
-  title: "Not found — CNA Platform",
+  title: "Not found — NetworkEyes",
 };
 
 export default function NotFound() {

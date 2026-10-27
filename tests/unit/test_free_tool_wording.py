@@ -549,7 +549,7 @@ class TestDockerfilesAndPrompts:
 
     def test_the_label_pattern_lets_the_real_labels_through(self) -> None:
         label = (
-            'LABEL org.opencontainers.image.title="CNA Platform" '
+            'LABEL org.opencontainers.image.title="NetworkEyes" '
             'org.opencontainers.image.description="Cloud Network Assessment CLI" '
             'org.opencontainers.image.licenses="Apache-2.0"'
         )

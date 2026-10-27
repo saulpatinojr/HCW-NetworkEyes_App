@@ -256,7 +256,7 @@ export async function generateComprehensiveReport(
     `**Organization:** ${ctx.clientOrg}  `,
     `**Engagement:** ${ctx.engagementName}  `,
     `**Date:** ${date}  `,
-    `**Prepared by:** Network Eyes  `,
+    `**Prepared by:** NetworkEyes  `,
     `**Classification:** Confidential`,
     "",
     "> This assessment was generated from live-discovered topology and analysis findings. Content flagged [VERIFY] or [REVIEW REQUIRED] must be validated by the engagement team before the report is shared.",

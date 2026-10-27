@@ -126,7 +126,7 @@ CMD ["python", "-m", "cna_azure_network_engine.edition"]
 FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS final-appliance
 
 ARG CNA_VERSION=dev
-LABEL org.opencontainers.image.title="CNA Platform" \
+LABEL org.opencontainers.image.title="NetworkEyes" \
       org.opencontainers.image.description="Cloud Network Assessment CLI" \
       org.opencontainers.image.version="${CNA_VERSION}" \
       org.opencontainers.image.source="https://github.com/saulpatinojr/HCW-NetworkEyes_App" \

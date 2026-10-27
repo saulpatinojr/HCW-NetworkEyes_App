@@ -27,8 +27,8 @@ licences. They are not copied into this repository.
 
 Names and logo that are NOT covered by the Apache License
 
-The names "Hybrid Cloud Works", "NetworkEyes" and "CNA Platform", and the
-Hybrid Cloud Works logo.
+The names "Hybrid Cloud Works" and "NetworkEyes", and the Hybrid Cloud Works
+logo.
   Files:   the logo is in these three files (the names have no file of their
            own; they appear in the documents and on the screens):
            apps/cna-web/public/hcw-logo-black.png

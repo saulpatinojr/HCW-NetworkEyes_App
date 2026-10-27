@@ -1,4 +1,4 @@
-"""CNA platform exception taxonomy.
+"""NetworkEyes exception taxonomy.
 
 Closes TODO_PhaseA: No Error Taxonomy.
 

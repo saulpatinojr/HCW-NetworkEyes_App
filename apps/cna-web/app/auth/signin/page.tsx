@@ -47,7 +47,7 @@ export default function SignInPage() {
       </div>
 
       <p className="mt-6 text-xs text-navy-400 dark:text-navy-300">
-        CNA Platform · Restricted access
+        NetworkEyes · Restricted access
       </p>
     </div>
   );

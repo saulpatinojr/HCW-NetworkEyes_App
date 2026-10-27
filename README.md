@@ -1,4 +1,4 @@
-# HCW NetworkEyes App — the Cloud Network Assessment (CNA) platform
+# HCW NetworkEyes App — Cloud Network Assessment
 
 [![CI](https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/workflows/300-test-codebase.yml/badge.svg)](https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/workflows/300-test-codebase.yml)
 [![Release](https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/workflows/310-release-version.yml/badge.svg)](https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/workflows/310-release-version.yml)
@@ -16,7 +16,7 @@ finding names the fact it came from. A free, upload-only version that needs no c
 image is published. NetworkEyes is a free tool for followers of Hybrid Cloud Works, shared through GitHub. There is no
 paid edition.
 
-This repository is the **product** of the Cloud Network Assessment platform: the single home
+This repository is the **product** of NetworkEyes, a Cloud Network Assessment tool: the single home
 of the application code and of the pipeline that builds and publishes its container images. It
 is the NetworkEyes App of the HCW App-to-AddOn initiative: `REFACTOR_APP.md` is its refactoring
 plan and [`HCW-NetworkEyes_AddOn`](https://github.com/saulpatinojr/HCW-NetworkEyes_AddOn) is
@@ -24,7 +24,7 @@ its lab build. It stands alone: it builds, signs and publishes its own container
 (`docker.io/hybridcloudworks/img-ne-appliance-app`), deploys nothing and notifies no one; see
 [Publishing the images](#publishing-the-images).
 
-A CNA-branded, multi-user web platform for cloud network assessments across AWS and Azure.
+A multi-user web app for cloud network assessments across AWS and Azure.
 Analysts run network discoveries, AI-powered analysis, and generate presentation-ready
 deliverables including an encyclopedia-grade network report. Users share deliverables through
 a time-limited authenticated portal. The platform deploys as three containerized services behind a
@@ -227,7 +227,7 @@ Reference** explains each value in full.
 The code in this repository and the container images built from it are licensed under the
 [Apache License, Version 2.0](LICENSE). The image label `org.opencontainers.image.licenses` says `Apache-2.0`. The
 [`NOTICE`](NOTICE) file lists what the Apache licence does not cover: the Aeonik typeface, and the names "Hybrid Cloud
-Works", "NetworkEyes" and "CNA Platform", and the Hybrid Cloud Works logo (section 6 of the licence grants no permission
+Works" and "NetworkEyes", and the Hybrid Cloud Works logo (section 6 of the licence grants no permission
 to use them, except for reasonable and customary use in describing the origin of the Work and reproducing the content of
 `NOTICE`). For the typeface the owner states that no separate licence is required (2026-10-25); this repository holds no
 licence file for it and has not verified the statement (`REVIEW.md`, R-020). The copyright holder is Hybrid Cloud Works
