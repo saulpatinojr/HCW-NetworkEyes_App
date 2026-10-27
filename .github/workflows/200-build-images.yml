@@ -13,7 +13,7 @@ name: "200 · Build Container Images"
 #
 # Publish order (scan before tag). Every image is pushed to Docker Hub **by
 # digest only** (no tag), scanned by Docker Scout at that digest, and only when
-# all five images have passed does the `tag-images` job attach the immutable
+# all four images have passed does the `tag-images` job attach the immutable
 # `*-sha-<7>` and floating `*-latest` tags. A failed scan therefore never moves
 # a tag; the untagged digest it leaves behind is inert (no tag resolves to it;
 # whether and when Docker Hub deletes such a manifest was not checked against its
@@ -21,10 +21,10 @@ name: "200 · Build Container Images"
 # `tag-images` writes to the run's step summary (one row per component: tags, digest, signed yes/no); the
 # 310 release notes repeat the digests. Nothing is written back to the repository.
 #
-# Tagging is NOT atomic and a re-run is the recovery. `tag-images` verifies all five digests, writes the table
+# Tagging is NOT atomic and a re-run is the recovery. `tag-images` verifies all four digests, writes the table
 # (heading: "Verified; tagging in progress"), then moves the tags one component at a time. If it fails or is
 # cancelled part-way, some components carry the new tags and some still the old ones, and the summary shows the
-# table without the closing "All five components tagged" line. Recovery: re-run the failed `tag-images` job
+# table without the closing "All four components tagged" line. Recovery: re-run the failed `tag-images` job
 # (Actions, Re-run failed jobs; the build jobs and their outputs are kept). It verifies every digest again and then
 # repeats `imagetools create`, which gives a tag the digest it already has without error, so nothing is duplicated.
 # Do not re-run the whole workflow for this: that rebuilds everything under a new run id.
@@ -54,6 +54,10 @@ name: "200 · Build Container Images"
 # (`runDetails.builder.id`) when the version is left unset, which made the first rehearsal (run 40238480162) refuse
 # to attest: "Provenance builder.id '' does not name this run". Moving to v1 is a change to all those consumers
 # together (a new cosign type and predicate path), not to this file alone.
+#
+# The worker image (apps/network-assessment-worker) is retired (owner decision 2026-10-27, REVIEW.md R-016): the
+# directory, its Dockerfile and its build job are gone, so a build publishes four images, not five. The `worker-*`
+# tags it published earlier stay on Docker Hub; 370 still ages the old `worker-sha-<7>` tags out (see its header).
 
 on:
   push:
@@ -63,7 +67,6 @@ on:
       - Dockerfile
       - .dockerignore
       - apps/network-assessment-api/**
-      - apps/network-assessment-worker/**
       - apps/network-assessment-web/**
       - network_assessment/**
       - scripts/drawio-headless.sh
@@ -86,7 +89,7 @@ on:
         default: false
 
 # Never cancel an in-flight build. Tagging in the final `tag-images` job is not
-# atomic (the check that nothing moves unless all five digests verify happens before
+# atomic (the check that nothing moves unless all four digests verify happens before
 # the first tag, but the tags then move one component at a time), so a cancellation while that
 # job is mid-loop would leave a partial tagged set on Docker Hub (e.g. `api-latest` moved,
 # `web-latest` not) that a consumer following the `*-latest` tags would deploy. See "Tagging is NOT
@@ -126,13 +129,13 @@ env:
 permissions: {}
 
 jobs:
-  # CLI, API, and Worker share an identical build shape (multi-stage image built
+  # CLI and API share an identical build shape (multi-stage image built
   # from the repository root context, no extra validation) so they run as one
   # matrix. Web is separate below because it adds npm audit, a second
   # (migrator) target, and a smoke test.
   #
   # Each matrix leg publishes its digest and tag list under its own output key
-  # (`cli`, `api`, `worker`); a leg leaves the other keys unset, so the job-level
+  # (`cli`, `api`); a leg leaves the other keys unset, so the job-level
   # outputs below carry one value per image. `tag-images` re-validates every
   # digest before it touches a tag.
   build-images:
@@ -148,10 +151,8 @@ jobs:
     outputs:
       digest_cli: ${{ steps.digest.outputs.cli }}
       digest_api: ${{ steps.digest.outputs.api }}
-      digest_worker: ${{ steps.digest.outputs.worker }}
       tags_cli: ${{ steps.digest.outputs.tags_cli }}
       tags_api: ${{ steps.digest.outputs.tags_api }}
-      tags_worker: ${{ steps.digest.outputs.tags_worker }}
     strategy:
       fail-fast: false
       matrix:
@@ -166,11 +167,6 @@ jobs:
             file: apps/network-assessment-api/Dockerfile
             raw_tag: api-latest
             sha_prefix: api-sha-
-          - name: Worker
-            key: worker
-            file: apps/network-assessment-worker/Dockerfile
-            raw_tag: worker-latest
-            sha_prefix: worker-sha-
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -332,7 +328,7 @@ jobs:
           cosign-release: ${{ env.COSIGN_VERSION }}
 
       # Tag lists here are handed to `tag-images` and applied only after every
-      # image has passed its scan (see the CLI/API/Worker job above).
+      # image has passed its scan (see the CLI/API job above).
       - name: Extract metadata for Web
         id: meta_web
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
@@ -380,7 +376,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Scout by digest — see the comment on the CLI/API/Worker Scout step
+      # Scout by digest — see the comment on the CLI/API Scout step
       # above: no tag exists yet, and a floating-tag reference could resolve
       # against a stale locally-cached image instead of the one just pushed.
       - name: Docker Scout — fail on fixable critical/high CVEs (Web)
@@ -451,7 +447,7 @@ jobs:
           echo "Smoke test passed (status=$STATUS)"
 
       # Both digests have now passed Scout and web its smoke test; sign them by
-      # digest (scripts/ci/sign_image.sh) — same gate as the CLI/API/Worker job.
+      # digest (scripts/ci/sign_image.sh) — same gate as the CLI/API job.
       - name: Sign and attest Web and Migrator images
         env:
           DIGEST_WEB: ${{ steps.build_web.outputs.digest }}
@@ -494,7 +490,7 @@ jobs:
   # content Scout did not see. `imagetools create` re-tags the pushed index
   # (with its attestations) without rebuilding or re-pushing layers.
   #
-  # Before any tag moves, scripts/ci/verify_signed_digest.sh checks that each of the five digests is signed and
+  # Before any tag moves, scripts/ci/verify_signed_digest.sh checks that each of the four digests is signed and
   # attested by THIS workflow at THIS commit and run, so no tag is ever attached to a digest a consumer could not
   # verify. The job then writes one row per component (tags, digest, signed yes/no) to the run's step summary. That
   # table is the record of what this build published; nothing is committed to the repository, and the release
@@ -538,7 +534,7 @@ jobs:
         uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6  # v4.7.0
         env:
           DOCKERHUB_OIDC_CONNECTIONID: ${{ vars.DOCKERHUB_CONNECTION }}
-          # The longest the connection allows: five verifications (cosign talks to Sigstore, up to two
+          # The longest the connection allows: four verifications (cosign talks to Sigstore, up to two
           # attempts each) run before the first tag moves, and the token is first used by the tagging.
           DOCKERHUB_OIDC_EXPIREIN: '3600'
         with:
@@ -554,12 +550,10 @@ jobs:
         env:
           DIGEST_CLI: ${{ needs.build-images.outputs.digest_cli }}
           DIGEST_API: ${{ needs.build-images.outputs.digest_api }}
-          DIGEST_WORKER: ${{ needs.build-images.outputs.digest_worker }}
           DIGEST_WEB: ${{ needs.build-web.outputs.digest_web }}
           DIGEST_MIGRATOR: ${{ needs.build-web.outputs.digest_migrator }}
           TAGS_CLI: ${{ needs.build-images.outputs.tags_cli }}
           TAGS_API: ${{ needs.build-images.outputs.tags_api }}
-          TAGS_WORKER: ${{ needs.build-images.outputs.tags_worker }}
           TAGS_WEB: ${{ needs.build-web.outputs.tags_web }}
           TAGS_MIGRATOR: ${{ needs.build-web.outputs.tags_migrator }}
           # What verify_signed_digest.sh pins every digest to: this commit (the image's revision label) and this run
@@ -573,14 +567,14 @@ jobs:
           set -euo pipefail
           IMAGE="docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}"
           declare -A DIGESTS=(
-            [cli]="$DIGEST_CLI" [api]="$DIGEST_API" [worker]="$DIGEST_WORKER"
+            [cli]="$DIGEST_CLI" [api]="$DIGEST_API"
             [web]="$DIGEST_WEB" [migrator]="$DIGEST_MIGRATOR"
           )
           declare -A TAGS=(
-            [cli]="$TAGS_CLI" [api]="$TAGS_API" [worker]="$TAGS_WORKER"
+            [cli]="$TAGS_CLI" [api]="$TAGS_API"
             [web]="$TAGS_WEB" [migrator]="$TAGS_MIGRATOR"
           )
-          COMPONENTS="cli api worker web migrator"
+          COMPONENTS="cli api web migrator"
 
           # Validate everything first so a missing output fails before any tag moves.
           for c in $COMPONENTS; do
@@ -625,7 +619,7 @@ jobs:
             fi
           done
           if [ "$UNSIGNED" -gt 0 ]; then
-            write_table "NOT TAGGED: ${UNSIGNED} of 5 digests did not verify"
+            write_table "NOT TAGGED: ${UNSIGNED} of 4 digests did not verify"
             echo "::error::${UNSIGNED} digest(s) are not signed and attested by this workflow at this commit (the table in the step summary names them); refusing to tag anything."
             exit 1
           fi
@@ -701,7 +695,7 @@ jobs:
             docker buildx imagetools create "${ARGS[@]}" "${IMAGE}@${DIGESTS[$c]}"
           done
           if [ "$MOVE_LATEST" = yes ]; then
-            echo "### All five components tagged" >> "$GITHUB_STEP_SUMMARY"
+            echo "### All four components tagged" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "### Sha tags attached; the *-latest tags were not moved (${WHY})" >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -739,7 +733,7 @@ jobs:
   # requires the image's revision label to equal the commit; a rehearsal digest could be promoted only by someone
   # who can already write tags to this registry repository, and every tag already rests on that trust.
   # (d) The rehearsal runs in its own concurrency group.
-  # What the rehearsal cannot cover: the five real images and their digest hand-over between jobs, the
+  # What the rehearsal cannot cover: the four real images and their digest hand-over between jobs, the
   # revision label that docker/metadata-action puts on the real images (here it is set by hand), the digest
   # table and the verify-before-tag gate of tag-images, and 310. It never touches `latest` or any `*-sha-*` tag and
   # writes nothing to the repository.

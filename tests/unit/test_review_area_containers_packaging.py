@@ -33,7 +33,7 @@ def test_findings_are_well_formed_and_in_area():
 
 
 def test_records_non_root_verified_for_every_service_image():
-    """7.4: each of the four service images is recorded as non-root compliant."""
+    """7.4: each of the three service images is recorded as non-root compliant."""
     findings = containers_packaging_findings()
     subjects = {
         f.subject
@@ -44,7 +44,6 @@ def test_records_non_root_verified_for_every_service_image():
         "Dockerfile",
         "apps/network-assessment-api/Dockerfile",
         "apps/network-assessment-web/Dockerfile",
-        "apps/network-assessment-worker/Dockerfile",
     }
     for finding in findings:
         if finding.dedup_key.startswith("containers-packaging:non-root-verified:"):

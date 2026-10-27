@@ -13,7 +13,7 @@ expected set:
   * the eight AWS module boundaries (ai, compute, database, identity,
     observability, runtime, security, storage) appear as subjects;
   * all 14 CI workflows appear as subjects;
-  * the four service Dockerfiles and ``docker-compose.yml`` appear as subjects.
+  * the three service Dockerfiles and ``docker-compose.yml`` appear as subjects.
 
 Property 2 (the universal area-coverage invariant) is spec task 14.2's dedicated
 property test; this module asserts the concrete coverage of the real plan.
@@ -36,12 +36,11 @@ from network_assessment.review.areas.cicd import (
 # The full set of numbered workflows under .github/workflows/.
 _ALL_WORKFLOWS = SELF_HOSTED_ONLY_WORKFLOWS + GITHUB_HOSTED_WORKFLOWS
 
-# The four service Dockerfiles plus the compose file (Requirement 7.1).
+# The three service Dockerfiles plus the compose file (Requirement 7.1).
 _SERVICE_DOCKERFILES = (
     "Dockerfile",
     "apps/network-assessment-api/Dockerfile",
     "apps/network-assessment-web/Dockerfile",
-    "apps/network-assessment-worker/Dockerfile",
 )
 _COMPOSE_FILE = "docker-compose.yml"
 
@@ -115,7 +114,7 @@ def test_coverage_all_core_ci_workflows_present():
 
 
 def test_coverage_service_dockerfiles_and_compose_present():
-    """Requirement 7.1: four service Dockerfiles + docker-compose.yml as subjects."""
+    """Requirement 7.1: three service Dockerfiles + docker-compose.yml as subjects."""
     tokens = _all_subject_tokens(build_remediation_plan())
     for dockerfile in _SERVICE_DOCKERFILES:
         assert dockerfile in tokens, f"Dockerfile not covered: {dockerfile}"

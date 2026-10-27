@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in the web app, the API, the worker, the network_assessment package, the engine package, the images or the CI does not work as expected.
+description: Something in the web app, the API, the network_assessment package, the engine package, the images or the CI does not work as expected.
 title: "[Bug]: "
 labels:
   - bug
@@ -38,7 +38,6 @@ body:
       options:
         - Web app (apps/network-assessment-web)
         - API (apps/network-assessment-api)
-        - Worker (apps/network-assessment-worker)
         - CLI and analysis engine (network_assessment package)
         - Azure network engine package (packages/network-assessment-azure-engine)
         - Container images and the image build

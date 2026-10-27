@@ -56,7 +56,6 @@ _SUBJECT = st.sampled_from(
         "Dockerfile",
         "apps/network-assessment-api/Dockerfile",
         "apps/network-assessment-web/Dockerfile",
-        "apps/network-assessment-worker/Dockerfile",
     ]
 )
 

@@ -553,8 +553,8 @@ def publish(request: PublishRequest) -> dict:
     portal index via network_assessment.delivery_portal, and returns a TTL-capped SAS portal
     URL. The signed URL itself is never persisted (AccessManager's contract) —
     only the publication metadata is recorded, so the caller must surface the
-    URL immediately. The network-assessment-worker placeholder that once sketched this job is
-    superseded by this endpoint.
+    URL immediately. The network-assessment-worker placeholder that once sketched this job was
+    superseded by this endpoint and has been removed (REVIEW.md R-016).
     """
     if not DATABASE_URL:
         raise HTTPException(

@@ -24,7 +24,7 @@ When it is safe to do so, please include:
 ## What this repository is, and what is in scope
 
 This repository is the product code of NetworkEyes: the web app (`apps/network-assessment-web`),
-the API (`apps/network-assessment-api`), the worker (`apps/network-assessment-worker`), the `network_assessment` Python package, the Azure network engine package
+the API (`apps/network-assessment-api`), the `network_assessment` Python package, the Azure network engine package
 (`packages/network-assessment-azure-engine`), the container images built from them, and the workflows in `.github/` that build
 and publish those images. Please report problems in:
 

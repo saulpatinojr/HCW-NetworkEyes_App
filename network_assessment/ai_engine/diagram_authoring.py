@@ -6,13 +6,13 @@ diagram per discovered scope.
 
 This module is the seam between discovery+analysis (already on-disk) and the
 draw.io render pipeline. It is intentionally synchronous and side-effect free
-— the worker hooks it after analysis and forwards the result to the export
+— the caller hooks it after analysis and forwards the result to the export
 pipeline + manifest. Failures degrade gracefully: a missing or partial
 topology yields fewer diagrams, not an exception.
 
 Optional integration with the in-app draw.io MCP surface is via
 `DrawioMCPClient.health()` — we log when it is reachable so operators can
-verify the studio is functional from the worker. The actual icon styles come
+verify the studio is functional from the running service. The actual icon styles come
 from the local shape catalog (offline-deterministic).
 """
 

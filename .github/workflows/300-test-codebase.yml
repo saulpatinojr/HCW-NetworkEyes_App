@@ -451,7 +451,6 @@ jobs:
           done <<'SETS'
           cli|--no-default-groups
           api|--no-default-groups --extra api
-          worker|--only-group worker
           build|--only-group build
           SETS
 

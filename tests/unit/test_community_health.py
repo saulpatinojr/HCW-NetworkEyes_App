@@ -37,7 +37,6 @@ ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 COMPONENTS = [
     "Web app (apps/network-assessment-web)",
     "API (apps/network-assessment-api)",
-    "Worker (apps/network-assessment-worker)",
     "CLI and analysis engine (network_assessment package)",
     "Azure network engine package (packages/network-assessment-azure-engine)",
     "Container images and the image build",
