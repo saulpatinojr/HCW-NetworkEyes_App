@@ -15,7 +15,7 @@ The flow is deliberately two-stage so both load-bearing behaviours are honoured:
     A finding whose owning blocker is not closed becomes an escalation carrying
     its ``blocker_id``; a finding with no owning blocker (or a closed one) becomes
     a fixable entry. This classifies escalations *before* consolidation, so the
-    R-003/R-005/R-006/R-008/R-009 consumers are marked as escalations.
+    consumers of the blockers that still gate a subject here (today R-005) are marked as escalations.
   * **Consolidate second (Requirements 1.4, 1.5).** The gated entries are fed
     into :func:`~network_assessment.review.consolidate.consolidate`, which merges entries sharing
     a ``dedup_key`` (``referenced_areas``/``subjects`` unions, ``severity`` max)
@@ -69,15 +69,16 @@ __all__ = [
 # The owning ``REVIEW.md`` blockers this review's escalations consume (design
 # "Blocker model" table, "Consumers in this review" column). R-005 is the
 # Bedrock model-access opt-in the observability area's live-Bedrock coverage
-# depends on, and R-009 is the Wiki-publication gate. R-001 – R-004, R-006 and
-# R-008 left this repository with the deployment layer (TODO.md T-504): the
-# Terraform and workflow subjects they gated are no longer reviewed here. R-007 is deliberately
-# absent: it is resolved-but-not-closed, so its subject stays out of automated
-# scope rather than becoming an escalation consumer.
+# depends on. R-001 – R-004, R-006 and R-008 left this repository with the
+# deployment layer (TODO.md T-504): the Terraform and workflow subjects they gated
+# are no longer reviewed here. R-009 (the Wiki-publication gate of the documentation
+# area) was superseded on 2026-10-27 when the wiki was deleted (REVIEW.md R-031), and
+# the escalation it owned was removed. R-007 is deliberately absent: it is
+# resolved-but-not-closed, so its subject stays out of automated scope rather than
+# becoming an escalation consumer.
 EXPECTED_ESCALATION_BLOCKERS: frozenset[str] = frozenset(
     {
         "R-005",  # Bedrock model access opt-in — Observability (live AI-path coverage)
-        "R-009",  # GitHub Wiki write access — Documentation
     }
 )
 
@@ -89,8 +90,8 @@ _BLOCKER_ID_PATTERN = re.compile(r"R-\d{3,}")
 # area for readability; ordering does not affect the consolidated result (the
 # consolidation engine sorts by severity and dedup key). The AWS gated
 # escalations (R-001 – R-006) and the R-003 CI escalation left with the
-# deployment layer (TODO.md T-504); the escalations that remain are R-005 (observability, live Bedrock) and
-# R-009 (documentation, Wiki publication).
+# deployment layer (TODO.md T-504), and the R-009 documentation escalation was removed with the wiki
+# (REVIEW.md R-031); the one escalation that remains is R-005 (observability, live Bedrock).
 AREA_EMITTERS: tuple[Callable[[], list[Finding]], ...] = (
     # python-engine-api
     python_engine_api_findings,
@@ -111,7 +112,7 @@ AREA_EMITTERS: tuple[Callable[[], list[Finding]], ...] = (
     containers_packaging_verify_findings,
     # observability (includes the R-005 live-Bedrock escalation)
     observability_findings,
-    # documentation (includes the R-009 Wiki-publication escalation)
+    # documentation (no escalation since the wiki was deleted; R-031)
     documentation_findings,
     documentation_verify_findings,
 )
@@ -209,7 +210,7 @@ def assert_escalations_well_formed(
       * **The escalation blocker set is exactly the expected consumers.** The
         set of owning blockers across all escalations equals
         ``expected_blockers`` (by default :data:`EXPECTED_ESCALATION_BLOCKERS`,
-        the R-005 and R-009 consumers that remain in the core).
+        the R-005 consumer that remains in the core).
 
     :param plan: the consolidated ``Remediation_Plan`` to verify.
     :param review_path: path to ``REVIEW.md`` for the blocker model; defaults to

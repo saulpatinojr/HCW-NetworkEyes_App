@@ -7,14 +7,16 @@ and :func:`network_assessment.review.assert_escalations_well_formed`.
 The invariant under test (Requirements 1.6, 10.4) is that every
 ``Escalation_Record`` entry carries its owning ``REVIEW.md`` blocker id, no
 fixable entry carries a blocker id, and the escalations cover exactly the
-R-005 and R-009 consumers this review declares (the AWS and Azure Terraform
-consumers left the core with the deployment layer, TODO.md T-504). R-007 is
+R-005 consumer this review declares (the AWS and Azure Terraform consumers left
+the core with the deployment layer, TODO.md T-504, and the R-009 wiki-publication
+consumer was removed with the wiki, REVIEW.md R-031). R-007 is
 resolved-but-not-closed, so its subject stays entirely out of scope and it is
 *not* an escalation consumer.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import re
 
 import pytest
@@ -35,8 +37,11 @@ _BLOCKERS = load_blockers()
 
 
 def test_expected_escalation_blocker_set_is_the_declared_consumers():
-    """The declared consumer set is R-005 and R-009 (not R-007)."""
-    assert EXPECTED_ESCALATION_BLOCKERS == {"R-005", "R-009"}
+    """The declared consumer set is R-005 alone (not R-007, and not the superseded R-009)."""
+    assert EXPECTED_ESCALATION_BLOCKERS == {"R-005"}
+    # R-009 (wiki write access) is superseded since the wiki was deleted (REVIEW.md R-031):
+    # the documentation area no longer has an escalation for it.
+    assert "R-009" not in EXPECTED_ESCALATION_BLOCKERS
     # The AWS/Azure Terraform consumers moved to the appliances with the
     # deployment layer (TODO.md T-504); they are not this repository's escalations.
     assert not EXPECTED_ESCALATION_BLOCKERS & {"R-001", "R-002", "R-003", "R-004", "R-006", "R-008"}
@@ -106,9 +111,22 @@ def test_assert_escalations_well_formed_passes_and_returns_summary():
 def test_assert_escalations_well_formed_rejects_missing_blocker():
     """A missing expected blocker fails the exact-set assertion."""
     plan = build_remediation_plan()
-    # Drop every escalation owned by R-009 so the set is no longer exact.
+    # Drop every escalation owned by R-005 so the set is no longer exact.
     plan.entries = [
-        entry for entry in plan.entries if not (entry.is_escalation and entry.blocker_id == "R-009")
+        entry for entry in plan.entries if not (entry.is_escalation and entry.blocker_id == "R-005")
     ]
+    with pytest.raises(AssertionError):
+        assert_escalations_well_formed(plan)
+
+
+def test_assert_escalations_well_formed_rejects_an_escalation_owned_by_the_superseded_r009():
+    """The set is exact in both directions: a wiki-publication escalation would be unexpected now."""
+    plan = build_remediation_plan()
+    template = next(entry for entry in plan.entries if entry.is_escalation)
+    plan.entries.append(
+        dataclasses.replace(
+            template, dedup_key="documentation:wiki-publication-r009", blocker_id="R-009"
+        )
+    )
     with pytest.raises(AssertionError):
         assert_escalations_well_formed(plan)
