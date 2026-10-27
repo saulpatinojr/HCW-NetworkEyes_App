@@ -4,7 +4,7 @@ Closes TODO.md T-603: nothing prevented documentation sprawl from returning.
 Hardened by T-605 – T-608. Runs in CI (repository-guardrails job) and can be
 run locally.
 
-The model is written out once, in README.md ("Documentation map"); this script
+The model is set out in full once, in README.md ("Documentation map"); this script
 enforces it. What the code allows, as a document file (a file with a suffix from
 DOCUMENT_SUFFIXES) in each place:
 
@@ -19,12 +19,16 @@ DOCUMENT_SUFFIXES) in each place:
   The name is compared exactly, not case-folded: git is case-sensitive, so "Docs/"
   would be a second folder that Windows and macOS checkouts cannot hold beside
   "docs/". Lookalikes are violations: doc/, documentation/, Docs/, DOCS/, a docs/
-  folder nested anywhere else (src/docs/), and a root file named docs.md. One
+  folder anywhere other than the top level (src/docs/; a docs/ folder inside docs/
+  itself is only a subfolder and is fine), and a root file named docs.md. One
   folder is one home; a second one is a second source of truth. One more refusal
-  inside docs/: GitHub reads community files from docs/ as well as .github/, so the
-  community-file names (SECURITY.md and the rest) directly in docs/, and the
-  ISSUE_TEMPLATE/ and PULL_REQUEST_TEMPLATE/ folders directly under it, stay
-  violations (ticket #247 keeps them in .github/ only).
+  inside docs/: the community-file names (SECURITY.md and the rest) directly in
+  docs/, and the ISSUE_TEMPLATE/ and PULL_REQUEST_TEMPLATE/ folders directly under
+  it, stay violations, so that docs/ never holds a second hidden copy of what .github/
+  holds (ticket #247 keeps them in .github/ only). GitHub documents most of those names
+  as readable from docs/; FUNDING.md and ISSUE_TEMPLATE/ are refused as this
+  repository's choice, not because GitHub reads them there. See the comment on
+  DOCS_REFUSED_DOCUMENTS.
 * .github/: the community-health files GitHub reads, and only where GitHub reads
   them: SECURITY.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md, PULL_REQUEST_TEMPLATE.md,
   SUPPORT.md and FUNDING.md directly in .github/, and markdown files directly in
@@ -141,6 +145,25 @@ GITHUB_TEMPLATE_DIRECTORIES = {"ISSUE_TEMPLATE", "PULL_REQUEST_TEMPLATE"}
 
 _GITHUB_TEMPLATE_DIRECTORIES_LOWER = {name.lower() for name in GITHUB_TEMPLATE_DIRECTORIES}
 
+# Names refused directly in docs/ (and the template folders directly under it), so that docs/ never holds
+# a second hidden copy of what .github/ holds. Two kinds of reason, kept apart because only one is a GitHub fact.
+#
+# What GitHub documents (the text of these docs.github.com pages, read 2026-10-27: "Creating a default community
+# health file", "Creating a pull request template for your repository", "Adding a code of conduct to your project",
+# "Setting guidelines for repository contributors", "Adding support resources to your project" and "Adding an
+# accessibility page to your repository"): ACCESSIBILITY.md, CODE_OF_CONDUCT.md, CONTRIBUTING.md, SECURITY.md and
+# SUPPORT.md are read from .github/, the repository root or docs/, and a pull request template is read from
+# pull_request_template.md or a PULL_REQUEST_TEMPLATE/ folder in .github/, the root or docs/. A copy in docs/ could
+# therefore be shown by GitHub as the repository's own policy.
+#
+# This repository's choice, not a GitHub claim: FUNDING.md and an ISSUE_TEMPLATE/ folder are refused in docs/ too.
+# The same pages document only .github/FUNDING.yml and .github/ISSUE_TEMPLATE/ (no docs/ location), so GitHub would
+# not read them there; they stay refused because ticket #247 allows them in .github/ only and one rule is simpler
+# than a different one per name. GOVERNANCE.md appears on none of the ten pages read for this (those six plus the
+# pages on issue templates, issue template configuration, community profiles and the sponsor button) and is not refused.
+DOCS_REFUSED_DOCUMENTS = ALLOWED_GITHUB_DOCUMENTS | {"ACCESSIBILITY.md"}
+_DOCS_REFUSED_DOCUMENTS_LOWER = {name.lower() for name in DOCS_REFUSED_DOCUMENTS}
+
 
 def is_excluded(relative: Path) -> bool:
     return any(part in EXCLUDED_DIRS for part in relative.parts)
@@ -156,18 +179,16 @@ def is_under_docs(relative: Path) -> bool:
 
 
 def is_github_reserved_in_docs(relative: Path) -> bool:
-    """A name GitHub would read as a community file or template when it sits in docs/.
+    """A community-file name (or template folder) directly in docs/, which the model refuses.
 
-    GitHub looks for SECURITY.md, CONTRIBUTING.md and the other community files, and for the
-    ISSUE_TEMPLATE/ and PULL_REQUEST_TEMPLATE/ folders, in .github/, in the repository root and in
-    docs/ (https://docs.github.com/en/communities/setting-up-your-project-for-healthy-contributions/
-    creating-a-default-community-health-file, read 2026-10-27). The model keeps them in .github/
-    only (ticket #247), so a second copy in docs/ would be a policy that GitHub may show and the
-    repository does not mean. Only the places GitHub reads are refused: the file names directly in
-    docs/, and the two template folders directly under it.
+    The model keeps community files in .github/ only (ticket #247). GitHub also reads most of them
+    from docs/, so a copy there could be shown as the repository's own policy; see the comment on
+    DOCS_REFUSED_DOCUMENTS for which names GitHub documents in docs/ and which are refused only
+    as this repository's choice. Only the places directly in docs/ are refused: the file names
+    directly in it, and the two template folders directly under it.
     """
     if len(relative.parts) == 2:
-        return relative.name.lower() in _ALLOWED_GITHUB_LOWER
+        return relative.name.lower() in _DOCS_REFUSED_DOCUMENTS_LOWER
     return relative.parts[1].lower() in _GITHUB_TEMPLATE_DIRECTORIES_LOWER
 
 
@@ -258,11 +279,11 @@ def validate() -> bool:
             file=sys.stderr,
         )
         print(
-            "    (long-form documentation; not Docs/, doc/, documentation/ or src/docs/, and not",
+            "    (long-form documentation; not Docs/, doc/, documentation/ or a docs/ anywhere but the",
             file=sys.stderr,
         )
         print(
-            "    a community-file name such as SECURITY.md, which belongs in .github/);",
+            "    top level, and not a community-file name such as SECURITY.md, which belongs in .github/);",
             file=sys.stderr,
         )
         print(
@@ -277,16 +298,45 @@ def validate() -> bool:
             "    files in .github/ISSUE_TEMPLATE/ and .github/PULL_REQUEST_TEMPLATE/).",
             file=sys.stderr,
         )
-        print('The model is written out in README.md, "Documentation map".', file=sys.stderr)
+        print('The model is set out in full in README.md, "Documentation map".', file=sys.stderr)
         print(file=sys.stderr)
-        for violation in violations:
-            print(f"  {violation}", file=sys.stderr)
-        print(file=sys.stderr)
-        print(
-            "Move long-form content into docs/, or into one of the other allowed documents,",
-            file=sys.stderr,
-        )
-        print("then delete the file.", file=sys.stderr)
+        # Every file allowed under docs/ is accepted, so a violation under docs/ is always a refused
+        # community-file name. Moving it into docs/ would not help, so it gets its own hint.
+        outside_docs = [violation for violation in violations if not is_under_docs(violation)]
+        in_docs = [violation for violation in violations if is_under_docs(violation)]
+        if outside_docs:
+            print("Document files in a place the model does not allow:", file=sys.stderr)
+            for violation in outside_docs:
+                print(f"  {violation}", file=sys.stderr)
+            print(file=sys.stderr)
+            print(
+                "Move long-form content into docs/, or into one of the other allowed documents,",
+                file=sys.stderr,
+            )
+            print("then delete the file.", file=sys.stderr)
+        if in_docs:
+            if outside_docs:
+                print(file=sys.stderr)
+            print(
+                "Files inside docs/ named like a GitHub community file (GitHub reads those names",
+                file=sys.stderr,
+            )
+            print(
+                "from docs/ as well as .github/, and the model keeps them in .github/ only):",
+                file=sys.stderr,
+            )
+            for violation in in_docs:
+                print(f"  {violation}", file=sys.stderr)
+            print(file=sys.stderr)
+            print(
+                "These are already in docs/, so moving them there would not help. Rename the page",
+                file=sys.stderr,
+            )
+            print(
+                "(for example security-notes.md). A real community file belongs in .github/, and only",
+                file=sys.stderr,
+            )
+            print("the names listed above are allowed there.", file=sys.stderr)
 
     if missing or violations:
         return False

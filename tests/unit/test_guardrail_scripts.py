@@ -150,6 +150,9 @@ class TestDocumentationModel:
             "docs/adr/0001-record-decisions.md",
             "docs/runbooks/azure/rotate-a-token.md",
             "docs/a/b/c/d/e/deep.md",
+            # A folder that happens to be called docs inside docs/ is only a subfolder.
+            "docs/docs/inner.md",
+            "docs/docs/docs/innermost.md",
             # Names that are only special in .github/ are ordinary pages when deeper in docs/.
             "docs/runbooks/SECURITY.md",
             "docs/guides/ISSUE_TEMPLATE/bug.md",
@@ -177,7 +180,7 @@ class TestDocumentationModel:
             "docs-old/GUIDE.md",
             "docs_archive/GUIDE.md",
             # docs/ is the top-level folder only: a second home next to the code is a second
-            # source of truth.
+            # source of truth. (A docs folder inside docs/ itself is a subfolder and is allowed.)
             "src/docs/GUIDE.md",
             "apps/network-assessment-web/docs/GUIDE.md",
             "packages/engine/docs/adr/0001.md",
@@ -243,18 +246,26 @@ class TestDocumentationModel:
     @pytest.mark.parametrize(
         "reserved",
         [
-            # GitHub reads community files from docs/ as well as .github/ (docs.github.com, "Creating a
-            # default community health file"), so a copy here would be a second policy. Ticket #247.
+            # Names GitHub documents as readable from docs/ as well as .github/ (the text of the pages
+            # "Creating a default community health file", "Creating a pull request template", "Adding a
+            # code of conduct", "Setting guidelines for repository contributors", "Adding support
+            # resources" and "Adding an accessibility page", read 2026-10-27): a copy here could be shown
+            # as the repository's own policy. Ticket #247 keeps them in .github/.
             "docs/SECURITY.md",
             "docs/CONTRIBUTING.md",
             "docs/CODE_OF_CONDUCT.md",
+            "docs/SUPPORT.md",
+            "docs/ACCESSIBILITY.md",
+            "docs/accessibility.md",
             "docs/PULL_REQUEST_TEMPLATE.md",
             "docs/pull_request_template.md",
-            "docs/SUPPORT.md",
-            "docs/FUNDING.md",
-            "docs/security.md",
-            "docs/ISSUE_TEMPLATE/bug.md",
             "docs/PULL_REQUEST_TEMPLATE/release.md",
+            "docs/security.md",
+            # Refused as this repository's choice, not because GitHub reads them from docs/: the same
+            # pages document only .github/FUNDING.yml and .github/ISSUE_TEMPLATE/. Kept refused so that
+            # docs/ holds no second copy of anything .github/ holds.
+            "docs/FUNDING.md",
+            "docs/ISSUE_TEMPLATE/bug.md",
             "docs/issue_template/bug.md",
         ],
     )
@@ -269,6 +280,55 @@ class TestDocumentationModel:
         result = run_script(DOC_MODEL_SCRIPT, fixture_repo)
         assert result.returncode == 1
         assert reserved in result.stderr.replace("\\", "/")
+
+    def test_a_community_file_name_in_docs_gets_its_own_hint_not_move_it_into_docs(
+        self, fixture_repo: Path
+    ) -> None:
+        """The file is already in docs/, so 'move long-form content into docs/' would be wrong advice."""
+        (fixture_repo / "docs").mkdir()
+        (fixture_repo / "docs" / "SECURITY.md").write_text("# policy\n")
+        commit_all(fixture_repo)
+
+        result = run_script(DOC_MODEL_SCRIPT, fixture_repo)
+        assert result.returncode == 1
+        report = result.stderr.replace("\\", "/")
+        assert "  docs/SECURITY.md" in report
+        assert "Files inside docs/ named like a GitHub community file" in report
+        assert "Rename the page" in report
+        assert ".github/" in report
+        # The generic hint is for files outside docs/ and would be wrong here.
+        assert "Move long-form content into docs/" not in report
+        assert "Document files in a place the model does not allow" not in report
+
+    def test_a_file_outside_docs_keeps_the_move_it_into_docs_hint(self, fixture_repo: Path) -> None:
+        (fixture_repo / "doc").mkdir()
+        (fixture_repo / "doc" / "GUIDE.md").write_text("# guide\n")
+        commit_all(fixture_repo)
+
+        result = run_script(DOC_MODEL_SCRIPT, fixture_repo)
+        assert result.returncode == 1
+        report = result.stderr.replace("\\", "/")
+        assert "  doc/GUIDE.md" in report
+        assert "Move long-form content into docs/" in report
+        assert "Files inside docs/ named like a GitHub community file" not in report
+        assert "Rename the page" not in report
+
+    def test_both_kinds_of_violation_each_get_their_own_hint(self, fixture_repo: Path) -> None:
+        for path in ("doc/GUIDE.md", "docs/CONTRIBUTING.md"):
+            target = fixture_repo / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("# page\n")
+        commit_all(fixture_repo)
+
+        result = run_script(DOC_MODEL_SCRIPT, fixture_repo)
+        assert result.returncode == 1
+        report = result.stderr.replace("\\", "/")
+        outside_at = report.index("Document files in a place the model does not allow")
+        inside_at = report.index("Files inside docs/ named like a GitHub community file")
+        assert outside_at < report.index("  doc/GUIDE.md") < inside_at
+        assert inside_at < report.index("  docs/CONTRIBUTING.md")
+        assert "Move long-form content into docs/" in report
+        assert "Rename the page" in report
 
     def test_ignores_untracked_build_artifacts(self, fixture_repo: Path) -> None:
         """T-608: a normal `pytest` run wrote .pytest_cache/README.md and broke the guard."""
