@@ -225,12 +225,13 @@ Reference** explains each value in full.
 ## Licence
 
 The code in this repository and the container images built from it are licensed under the
-[Apache License, Version 2.0](LICENSE). The image label `org.opencontainers.image.licenses` says `Apache-2.0`.
-The [`NOTICE`](NOTICE) file lists what the Apache licence does not cover: the Aeonik typeface, and the Hybrid Cloud
-Works name and logo (section 6 of the licence grants no permission to use them). For the typeface the owner states that
-no separate licence is required (2026-10-25); this repository holds no licence file for it and has not verified the
-statement (`REVIEW.md`, R-020). The copyright holder is Hybrid Cloud Works (owner's statement, 2026-10-26; `REVIEW.md`,
-R-030).
+[Apache License, Version 2.0](LICENSE). The image label `org.opencontainers.image.licenses` says `Apache-2.0`. The
+[`NOTICE`](NOTICE) file lists what the Apache licence does not cover: the Aeonik typeface, and the names "Hybrid Cloud
+Works", "NetworkEyes" and "CNA Platform", and the Hybrid Cloud Works logo (section 6 of the licence grants no permission
+to use them, except for reasonable and customary use in describing the origin of the Work and reproducing the content of
+`NOTICE`). For the typeface the owner states that no separate licence is required (2026-10-25); this repository holds no
+licence file for it and has not verified the statement (`REVIEW.md`, R-020). The copyright holder is Hybrid Cloud Works
+(owner's statement, 2026-10-26; `REVIEW.md`, R-030).
 
 ## Repository conventions
 

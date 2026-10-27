@@ -58,10 +58,12 @@ def test_notice_states_the_licence_and_lists_every_bundled_font() -> None:
     assert not missing, f"NOTICE does not list these font files: {missing}"
 
 
-def test_notice_says_the_name_and_every_logo_file_are_not_covered_by_the_licence() -> None:
+def test_notice_says_the_names_and_every_logo_file_are_not_covered_by_the_licence() -> None:
     notice = (REPO_ROOT / "NOTICE").read_text(encoding="utf-8")
-    heading = "Name and logo that are NOT covered by the Apache License"
-    assert heading in notice, "NOTICE has no section for the Hybrid Cloud Works name and logo"
+    heading = "Names and logo that are NOT covered by the Apache License"
+    assert heading in notice, (
+        "NOTICE has no section for the product names and the Hybrid Cloud Works logo"
+    )
     section = notice[
         notice.index(heading) :
     ]  # the checks below read this section, not the font entry above it
@@ -69,11 +71,15 @@ def test_notice_says_the_name_and_every_logo_file_are_not_covered_by_the_licence
     assert logos, "expected the Hybrid Cloud Works logo files to be tracked"
     missing = [name for name in logos if name not in section]
     assert not missing, (
-        f"NOTICE does not list these logo files in its name and logo section: {missing}"
+        f"NOTICE does not list these logo files in its names and logo section: {missing}"
     )
     text = " ".join(section.split())  # line breaks and runs of spaces do not matter
-    assert 'The name "Hybrid Cloud Works" and the Hybrid Cloud Works logo' in text
-    assert "The Apache License does not cover the name or the logo" in text
+    assert (
+        'The names "Hybrid Cloud Works", "NetworkEyes" and "CNA Platform", '
+        "and the Hybrid Cloud Works logo"
+    ) in text
+    assert "The Apache License does not cover these names or the logo" in text
+    assert "This does not take away anything the Apache License gives you for the code" in text
     assert "Section 6 of it (Trademarks) grants no permission to use them" in text
     # section 6 of LICENSE has an exception; NOTICE quotes it in the licence's own words rather than paraphrasing it
     assert (
