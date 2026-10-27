@@ -272,7 +272,7 @@ export async function analyzeEngagement(
   const { topologyJson, documents = [], existingFindings = [], focus, extraInstruction } = options;
   const focusInstruction = FOCUS_PROMPTS[focus];
 
-  const systemPrompt = `You are a senior Azure cloud network security architect performing a Cloud Network Assessment (CNA).
+  const systemPrompt = `You are a senior Azure cloud network security architect performing a Cloud Network Assessment.
 You have access to three data sources: live-discovered topology, uploaded documents, and existing findings from automated rules.
 
 ANALYSIS FOCUS: ${focusInstruction}

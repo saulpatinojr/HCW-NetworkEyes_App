@@ -29,7 +29,7 @@ def discover():
 @click.option(
     "--org-role",
     required=True,
-    help="ARN of the cross-account read-only role (e.g. arn:aws:iam::MGMT:role/CNA-ReadOnly)",
+    help="ARN of the cross-account read-only role (e.g. arn:aws:iam::MGMT:role/NetworkAssessment-ReadOnly)",
 )
 @click.option("--external-id", default=None, help="STS ExternalId for the role assumption")
 @click.option(
@@ -60,19 +60,19 @@ def discover_aws(  # noqa: PLR0913
       # Full org discovery
       network-assessment discover aws \\
         --engagement-id acme-20260305-a3f2 \\
-        --org-role arn:aws:iam::123456789012:role/CNA-ReadOnly
+        --org-role arn:aws:iam::123456789012:role/NetworkAssessment-ReadOnly
 
       # Single account, specific regions
       network-assessment discover aws \\
         --engagement-id acme-20260305-a3f2 \\
-        --org-role arn:aws:iam::123456789012:role/CNA-ReadOnly \\
+        --org-role arn:aws:iam::123456789012:role/NetworkAssessment-ReadOnly \\
         --accounts 234567890123 \\
         --regions us-east-1,eu-west-1
 
       # Resume interrupted discovery
       network-assessment discover aws \\
         --engagement-id acme-20260305-a3f2 \\
-        --org-role arn:aws:iam::123456789012:role/CNA-ReadOnly \\
+        --org-role arn:aws:iam::123456789012:role/NetworkAssessment-ReadOnly \\
         --resume
     """
     from network_assessment.core.exceptions import NetworkAssessmentAuthError

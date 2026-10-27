@@ -13,7 +13,13 @@ import hashlib
 
 import pytest
 
-from cna_azure_network_engine.rules import (
+from network_assessment.ai_engine.observed_state_enforcer import (
+    ObservedStateEnforcer,
+    ObservedStateViolation,
+)
+from network_assessment.core.findings_schema import FindingSeverity, FrameworkMapping
+from network_assessment.core.topology.azure import AzureSubscriptionTopology, AzureTopology, VNet
+from network_assessment_azure_engine.rules import (
     RULES,
     RULES_VERSION,
     DuplicateRuleError,
@@ -23,13 +29,7 @@ from cna_azure_network_engine.rules import (
     rule_metadata,
     rules_digest,
 )
-from cna_azure_network_engine.rules.registry import RULES as _registry_dict
-from network_assessment.ai_engine.observed_state_enforcer import (
-    ObservedStateEnforcer,
-    ObservedStateViolation,
-)
-from network_assessment.core.findings_schema import FindingSeverity, FrameworkMapping
-from network_assessment.core.topology.azure import AzureSubscriptionTopology, AzureTopology, VNet
+from network_assessment_azure_engine.rules.registry import RULES as _registry_dict
 
 # Re-pin when a rule is added, removed or re-versioned — and bump RULES_VERSION with it.
 # The table is the digest's input, so rules_digest() is checked without a hex literal
@@ -56,7 +56,7 @@ SUB = "00000000-0000-0000-0000-000000000001"
 @pytest.fixture
 def scratch_registry(monkeypatch):
     """An empty registry for registration-contract tests; the real one is restored after."""
-    monkeypatch.setattr("cna_azure_network_engine.rules.registry.RULES", {})
+    monkeypatch.setattr("network_assessment_azure_engine.rules.registry.RULES", {})
     return None
 
 
@@ -283,7 +283,7 @@ class TestUnknowns:
         )
 
     def test_live_only_rule_runs_when_its_input_is_present(self):
-        from cna_azure_network_engine.model.azure import GatewayMetric, NetworkMetrics
+        from network_assessment_azure_engine.model.azure import GatewayMetric, NetworkMetrics
 
         metrics = NetworkMetrics(
             gateway_metrics=[

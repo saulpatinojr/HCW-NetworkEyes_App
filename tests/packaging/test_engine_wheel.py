@@ -1,7 +1,7 @@
 """The engine wheel builds, installs in a clean venv with pydantic alone, and imports no cloud SDK.
 
-Plan 7.C acceptance: ``pip install ./packages/cna-azure-network-engine`` in a clean venv installs
-pydantic only; ``import cna_azure_network_engine`` leaves ``azure`` out of ``sys.modules``; no
+Plan 7.C acceptance: ``pip install ./packages/network-assessment-azure-engine`` in a clean venv installs
+pydantic only; ``import network_assessment_azure_engine`` leaves ``azure`` out of ``sys.modules``; no
 distribution named ``azure-*``, ``msal``, ``boto3``, ``psycopg2`` or ``network-assessment`` is present. The
 build uses ``uv`` when it is on PATH (the developer and image path) and falls back to the
 interpreter's ``pip`` (the CI test job).
@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-PACKAGE = REPO_ROOT / "packages" / "cna-azure-network-engine"
+PACKAGE = REPO_ROOT / "packages" / "network-assessment-azure-engine"
 FORBIDDEN_PREFIXES = (
     "azure-",
     "msal",
@@ -61,7 +61,7 @@ def wheel(tmp_path_factory) -> Path:
             [sys.executable, "-m", "pip", "wheel", "--no-deps", "-w", str(out), str(PACKAGE)]
         )
     assert result.returncode == 0, result.stderr[-2000:]
-    wheels = sorted(out.glob("cna_azure_network_engine-*.whl"))
+    wheels = sorted(out.glob("network_assessment_azure_engine-*.whl"))
     assert len(wheels) == 1, [w.name for w in out.iterdir()]
     return wheels[0]
 
@@ -108,7 +108,7 @@ class TestWheel:
     def test_import_in_clean_venv_pulls_no_cloud_sdk(self, clean_venv: Path):
         result = _in_venv(
             clean_venv,
-            "import sys, cna_azure_network_engine as e; "
+            "import sys, network_assessment_azure_engine as e; "
             "print(e.RULES_VERSION, e.TOPOLOGY_MODEL_VERSION, len(e.RULES)); "
             "assert 'azure' not in sys.modules; assert 'network_assessment' not in sys.modules",
         )
@@ -126,24 +126,26 @@ class TestWheel:
         names = [
             n.strip().lower().replace("_", "-") for n in result.stdout.splitlines() if n.strip()
         ]
-        assert "cna-azure-network-engine" in names
+        assert "network-assessment-azure-engine" in names
         offenders = [
-            n for n in names if n.startswith(FORBIDDEN_PREFIXES) and n != "cna-azure-network-engine"
+            n
+            for n in names
+            if n.startswith(FORBIDDEN_PREFIXES) and n != "network-assessment-azure-engine"
         ]
         assert offenders == [], offenders
 
     def test_discovery_guard_names_the_extra(self, clean_venv: Path):
         result = _in_venv(
             clean_venv,
-            "from cna_azure_network_engine.discovery import require_azure_extra\n"
+            "from network_assessment_azure_engine.discovery import require_azure_extra\n"
             "try:\n    require_azure_extra()\nexcept ImportError as exc:\n    print(exc)\nelse:\n    raise SystemExit('expected ImportError')",
         )
         assert result.returncode == 0, result.stderr[-2000:]
-        assert "cna-azure-network-engine[azure]" in result.stdout
+        assert "network-assessment-azure-engine[azure]" in result.stdout
 
     def test_normalize_and_evaluate_run_in_the_clean_venv(self, clean_venv: Path):
         code = (
-            "import cna_azure_network_engine as e\n"
+            "import network_assessment_azure_engine as e\n"
             "S='00000000-0000-0000-0000-000000000001'\n"
             "rows=[{'id': f'/subscriptions/{S}/resourceGroups/hcw-sample-rg/providers/Microsoft.Network/virtualNetworks/hcw-sample-vnet',"
             " 'name': 'hcw-sample-vnet', 'type': 'microsoft.network/virtualnetworks', 'location': 'eastus',"

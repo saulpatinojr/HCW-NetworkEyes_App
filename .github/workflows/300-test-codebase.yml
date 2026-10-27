@@ -280,16 +280,16 @@ jobs:
         # index, so it is installed from the tree first and the root's dependency on it
         # is then already satisfied (REFACTOR_APP.md change set C).
         run: |
-          pip install -e packages/cna-azure-network-engine
+          pip install -e packages/network-assessment-azure-engine
           pip install -e ".[dev,enrichment,api,aws]"
       - name: Run tests with coverage
         # --cov=apps counts the API/router code the TestClient tests now exercise
         # in the same gate as the network_assessment package (TEST-001).
         run: |
-          pytest tests/unit/ tests/security/ tests/packaging/ packages/cna-azure-network-engine/tests/ -v --tb=short \
+          pytest tests/unit/ tests/security/ tests/packaging/ packages/network-assessment-azure-engine/tests/ -v --tb=short \
             --cov=network_assessment \
             --cov=apps \
-            --cov=cna_azure_network_engine \
+            --cov=network_assessment_azure_engine \
             --cov-report=term-missing \
             --cov-report=xml:coverage.xml \
             --cov-fail-under=80

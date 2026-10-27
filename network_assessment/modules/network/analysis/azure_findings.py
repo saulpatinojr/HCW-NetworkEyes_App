@@ -1,6 +1,6 @@
 """Azure findings for the monorepo: the engine's ``evaluate`` plus the monorepo's annotations.
 
-The engine (``cna_azure_network_engine``) evaluates the typed rule registry over a topology and
+The engine (``network_assessment_azure_engine``) evaluates the typed rule registry over a topology and
 returns engine findings and the rules it could not answer. The monorepo's callers — the CLI's
 ``AnalysisEngine``, the API's Azure discovery runner, the FinOps/BC-DR generators — need the
 monorepo's ``Finding`` (MCP recommendations, review flags, the static cost estimate), so this
@@ -12,12 +12,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from cna_azure_network_engine.rules import RULES as ENGINE_RULES
-from cna_azure_network_engine.rules import RULES_VERSION as ENGINE_RULES_VERSION
-from cna_azure_network_engine.rules import ProgressFn, evaluate
 from network_assessment.core.findings_schema import Finding, Unknown
 from network_assessment.core.topology.azure import AzureTopology
 from network_assessment.modules.network.analysis.finops_signals import attach_cost_estimates
+from network_assessment_azure_engine.rules import RULES as ENGINE_RULES
+from network_assessment_azure_engine.rules import RULES_VERSION as ENGINE_RULES_VERSION
+from network_assessment_azure_engine.rules import ProgressFn, evaluate
 
 RULES = ENGINE_RULES
 RULES_VERSION = ENGINE_RULES_VERSION

@@ -1,7 +1,7 @@
 """Post-discovery network analysis — pure functions over topology checkpoints.
 
 The Azure rules, the classifier and the taxonomy live in the engine package
-(``cna_azure_network_engine``); these modules evaluate them and add the monorepo's own
+(``network_assessment_azure_engine``); these modules evaluate them and add the monorepo's own
 annotations:
   azure_findings      — evaluate_azure: every rule, monorepo findings plus unknowns
   topology_classifier — tenant network pattern (mesh | hub_spoke | vwan | isolated)

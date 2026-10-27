@@ -76,22 +76,16 @@ Each one actively misleads an engineer or a workflow run.
   200/300 bands). Other stale numeric references may exist in scripts — grep for `\b0[0-9]{2}-`
   and `\b1[0-9]{2}-` across `scripts/` and `.github/` when fixing this.
 
-### T-103 — Verify the ADR pages referenced by the changelog exist in the Wiki
+### T-103 — Verify the ADR pages referenced by the changelog exist in the Wiki (withdrawn 2026-10-27)
 
-- **Priority:** Medium
-- **Description:** `CHANGELOG.md` previously claimed ADRs 0001–0005 were added under `docs/adr/`.
-  That directory has never existed in this repository's git history — the `[1.0.0-prep]` entry
-  records that ADRs were migrated to the GitHub Wiki. The changelog references have been corrected
-  to name the Wiki, but the target pages have not been confirmed to exist.
-- **Dependencies:** Wiki read access.
-- **Recommended action:** Confirm ADR-0001 through ADR-0005 exist as Wiki pages (Anthropic
-  removal, smoke-test removal, Entra redirect-URI ownership, Key Vault network hardening target,
-  container image-pull strategy). Recreate any that are missing from the changelog entries that
-  describe them, and link them from the Wiki home page.
-- **Status:** Not started
-- **Notes for future engineers:** The five ADR subjects are fully described in `CHANGELOG.md`
-  under `[Unreleased]` → Added/Removed, so a missing page can be reconstructed from there without
-  archaeology.
+- **Priority:** None
+- **Description:** Withdrawn: the GitHub Wiki was deleted on 2026-10-27 (`REVIEW.md` R-031), so there are no wiki pages
+  left to confirm. Long-form documentation now goes in the `docs/` folder, and which of the old wiki pages come back
+  there is the owner's choice (`REVIEW.md` R-032). `CHANGELOG.md` entries that say the ADRs were added to the wiki are dated records and
+  stay as written. If the owner brings the ADRs back, the five subjects (Anthropic removal, smoke-test removal, Entra
+  redirect-URI ownership, Key Vault network hardening target, container image-pull strategy) are described in
+  `CHANGELOG.md` under `[Unreleased]` → Added/Removed, so a page can be rebuilt from there.
+- **Status:** Withdrawn — 2026-10-27.
 
 ### T-104 — Add a `Microsoft.AlertsManagement` registration check to workflow 100
 
@@ -509,8 +503,8 @@ order; do not reorder it.
   `migrate/scripts/Initialize-Migration.ps1` last exists at commit `7a6b1fa` on `main` — read it
   from history (`git show 7a6b1fa:migrate/scripts/Initialize-Migration.ps1`), and remember its
   `iam.tf` neighbour carries the obsolete OIDC thumbprint T-203 says must not be copied forward.
-  The IAM policy mapping and directory inventory preserved in the notes below remain queued for
-  the Wiki under T-601.
+  The IAM policy mapping and directory inventory preserved in the notes below stay here, as the only
+  copy, until the owner chooses which pages come back into `docs/` (`REVIEW.md` R-032; T-601 is withdrawn).
 - **Notes for future engineers:** The current stack supersedes `migrate/` on every axis: eight
   module boundaries mirroring Azure, split platform/workload state, VPC endpoints, X-Ray, Bedrock,
   and autoscaling. `migrate/` has none of those. Treat it as history, not as an alternative. The
@@ -527,7 +521,7 @@ order; do not reorder it.
   | `SecurityAudit` | Security Reader | Security findings |
   | `AWSBillingReadOnlyAccess` | Billing Reader | Cost and usage for FinOps |
 
-  Plus a scoped write policy for Terraform to manage CNA infrastructure. If the current `identity`
+  Plus a scoped write policy for Terraform to manage NetworkEyes infrastructure. If the current `identity`
   module lacks the billing or security-audit grant, the AWS FinOps and security signals will come
   back empty at runtime rather than failing loudly at apply — check this explicitly.
 
@@ -1576,7 +1570,7 @@ order; do not reorder it.
   `REVIEW.md` R-008 and R-010 (the Azure side); and T-416 (both).
 - **Status:** Done — 2026-09-15. Every moved item here is reduced to a pointer in its Status line ("Left this
   repository 2026-09-15 (T-507)"), with the id kept stable so `CHANGELOG.md` references still resolve.
-- **Notes for future engineers:** Application-level items never move; `REVIEW.md` here keeps R-009, R-011 and R-012.
+- **Notes for future engineers:** Application-level items never move; `REVIEW.md` here keeps R-009, R-011 and R-012 (R-009 was superseded on 2026-10-27, see R-031).
 
 ### T-508 — Re-scope the production-readiness review engine to the core
 
@@ -1596,7 +1590,7 @@ order; do not reorder it.
   appliances (each appliance reviewing its own Terraform) or are retired here; prune
   `SELF_HOSTED_ONLY_WORKFLOWS` to the four core workflows and re-derive the secret-location list
   from the current `.secrets.baseline`; update the pinned counts in the tests in the same change.
-- **Status:** Done — 2026-09-15. The `terraform-aws`/`terraform-azure` emitters and their tests were retired; each area is represented by one relocation record (`network_assessment/review/areas/terraform_relocated.py`) so the closed nine-area set and Property 2 still hold, and the findings they carried left this repository with the Terraform. `SELF_HOSTED_ONLY_WORKFLOWS` names the three self-hosted core workflows, the documentation area describes the four-workflow tree and the appliance-owned deploy path, the security-secrets location list is regenerated from the current `.secrets.baseline` (12 files), and the R-003/R-006 escalations left with their subjects — `EXPECTED_ESCALATION_BLOCKERS` is now `{R-005, R-009}`. Recorded in [`CHANGELOG.md`](CHANGELOG.md) → Unreleased → Changed.
+- **Status:** Done — 2026-09-15. The `terraform-aws`/`terraform-azure` emitters and their tests were retired; each area is represented by one relocation record (`network_assessment/review/areas/terraform_relocated.py`) so the closed nine-area set and Property 2 still hold, and the findings they carried left this repository with the Terraform. `SELF_HOSTED_ONLY_WORKFLOWS` names the three self-hosted core workflows, the documentation area describes the four-workflow tree and the appliance-owned deploy path, the security-secrets location list is regenerated from the current `.secrets.baseline` (12 files), and the R-003/R-006 escalations left with their subjects — `EXPECTED_ESCALATION_BLOCKERS` was then `{R-005, R-009}` (R-009 was removed on 2026-10-27, so it is now `{R-005}`). Recorded in [`CHANGELOG.md`](CHANGELOG.md) → Unreleased → Changed.
 - **Notes for future engineers:** `network_assessment/review/blockers.py` parses `REVIEW.md`'s index table at
   runtime and `test_review_blockers.py` asserts that R-001 – R-010 are present and that only R-007
   is "Resolved" — keep every `R-0NN` row in the table (with a redirect in the Status cell) rather
@@ -1616,22 +1610,23 @@ order; do not reorder it.
   this repository, which is again the product (`REVIEW.md` R-013, R-014, R-023). On 2026-10-25 it was made to stand
   alone: it depends on no other repository.
 - **Notes for future engineers:** Issue and pull-request numbers of the form `#NNN` that refer to the earlier
-  repositories in `CHANGELOG.md`, `REVIEW.md`, `CNA-0.90-updates.md` and this file are historical citations of threads
-  that no longer exist; they were links and are now plain numbers.
+  repositories in `CHANGELOG.md`, `REVIEW.md` and this file are historical citations of threads
+  that no longer exist; they were links and are now plain numbers. `CNA-0.90-updates.md`, which cited them too, was
+  removed on 2026-10-27; its last version is in Git history, at commit a9312f15a98d9d54c0fff90f897eb5207e306e90. The
+  dated entries of this file, `REVIEW.md` and `CHANGELOG.md` that still name it describe that version.
 
 ---
 
 ## Phase 6 — Documentation improvements
 
-### T-601 — Publish the seven prepared Wiki pages
+### T-601 — Publish the seven prepared Wiki pages (withdrawn 2026-10-27)
 
-- **Priority:** Medium
-- **Description:** The documentation consolidation displaced long-form content from `README.md`
-  and from two non-root documents. Seven validated, ready-to-publish pages were prepared. They are
-  not committed to the repository — publishing requires Wiki write access, which the automation
-  performing the consolidation does not have.
-- **Dependencies:** `REVIEW.md` → R-009 (Wiki write access).
-- **Recommended action:** Publish, or merge into existing pages:
+- **Priority:** None
+- **Description:** Withdrawn: the GitHub Wiki was deleted on 2026-10-27, and the owner decided (`REVIEW.md` R-031,
+  answer `docs-folder`) that long-form documentation lives in the `docs/` folder of this repository. There is no wiki
+  to publish to, so `REVIEW.md` R-009 (wiki write access) is superseded. The seven pages that had been prepared were
+  never committed to the repository. The table is kept only as a record of what they covered, in case the owner
+  chooses to restore any of that material into `docs/`:
 
   | Page | Content |
   |---|---|
@@ -1643,28 +1638,20 @@ order; do not reorder it.
   | `Runbook: Log Analytics Workspace State Migration` | The state-surgery procedure now held in T-304 |
   | `Legacy AWS Migrate Root` | The superseded `migrate/` root, IAM policy mapping preserved |
 
-  Then add the links to `README.md`'s documentation map.
-- **Status:** Blocked on R-009
-- **Notes for future engineers:** `Workflows Guide` and `Secrets Reference` are already referenced
-  by `.env.example`, so those pages likely exist — merge rather than create, and do not duplicate.
-  The page content is attached to the pull request that introduced this backlog. Nothing is lost
-  if it is never published: every fact in those pages is either still in the repository or carried
-  in a TODO item's handoff notes.
+  Nothing has been imported. Which pages come back is the owner's choice (`REVIEW.md` R-032).
+- **Status:** Withdrawn — 2026-10-27.
+- **Notes for future engineers:** Nothing is lost by withdrawing this: every fact in those pages is either still in
+  the repository or carried in the handoff notes of T-304 and T-401.
 
-### T-602 — Trim the long-form runbook content out of TODO.md once the Wiki has it
+### T-602 — Trim the long-form runbook content out of TODO.md once the Wiki has it (withdrawn 2026-10-27)
 
-- **Priority:** Low
-- **Description:** `TODO.md` → T-304 currently carries the full Log Analytics workspace state
-  migration runbook, and T-401 carries the `migrate/` directory reference. That content is
-  operational documentation living in the engineering backlog because the Wiki was unreachable
-  when the two source files were removed. It is the right fallback, not the right home.
-- **Dependencies:** T-601 (the Wiki pages must exist first).
-- **Recommended action:** Once `Runbook: Log Analytics Workspace State Migration` and
-  `Legacy AWS Migrate Root` are published and verified, replace the inline procedures in T-304 and
-  T-401 with a one-line summary plus the Wiki link.
-- **Status:** Blocked on T-601
-- **Notes for future engineers:** Do not trim before the Wiki pages are confirmed published and
-  rendering. These notes are currently the only copy of that content in the repository.
+- **Priority:** None
+- **Description:** Withdrawn together with T-601: there is no wiki to link to. The inline runbook text in T-304 (the
+  Log Analytics workspace state migration) and the `migrate/` reference in T-401 stay where they are, and they are the
+  only copy of that content in the repository. If the owner brings that material back as pages under `docs/`
+  (`REVIEW.md` R-032), the text in T-304 and T-401 can then be replaced with a link to the page, but not before the
+  page exists and renders.
+- **Status:** Withdrawn — 2026-10-27.
 
 ### T-603 — Add a CI guard for the documentation model
 
@@ -1698,7 +1685,8 @@ order; do not reorder it.
 - **Dependencies:** T-603 (the guard's exclusion list encodes this decision).
 - **Recommended action:** Periodically confirm no project-specific documentation has been written
   into either directory. If any appears, classify it by content and move it to `README.md`,
-  `CHANGELOG.md`, `REVIEW.md`, `TODO.md`, or the Wiki as the model requires.
+  `CHANGELOG.md`, `REVIEW.md`, `TODO.md`, or `docs/` (the wiki it used to name was deleted, `REVIEW.md` R-031) as the
+  model requires.
 - **Status:** Done (2026-09-23) — first pass. A sweep of `.claude/`, `.agents/`, `.codex/` and
   `.kiro/` for the platform's own names (repositories, tenants, resource groups, image namespace,
   workflow numbers, `REVIEW.md` ids) found one project-specific tree: `.kiro/specs/production-readiness/`,
@@ -2043,7 +2031,7 @@ Azure field shapes and already names `network_assessment/core/topology/azure.py`
 ### T-720 — Azure rule registry follow-ups (change set B)
 The typed Azure rule registry replaced the API's Engine B and Engine A's Azure rules (`CHANGELOG.md`
 `[Unreleased]`; change set B of the `REFACTOR_APP.md` plan held in `HCW-NetworkEyes_App`); change set C
-moved it into `packages/cna-azure-network-engine` (T-721). Left open, in the order the plan takes them:
+moved it into `packages/network-assessment-azure-engine` (T-721). Left open, in the order the plan takes them:
 - Engine B checks dropped without a typed equivalent — return them as `applies_to="live-only"` rules once
   change set D's collectors feed the model: NVA inventory and the per-NVA checks (fewer than two NICs, NIC
   without NSG, IP forwarding without a known NVA publisher), BGP disabled on a gateway with connections,
@@ -2066,12 +2054,12 @@ moved it into `packages/cna-azure-network-engine` (T-721). Left open, in the ord
 - Plan change sets C–K are still not folded into this backlog (see T-719).
 
 ### T-721 — Engine package follow-ups (change set C)
-`packages/cna-azure-network-engine` is the Azure engine and the monorepo consumes it as a uv workspace
+`packages/network-assessment-azure-engine` is the Azure engine and the monorepo consumes it as a uv workspace
 member (`CHANGELOG.md` `[Unreleased]`). Open:
 - Licence and copyright holder of the package (plan section 22, item 1): decided. The owner chose Apache-2.0
   (2026-10-25) and Hybrid Cloud Works as the copyright holder (2026-10-26); the package's `pyproject.toml` says
   `license = "Apache-2.0"`. The wheel stays unpublished until the PyPI step below.
-- `[REVIEW REQUIRED]` The PyPI name `cna-azure-network-engine` and trusted publishing (plan section 22,
+- `[REVIEW REQUIRED]` The PyPI name `network-assessment-azure-engine` and trusted publishing (plan section 22,
   item 2; change set J's `320-release-engine.yml`). Until then the monorepo consumes the workspace member
   and CI installs it from the tree before `network-assessment`.
 - Model version: the plan declared `TOPOLOGY_MODEL_VERSION = "1.3.0"`; the engine ships `1.4.0` because
@@ -2093,11 +2081,11 @@ member (`CHANGELOG.md` `[Unreleased]`). Open:
 - Keep the monorepo's re-export shims (`network_assessment.core.topology.azure` / `.common`,
   `network_assessment.ai_engine.observed_state_enforcer`, `network_assessment.modules.network.analysis.topology_classifier`) until change
   set K removes `topology_schema` (T-719); then import the engine directly where it is cheaper.
-- Change set D fills `cna_azure_network_engine/discovery/` behind the `[azure]` extra;
+- Change set D fills `network_assessment_azure_engine/discovery/` behind the `[azure]` extra;
   `require_azure_extra()` is the guard today.
 
 ### T-722 — Least-privilege roles: verify the actions, assign them in the deployment (change set F)
-`docs/roles/cna-network-bgp-reader.json`, `network_assessment/modules/network/module.yaml`, `.env.example` and the help
+`docs/roles/network-assessment-bgp-reader.json`, `network_assessment/modules/network/module.yaml`, `.env.example` and the help
 modal now carry the roles table of `REFACTOR_APP.md` section 13 (`CHANGELOG.md` `[Unreleased]`). Open:
 - Checked 2026-10-25: every action string in the custom role and in `module.yaml` is listed in the Microsoft Learn
   Azure permissions reference (networking, management-and-governance, monitor and security pages under
@@ -2106,7 +2094,7 @@ modal now carry the roles table of `REFACTOR_APP.md` section 13 (`CHANGELOG.md` 
   whoever creates the role, against their own tenant:
   `az provider operation show --namespace Microsoft.Network -o json | ConvertFrom-Json` (PowerShell) and
   look for each of the six names; then `az role definition create --role-definition
-  '@docs/roles/cna-network-bgp-reader.json'` from a checkout of `main` that carries the file.
+  '@docs/roles/network-assessment-bgp-reader.json'` from a checkout of `main` that carries the file.
 - `[REVIEW REQUIRED]` The role set itself (Reader + the optional reader roles + the custom role) is an
   owner decision on what the appliance identity may read; Cost Management Reader and Log Analytics
   Reader are only needed for the live cost and Traffic Analytics rules.
@@ -2162,7 +2150,7 @@ container at a time (`CHANGELOG.md` `[Unreleased]`; `tests/unit/test_network_ass
   exclusions `network_assessment.core.auth.build_azure_credential` applies (T-723).
 
 ### T-725 — Engine independence: keep the no-I/O proof green as discovery and AWS move (change set E)
-`tests/unit/test_engine_has_no_io.py` holds the import boundary of `cna_azure_network_engine`
+`tests/unit/test_engine_has_no_io.py` holds the import boundary of `network_assessment_azure_engine`
 (`CHANGELOG.md` `[Unreleased]`). Open:
 - Change set D adds `discovery/` modules that import the Azure SDK; they are the one allowed place, and the
   test's `CLOUD_ROOTS` check keeps them there. Nothing under `discovery/` may import `network_assessment.*` either.
@@ -2174,7 +2162,7 @@ container at a time (`CHANGELOG.md` `[Unreleased]`; `tests/unit/test_network_ass
   `tests/packaging/test_engine_wheel.py` is the stronger proof and already imports in a clean venv.
 
 ### T-726 — Resource Graph discovery: acceptance run, live collectors into the package, remove the ARM loop (change set D)
-`cna_azure_network_engine.discovery.resource_graph` builds the model; `NETWORK_ASSESSMENT_DISCOVERY_BACKEND=arm` keeps the
+`network_assessment_azure_engine.discovery.resource_graph` builds the model; `NETWORK_ASSESSMENT_DISCOVERY_BACKEND=arm` keeps the
 old loop for one release (`CHANGELOG.md` `[Unreleased]`). Open:
 - `[VERIFY]` Acceptance with a Reader-only identity (the T-722 role set, no write role): zero
   `HttpResponseError` from list calls, every live-only rule in `unknowns[]` until the optional roles are
@@ -2185,7 +2173,7 @@ old loop for one release (`CHANGELOG.md` `[Unreleased]`). Open:
   and `properties.resourceDetails.{Id,ResourceType}`; `ResourceContainers`
   `properties.managementGroupAncestorsChain[]` and `properties.details.parent.id`; VM `plan` column and
   `properties.networkProfile.networkInterfaces[].id`; NIC `properties.enableIPForwarding`.
-- Every bound in the package's `[azure]` extra (`packages/cna-azure-network-engine/pyproject.toml`): checked against PyPI on
+- Every bound in the package's `[azure]` extra (`packages/network-assessment-azure-engine/pyproject.toml`): checked against PyPI on
   2026-10-25 (each lower bound is the newest release, no next major exists); that the SDK calls behave as coded stays open
   until the acceptance run above, which needs a tenant and so cannot be done from an agent session.
 - The live collector bodies still live in `network_assessment/modules/network/discovery/azure_discovery.py` and run from
@@ -2211,7 +2199,7 @@ old loop for one release (`CHANGELOG.md` `[Unreleased]`). Open:
 
 ### T-727 — Lab boundary image: first CI build, and the API Dockerfile into the root file (change set I)
 `Dockerfile` builds `EDITION=appliance` (default) and the build-only `EDITION=lab`; `300-test-codebase.yml`
-`lab-image` proves the boundary; `cna_azure_network_engine.edition` is the proof (`CHANGELOG.md` `[Unreleased]`;
+`lab-image` proves the boundary; `network_assessment_azure_engine.edition` is the proof (`CHANGELOG.md` `[Unreleased]`;
 `tests/security/test_lab_boundary.py`). Open:
 - Verified 2026-10-11: the `lab-image` job ran green on the change-set PR (#198, head 71e6157) and on the first
   `300-test-codebase.yml` run from `main` after the merge (ba0c983): the build succeeds, the `CMD` proof prints
@@ -2226,7 +2214,7 @@ old loop for one release (`CHANGELOG.md` `[Unreleased]`). Open:
   for it; keep that check when the image workflow changes.
 - The AddOn builds its deployable lab image from the published engine with the same pattern (its
   `infrastructure/docker/Dockerfile`); once the engine wheel is released (T-728; the AddOn pins the GitHub Release asset by URL and sha256) its `edition.py` can import
-  `cna_azure_network_engine.edition` instead of carrying its own copy.
+  `network_assessment_azure_engine.edition` instead of carrying its own copy.
 
 ### T-728 — Engine release and OIDC registry login: the owner steps (change set J)
 `320-release-engine.yml` publishes the engine wheel by trusted publishing on `engine-v*` tags; `200` and `310`
@@ -2234,7 +2222,7 @@ log in to Docker Hub through its OIDC connection (`CHANGELOG.md` `[Unreleased]`;
 Nothing publishes until the owner flips the variables below. Open, in order:
 - `[REVIEW REQUIRED]` **PyPI trusted publisher.** In a browser, at
   <https://pypi.org/manage/account/publishing/>, add a pending publisher with PyPI project name
-  `cna-azure-network-engine`, owner `saulpatinojr`, repository `HCW-NetworkEyes_App`, workflow
+  `network-assessment-azure-engine`, owner `saulpatinojr`, repository `HCW-NetworkEyes_App`, workflow
   `320-release-engine.yml`, environment left blank. Then, PowerShell:
 
   ```powershell
@@ -2366,8 +2354,8 @@ Nothing publishes until the owner flips the variables below. Open, in order:
 - **First engine release: done (checked 2026-10-24).** `engine-v0.1.0` was published on 2026-10-12 by
   `320-release-engine.yml` (run 38205653284, success). The GitHub Release carries
   `cna_azure_network_engine-0.1.0-py3-none-any.whl` (sha256 `a609b80059fca7b22057b464a0c41895b324e21dc3e28d569a6e0894e94bd1ba`)
-  and `cna_azure_network_engine-0.1.0.tar.gz`. The PyPI step stays off until `PYPI_PUBLISH_ENABLED` is
-  `true` (first bullet), so `pip download cna-azure-network-engine` does not work yet. **Still open:**
+  and `cna_azure_network_engine-0.1.0.tar.gz`, both published under the engine's earlier name (before the rename of 2026-10-27; a release under the new name needs a version above 0.1.0, because the tag `engine-v0.1.0` exists). The PyPI step stays off until `PYPI_PUBLISH_ENABLED` is
+  `true` (first bullet), so `pip download network-assessment-azure-engine` does not work yet. **Still open:**
   `HCW-NetworkEyes_AddOn` has not adopted the wheel. Its `pyproject.toml` has no `ENGINE_REF` line, so its
   `core-update.yml` finds nothing to do and the lab still runs the ported copy under
   `src/network_assessment` (its `PROVENANCE.md`). That adoption belongs in the AddOn (its

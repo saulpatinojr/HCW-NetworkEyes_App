@@ -132,7 +132,7 @@ export function SpHelpModal() {
               {/* Step 3 */}
               <Step number={3} title="Assign Reader (and the optional reader roles) on your subscriptions">
                 <p className="mb-2 text-gray-600 dark:text-navy-300">
-                  Repeat for each subscription you want CNA to discover:
+                  Repeat for each subscription you want NetworkEyes to discover:
                 </p>
                 <ol className="list-decimal space-y-1.5 pl-5 text-gray-600 dark:text-navy-300">
                   <li>
@@ -187,8 +187,8 @@ export function SpHelpModal() {
                   The scan is read-only: every call it makes is a read, including listing
                   virtual network gateways. The only non-read calls are the BGP state actions
                   (peer status, learned and advertised routes), which the custom role
-                  <Code>CNA Network BGP Reader</Code> grants and nothing else. A write role
-                  gives CNA permissions it never uses.
+                  <Code>Network Assessment BGP Reader</Code> grants and nothing else. A write role
+                  gives NetworkEyes permissions it never uses.
                 </p>
                 <p className="font-semibold text-gray-700 dark:text-navy-200 mb-1">Roles, and what each unlocks:</p>
                 <table className="w-full text-left text-gray-600 dark:text-navy-300">
@@ -211,7 +211,7 @@ export function SpHelpModal() {
                 </table>
                 <p className="mt-2 text-gray-500 dark:text-navy-400">
                   The custom role&apos;s six actions are listed in{" "}
-                  <Code>docs/roles/cna-network-bgp-reader.json</Code> and are marked for
+                  <Code>docs/roles/network-assessment-bgp-reader.json</Code> and are marked for
                   verification against the current Microsoft.Network operations before the
                   role is created.
                 </p>
@@ -251,7 +251,7 @@ const ROLES = [
   { role: "Security Reader", kind: "built-in", purpose: "Defender assessments" },
   { role: "Cost Management Reader", kind: "built-in", purpose: "Cost rules (AZ-COST-002/003/005)" },
   { role: "Log Analytics Reader", kind: "built-in", purpose: "Traffic Analytics (AZ-NET-014 live form)" },
-  { role: "CNA Network BGP Reader", kind: "custom", purpose: "BGP peer status, learned and advertised routes" },
+  { role: "Network Assessment BGP Reader", kind: "custom", purpose: "BGP peer status, learned and advertised routes" },
   { role: "Management Group Reader", kind: "built-in", purpose: "Management-group tree (optional)" },
 ] as const;
 

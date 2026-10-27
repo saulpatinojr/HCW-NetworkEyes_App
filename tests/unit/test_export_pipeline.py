@@ -32,7 +32,7 @@ def tmp_output(tmp_path):
     return tmp_path / "diagrams"
 
 
-MINIMAL_XML = """<mxfile host="CNA" version="21.0.0">
+MINIMAL_XML = """<mxfile host="NetworkEyes" version="21.0.0">
   <diagram name="test">
     <mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel>
   </diagram>
@@ -146,7 +146,7 @@ class TestRealDrawioExport:
     The container images install draw.io desktop plus the
     scripts/drawio-headless.sh wrapper (xvfb-run, --no-sandbox, HOME
     fallback); these tests prove that chain produces real SVG rather than
-    silently degrading — the CNA-0.90 gap where encyclopedia diagrams
+    silently degrading — the 0.9.0 gap where encyclopedia diagrams
     never rendered because no image carried the CLI.
     """
 

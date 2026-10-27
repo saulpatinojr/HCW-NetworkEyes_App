@@ -77,14 +77,14 @@ class TestModuleBoundaries:
         assert "network_assessment.core.topology.aws" not in imported
         assert "network_assessment.core.topology_schema" not in imported
         # The Azure model lives in the engine package; this module re-exports it.
-        assert "cna_azure_network_engine.model.azure" in imported
+        assert "network_assessment_azure_engine.model.azure" in imported
 
     def test_aws_module_imports_nothing_from_azure(self):
         imported = self._imported_modules(TOPOLOGY_DIR / "aws.py")
         assert "network_assessment.core.topology.azure" not in imported
         assert "network_assessment.core.topology_schema" not in imported
         assert "network_assessment.core.topology.common" in imported
-        assert not any(m.startswith("cna_azure_network_engine") for m in imported)
+        assert not any(m.startswith("network_assessment_azure_engine") for m in imported)
 
     def test_importing_azure_does_not_load_aws(self):
         code = (

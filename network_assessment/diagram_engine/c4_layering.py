@@ -1,7 +1,7 @@
 """C4 layering helpers for draw.io deliverables.
 
 We adopt the C4 model (https://c4model.com) to map each diagram to one of the
-three CNA deliverable audiences:
+three NetworkEyes deliverable audiences:
 
   * Context   → executive deliverable (system-of-systems, no internals)
   * Container → architect deliverable (regions, VPCs/VNets, hubs, gateways)

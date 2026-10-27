@@ -15,7 +15,7 @@
 
 **Owner's Azure target decision (2026-10-09, `PLAN.md` owner decision 2), quoted:** "*App* = Azure Container Apps + user-assigned managed identity (Reader; + Cost Management Reader for Cloud Assessor) on a client subscription/RG, clients clone the repo, anonymous live results, no visitor credential. *AddOn* = the **same Docker image** in a `lab` edition on the Hostinger VPS: visitors upload an **Azure Resource Graph export** (JSON/CSV, 5 MB / 5,000 rows, Turnstile-gated, in-memory, TTL), mirroring the Azure Migrate lab model; restart erases everything."
 
-**Upstream and downstream model.** The Core is upstream: it owns the engine, the rule corpus, discovery and the appliance build, and publishes the Python distribution `cna-azure-network-engine` (import name `cna_azure_network_engine`) plus the appliance image. The AddOn `HCW-NetworkEyes_AddOn` is downstream: until the wheel exists it carries an interim port of about 1,100 lines from `5d3b914` with per-file provenance headers and a root `PROVENANCE.md`; once the wheel is published it pins the exact version and deletes `src/network_assessment/{model,rules,classify}` (AddOn ADR-0001). The AddOn never gains an Azure credential path; the Core never gains an upload path.
+**Upstream and downstream model.** The Core is upstream: it owns the engine, the rule corpus, discovery and the appliance build, and publishes the Python distribution `network-assessment-azure-engine` (import name `network_assessment_azure_engine`) plus the appliance image. The AddOn `HCW-NetworkEyes_AddOn` is downstream: until the wheel exists it carries an interim port of about 1,100 lines from `5d3b914` with per-file provenance headers and a root `PROVENANCE.md`; once the wheel is published it pins the exact version and deletes `src/network_assessment/{model,rules,classify}` (AddOn ADR-0001). The AddOn never gains an Azure credential path; the Core never gains an upload path.
 
 ## 1 Purpose
 
@@ -62,15 +62,15 @@ Evidence at `5d3b914`, line counts from `git show <path> | wc -l`.
 
 ```
 HCW-NetworkEyes_App (upstream)
-  packages/cna-azure-network-engine/  -> PyPI: cna-azure-network-engine (wheel)
-    cna_azure_network_engine/{model, rules, classify, findings, report, normalize}   (base: pydantic only)
-    cna_azure_network_engine/discovery/   ([azure] extra: resource_graph + live_bgp/metrics/diagnostics/cost/law)
+  packages/network-assessment-azure-engine/  -> PyPI: network-assessment-azure-engine (wheel)
+    network_assessment_azure_engine/{model, rules, classify, findings, report, normalize}   (base: pydantic only)
+    network_assessment_azure_engine/discovery/   ([azure] extra: resource_graph + live_bgp/metrics/diagnostics/cost/law)
   network_assessment/ (monorepo package, depends on the engine; CLI, API, report and diagram engines unchanged in scope)
   Dockerfile  ARG EDITION=appliance|lab  -> appliance image docker.io/hybridcloudworks/img-ne-appliance-app, consumed by digest;
                                             lab target = CI boundary proof (engine without [azure]), never pushed
   .github/workflows/320-release-engine.yml  (tag engine-v*)
 Azure appliance repo: one Consumption Container App (min 1 / max 1), UAMI, Reader + optional reader roles
-  + custom "CNA Network BGP Reader"; timer-driven ARG refresh; no upload route.
+  + custom "Network Assessment BGP Reader"; timer-driven ARG refresh; no upload route.
 HCW-NetworkEyes_AddOn (downstream): same Dockerfile pattern on the published wheel without [azure]; builds and
   ships docker.io/hybridcloudworks/hcw-addon-network-assessment (the lab build's HTTP contract lives there);
   visitors upload an ARG export; deletes its ported model/rules/classify once the wheel exists.
@@ -80,8 +80,8 @@ Package contract:
 
 | Item | Value |
 |---|---|
-| Distribution name | `cna-azure-network-engine` `[REVIEW REQUIRED]` (PyPI name and trusted publishing, section 22) |
-| Import name | `cna_azure_network_engine` |
+| Distribution name | `network-assessment-azure-engine` `[REVIEW REQUIRED]` (PyPI name and trusted publishing, section 22) |
+| Import name | `network_assessment_azure_engine` |
 | Base dependencies | `pydantic>=2.13,<3` only |
 | Extras | `[azure]`: `azure-identity`, `azure-mgmt-resourcegraph`, `azure-mgmt-network`, `azure-mgmt-monitor<7`, `azure-monitor-query<3`, `azure-mgmt-costmanagement<5`, `azure-mgmt-loganalytics<15`, `azure-mgmt-security<8` (bounds as `pyproject.toml` lines 71 to 82 already justify) |
 | `requires-python` | `>=3.14` (the images already run `python:3.14-slim`; CI already tests 3.14 at `300-test-codebase.yml` line 137) |
@@ -122,10 +122,10 @@ Package contract:
 |---|---|---|---|
 | A | Split `topology_schema.py` | P1 | `network_assessment/core/topology/{common,azure,aws}.py`; `topology_schema.py` becomes a deprecation shim for one release |
 | B | Unify Engine A and Engine B | P2 | Port the 14 Engine-B-only checks as typed rules `AZ-NET-020..033`, `AZ-BCDR-006/007`; delete `_check_*` and `_topology_to_findings` from `main.py` |
-| C | Extract the engine package | P1 | `packages/cna-azure-network-engine/` with base and `[azure]` extra; the monorepo `network-assessment` depends on it |
+| C | Extract the engine package | P1 | `packages/network-assessment-azure-engine/` with base and `[azure]` extra; the monorepo `network-assessment` depends on it |
 | D | Resource Graph discovery | P2 | Real `use_resource_graph`; one paged KQL query per scope replaces the 15-collector ARM loop; ARM only for BGP, metrics, diagnostics, cost, LAW; remove `socket.gethostbyname` |
 | E | Engine independence from `EngagementStore` and Postgres | P1 | `evaluate(topology) -> FindingsReport` pure; store writes move to callers |
-| F | Least-privilege roles | P1 (security) | Replace Network Contributor in four places; custom role JSON `docs/roles/cna-network-bgp-reader.json` |
+| F | Least-privilege roles | P1 (security) | Replace Network Contributor in four places; custom role JSON `docs/roles/network-assessment-bgp-reader.json` |
 | G | Appliance on Container Apps with UAMI; remove SP secrets | P1 (security) | Delete `ClientSecretCredential`, `sp_client_secret`, `/discovery/test-connection`; Prisma migration drops `spSecretEnc` |
 | H | API bearer auth and exception redaction | P1 (security) | Entra JWT validation on `network-assessment-api`; redaction helper for persisted errors |
 | I | Lab boundary image target and boundary test | P2 | `ARG EDITION=appliance|lab` in the root `Dockerfile`; the `lab` target is a build-only boundary proof, never pushed; `tests/security/test_lab_boundary.py`; the deployable lab build is the AddOn's image |
@@ -218,13 +218,13 @@ Rule mapping (ids, severities and evidence as the AddOn design table B.4; the Co
 
 **Current behavior.** The engine's pieces are spread across `network_assessment/core`, `network_assessment/ai_engine` and `network_assessment/modules/network/analysis`, inside the `network-assessment` distribution whose base dependencies include seven `azure-*` packages, `boto3`, `openai`, `anthropic`, `weasyprint` and `pandas` (`pyproject.toml:10-48`).
 
-**Required behavior.** `pip install cna-azure-network-engine` in a clean venv installs `pydantic` only and exposes model, rules, classifier, findings, Markdown/JSON renderers and the Resource Graph normalizer. `pip install "cna-azure-network-engine[azure]"` adds discovery.
+**Required behavior.** `pip install network-assessment-azure-engine` in a clean venv installs `pydantic` only and exposes model, rules, classifier, findings, Markdown/JSON renderers and the Resource Graph normalizer. `pip install "network-assessment-azure-engine[azure]"` adds discovery.
 
 **Exact change.**
 
 ```
-packages/cna-azure-network-engine/pyproject.toml   # name, requires-python >=3.14, dependencies = ["pydantic>=2.13,<3"], optional azure extra (section 3)
-packages/cna-azure-network-engine/cna_azure_network_engine/
+packages/network-assessment-azure-engine/pyproject.toml   # name, requires-python >=3.14, dependencies = ["pydantic>=2.13,<3"], optional azure extra (section 3)
+packages/network-assessment-azure-engine/network_assessment_azure_engine/
   __init__.py            # exports of section 3; __version__
   model/azure.py, model/common.py        # from network_assessment/core/topology/{azure,common}.py (A); TOPOLOGY_MODEL_VERSION = "1.3.0"
   findings/schema.py     # findings_schema.py minus FindingRecommendation.source, recommendation_source, human_reviewed,
@@ -235,14 +235,14 @@ packages/cna-azure-network-engine/cna_azure_network_engine/
   report/markdown.py, report/jsonreport.py   # new: Markdown and JSON renderers only
   normalize/resource_graph.py  # new: rows -> AzureTopology (type table in the AddOn design B.3)
   discovery/             # change set D; imports azure.* lazily, guarded by the extra
-packages/cna-azure-network-engine/tests/  # moved unit tests
+packages/network-assessment-azure-engine/tests/  # moved unit tests
 ```
 
-Root `pyproject.toml` adds `"cna-azure-network-engine @ file://./packages/cna-azure-network-engine"` during the monorepo phase (an exact version once published); `network_assessment/core/topology/azure.py`, `network_assessment/ai_engine/observed_state_enforcer.py`, `network_assessment/core/findings_schema.py` and the three analysis modules become one-line re-exports from the package. `network_assessment/core/finding_taxonomy.py` keeps the AWS tables and re-exports the Azure part from `rules/taxonomy.py`.
+Root `pyproject.toml` adds `"network-assessment-azure-engine @ file://./packages/network-assessment-azure-engine"` during the monorepo phase (an exact version once published); `network_assessment/core/topology/azure.py`, `network_assessment/ai_engine/observed_state_enforcer.py`, `network_assessment/core/findings_schema.py` and the three analysis modules become one-line re-exports from the package. `network_assessment/core/finding_taxonomy.py` keeps the AWS tables and re-exports the Azure part from `rules/taxonomy.py`.
 
 - **Components affected.** Everything importing the moved modules; `apps/network-assessment-api/Dockerfile` (install the package before `network-assessment`); `300-test-codebase.yml` (package tests in a clean venv job).
-- **Tests.** `tests/packaging/test_engine_wheel.py`: `uv build packages/cna-azure-network-engine`, install in a temporary venv, `python -c "import cna_azure_network_engine as e; assert e.RULES_VERSION"`, and `pip list` contains no `azure-*`, `boto3` or `psycopg2`.
-- **Acceptance.** The packaging test passes; `python -c "import cna_azure_network_engine, sys; assert 'azure' not in sys.modules"` succeeds.
+- **Tests.** `tests/packaging/test_engine_wheel.py`: `uv build packages/network-assessment-azure-engine`, install in a temporary venv, `python -c "import network_assessment_azure_engine as e; assert e.RULES_VERSION"`, and `pip list` contains no `azure-*`, `boto3` or `psycopg2`.
+- **Acceptance.** The packaging test passes; `python -c "import network_assessment_azure_engine, sys; assert 'azure' not in sys.modules"` succeeds.
 - **Priority** P1. **Dependencies** A. **Rollback** re-exports keep the old paths; deleting `packages/` and the dependency line restores `5d3b914` behaviour.
 
 ### 7.D Resource Graph discovery (change set D)
@@ -251,7 +251,7 @@ Root `pyproject.toml` adds `"cna-azure-network-engine @ file://./packages/cna-az
 
 **Required behavior.** One paged Resource Graph query per scope populates the model through the normalizer; ARM is used only where Resource Graph has no data (BGP POST actions, Monitor metrics, diagnostic settings, Cost Management, Log Analytics queries); the private-endpoint DNS check is removed and the field becomes `unknown`.
 
-**Exact change.** New `cna_azure_network_engine/discovery/resource_graph.py`:
+**Exact change.** New `network_assessment_azure_engine/discovery/resource_graph.py`:
 
 ```python
 NETWORK_QUERY = ("Resources | where type startswith 'microsoft.network/' "
@@ -326,8 +326,8 @@ class AnalysisEngine:
 `FindingsReport.engagement_id` becomes `str | None = None`; the CLI sets it. AWS rules stay in `AnalysisEngine` until change set K moves them.
 
 - **Components affected.** `analysis_engine.py`, `network_assessment/cli/analyze.py`, `main.py`, `tests/unit/test_analysis_engine.py`.
-- **Tests.** `test_analysis_engine.py` fixtures call `evaluate(topology)` directly; `tests/unit/test_engine_has_no_io.py` asserts `cna_azure_network_engine` imports neither `network_assessment.core.persistence` nor `psycopg2` (walk `sys.modules` after import).
-- **Acceptance.** `git grep -n "EngagementStore\|psycopg2" -- packages/cna-azure-network-engine` is empty.
+- **Tests.** `test_analysis_engine.py` fixtures call `evaluate(topology)` directly; `tests/unit/test_engine_has_no_io.py` asserts `network_assessment_azure_engine` imports neither `network_assessment.core.persistence` nor `psycopg2` (walk `sys.modules` after import).
+- **Acceptance.** `git grep -n "EngagementStore\|psycopg2" -- packages/network-assessment-azure-engine` is empty.
 - **Priority** P1. **Dependencies** C. **Rollback** the wrapper class keeps the CLI contract; revert is a single commit.
 
 ### 7.F Least-privilege roles (change set F)
@@ -336,11 +336,11 @@ class AnalysisEngine:
 
 **Required behavior.** One role table (section 13), repeated verbatim in all four places and in the appliance Terraform.
 
-**Exact change.** New `docs/roles/cna-network-bgp-reader.json` (every action name checked on 2026-10-25 against the Microsoft Learn Azure permissions reference; re-check against the tenant with the Microsoft.Network provider operations list before `az role definition create`; `AssignableScopes` is set to the real scopes by whoever creates the role):
+**Exact change.** New `docs/roles/network-assessment-bgp-reader.json` (every action name checked on 2026-10-25 against the Microsoft Learn Azure permissions reference; re-check against the tenant with the Microsoft.Network provider operations list before `az role definition create`; `AssignableScopes` is set to the real scopes by whoever creates the role):
 
 ```json
 {
-  "Name": "CNA Network BGP Reader",
+  "Name": "Network Assessment BGP Reader",
   "IsCustom": true,
   "Description": "Read-only BGP state for Cloud Network Assessment. POST actions that return data and change nothing.",
   "Actions": [
@@ -357,9 +357,9 @@ class AnalysisEngine:
 ```
 
 - `sp-help-modal.tsx`: replace the four passages with the table; Step 4 becomes "Assign Reader (and the optional reader roles)"; the amber callout becomes "Why not Network Contributor?" stating the scan is read-only and the only non-read calls are the BGP actions in the custom role. After change set G this modal describes the managed identity instead of a service principal.
-- `main.py:1146`: "Assign the Reader role at the subscription scope. For BGP state, also assign the custom role CNA Network BGP Reader."
+- `main.py:1146`: "Assign the Reader role at the subscription scope. For BGP state, also assign the custom role Network Assessment BGP Reader."
 - `module.yaml:27-35`: `Microsoft.Resources/subscriptions/resourceGroups/read`, `Microsoft.ResourceGraph/resources/read`, `Microsoft.Network/*/read`, `Microsoft.Insights/diagnosticSettings/read`, `Microsoft.Insights/Metrics/read`, `Microsoft.Security/assessments/read`, `Microsoft.CostManagement/query/action`, `Microsoft.OperationalInsights/workspaces/query/read`, plus the six custom-role actions, each checked against Microsoft Learn on 2026-10-25.
-- `.env.example:73`: "Required RBAC: Reader on each assessed scope; optional Security Reader, Cost Management Reader, Log Analytics Reader, CNA Network BGP Reader (docs/roles/cna-network-bgp-reader.json)."
+- `.env.example:73`: "Required RBAC: Reader on each assessed scope; optional Security Reader, Cost Management Reader, Log Analytics Reader, Network Assessment BGP Reader (docs/roles/network-assessment-bgp-reader.json)."
 
 - **Components affected.** Web modal, API finding text, module manifest, env template, appliance Terraform (`azurerm_role_definition` plus assignments).
 - **Tests.** `tests/unit/test_role_docs.py`: `git grep -n "Network Contributor" -- apps network_assessment docs .env.example` is empty; the JSON parses and lists exactly the six actions.
@@ -375,7 +375,7 @@ class AnalysisEngine:
 **Exact change.**
 
 ```python
-# cna_azure_network_engine/discovery/settings.py
+# network_assessment_azure_engine/discovery/settings.py
 FORBIDDEN_ENV = ("AZURE_CLIENT_SECRET", "AZURE_CLIENT_CERTIFICATE_PATH", "AZURE_USERNAME", "AZURE_PASSWORD",
                  "AZURE_FEDERATED_TOKEN_FILE", "AZURE_AUTHORITY_HOST")
 
@@ -467,7 +467,7 @@ ARG EDITION=appliance
 FROM python:3.14-slim@sha256:cae66f2ef0ec51a9891263eeee7f987dacf0a9879e8aa9353d5606e0530619a5 AS builder
 ARG EDITION
 WORKDIR /build
-COPY packages/cna-azure-network-engine /build/engine
+COPY packages/network-assessment-azure-engine /build/engine
 COPY pyproject.toml /build/network-assessment-src/
 COPY network_assessment/ /build/network-assessment-src/network_assessment/
 COPY apps/network-assessment-api/ /build/network-assessment-src/apps/network-assessment-api/
@@ -496,7 +496,7 @@ ENV NETWORK_ASSESSMENT_EDITION=appliance
 FROM final-${EDITION}
 ```
 
-`apps/network-assessment-api/requirements.txt` (new, exact pins; section 11) replaces the inline package list at `apps/network-assessment-api/Dockerfile:17-39`. New `tests/security/test_lab_boundary.py` runs against a venv built with `pip install packages/cna-azure-network-engine` (no extra): `find_spec("azure") is None`; `importlib.metadata.distributions()` lists no name starting with `azure-`, `msal` or `boto3`; the engine's `edition.py` guard (shared with the AddOn) exits 1 with "lab edition" on stderr when `find_spec("azure")`, `msal` or `boto3` resolves or when any of `IDENTITY_ENDPOINT`, `MSI_ENDPOINT`, `AZURE_CLIENT_SECRET`, `AZURE_FEDERATED_TOKEN_FILE` is set. The lab HTTP checks (`/api/health` reporting `edition: "lab"`, `azureConnectivity: "disabled-by-design"`, no password inputs, image-level `import azure` on the shipped image) live in the AddOn's `tests/security/test_edition_boundary.py` and its image job, not here.
+`apps/network-assessment-api/requirements.txt` (new, exact pins; section 11) replaces the inline package list at `apps/network-assessment-api/Dockerfile:17-39`. New `tests/security/test_lab_boundary.py` runs against a venv built with `pip install packages/network-assessment-azure-engine` (no extra): `find_spec("azure") is None`; `importlib.metadata.distributions()` lists no name starting with `azure-`, `msal` or `boto3`; the engine's `edition.py` guard (shared with the AddOn) exits 1 with "lab edition" on stderr when `find_spec("azure")`, `msal` or `boto3` resolves or when any of `IDENTITY_ENDPOINT`, `MSI_ENDPOINT`, `AZURE_CLIENT_SECRET`, `AZURE_FEDERATED_TOKEN_FILE` is set. The lab HTTP checks (`/api/health` reporting `edition: "lab"`, `azureConnectivity: "disabled-by-design"`, no password inputs, image-level `import azure` on the shipped image) live in the AddOn's `tests/security/test_edition_boundary.py` and its image job, not here.
 
 - **Components affected.** `Dockerfile`, `apps/network-assessment-api/Dockerfile` (its body becomes the `final-appliance` stage; the file is deleted), `apps/network-assessment-api/requirements.txt` (new), `200-build-images.yml` (the `lab` target is built with `push: false` and is never pushed), `tests/security/`.
 - **Tests.** The venv tests above; `300-test-codebase.yml` gains a job `lab-image` that builds with `--build-arg EDITION=lab -t network-assessment:lab`, runs `docker run --rm network-assessment:lab` expecting exit 0 and `docker run --rm network-assessment:lab python -c "import azure"` expecting exit 1.
@@ -513,7 +513,7 @@ FROM final-${EDITION}
 
 | Job | `permissions` | Steps |
 |---|---|---|
-| `build-test` | `contents: read` | `pip install uv && uv build packages/cna-azure-network-engine --out-dir dist`; install the wheel in a fresh venv, `python -c "import cna_azure_network_engine as e; print(e.RULES_VERSION)"`, run the package tests; upload `dist/` as an artifact |
+| `build-test` | `contents: read` | `pip install uv && uv build packages/network-assessment-azure-engine --out-dir dist`; install the wheel in a fresh venv, `python -c "import network_assessment_azure_engine as e; print(e.RULES_VERSION)"`, run the package tests; upload `dist/` as an artifact |
 | `publish-pypi` | `id-token: write`, `contents: read` | `if: vars.PYPI_PUBLISH_ENABLED == 'true'`; download the artifact; `uv publish --trusted-publishing always dist/*` (OIDC to PyPI through uv itself; no third-party publishing action and no token) |
 | `release-upload` | `contents: write` | download the artifact; `gh release create "$GITHUB_REF_NAME" --verify-tag --notes-from-tag dist/*` with `GH_TOKEN: ${{ github.token }}`; this is the only job with write access to the repository |
 
@@ -521,7 +521,7 @@ In `200-build-images.yml`: replace the `login-action` step's `password: ${{ secr
 
 - **Components affected.** Workflows, `docs/release/`.
 - **Tests.** `actionlint`; the digest shape is checked by `scripts/ci/verify_signed_digest.sh` and `scripts/ci/release_digests.sh`.
-- **Acceptance.** `pip download cna-azure-network-engine --no-deps -d ./wheel` succeeds once publishing is enabled; the step summary carries a digest for every image.
+- **Acceptance.** `pip download network-assessment-azure-engine --no-deps -d ./wheel` succeeds once publishing is enabled; the step summary carries a digest for every image.
 - **Priority** P3. **Dependencies** C, I. **Rollback** the workflow is additive; the old login step is one commit away.
 
 ### 7.K AWS gating behind an extra (change set K)
@@ -622,7 +622,7 @@ Pattern: `/home/user/HCW-AzMigrateOrchestrator_App/infrastructure/terraform/appl
 | `azurerm_container_app.api` | `revision_mode = "Single"`; `template { min_replicas = 1, max_replicas = 1 }` (`CONTRACT-DECISIONS` item 21: scale-to-zero loses the in-memory snapshot; the zero-replica trade is documented as an owner option, not the default); `cpu = 0.5`, `memory = "1Gi"`; `target_port = 8080`; image `docker.io/hybridcloudworks/img-ne-appliance-app@sha256:...` taken from the `api` digest in the `200` step summary or the `310` release notes, never a floating tag |
 | `env` | `NETWORK_ASSESSMENT_EDITION=appliance`, `NETWORK_ASSESSMENT_SCOPES`, `NETWORK_ASSESSMENT_REFRESH_SECONDS=900`, `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `NETWORK_ASSESSMENT_ENTRA_*`, `NA_FRAME_ANCESTORS`, `NA_SITE_ORIGINS`, `NA_TRUST_PROXY=1` |
 | `azurerm_role_assignment` | `Reader` `for_each` over `assessment_scope_ids`; optional `Security Reader`, `Cost Management Reader`, `Log Analytics Reader` (on `var.log_analytics_workspace_ids`) behind `var.enable_live_rules` |
-| `azurerm_role_definition.bgp_reader` | From `docs/roles/cna-network-bgp-reader.json` with `assignable_scopes = var.assessment_scope_ids`; assigned with the live rules flag |
+| `azurerm_role_definition.bgp_reader` | From `docs/roles/network-assessment-bgp-reader.json` with `assignable_scopes = var.assessment_scope_ids`; assigned with the live rules flag |
 | `azuread_application.api` | `identifier_uris` set to the `api://` form of its client id after creation; app role `Discovery.Run` (`allowed_member_types = ["Application"]`) |
 | `azuread_app_role_assignment.web` | Assigns `Discovery.Run` on the API's service principal to the web tier's user-assigned identity (`principal_object_id = azurerm_user_assigned_identity.web.principal_id`); without it the web tier's token is valid but gets 403 `insufficient_role` (7.H) |
 | `azurerm_log_analytics_workspace` | 30-day retention, as the pattern |
@@ -654,10 +654,10 @@ Roles table (the single source for 7.F, section 12 and the appliance docs):
 | Security Reader | built-in | `Microsoft.Security/*/read` | Defender assessments |
 | Cost Management Reader | built-in | `Microsoft.CostManagement/*/read`, `query/action` | `AZ-COST-002/003/005` |
 | Log Analytics Reader | built-in | `workspaces/query/read`, shared keys excluded | Traffic Analytics (`AZ-NET-014` live form) |
-| CNA Network BGP Reader | custom (`docs/roles/cna-network-bgp-reader.json`) | six actions, all checked against Microsoft Learn on 2026-10-25 | BGP peer status, learned and advertised routes |
+| Network Assessment BGP Reader | custom (`docs/roles/network-assessment-bgp-reader.json`) | six actions, all checked against Microsoft Learn on 2026-10-25 | BGP peer status, learned and advertised routes |
 | Management Group Reader | built-in | `Microsoft.Management/managementGroups/read` | Management-group tree (optional) |
 
-Unchanged by this document and still open: R-011 (BYO AI key path and egress review) and the deploy service principal's least-privilege gaps recorded in `CNA-0.90-updates.md` section 5.
+Unchanged by this document and still open: R-011 (BYO AI key path and egress review) and the deploy service principal's least-privilege gaps recorded in section 5 of `CNA-0.90-updates.md`, a working document that was removed on 2026-10-27 (its last version is in Git history, at commit a9312f15a98d9d54c0fff90f897eb5207e306e90).
 
 ## 14 Testing requirements
 
@@ -729,9 +729,9 @@ One PR per change set, ready for review, following the Core's PR template; `CHAN
 |---|---|---|---|
 | P1 | Entra bearer on `network-assessment-api`; redaction helper | H | new; closes the "no authentication" security observation |
 | P1 | Remove `ClientSecretCredential`, `sp_client_secret`, `spSecretEnc`; UAMI only | G | R-011 (crypto path narrowed to AI keys; the review itself unchanged) |
-| P1 | Least-privilege role table and custom role JSON | F | R-008 (acceptance re-run with the new roles); `CNA-0.90-updates.md` section 5 |
+| P1 | Least-privilege role table and custom role JSON | F | R-008 (acceptance re-run with the new roles); section 5 of `CNA-0.90-updates.md` (removed 2026-10-27; last version in Git history, commit a9312f15a98d9d54c0fff90f897eb5207e306e90) |
 | P1 | Split `topology_schema.py` | A | T-410 (`ty` findings reduced) |
-| P1 | Extract `cna-azure-network-engine` | C | T-413, T-414 (pins and extras absorbed into the engine's `[azure]` extra) |
+| P1 | Extract `network-assessment-azure-engine` | C | T-413, T-414 (pins and extras absorbed into the engine's `[azure]` extra) |
 | P1 | Pure `evaluate()`; engine without `EngagementStore` | E | T-412 (store read-side now outside the engine) |
 | P2 | Unify Engine A and B; typed `AZ-NET-020..033`, `AZ-BCDR-006/007` | B | T-417 (ids make the four generated reports consistent) |
 | P2 | Resource Graph discovery; remove scanner-host DNS | D | T-403, T-408 (fixtures replace SDK mocks; coverage stays measured); R-008 (live acceptance on the new backend) |
@@ -739,12 +739,12 @@ One PR per change set, ready for review, following the Core's PR template; `CHAN
 | P3 | `320-release-engine.yml`; OIDC login; digests | J | T-503 (withdrawn 2026-10-25); T-504 to T-508 done, unaffected |
 | P3 | AWS behind an extra | K | T-404 (boto3 and azure-mgmt consistency gaps close by separation); T-418 (diagrams stay Azure-only) |
 | P3 | Remove the 52 MB vendored agent configuration from the product tree or move it to a separate repository | hygiene | T-411 (detect-secrets triage shrinks) |
-| Unaffected | R-009 (Wiki access), R-012 (project board token), T-401, T-405 to T-407, T-409, T-415, T-416, T-419, T-501, T-502, T-505 | | Owner items; listed so the mapping is complete |
+| Unaffected | R-009 (Wiki access; superseded 2026-10-27), R-012 (project board token), T-401, T-405 to T-407, T-409, T-415, T-416, T-419, T-501, T-502, T-505 | | Owner items; listed so the mapping is complete |
 
 ## 19 Acceptance criteria
 
-1. `pip install ./packages/cna-azure-network-engine` in a clean venv installs `pydantic` only; `python -c "import cna_azure_network_engine as e, sys; print(e.RULES_VERSION); assert 'azure' not in sys.modules"` prints the version.
-2. `pip install "./packages/cna-azure-network-engine[azure]"` adds discovery; `python -c "from cna_azure_network_engine.discovery import ResourceGraphDiscovery"` succeeds.
+1. `pip install ./packages/network-assessment-azure-engine` in a clean venv installs `pydantic` only; `python -c "import network_assessment_azure_engine as e, sys; print(e.RULES_VERSION); assert 'azure' not in sys.modules"` prints the version.
+2. `pip install "./packages/network-assessment-azure-engine[azure]"` adds discovery; `python -c "from network_assessment_azure_engine.discovery import ResourceGraphDiscovery"` succeeds.
 3. `git grep -c "def _check_" -- apps/network-assessment-api/main.py` prints nothing; `git grep -n "Network Contributor" -- apps network_assessment docs .env.example` prints nothing; `git grep -n "ClientSecretCredential\|DefaultAzureCredential\|sp_client_secret\|spSecretEnc\|gethostbyname" -- apps network_assessment packages` prints nothing.
 4. `docker build --build-arg EDITION=lab -t network-assessment:lab .` succeeds, `docker run --rm network-assessment:lab` exits 0 and `docker run --rm network-assessment:lab python -c "import azure"` exits 1; the image is never pushed and has no digest row; `docker build --build-arg EDITION=appliance -t network-assessment:appliance .` succeeds.
 5. `GET /api/health` on the appliance returns `edition: "appliance"`, `azureConnectivity: "managed-identity"`, `id: "network-assessment"` and `version` at the top level, with no token. The `lab` form of the envelope is the AddOn's acceptance, on its own image.
@@ -776,9 +776,9 @@ docker run --rm -e NETWORK_ASSESSMENT_EDITION=appliance -e AZURE_CLIENT_ID=00000
 # Expected: 401 (against a running appliance network-assessment-api after H); 200 for /api/health with no token
 (Invoke-WebRequest http://127.0.0.1:8080/discovery/jobs/x -SkipHttpErrorCheck).StatusCode; (Invoke-WebRequest http://127.0.0.1:8080/api/health -SkipHttpErrorCheck).StatusCode
 # Expected: the rules version, then False
-uv build packages/cna-azure-network-engine --out-dir dist; python -m venv .venv-clean; .\.venv-clean\Scripts\pip install (Get-ChildItem dist/*.whl).FullName; .\.venv-clean\Scripts\python -c "import cna_azure_network_engine as e, sys; print(e.RULES_VERSION); print('azure' in sys.modules)"
-# Expected once publishing is enabled: one cna_azure_network_engine-*.whl; before that "No matching distribution found" is the expected state, not a build failure
-New-Item -ItemType Directory -Force ./wheel | Out-Null; pip download cna-azure-network-engine --no-deps -d ./wheel; Get-ChildItem ./wheel
+uv build packages/network-assessment-azure-engine --out-dir dist; python -m venv .venv-clean; .\.venv-clean\Scripts\pip install (Get-ChildItem dist/*.whl).FullName; .\.venv-clean\Scripts\python -c "import network_assessment_azure_engine as e, sys; print(e.RULES_VERSION); print('azure' in sys.modules)"
+# Expected once publishing is enabled: one network_assessment_azure_engine-*.whl; before that "No matching distribution found" is the expected state, not a build failure
+New-Item -ItemType Directory -Force ./wheel | Out-Null; pip download network-assessment-azure-engine --no-deps -d ./wheel; Get-ChildItem ./wheel
 ```
 
 bash (Git Bash or Linux):
@@ -797,9 +797,9 @@ docker run --rm -e NETWORK_ASSESSMENT_EDITION=appliance -e AZURE_CLIENT_ID=00000
 # Expected: 401 (against a running appliance network-assessment-api after H), then 200 for /api/health with no token
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/discovery/jobs/x; curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/api/health
 # Expected: the rules version, then False
-uv build packages/cna-azure-network-engine --out-dir dist && python -m venv .venv-clean && .venv-clean/bin/pip install dist/*.whl && .venv-clean/bin/python -c "import cna_azure_network_engine as e, sys; print(e.RULES_VERSION); print('azure' in sys.modules)"
-# Expected once publishing is enabled: one cna_azure_network_engine-*.whl
-mkdir -p ./wheel && pip download cna-azure-network-engine --no-deps -d ./wheel && ls ./wheel
+uv build packages/network-assessment-azure-engine --out-dir dist && python -m venv .venv-clean && .venv-clean/bin/pip install dist/*.whl && .venv-clean/bin/python -c "import network_assessment_azure_engine as e, sys; print(e.RULES_VERSION); print('azure' in sys.modules)"
+# Expected once publishing is enabled: one network_assessment_azure_engine-*.whl
+mkdir -p ./wheel && pip download network-assessment-azure-engine --no-deps -d ./wheel && ls ./wheel
 ```
 
 Live acceptance (R-008), bash, after `az login` as an identity holding only Reader on the subscriptions named in `NETWORK_ASSESSMENT_SCOPES`: `NETWORK_ASSESSMENT_PROFILE=developer uv run network-assessment discover azure --scopes "$NETWORK_ASSESSMENT_SCOPES"` (the CLI's `AzureCliCredential` path, which the appliance image refuses); expected: the progress log contains no `WARNING` line with `HTTP 403`; record the wall time in `VALIDATION.md`.
@@ -808,8 +808,8 @@ Live acceptance (R-008), bash, after `az login` as an identity holding only Read
 
 | AddOn item | Relationship to the Core |
 |---|---|
-| Interim port: `src/network_assessment/model/topology.py` (from `topology_schema.py:315-1010`), `model/findings.py` (`findings_schema.py`), `model/enforcer.py` (`observed_state_enforcer.py` verbatim), `rules/azure_net.py` (Engine A `_check_azure_*` lines 639 to 1660 and Engine B lines 195 to 1127 as `AZ-NET-020..033`), `rules/azure_bcdr.py` (`bcdr_signals.py`), `rules/azure_cost.py` (`finops_signals.py` 001 and 004), `rules/taxonomy.py` (`finding_taxonomy.py`), `classify/topology.py` (`topology_classifier.py`) | Each file carries `# Ported from <the earlier core repository> <path> at 5d3b914; changes: ...`; the AddOn's root `PROVENANCE.md` lists file, source path, commit, lines, changes and reason. The Core's change sets A, B, C and E produce the same symbols under `cna_azure_network_engine`, so the port is removable without semantic change |
-| Deletion of the port | When `cna-azure-network-engine` is on PyPI (section 15 step 2), the AddOn's `core-update.yml` pins the exact version, deletes `src/network_assessment/{model,rules,classify}`, keeps `ingestion/`, `store/`, `api/`, `security/`, `web/`, and removes the `PROVENANCE.md` rows for the deleted files |
+| Interim port: `src/network_assessment/model/topology.py` (from `topology_schema.py:315-1010`), `model/findings.py` (`findings_schema.py`), `model/enforcer.py` (`observed_state_enforcer.py` verbatim), `rules/azure_net.py` (Engine A `_check_azure_*` lines 639 to 1660 and Engine B lines 195 to 1127 as `AZ-NET-020..033`), `rules/azure_bcdr.py` (`bcdr_signals.py`), `rules/azure_cost.py` (`finops_signals.py` 001 and 004), `rules/taxonomy.py` (`finding_taxonomy.py`), `classify/topology.py` (`topology_classifier.py`) | Each file carries `# Ported from <the earlier core repository> <path> at 5d3b914; changes: ...`; the AddOn's root `PROVENANCE.md` lists file, source path, commit, lines, changes and reason. The Core's change sets A, B, C and E produce the same symbols under `network_assessment_azure_engine`, so the port is removable without semantic change |
+| Deletion of the port | When `network-assessment-azure-engine` is on PyPI (section 15 step 2), the AddOn's `core-update.yml` pins the exact version, deletes `src/network_assessment/{model,rules,classify}`, keeps `ingestion/`, `store/`, `api/`, `security/`, `web/`, and removes the `PROVENANCE.md` rows for the deleted files |
 | Rule ids, severities, `RULES_VERSION`, `TOPOLOGY_MODEL_VERSION` | The AddOn uses the 7.B table and `lab-1.0.0` now; the Core must not renumber. The AddOn's `test_registry.py` hash-pins `RULES_VERSION`; a Core bump is adopted through `core-update` |
 | ARG normalizer | The AddOn's `ingestion/normalize.py` (type table in its design B.3) is the reference implementation for the Core's `normalize/resource_graph.py` (C, D); once published, the AddOn imports it too |
 | Shared `/api/health` and pane contract | Both builds answer the flat envelope of section 8 with `id: "network-assessment"`; the website's status proxy reads exactly `configured, reachable, version, edition, capabilities, asOf`; the pane posts `{ type: 'hcw-addon', id, state }` with states `loading | ready | working | unavailable` to each `siteOrigins` entry. The Core's appliance public surface uses the same headers and error envelope so one pane bundle serves both builds |
@@ -821,8 +821,8 @@ Live acceptance (R-008), bash, after `az login` as an identity holding only Read
 **Open questions (owner):**
 
 1. `[REVIEW REQUIRED]` **Relicensing.** Licence decided 2026-10-25 (owner): Apache-2.0 for the code and the image label ([PR 306](https://github.com/saulpatinojr/HCW-NetworkEyes_App/pull/306)); the engine package's `pyproject.toml` now says `license = "Apache-2.0"`. At the commit this plan audited, the Core had no `license` field in `pyproject.toml` and labelled its images `org.opencontainers.image.licenses="Proprietary"` (`Dockerfile:50`); the AddOn is MIT. The copyright holder is decided: Hybrid Cloud Works (owner's statement, 2026-10-26; `LICENSE`, `NOTICE`, `REVIEW.md` R-030). Nothing in this question is open now. The AddOn's `PROVENANCE.md` still makes the ported set removable, and the wheel stays unpublished until the PyPI step in item 2.
-2. `[REVIEW REQUIRED]` **PyPI name and trusted publishing.** `cna-azure-network-engine` must be registered on PyPI with a trusted publisher for `saulpatinojr/HCW-NetworkEyes_App` and the `320-release-engine.yml` workflow; `vars.PYPI_PUBLISH_ENABLED` stays unset until then, and the wheel is attached to the GitHub Release instead.
-3. **Custom role action names.** Checked on 2026-10-25: the six actions in `docs/roles/cna-network-bgp-reader.json` are listed in the Microsoft Learn Azure permissions reference. Whoever creates the role still re-checks them against their tenant with the `Microsoft.Network` provider operations before `az role definition create`.
+2. `[REVIEW REQUIRED]` **PyPI name and trusted publishing.** `network-assessment-azure-engine` must be registered on PyPI with a trusted publisher for `saulpatinojr/HCW-NetworkEyes_App` and the `320-release-engine.yml` workflow; `vars.PYPI_PUBLISH_ENABLED` stays unset until then, and the wheel is attached to the GitHub Release instead.
+3. **Custom role action names.** Checked on 2026-10-25: the six actions in `docs/roles/network-assessment-bgp-reader.json` are listed in the Microsoft Learn Azure permissions reference. Whoever creates the role still re-checks them against their tenant with the `Microsoft.Network` provider operations before `az role definition create`.
 4. `[REVIEW REQUIRED]` **Graph and Entra permissions.** The app registration for the bearer audience (7.H) and any Microsoft Graph permission the web tier needs to acquire tokens with its identity are tenant-admin steps.
 5. `[REVIEW REQUIRED]` **Compliance-framework references** (WAF, CIS, PCI-DSS, ISO 27001, HIPAA, FedRAMP, CISA ZTMM) carried as rule data from `analysis_engine.py` are claims shown to users; every control reference is `[VERIFY]` and the set needs legal or compliance review before the appliance's anonymous public surface exposes them.
 6. **Rule numbering.** Zone-redundancy checks are numbered `AZ-BCDR-006/007` rather than `AZ-NET-02x`, and `AZ-NET-032/033` severities are lowered from Engine B's; both are flagged for the owner, and the AddOn already uses them.

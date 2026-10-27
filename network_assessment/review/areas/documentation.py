@@ -2,9 +2,17 @@
 
 This is the *verify-then-close-gaps* record for the documentation audit: the
 four required documents (``README.md``, ``CHANGELOG.md``, ``REVIEW.md``,
-``TODO.md``) plus the one optional working document (``CNA-0.90-updates.md``),
-cross-checked against the actual repository tree, plus the still-open doc-task
-entries and the R-009 Wiki-publication escalation.
+``TODO.md``), ``CLAUDE.md``, the one optional temporary root document
+(``REFACTOR_APP.md``) and the ``docs/`` folder, cross-checked against the actual
+repository tree, plus the still-open doc-task entries.
+
+The wiki-publication escalation this area used to carry (``REVIEW.md`` R-009) and
+the open-task entry for T-103 (confirm the ADR pages on the wiki) were removed on
+2026-10-27: the GitHub Wiki was deleted, R-009 is superseded, T-103 is withdrawn,
+and long-form documentation now goes in ``docs/`` (``REVIEW.md`` R-031). Both
+findings had become meaningless, so their dedup keys
+(``documentation:wiki-publication-r009``, ``documentation:open-task:T-103``) no
+longer exist; every other key is unchanged.
 
 Facts cross-checked during the audit (design "9. Documentation", Requirement
 9.1) — all verified accurate, recorded as ``INFORMATIONAL`` verified-compliant
@@ -16,11 +24,14 @@ findings so the plan captures what was checked, not only what broke:
   * **CLI entry point.** ``README`` documents the ``network-assessment`` CLI
     (``pip install -e .[dev]`` → ``network-assessment --help``); ``pyproject.toml`` declares
     ``[project.scripts] network-assessment = "network_assessment.cli.main:cli"`` — consistent.
-  * **Four-document model.** ``README``'s documentation map claims exactly four
-    required markdown files plus at most one optional temporary working
-    document. The repository root carries exactly ``README.md``,
-    ``CHANGELOG.md``, ``REVIEW.md``, ``TODO.md`` and the one optional
-    ``CNA-0.90-updates.md`` — consistent.
+  * **Document model.** ``README``'s documentation map says the repository keeps
+    four required root documents, ``CLAUDE.md`` and one optional temporary
+    document (six root documents at most), long-form documentation in ``docs/``,
+    and the community files in ``.github/``. The repository root carries exactly
+    ``README.md``, ``CHANGELOG.md``, ``REVIEW.md``, ``TODO.md``, ``CLAUDE.md`` and
+    the optional ``REFACTOR_APP.md`` — consistent. ``docs/`` holds its index
+    (``docs/README.md``) and the role definition ``docs/roles/`` (JSON, not a
+    document); no long-form page has been restored yet.
   * **Numbered workflows.** ``README`` conventions describe numeric workflow
     bands and name the five workflows this repository keeps
     (``200-build-images.yml``, ``300-test-codebase.yml``,
@@ -46,19 +57,18 @@ Executable status of documented paths (Requirement 9.2):
 Open doc tasks (Requirement 9.3). Of T-103, T-304, T-401 — checked against
 ``TODO.md`` current status:
 
-  * **T-103** — *Not started* → OPEN. Recorded as a plan entry.
+  * **T-103** — *Withdrawn 2026-10-27* (the wiki it asked about is deleted) → not
+    open. Not recorded.
   * **T-304** — *Not started — not currently applicable* → OPEN. Recorded as a
     plan entry (a not-currently-applicable open task is still open work).
   * **T-401** — *Done* → CLOSED. Not recorded as an open-task entry; recorded
     instead as a verified-compliant ``INFORMATIONAL`` finding so the plan shows
     the task was checked and found closed.
 
-Escalation (Requirement 9.4). Publishing the prepared Wiki pages depends on
-GitHub Wiki write access, which is scoped out (``REVIEW.md`` R-009, "Open — not
-blocking"). Recorded as an ``Escalation_Record`` carrying ``blocker_id="R-009"``
-— the review never attempts the publication. These records are consumed by the
-consolidation step (spec task 14.1) and, for the escalation, routed through the
-scope gate (spec task 2.1 / 14.3).
+No finding of this area is owned by a ``REVIEW.md`` blocker any more, so none of
+them becomes an ``Escalation_Record`` (Requirement 9.4 had one, the R-009 wiki
+publication, until 2026-10-27). These records are consumed by the consolidation
+step (spec task 14.1).
 """
 
 from __future__ import annotations
@@ -100,10 +110,12 @@ def _accuracy_findings() -> list[Finding]:
             severity=Severity.INFORMATIONAL,
             proposed_action=(
                 "Verified compliant: README's documentation map (four required "
-                "docs + one optional temporary working doc) matches the "
-                "repository root, which carries exactly README.md, CHANGELOG.md, "
-                "REVIEW.md, TODO.md and the optional CNA-0.90-updates.md. Retire "
-                "CNA-0.90-updates.md when 0.9.0 ships, as the map states."
+                "root docs, CLAUDE.md and one optional temporary doc, six root "
+                "documents at most; long-form documentation in docs/) matches "
+                "the repository root, which carries exactly README.md, "
+                "CHANGELOG.md, REVIEW.md, TODO.md, CLAUDE.md and the optional "
+                "REFACTOR_APP.md. Retire REFACTOR_APP.md when its change sets "
+                "have shipped, as the map states."
             ),
             dedup_key="documentation:four-document-model-accurate",
             subject="README.md::documentation-map",
@@ -174,22 +186,11 @@ def _executable_status_findings() -> list[Finding]:
 
 
 def _open_doc_task_findings() -> list[Finding]:
-    """One plan entry per still-open doc task among T-103, T-304 (Requirement 9.3)."""
+    """One plan entry per still-open doc task: T-304 (Requirement 9.3).
+
+    T-103 was withdrawn on 2026-10-27 (its wiki is deleted) and is not recorded.
+    """
     return [
-        Finding(
-            area=_AREA,
-            severity=Severity.MEDIUM,
-            proposed_action=(
-                "Open doc task T-103 (Not started): confirm ADR-0001 through "
-                "ADR-0005 exist as GitHub Wiki pages (the CHANGELOG references "
-                "were corrected to name the Wiki but the target pages are "
-                "unconfirmed), recreate any missing page from the CHANGELOG "
-                "subjects, and link them from the Wiki home. Depends on Wiki read "
-                "access."
-            ),
-            dedup_key="documentation:open-task:T-103",
-            subject="TODO.md::T-103",
-        ),
         Finding(
             area=_AREA,
             severity=Severity.LOW,
@@ -207,25 +208,6 @@ def _open_doc_task_findings() -> list[Finding]:
     ]
 
 
-def _wiki_escalation_finding() -> Finding:
-    """R-009 Wiki-publication escalation (Requirement 9.4, escalation-only)."""
-    return Finding(
-        area=_AREA,
-        severity=Severity.LOW,
-        proposed_action=(
-            "Escalation: publishing the prepared long-form Wiki pages depends on "
-            "GitHub Wiki write access, which is scoped out (the wiki remote "
-            "returns 401 to the automation). The review records the requirement "
-            "and never attempts the publication; owner: REVIEW.md R-009 "
-            "(Open - not blocking). Grant Wiki write access or publish the "
-            "prepared pages manually (TODO.md T-601/T-602)."
-        ),
-        dedup_key="documentation:wiki-publication-r009",
-        subject="GitHub Wiki (long-form documentation publication)",
-        blocker_id="R-009",
-    )
-
-
 def _verify_findings() -> list[Finding]:
     """Verification of the documentation model (spec task 13.2, Requirement 9.1/9.2).
 
@@ -234,16 +216,17 @@ def _verify_findings() -> list[Finding]:
     inspection:
 
       * ``scripts/validate_documentation_model.py`` — the CI guard for the
-        four-document model (README "Repository conventions"). Run against the
-        tracked tree it exits 0: the four required root documents plus the one
-        optional ``CNA-0.90-updates.md`` are present and nothing else is
-        documentation. This is the executable form of the 9.1 four-document
-        cross-check.
+        document model (README "Documentation map"). Run against the tracked
+        tree it exits 0: the four required root documents are present, the root
+        also carries ``CLAUDE.md`` and the optional ``REFACTOR_APP.md``, and no
+        document file sits outside the places the model allows (the root,
+        ``docs/``, and the community files in ``.github/``). This is the
+        executable form of the 9.1 document-model cross-check.
       * **Link / path resolution.** Every relative document link README's
         documentation map carries (``CHANGELOG.md``, ``REVIEW.md``, ``TODO.md``,
-        ``CNA-0.90-updates.md``) resolves on the tree, as do the ``.env.example``
-        inventory files README points at (repository root and
-        ``apps/network-assessment-web/``).
+        ``REFACTOR_APP.md``, ``CLAUDE.md``, ``docs/`` and ``docs/README.md``)
+        resolves on the tree, as do the ``.env.example`` inventory files README
+        points at (repository root and ``apps/network-assessment-web/``).
       * **Command / workflow-name resolution.** Every workflow filename README
         references by name (``200-build-images.yml``, ``300-test-codebase.yml``,
         ``310-release-version.yml``, ``320-release-engine.yml``, ``370-registry-cleanup.yml``) exists under
@@ -265,9 +248,10 @@ def _verify_findings() -> list[Finding]:
             proposed_action=(
                 "Verified compliant: scripts/validate_documentation_model.py "
                 "exits 0 against the tracked tree — the four required root "
-                "documents (README.md, CHANGELOG.md, REVIEW.md, TODO.md) plus "
-                "the one optional CNA-0.90-updates.md are present and nothing "
-                "outside the allow-list is documentation. Keep the guard in CI "
+                "documents (README.md, CHANGELOG.md, REVIEW.md, TODO.md) are "
+                "present, the root also carries CLAUDE.md and the optional "
+                "REFACTOR_APP.md, and no document file sits outside the root, "
+                "docs/ and the .github/ community files. Keep the guard in CI "
                 "so documentation sprawl cannot return (TODO.md T-603)."
             ),
             dedup_key="documentation:model-validator-passes",
@@ -279,9 +263,10 @@ def _verify_findings() -> list[Finding]:
             proposed_action=(
                 "Verified compliant: every relative link in README's "
                 "documentation map resolves (CHANGELOG.md, REVIEW.md, TODO.md, "
-                "CNA-0.90-updates.md) and the documented .env.example inventory "
-                "files resolve (repository root and apps/network-assessment-web/). No broken "
-                "documentation link found."
+                "REFACTOR_APP.md, CLAUDE.md, docs/ and docs/README.md) and the "
+                "documented .env.example inventory files resolve (repository root "
+                "and apps/network-assessment-web/). No broken documentation link "
+                "found."
             ),
             dedup_key="documentation:links-resolve",
             subject="README.md::documentation-map / .env.example",
@@ -322,13 +307,14 @@ def documentation_findings() -> list[Finding]:
     """Return the Requirement 9 findings recorded for the documentation area.
 
     Covers the accuracy cross-checks (9.1), the executable-status entries for
-    documented deploy/CLI paths (9.2), one plan entry per still-open doc task
-    among T-103/T-304/T-401 (9.3, and T-401 is closed so recorded as
-    verified-compliant instead), and the R-009 Wiki-publication escalation (9.4).
+    documented deploy/CLI paths (9.2), and one plan entry per still-open doc task
+    among T-304/T-401 (9.3; T-401 is closed so it is recorded as
+    verified-compliant instead, and T-103 is withdrawn). No finding is owned by a
+    ``REVIEW.md`` blocker any more (the R-009 wiki-publication escalation, 9.4,
+    was removed on 2026-10-27).
     """
     findings: list[Finding] = []
     findings.extend(_accuracy_findings())
     findings.extend(_executable_status_findings())
     findings.extend(_open_doc_task_findings())
-    findings.append(_wiki_escalation_finding())
     return findings

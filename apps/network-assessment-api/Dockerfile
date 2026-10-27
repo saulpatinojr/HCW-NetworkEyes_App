@@ -24,17 +24,17 @@ COPY --from=uv /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
 # The engine package is a uv workspace member: its pyproject.toml must be present for
 # `uv export --locked` to resolve the workspace, before the source tree is copied.
-COPY packages/cna-azure-network-engine/pyproject.toml packages/cna-azure-network-engine/
+COPY packages/network-assessment-azure-engine/pyproject.toml packages/network-assessment-azure-engine/
 RUN uv export --locked --no-default-groups --no-emit-project --no-emit-workspace --extra api --extra aws -o /tmp/requirements.txt \
  && uv pip install --system --no-cache --require-hashes --no-deps --prefix=/install -r /tmp/requirements.txt \
  && uv export --locked --only-group build -o /tmp/build-requirements.txt \
  && uv pip install --system --no-cache --require-hashes --no-deps -r /tmp/build-requirements.txt
-COPY packages/cna-azure-network-engine/ packages/cna-azure-network-engine/
+COPY packages/network-assessment-azure-engine/ packages/network-assessment-azure-engine/
 COPY network_assessment/ network_assessment/
 COPY apps/network-assessment-api/ apps/network-assessment-api/
 # The engine package first (a workspace member, excluded from the hash-checked export
 # above), then the network_assessment package itself; both from the tree, both without build isolation.
-RUN uv pip install --system --no-cache --no-deps --no-build-isolation --prefix=/install ./packages/cna-azure-network-engine \
+RUN uv pip install --system --no-cache --no-deps --no-build-isolation --prefix=/install ./packages/network-assessment-azure-engine \
  && uv pip install --system --no-cache --no-deps --no-build-isolation --prefix=/install . \
  && rm -f /tmp/requirements.txt /tmp/build-requirements.txt
 

@@ -282,7 +282,7 @@ def _edge_cell(src: str, tgt: str, label: str = "") -> str:
 
 def _wrap_diagram(cells: str, label: str) -> str:
     return textwrap.dedent(f"""\
-        <mxfile host="CNA" version="21.0.0">
+        <mxfile host="NetworkEyes" version="21.0.0">
           <diagram name="{_safe(label)}">
             <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10"
               connect="1" arrows="1" fold="1" page="0"
@@ -903,4 +903,4 @@ def merge_diagrams(pages: list[tuple[str, str]]) -> str:
         )
 
     body = "\n  ".join(fragments)
-    return f'<mxfile host="CNA" version="21.0.0">\n  {body}\n</mxfile>'
+    return f'<mxfile host="NetworkEyes" version="21.0.0">\n  {body}\n</mxfile>'

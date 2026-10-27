@@ -7,7 +7,9 @@ real entry point — including the `sys.exit` in `__main__` — rather than an
 importable slice of it.
 
 The documentation-model cases also cover T-605 (missing required documents),
-T-606 (mixed-case and non-.md documents), and T-608 (untracked build artifacts).
+T-606 (mixed-case and non-.md documents), and T-608 (untracked build artifacts). Since
+2026-10-27 they also cover the docs/ folder (REVIEW.md R-031): which paths are allowed at any
+depth, which lookalikes are refused, and that the removed working document cannot come back.
 """
 
 import shutil
@@ -78,9 +80,11 @@ def commit_all(repo: Path) -> None:
 
 class TestDocumentationModel:
     def test_passes_on_a_conforming_repository(self, fixture_repo: Path) -> None:
+        """No docs/ folder is needed: nothing under docs/ is required to exist."""
         result = run_script(DOC_MODEL_SCRIPT, fixture_repo)
         assert result.returncode == 0, result.stderr
         assert "Documentation model OK" in result.stdout
+        assert "0 under docs/" in result.stdout
 
     @pytest.mark.parametrize("missing", REQUIRED_DOCUMENTS)
     def test_fails_when_a_required_document_is_deleted(
@@ -108,12 +112,17 @@ class TestDocumentationModel:
     @pytest.mark.parametrize(
         "sprawl",
         [
-            "docs/GUIDE.md",
-            "docs/ROADMAP.MD",
+            # T-606: every document suffix and any letter case is a document, wherever it sits
+            # outside the places the model allows.
+            "ROADMAP.md",
             "NOTES.Md",
-            "docs/NOTES.markdown",
-            "docs/PLAN.rst",
-            "docs/PLAN.adoc",
+            "doc/ROADMAP.MD",
+            "documentation/NOTES.markdown",
+            "Docs/PLAN.rst",
+            "src/docs/PLAN.adoc",
+            "scripts/GUIDE.md",
+            # The working document that was removed on 2026-10-27 may not come back at the root.
+            "CNA-0.90-updates.md",
         ],
     )
     def test_fails_on_documentation_sprawl(self, fixture_repo: Path, sprawl: str) -> None:
@@ -126,6 +135,200 @@ class TestDocumentationModel:
         result = run_script(DOC_MODEL_SCRIPT, fixture_repo)
         assert result.returncode == 1
         assert sprawl in result.stderr.replace("\\", "/")
+
+    @pytest.mark.parametrize(
+        "page",
+        [
+            "docs/README.md",
+            "docs/GUIDE.md",
+            # The same document suffixes the validator recognises everywhere else, in any case.
+            "docs/ROADMAP.MD",
+            "docs/NOTES.markdown",
+            "docs/PLAN.rst",
+            "docs/PLAN.adoc",
+            # Any depth below docs/.
+            "docs/adr/0001-record-decisions.md",
+            "docs/runbooks/azure/rotate-a-token.md",
+            "docs/a/b/c/d/e/deep.md",
+            # A folder that happens to be called docs inside docs/ is only a subfolder.
+            "docs/docs/inner.md",
+            "docs/docs/docs/innermost.md",
+            # Names that are only special in .github/ are ordinary pages when deeper in docs/.
+            "docs/runbooks/SECURITY.md",
+            "docs/guides/ISSUE_TEMPLATE/bug.md",
+        ],
+    )
+    def test_allows_documents_under_the_docs_folder(self, fixture_repo: Path, page: str) -> None:
+        """REVIEW.md R-031 (docs-folder, 2026-10-27): long-form documentation lives in docs/."""
+        target = fixture_repo / page
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("# page\n")
+        commit_all(fixture_repo)
+
+        result = run_script(DOC_MODEL_SCRIPT, fixture_repo)
+        assert result.returncode == 0, result.stderr
+        assert "1 under docs/" in result.stdout
+
+    @pytest.mark.parametrize(
+        "lookalike",
+        [
+            # The folder name is compared exactly: other spellings are other folders.
+            "doc/GUIDE.md",
+            "Docs/GUIDE.md",
+            "DOCS/GUIDE.md",
+            "documentation/GUIDE.md",
+            "docs-old/GUIDE.md",
+            "docs_archive/GUIDE.md",
+            # docs/ is the top-level folder only: a second home next to the code is a second
+            # source of truth. (A docs folder inside docs/ itself is a subfolder and is allowed.)
+            "src/docs/GUIDE.md",
+            "apps/network-assessment-web/docs/GUIDE.md",
+            "packages/engine/docs/adr/0001.md",
+            ".github/docs/GUIDE.md",
+            "scripts/docs/GUIDE.md",
+            # A root file is judged by the root list, whatever it is called.
+            "docs.md",
+            "DOCS.md",
+            "documentation.md",
+        ],
+    )
+    def test_rejects_lookalikes_of_the_docs_folder(
+        self, fixture_repo: Path, lookalike: str
+    ) -> None:
+        target = fixture_repo / lookalike
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("# lookalike\n")
+        commit_all(fixture_repo)
+
+        result = run_script(DOC_MODEL_SCRIPT, fixture_repo)
+        assert result.returncode == 1
+        assert lookalike in result.stderr.replace("\\", "/")
+
+    def test_names_in_docs_do_not_hide_a_violation_elsewhere(self, fixture_repo: Path) -> None:
+        for path in ("docs/GUIDE.md", "src/docs/GUIDE.md"):
+            target = fixture_repo / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("# page\n")
+        commit_all(fixture_repo)
+
+        result = run_script(DOC_MODEL_SCRIPT, fixture_repo)
+        assert result.returncode == 1
+        report = result.stderr.replace("\\", "/")
+        assert "src/docs/GUIDE.md" in report
+        assert "  docs/GUIDE.md" not in report
+
+    def test_files_that_are_not_documents_in_docs_are_not_the_validators_business(
+        self, fixture_repo: Path
+    ) -> None:
+        """docs/roles/*.json exists today: only document suffixes are ever scanned."""
+        for path in ("docs/roles/role.json", "docs/diagram.drawio", "docs/img/logo.png"):
+            target = fixture_repo / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("not a document\n")
+        commit_all(fixture_repo)
+
+        result = run_script(DOC_MODEL_SCRIPT, fixture_repo)
+        assert result.returncode == 0, result.stderr
+        assert "0 under docs/" in result.stdout
+
+    def test_a_page_in_docs_does_not_stand_in_for_a_required_root_document(
+        self, fixture_repo: Path
+    ) -> None:
+        (fixture_repo / "TODO.md").unlink()
+        (fixture_repo / "docs").mkdir()
+        (fixture_repo / "docs" / "TODO.md").write_text("# TODO\n")
+        commit_all(fixture_repo)
+
+        result = run_script(DOC_MODEL_SCRIPT, fixture_repo)
+        assert result.returncode == 1
+        assert "required document(s) missing" in result.stderr
+
+    @pytest.mark.parametrize(
+        "reserved",
+        [
+            # Names GitHub documents as readable from docs/ as well as .github/ (the text of the pages
+            # "Creating a default community health file", "Creating a pull request template", "Adding a
+            # code of conduct", "Setting guidelines for repository contributors", "Adding support
+            # resources" and "Adding an accessibility page", read 2026-10-27): a copy here could be shown
+            # as the repository's own policy. Ticket #247 keeps them in .github/.
+            "docs/SECURITY.md",
+            "docs/CONTRIBUTING.md",
+            "docs/CODE_OF_CONDUCT.md",
+            "docs/SUPPORT.md",
+            "docs/ACCESSIBILITY.md",
+            "docs/accessibility.md",
+            "docs/PULL_REQUEST_TEMPLATE.md",
+            "docs/pull_request_template.md",
+            "docs/PULL_REQUEST_TEMPLATE/release.md",
+            "docs/security.md",
+            # Refused as this repository's choice, not because GitHub reads them from docs/: the same
+            # pages document only .github/FUNDING.yml and .github/ISSUE_TEMPLATE/. Kept refused so that
+            # docs/ holds no second copy of anything .github/ holds.
+            "docs/FUNDING.md",
+            "docs/ISSUE_TEMPLATE/bug.md",
+            "docs/issue_template/bug.md",
+        ],
+    )
+    def test_rejects_the_community_file_names_directly_in_docs(
+        self, fixture_repo: Path, reserved: str
+    ) -> None:
+        target = fixture_repo / reserved
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("# reserved\n")
+        commit_all(fixture_repo)
+
+        result = run_script(DOC_MODEL_SCRIPT, fixture_repo)
+        assert result.returncode == 1
+        assert reserved in result.stderr.replace("\\", "/")
+
+    def test_a_community_file_name_in_docs_gets_its_own_hint_not_move_it_into_docs(
+        self, fixture_repo: Path
+    ) -> None:
+        """The file is already in docs/, so 'move long-form content into docs/' would be wrong advice."""
+        (fixture_repo / "docs").mkdir()
+        (fixture_repo / "docs" / "SECURITY.md").write_text("# policy\n")
+        commit_all(fixture_repo)
+
+        result = run_script(DOC_MODEL_SCRIPT, fixture_repo)
+        assert result.returncode == 1
+        report = result.stderr.replace("\\", "/")
+        assert "  docs/SECURITY.md" in report
+        assert "Files inside docs/ named like a GitHub community file" in report
+        assert "Rename the page" in report
+        assert ".github/" in report
+        # The generic hint is for files outside docs/ and would be wrong here.
+        assert "Move long-form content into docs/" not in report
+        assert "Document files in a place the model does not allow" not in report
+
+    def test_a_file_outside_docs_keeps_the_move_it_into_docs_hint(self, fixture_repo: Path) -> None:
+        (fixture_repo / "doc").mkdir()
+        (fixture_repo / "doc" / "GUIDE.md").write_text("# guide\n")
+        commit_all(fixture_repo)
+
+        result = run_script(DOC_MODEL_SCRIPT, fixture_repo)
+        assert result.returncode == 1
+        report = result.stderr.replace("\\", "/")
+        assert "  doc/GUIDE.md" in report
+        assert "Move long-form content into docs/" in report
+        assert "Files inside docs/ named like a GitHub community file" not in report
+        assert "Rename the page" not in report
+
+    def test_both_kinds_of_violation_each_get_their_own_hint(self, fixture_repo: Path) -> None:
+        for path in ("doc/GUIDE.md", "docs/CONTRIBUTING.md"):
+            target = fixture_repo / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("# page\n")
+        commit_all(fixture_repo)
+
+        result = run_script(DOC_MODEL_SCRIPT, fixture_repo)
+        assert result.returncode == 1
+        report = result.stderr.replace("\\", "/")
+        outside_at = report.index("Document files in a place the model does not allow")
+        inside_at = report.index("Files inside docs/ named like a GitHub community file")
+        assert outside_at < report.index("  doc/GUIDE.md") < inside_at
+        assert inside_at < report.index("  docs/CONTRIBUTING.md")
+        assert "Move long-form content into docs/" in report
+        assert "Rename the page" in report
 
     def test_ignores_untracked_build_artifacts(self, fixture_repo: Path) -> None:
         """T-608: a normal `pytest` run wrote .pytest_cache/README.md and broke the guard."""
@@ -227,20 +430,28 @@ class TestDocumentationModel:
         assert result.returncode == 1
         assert misplaced in result.stderr.replace("\\", "/")
 
-    def test_failure_message_names_the_github_community_files(self, fixture_repo: Path) -> None:
-        (fixture_repo / "docs").mkdir()
-        (fixture_repo / "docs" / "GUIDE.md").write_text("# guide\n")
+    def test_failure_message_names_every_place_a_document_is_allowed(
+        self, fixture_repo: Path
+    ) -> None:
+        (fixture_repo / "doc").mkdir()
+        (fixture_repo / "doc" / "GUIDE.md").write_text("# guide\n")
         commit_all(fixture_repo)
 
         result = run_script(DOC_MODEL_SCRIPT, fixture_repo)
         assert result.returncode == 1
+        assert "docs/" in result.stderr
+        assert "REFACTOR_APP.md" in result.stderr
         assert ".github/ISSUE_TEMPLATE/" in result.stderr
         assert "CODE_OF_CONDUCT.md" in result.stderr
+        # The retired document and the retired destination are no longer offered as options.
+        assert "CNA-0.90-updates.md" not in result.stderr
+        assert "R-031" not in result.stderr
+        assert "no destination" not in result.stderr
 
     def test_reports_failures_on_stderr(self, fixture_repo: Path) -> None:
         """T-607: failures went to stdout while the sibling shape-catalog guard used stderr."""
-        (fixture_repo / "docs").mkdir()
-        (fixture_repo / "docs" / "GUIDE.md").write_text("# guide\n")
+        (fixture_repo / "doc").mkdir()
+        (fixture_repo / "doc" / "GUIDE.md").write_text("# guide\n")
         commit_all(fixture_repo)
 
         result = run_script(DOC_MODEL_SCRIPT, fixture_repo)

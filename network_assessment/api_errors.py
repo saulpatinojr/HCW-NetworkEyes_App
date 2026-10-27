@@ -1,4 +1,4 @@
-"""Downstream-SDK error sanitizer for the CNA API.
+"""Downstream-SDK error sanitizer for the NetworkEyes API.
 
 Requirement 2.3 (production-readiness): when a downstream SDK returns an error
 to the API, the client-facing response must exclude the *raw* SDK exception

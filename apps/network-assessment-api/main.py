@@ -1,4 +1,4 @@
-"""CNA API — discovery orchestration layer.
+"""NetworkEyes API — discovery orchestration layer.
 
 Accepts discovery jobs from network-assessment-web, runs the Azure discovery engine in
 background tasks, maps the resulting topology to security findings, and writes
@@ -228,7 +228,7 @@ async def _lifespan(_app: FastAPI):
         db.close_all()
 
 
-app = FastAPI(title="CNA API", version=_api_version(), lifespan=_lifespan)
+app = FastAPI(title="NetworkEyes API", version=_api_version(), lifespan=_lifespan)
 app.include_router(metrics_router)
 app.include_router(chat_router)
 app.include_router(reports_router)
@@ -478,7 +478,7 @@ def intake(body: dict) -> dict:
     )
 
 
-# ─── Client portal publishing (CNA-0.90 §3: the publish story) ───────────────
+# ─── Client portal publishing (the 0.9.0 backlog item "the publish story") ───
 
 
 class PublishRequest(BaseModel):
@@ -780,7 +780,7 @@ def _require_aws_installed() -> None:
 
 @internal.post("/discovery/test-connection-aws")
 async def test_connection_aws(request: AwsTestConnectionRequest) -> dict:
-    """Validate AWS keys and prove the CNA read-only role can be assumed."""
+    """Validate AWS keys and prove the NetworkEyes read-only role can be assumed."""
     _require_aws_installed()
     try:
         import boto3  # lazy: keeps Azure-only deployments importable without boto3
@@ -793,7 +793,7 @@ async def test_connection_aws(request: AwsTestConnectionRequest) -> dict:
         identity = sts.get_caller_identity()
         kwargs: dict[str, Any] = {
             "RoleArn": request.role_arn,
-            "RoleSessionName": "CNA-TestConnection",
+            "RoleSessionName": "NetworkAssessment-TestConnection",
             "DurationSeconds": 900,
         }
         if request.external_id:
@@ -936,7 +936,7 @@ def _run_azure_discovery(request: DiscoveryStartRequest) -> None:
                     "→ discovery blocked; no rules evaluated"
                 )
 
-        # One typed rule set for every Azure finding (the cna_azure_network_engine package):
+        # One typed rule set for every Azure finding (the network_assessment_azure_engine package):
         # pure evaluate(topology), rule ids on every finding, hedge check on every fact.
         _log(f"Evaluating {len(RULES)} Azure rules (rules {RULES_VERSION})…")
 
@@ -1011,7 +1011,7 @@ def _run_azure_discovery(request: DiscoveryStartRequest) -> None:
 
 
 def _run_aws_discovery(request: DiscoveryStartRequest) -> None:
-    """AWS counterpart of _run_azure_discovery (CNA-0.90 §3: AWS end-to-end).
+    """AWS counterpart of _run_azure_discovery (the 0.9.0 backlog item "AWS end-to-end").
 
     Findings come from the network_assessment package's AnalysisEngine AWS rules; the Azure
     path evaluates the typed rule registry instead. Both write through

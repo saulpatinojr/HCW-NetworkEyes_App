@@ -1,2 +1,2 @@
-Audit Azure NSGs from CNA discovery data.
+Audit Azure NSGs from NetworkEyes discovery data.
 Observed state only. Flag deviations from Azure Security Benchmark v3.

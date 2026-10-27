@@ -86,8 +86,8 @@ _EXC_CLASS = st.sampled_from(list(_EXC_CLASSES))
 # these makes the "no raw text leaks" assertion meaningful: if any survived into
 # the client message, that would be a real leak of internal detail.
 _SENSITIVE_FRAGMENTS = (
-    "arn:aws:iam::123456789012:role/cna-deploy",
-    "https://cna-prod.privatelink.blob.core.windows.net",
+    "arn:aws:iam::123456789012:role/network-assessment-deploy",
+    "https://network-assessment-prod.privatelink.blob.core.windows.net",
     "postgresql://admin:s3cr3t@db.internal:5432/cna",
     "AccessDeniedException: user is not authorized",
     "x-amz-request-id: 7F3A2B1C9D8E",

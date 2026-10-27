@@ -34,12 +34,18 @@ managed edge, backed by PostgreSQL and authenticated via Microsoft Entra ID.
 
 ## Documentation map
 
-This repository keeps four required documents plus `CLAUDE.md`, and two *optional* temporary
-working documents that are removed when their work ships (`REFACTOR_APP.md`, the refactoring plan, and
-`CNA-0.90-updates.md`). That makes seven root documents at most; `scripts/validate_documentation_model.py`
-enforces the list. The community files GitHub reads (`SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, the pull request template and the issue forms) live in
-[`.github/`](.github), not at the root, and the validator allows exactly those. Everything else has no destination yet: the GitHub Wiki that held it was deleted on 2026-10-27, and where long-form
-documentation lives now is an open decision (`REVIEW.md`, R-031).
+This repository keeps four required documents at the root plus `CLAUDE.md`, and one *optional* temporary
+working document that is removed when its work ships (`REFACTOR_APP.md`, the refactoring plan). That makes six
+root documents at most. Long-form documentation (guides, architecture, runbooks, decision records) lives in the
+[`docs/`](docs) folder, at any depth below it; nothing in it is required, and it is reviewed in pull requests like
+code (the GitHub Wiki that used to hold it was deleted on 2026-10-27; `REVIEW.md`, R-031). The community files GitHub
+reads (`SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, the pull request template and the issue forms) live in
+[`.github/`](.github), not at the root and not in `docs/`. Nothing else is allowed:
+`scripts/validate_documentation_model.py` fails the build on any other document file (a file ending in `.md`,
+`.rst`, `.adoc` and the like), for example in `doc/`, `documentation/`, `Docs/` or a `docs` folder anywhere other
+than the top level of the repository (a `docs` folder inside `docs/` itself is only a subfolder and is fine). This
+section is the model's one full statement: the other documents point here, and a test keeps its count and its list in
+step with the validator.
 
 | Document | Contains |
 |---|---|
@@ -47,9 +53,9 @@ documentation lives now is an open decision (`REVIEW.md`, R-031).
 | [`CHANGELOG.md`](CHANGELOG.md) | Completed work, by release |
 | [`REVIEW.md`](REVIEW.md) | Blockers that require a human decision, approval, or access grant |
 | [`TODO.md`](TODO.md) | The engineering work queue — every actionable item, phased |
-| [`REFACTOR_APP.md`](REFACTOR_APP.md) | The owner-approved refactoring plan this repository executes (HCW App-to-AddOn initiative, 2026-10): change sets A–K, acceptance criteria, validation commands |
+| [`REFACTOR_APP.md`](REFACTOR_APP.md) | *Optional, temporary* — the owner-approved refactoring plan this repository executes (HCW App-to-AddOn initiative, 2026-10): change sets A–K, acceptance criteria, validation commands |
 | [`CLAUDE.md`](CLAUDE.md) | Rules for AI coding agents: what this repository is, the image contract, and the conventions agents get wrong |
-| [`CNA-0.90-updates.md`](CNA-0.90-updates.md) | *Optional, temporary* — the one working-document exception to the four required docs: the 0.9.0 pre-demo review, cleanup record, polish plan, and the 2026-08-28 dev rebuild/deployment record (§5); retired when 0.9.0 ships |
+| [`docs/`](docs) | Long-form documentation. There are no pages yet; [`docs/README.md`](docs/README.md) says what belongs there and how pages are named and reviewed |
 
 If you are picking up work on this repository, start with `TODO.md`. If you are waiting on
 someone, check `REVIEW.md`.
@@ -63,7 +69,7 @@ apps/
 ├── network-assessment-web/          Next.js web platform (8-step journey, encyclopedia, copilot)
 ├── network-assessment-api/          FastAPI — metrics, chat, reports, discovery routers
 └── network-assessment-worker/       Python background worker — discovery + report generation
-packages/             cna-azure-network-engine — the Azure engine (model, typed rules, classifier,
+packages/             network-assessment-azure-engine — the Azure engine (model, typed rules, classifier,
                       Resource Graph normalizer, renderers); a uv workspace member the network_assessment package consumes
 network_assessment/   Python package, installed as the `network-assessment` CLI (the old `cna` command still works)
 ├── core/             topology/{common,azure,aws} · findings_schema · stat_masters · engagement
@@ -76,6 +82,8 @@ network_assessment/   Python package, installed as the `network-assessment` CLI 
 scripts/              Repository guards (documentation model, module graph, shape catalog)
                       and the headless draw.io wrapper the images use
 tests/                unit/ and integration/
+docs/                 Long-form documentation (no pages yet; see the Documentation map) and
+                      roles/, the custom Azure role definition as a JSON file
 .github/workflows/    200 build images · 300 test · 310 release · 320 engine release · 370 registry cleanup · 390 repository admin
 local/agent-config/   Vendored agent configuration — gitignored, not project source
 ```
@@ -234,11 +242,9 @@ licence file for it and has not verified the statement (`REVIEW.md`, R-020). The
 
 ## Repository conventions
 
-- **Four documents plus `CLAUDE.md`.** `README.md`, `CHANGELOG.md`, `REVIEW.md`,
-  `TODO.md`, and `CLAUDE.md` (agent instructions) are the only markdown files in the repository, apart
-  from the two optional temporary documents named in "Documentation map" (`REFACTOR_APP.md`, `CNA-0.90-updates.md`) and the
-  community files in `.github/`.
-  Long-form documentation has no destination since the wiki was deleted (`REVIEW.md`, R-031).
+- **Documents go where the Documentation map says.** The model is set out in full once, in the Documentation map
+  above; `scripts/validate_documentation_model.py` enforces it in CI. Long-form documentation goes in `docs/`.
+  Do not add a document file anywhere else.
 - **Image contract changes are recorded, never implied.** Any change to the image tag scheme, the
   signed-digest record, or the runtime environment contract
   (`NETWORK_ASSESSMENT_AI_MODE`, `NETWORK_ASSESSMENT_APPLIANCE_CLOUD`, …) is recorded under `Changed` in `CHANGELOG.md` and in the release notes,

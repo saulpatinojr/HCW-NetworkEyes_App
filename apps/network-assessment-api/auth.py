@@ -1,4 +1,4 @@
-"""Bearer authentication for the CNA API (SEC-001 / ARCH-002; change set H).
+"""Bearer authentication for the NetworkEyes API (SEC-001 / ARCH-002; change set H).
 
 The API is an internal service the web tier calls; historically it carried no
 authentication and relied entirely on being network-private. The AWS appliance

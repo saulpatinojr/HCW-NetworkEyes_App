@@ -49,18 +49,18 @@ COPY --from=uv /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
 # The engine package is a uv workspace member: its pyproject.toml must be present for
 # `uv export --locked` to resolve the workspace, before the source tree is copied.
-COPY packages/cna-azure-network-engine/pyproject.toml packages/cna-azure-network-engine/
+COPY packages/network-assessment-azure-engine/pyproject.toml packages/network-assessment-azure-engine/
 # The appliance build serves both clouds, so the [aws] extra rides along here; the
 # package itself declares boto3 only under that extra (change set K).
 RUN uv export --locked --no-default-groups --no-emit-project --no-emit-workspace --extra aws -o /tmp/requirements.txt \
  && uv pip install --system --no-cache --require-hashes --no-deps --prefix=/install -r /tmp/requirements.txt \
  && uv export --locked --only-group build -o /tmp/build-requirements.txt \
  && uv pip install --system --no-cache --require-hashes --no-deps -r /tmp/build-requirements.txt
-COPY packages/cna-azure-network-engine/ packages/cna-azure-network-engine/
+COPY packages/network-assessment-azure-engine/ packages/network-assessment-azure-engine/
 COPY network_assessment/ network_assessment/
 # The engine package first (a workspace member, excluded from the hash-checked export
 # above), then the network_assessment package itself; both from the tree, both without build isolation.
-RUN uv pip install --system --no-cache --no-deps --no-build-isolation --prefix=/install ./packages/cna-azure-network-engine \
+RUN uv pip install --system --no-cache --no-deps --no-build-isolation --prefix=/install ./packages/network-assessment-azure-engine \
  && uv pip install --system --no-cache --no-deps --no-build-isolation --prefix=/install . \
  && rm -f /tmp/requirements.txt /tmp/build-requirements.txt
 
@@ -76,16 +76,16 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_CACHE_DIR=1 PYTHONDONTWRITEBYTECODE=1
 WORKDIR /build
 COPY --from=uv /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
-COPY packages/cna-azure-network-engine/ packages/cna-azure-network-engine/
+COPY packages/network-assessment-azure-engine/ packages/network-assessment-azure-engine/
 # The engine's base dependencies from the lock (hash-checked), then the engine itself
 # from the tree with no extras: no cloud SDK is named anywhere in this stage.
-RUN uv export --locked --no-default-groups --no-emit-project --no-emit-workspace --package cna-azure-network-engine -o /tmp/lab-requirements.txt \
+RUN uv export --locked --no-default-groups --no-emit-project --no-emit-workspace --package network-assessment-azure-engine -o /tmp/lab-requirements.txt \
  && uv pip install --system --no-cache --require-hashes --no-deps --prefix=/install-lab -r /tmp/lab-requirements.txt \
  && uv export --locked --only-group build -o /tmp/build-requirements.txt \
  && uv pip install --system --no-cache --require-hashes --no-deps -r /tmp/build-requirements.txt \
- && uv pip install --system --no-cache --no-deps --no-build-isolation --prefix=/install-lab ./packages/cna-azure-network-engine \
+ && uv pip install --system --no-cache --no-deps --no-build-isolation --prefix=/install-lab ./packages/network-assessment-azure-engine \
  && rm -f /tmp/lab-requirements.txt /tmp/build-requirements.txt \
- && PYTHONPATH=/install-lab/lib/python3.14/site-packages python -m cna_azure_network_engine.edition
+ && PYTHONPATH=/install-lab/lib/python3.14/site-packages python -m network_assessment_azure_engine.edition
 
 # ---- drawio fetch stage ----
 # Pinned draw.io desktop release, verified by checksum before it can reach
@@ -120,7 +120,7 @@ RUN python -m pip uninstall -y pip \
 USER 1001
 ENV NETWORK_ASSESSMENT_EDITION=lab
 # Exit 0 when azure is NOT importable and no identity variable is set; exit 1 otherwise.
-CMD ["python", "-m", "cna_azure_network_engine.edition"]
+CMD ["python", "-m", "network_assessment_azure_engine.edition"]
 
 # ---- final stage: appliance ----
 FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS final-appliance

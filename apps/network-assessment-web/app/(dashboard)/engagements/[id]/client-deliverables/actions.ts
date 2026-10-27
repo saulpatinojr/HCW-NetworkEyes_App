@@ -261,7 +261,7 @@ export async function deleteDocument(formData: FormData) {
 }
 
 // ─── Publish client portal ───────────────────────────────────────────────────
-// Delegates to the CNA API, which uploads the published deliverables to a
+// Delegates to the NetworkEyes API, which uploads the published deliverables to a
 // private per-engagement blob container and returns a TTL-capped SAS portal
 // URL. The URL is returned to the caller ONCE and never persisted.
 

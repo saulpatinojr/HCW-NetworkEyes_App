@@ -46,9 +46,10 @@ _SERVICE_DOCKERFILES = (
 _COMPOSE_FILE = "docker-compose.yml"
 
 # The escalation blockers this review consumes in the core (design "Blocker model"
-# table): R-005 observability, R-009 documentation. The AWS/Azure Terraform
-# consumers left with the deployment layer (TODO.md T-504).
-_EXPECTED_ESCALATION_BLOCKERS = frozenset({"R-005", "R-009"})
+# table): R-005 observability. The AWS/Azure Terraform consumers left with the
+# deployment layer (TODO.md T-504), and the R-009 documentation consumer was removed
+# with the wiki (REVIEW.md R-031).
+_EXPECTED_ESCALATION_BLOCKERS = frozenset({"R-005"})
 
 
 def _all_subject_tokens(plan: RemediationPlan) -> set[str]:
@@ -123,7 +124,7 @@ def test_coverage_service_dockerfiles_and_compose_present():
 
 
 def test_escalations_carry_expected_blocker_ids():
-    """Escalation entries reference the R-005 and R-009 consumers that remain in the core."""
+    """Escalation entries reference the R-005 consumer that remains in the core."""
     plan = build_remediation_plan()
     escalation_blockers = {entry.blocker_id for entry in plan.entries if entry.is_escalation}
     assert escalation_blockers == _EXPECTED_ESCALATION_BLOCKERS, (
