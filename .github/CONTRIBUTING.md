@@ -20,7 +20,7 @@ overview, and `TODO.md` is the work queue.
   `packages/network-assessment-azure-engine`. Deployment is not done here: this repository only builds and publishes the
   images. A change to the image tags, the signing identity or
   the runtime environment settings changes what consumers rely on; `CLAUDE.md` explains how to record it.
-- **Documents:** the model is written out once, in the Documentation map of `README.md`, and
+- **Documents:** the model is set out in full once, in the Documentation map of `README.md`, and
   `scripts/validate_documentation_model.py` fails the build on a document file where the map does not allow one. Write
   long-form documentation (guides, architecture, runbooks, decision records) under `docs/`; it is reviewed in the pull
   request like code, and `docs/README.md` says how pages are named. The community files GitHub itself reads (this

@@ -127,11 +127,11 @@ change under `Changed` in `CHANGELOG.md` (and in the release notes) where a cons
 
 ## Repository conventions that agents get wrong
 
-- **Documents:** the model is written out once, in `README.md` (Documentation map), and
+- **Documents:** the model is set out in full once, in `README.md` (Documentation map), and
   `scripts/validate_documentation_model.py` enforces it in CI. Do not restate it elsewhere and do not add a document file
   where the map does not allow one. Long-form documentation (guides, architecture, runbooks, decision records) goes in
   `docs/`, reviewed in a pull request like code (`docs/README.md` says how). Do not restore pages from the deleted GitHub
-  Wiki on your own: which pages come back is the owner's choice (`REVIEW.md` R-031).
+  Wiki on your own: which pages come back is the owner's choice (`REVIEW.md` R-032).
 - **Never hardcode a value at a call site.** Declare it (`DiscoveryOptions`
   field, module-level constant, setting) and resolve at runtime.
 - **Python dependencies are locked.** `uv.lock` is the resolution every Python

@@ -81,7 +81,7 @@ Each one actively misleads an engineer or a workflow run.
 - **Priority:** None
 - **Description:** Withdrawn: the GitHub Wiki was deleted on 2026-10-27 (`REVIEW.md` R-031), so there are no wiki pages
   left to confirm. Long-form documentation now goes in the `docs/` folder, and which of the old wiki pages come back
-  there is the owner's choice. `CHANGELOG.md` entries that say the ADRs were added to the wiki are dated records and
+  there is the owner's choice (`REVIEW.md` R-032). `CHANGELOG.md` entries that say the ADRs were added to the wiki are dated records and
   stay as written. If the owner brings the ADRs back, the five subjects (Anthropic removal, smoke-test removal, Entra
   redirect-URI ownership, Key Vault network hardening target, container image-pull strategy) are described in
   `CHANGELOG.md` under `[Unreleased]` → Added/Removed, so a page can be rebuilt from there.
@@ -504,7 +504,7 @@ order; do not reorder it.
   from history (`git show 7a6b1fa:migrate/scripts/Initialize-Migration.ps1`), and remember its
   `iam.tf` neighbour carries the obsolete OIDC thumbprint T-203 says must not be copied forward.
   The IAM policy mapping and directory inventory preserved in the notes below stay here, as the only
-  copy, until the owner chooses which pages come back into `docs/` (`REVIEW.md` R-031; T-601 is withdrawn).
+  copy, until the owner chooses which pages come back into `docs/` (`REVIEW.md` R-032; T-601 is withdrawn).
 - **Notes for future engineers:** The current stack supersedes `migrate/` on every axis: eight
   module boundaries mirroring Azure, split platform/workload state, VPC endpoints, X-Ray, Bedrock,
   and autoscaling. `migrate/` has none of those. Treat it as history, not as an alternative. The
@@ -1590,7 +1590,7 @@ order; do not reorder it.
   appliances (each appliance reviewing its own Terraform) or are retired here; prune
   `SELF_HOSTED_ONLY_WORKFLOWS` to the four core workflows and re-derive the secret-location list
   from the current `.secrets.baseline`; update the pinned counts in the tests in the same change.
-- **Status:** Done — 2026-09-15. The `terraform-aws`/`terraform-azure` emitters and their tests were retired; each area is represented by one relocation record (`network_assessment/review/areas/terraform_relocated.py`) so the closed nine-area set and Property 2 still hold, and the findings they carried left this repository with the Terraform. `SELF_HOSTED_ONLY_WORKFLOWS` names the three self-hosted core workflows, the documentation area describes the four-workflow tree and the appliance-owned deploy path, the security-secrets location list is regenerated from the current `.secrets.baseline` (12 files), and the R-003/R-006 escalations left with their subjects — `EXPECTED_ESCALATION_BLOCKERS` is now `{R-005, R-009}`. Recorded in [`CHANGELOG.md`](CHANGELOG.md) → Unreleased → Changed.
+- **Status:** Done — 2026-09-15. The `terraform-aws`/`terraform-azure` emitters and their tests were retired; each area is represented by one relocation record (`network_assessment/review/areas/terraform_relocated.py`) so the closed nine-area set and Property 2 still hold, and the findings they carried left this repository with the Terraform. `SELF_HOSTED_ONLY_WORKFLOWS` names the three self-hosted core workflows, the documentation area describes the four-workflow tree and the appliance-owned deploy path, the security-secrets location list is regenerated from the current `.secrets.baseline` (12 files), and the R-003/R-006 escalations left with their subjects — `EXPECTED_ESCALATION_BLOCKERS` was then `{R-005, R-009}` (R-009 was removed on 2026-10-27, so it is now `{R-005}`). Recorded in [`CHANGELOG.md`](CHANGELOG.md) → Unreleased → Changed.
 - **Notes for future engineers:** `network_assessment/review/blockers.py` parses `REVIEW.md`'s index table at
   runtime and `test_review_blockers.py` asserts that R-001 – R-010 are present and that only R-007
   is "Resolved" — keep every `R-0NN` row in the table (with a redirect in the Status cell) rather
@@ -1638,7 +1638,7 @@ order; do not reorder it.
   | `Runbook: Log Analytics Workspace State Migration` | The state-surgery procedure now held in T-304 |
   | `Legacy AWS Migrate Root` | The superseded `migrate/` root, IAM policy mapping preserved |
 
-  Nothing has been imported. Which pages come back is the owner's choice (R-031).
+  Nothing has been imported. Which pages come back is the owner's choice (`REVIEW.md` R-032).
 - **Status:** Withdrawn — 2026-10-27.
 - **Notes for future engineers:** Nothing is lost by withdrawing this: every fact in those pages is either still in
   the repository or carried in the handoff notes of T-304 and T-401.
@@ -1649,7 +1649,7 @@ order; do not reorder it.
 - **Description:** Withdrawn together with T-601: there is no wiki to link to. The inline runbook text in T-304 (the
   Log Analytics workspace state migration) and the `migrate/` reference in T-401 stay where they are, and they are the
   only copy of that content in the repository. If the owner brings that material back as pages under `docs/`
-  (`REVIEW.md` R-031), the text in T-304 and T-401 can then be replaced with a link to the page, but not before the
+  (`REVIEW.md` R-032), the text in T-304 and T-401 can then be replaced with a link to the page, but not before the
   page exists and renders.
 - **Status:** Withdrawn — 2026-10-27.
 

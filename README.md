@@ -42,8 +42,10 @@ code (the GitHub Wiki that used to hold it was deleted on 2026-10-27; `REVIEW.md
 reads (`SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, the pull request template and the issue forms) live in
 [`.github/`](.github), not at the root and not in `docs/`. Nothing else is allowed:
 `scripts/validate_documentation_model.py` fails the build on any other document file (a file ending in `.md`,
-`.rst`, `.adoc` and the like), for example in `doc/`, `documentation/`, `Docs/` or a `docs/` folder nested inside
-another folder. This section is the one place the model is written out; the other documents point here.
+`.rst`, `.adoc` and the like), for example in `doc/`, `documentation/`, `Docs/` or a `docs` folder anywhere other
+than the top level of the repository (a `docs` folder inside `docs/` itself is only a subfolder and is fine). This
+section is the model's one full statement: the other documents point here, and a test keeps its count and its list in
+step with the validator.
 
 | Document | Contains |
 |---|---|
@@ -240,7 +242,7 @@ licence file for it and has not verified the statement (`REVIEW.md`, R-020). The
 
 ## Repository conventions
 
-- **Documents go where the Documentation map says.** The model is written out once, in the Documentation map
+- **Documents go where the Documentation map says.** The model is set out in full once, in the Documentation map
   above; `scripts/validate_documentation_model.py` enforces it in CI. Long-form documentation goes in `docs/`.
   Do not add a document file anywhere else.
 - **Image contract changes are recorded, never implied.** Any change to the image tag scheme, the
