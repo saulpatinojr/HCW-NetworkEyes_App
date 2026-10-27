@@ -23,7 +23,8 @@
 # How it stays safe: every tool runs in a disposable container (--rm) with all capabilities dropped, no privilege
 # escalation and no Docker socket. The repository is mounted read-only. hadolint and actionlint get no network.
 # Trivy gets network access to download its vulnerability database into a named volume, `network-assessment-trivy-cache`, which is
-# the only thing this script leaves behind; remove it with `docker volume rm network-assessment-trivy-cache`.
+# the only thing this script leaves behind; remove it with `docker volume rm network-assessment-trivy-cache`. Before the rename of
+# 2026-10-27 the volume was called `cna-trivy-cache`; an old one is not used any more, remove it with `docker volume rm cna-trivy-cache`.
 #
 # The script stops when `docker context show` names an engine other than your own machine (desktop-linux, or
 # default on Linux), or when DOCKER_HOST is set, because a scan against a shared or remote engine is a different

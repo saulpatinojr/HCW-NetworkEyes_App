@@ -34,6 +34,8 @@ BARE_LABEL = re.compile(rf"(?<![A-Za-z0-9_.-]){_UPPER}(?![A-Za-z0-9_-])")
 HISTORY = frozenset(
     {"CHANGELOG.md", "CNA-0.90-updates.md"}
 )  # dated records keep the names they were written with
+# the first engine release was published under the old name; a line that names that release or its files may keep it
+PUBLISHED_ENGINE_RELEASE = re.compile(rf"engine-v0[.]1[.]0|{_SHORT}_azure_network_engine-0[.]1[.]0")
 
 
 def _hits(
@@ -131,8 +133,7 @@ def test_the_engine_package_and_the_role_document_use_their_new_names() -> None:
 def test_no_tracked_file_uses_an_old_engine_name_except_where_it_records_the_published_release() -> (
     None
 ):
-    # the first engine release was published under the old name and its files keep it; a line about that release says 0.1.0
-    hits = _hits(OLD_ENGINE, skip_line=lambda line: "0.1.0" in line)
+    hits = _hits(OLD_ENGINE, skip_line=lambda line: bool(PUBLISHED_ENGINE_RELEASE.search(line)))
     assert not hits, f"an old engine name is back: {hits}"
 
 
@@ -151,6 +152,14 @@ def test_the_patterns_catch_what_they_are_for_and_spare_what_stays() -> None:
         assert OLD_APP_NAME.search(text), text
     for text in (f"{_SHORT}-azure-network-engine", f"{_SHORT}_azure_network_engine"):
         assert OLD_ENGINE.search(text), text
+    # only a line that names the published release is spared, not any line that mentions a version
+    for text in (
+        "engine-v0.1.0",
+        f"{_SHORT}_azure_network_engine-0.1.0-py3-none-any.whl",
+    ):
+        assert PUBLISHED_ENGINE_RELEASE.search(text), text
+    for text in (f"{_SHORT}-azure-network-engine>=0.1.0", f"{_SHORT}_azure_network_engine 0.1.0"):
+        assert not PUBLISHED_ENGINE_RELEASE.search(text), text
     for text in (f"{_UPPER}-ReadOnly", f"role/{_UPPER}-Discovery", f"{_UPPER}-Test"):
         assert OLD_ROLE.search(text), text
     for text in (f"the {_UPPER} API", f"({_UPPER})", f"{_UPPER} VNet"):
