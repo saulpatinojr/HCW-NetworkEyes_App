@@ -93,7 +93,7 @@ describe("the web tier does not depend on another repository", () => {
     for (const name of ["image-update.ts", "image-update-rules.ts"]) {
       const text = readFileSync(path.join(APP_ROOT, "lib", name), "utf8");
       expect(text, name).not.toMatch(/github/i);
-      expect(text, name).not.toMatch(/process\.env\.CNA_(?!BUILD_SHA|WEB_IMAGE|IMAGE_REGISTRY_(?:USERNAME|TOKEN)|IMAGE_UPDATE_CHECK_INTERVAL_MINUTES)/);
+      expect(text, name).not.toMatch(/process\.env\.NETWORK_ASSESSMENT_(?!BUILD_SHA|WEB_IMAGE|IMAGE_REGISTRY_(?:USERNAME|TOKEN)|IMAGE_UPDATE_CHECK_INTERVAL_MINUTES)/);
     }
   });
 });
