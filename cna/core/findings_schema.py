@@ -46,7 +46,7 @@ __all__ = [
     "Unknown",
 ]
 
-_PLATFORM_SOURCE = "CNA Platform"
+_PLATFORM_SOURCE = "NetworkEyes"
 
 
 class FindingStatus(enum.StrEnum):
@@ -58,7 +58,7 @@ class FindingStatus(enum.StrEnum):
 class FindingRecommendation(BaseModel):
     """A vendor recommendation sourced from an MCP server or offline library."""
 
-    source: str  # e.g. "AWS MCP Server (awslabs/mcp)" or "CNA Platform"
+    source: str  # e.g. "AWS MCP Server (awslabs/mcp)" or "NetworkEyes"
     text: str
     reference_url: str = ""
 

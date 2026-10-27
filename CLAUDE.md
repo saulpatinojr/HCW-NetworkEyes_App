@@ -5,8 +5,8 @@ human intro page; this file states the rules an agent must not infer wrongly.
 
 ## What this repository is
 
-This repository, `saulpatinojr/HCW-NetworkEyes_App`, is the **product** of the Cloud Network
-Assessment (CNA) platform and the NetworkEyes App of the HCW App-to-AddOn initiative: the single
+This repository, `saulpatinojr/HCW-NetworkEyes_App`, is the **product** of the NetworkEyes App of the
+HCW App-to-AddOn initiative: the single
 source of application code — `apps/cna-web`, `apps/cna-api`, `apps/cna-worker`,
 and the `cna` Python package — and the pipeline that builds and publishes their
 container images (`200-build-images.yml` → Docker Hub `<namespace>/img-ne-appliance-app`).

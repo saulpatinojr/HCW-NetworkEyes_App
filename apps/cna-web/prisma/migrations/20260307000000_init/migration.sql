@@ -1,4 +1,4 @@
--- CNA Platform — Initial schema migration
+-- NetworkEyes — Initial schema migration
 -- Generated from prisma/schema.prisma
 
 -- CreateEnum

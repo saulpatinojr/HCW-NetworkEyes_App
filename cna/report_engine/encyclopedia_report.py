@@ -110,7 +110,7 @@ def normalize_finding(finding: Finding | dict) -> dict:
             recommendations = [
                 {
                     "text": str(rec),
-                    "source": str(_get(finding, "recommendation_source") or "CNA Platform"),
+                    "source": str(_get(finding, "recommendation_source") or "NetworkEyes"),
                 }
             ]
     else:
@@ -130,7 +130,7 @@ def normalize_finding(finding: Finding | dict) -> dict:
             recommendations = [
                 {
                     "text": finding.recommendation,
-                    "source": finding.recommendation_source or "CNA Platform",
+                    "source": finding.recommendation_source or "NetworkEyes",
                 }
             ]
 
@@ -502,7 +502,7 @@ def build_encyclopedia_context(  # noqa: PLR0913 — one optional input per data
             "client_org": engagement.get("client_org", ""),
             "engagement_name": engagement.get("engagement_name", "Cloud Network Assessment"),
             "generated_at": engagement.get("generated_at", ""),
-            "prepared_by": engagement.get("prepared_by", "Network Eyes"),
+            "prepared_by": engagement.get("prepared_by", "NetworkEyes"),
         },
         "severity_counts": severity_counts,
         "severity_order": list(_SEVERITY_ORDER),

@@ -13,7 +13,7 @@ const aeonik = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "CNA Platform",
+  title: "NetworkEyes",
   description:
     "Cloud Network Assessment — multi-user assessment, analysis, and delivery platform",
 };

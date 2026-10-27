@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { buildSectionMessages, buildSynthesisMessages, type ReportMeta } from "./report-prompts";
 import { buildEnvironmentSnapshot, COMPREHENSIVE_SECTIONS, type SectionSpec } from "./report-sections";
 
-// Network Eyes is a free tool for followers of Hybrid Cloud Works. The prompts the AI report
+// NetworkEyes is a free tool for followers of Hybrid Cloud Works. The prompts the AI report
 // engine sends must not name a company or describe the report as a paid service. These tests
 // are the guard that wording drifts past in review (issue #318). `\bclients?\b` does not match
 // the field name `clientOrg`, which is a code name and stays.

@@ -72,7 +72,7 @@ class TestOfflineFallback:
     def test_returns_generic_for_unknown_rule(self):
         recs = RecommendationEngine._offline_fallback("UNKNOWN-RULE-999")
         assert len(recs) == 1
-        assert recs[0].source == "CNA Platform"
+        assert recs[0].source == "NetworkEyes"
         assert "MCP server was unavailable" in recs[0].text
 
     def test_all_known_aws_rules_have_recs(self):

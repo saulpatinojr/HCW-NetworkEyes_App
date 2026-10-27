@@ -506,7 +506,7 @@ export async function generateDeliverableContent(
   const date = new Date().toISOString().split("T")[0];
 
   const outputInstruction = `OUTPUT: Return only the Markdown document content. No JSON wrapper. Start directly with the report heading.
-Include a professional header: Organization, Engagement, Date, Report Type, Prepared By: Network Eyes.`;
+Include a professional header: Organization, Engagement, Date, Report Type, Prepared By: NetworkEyes.`;
 
   const systemPrompt = `You are a senior cloud network security architect generating a professional assessment deliverable.
 ${typePrompt}

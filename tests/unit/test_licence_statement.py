@@ -75,8 +75,7 @@ def test_notice_says_the_names_and_every_logo_file_are_not_covered_by_the_licenc
     )
     text = " ".join(section.split())  # line breaks and runs of spaces do not matter
     assert (
-        'The names "Hybrid Cloud Works", "NetworkEyes" and "CNA Platform", '
-        "and the Hybrid Cloud Works logo"
+        'The names "Hybrid Cloud Works" and "NetworkEyes", and the Hybrid Cloud Works logo'
     ) in text
     assert "The Apache License does not cover these names or the logo" in text
     assert "This does not take away anything the Apache License gives you for the code" in text
