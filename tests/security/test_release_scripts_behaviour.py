@@ -87,6 +87,7 @@ class TestPathsTouchBuild:
             "network_assessment/core/auth.py",
             "apps/network-assessment-web/lib/image-update-rules.ts",
             "apps/network-assessment-api/Dockerfile",
+            "apps/network-assessment-api/main.py",  # apps/network-assessment-api/** is in the filter
             "scripts/ci/sign_image.sh",
             "pyproject.toml",
             "uv.lock",
@@ -107,12 +108,10 @@ class TestPathsTouchBuild:
             "scripts/ci/find_release_image.sh",
             "tests/security/test_image_repository_name.py",
             "docs/dockerfile.md",
-            "apps/network-assessment-api/main.py",  # apps/network-assessment-api/** is NOT in the filter; only the Dockerfile paths listed are
         ],
     )
     def test_documentation_the_manifest_and_other_workflows_are_not(self, changed):
-        patterns = [p for p in self.patterns if not p.startswith("apps/network-assessment-api/")]
-        assert paths_touch_build.touching([changed], patterns) == []
+        assert paths_touch_build.touching([changed], self.patterns) == []
 
     def test_star_stays_within_a_segment_and_double_star_does_not(self):
         assert paths_touch_build.touching(["a/b.txt"], ["a/*"]) == ["a/b.txt"]

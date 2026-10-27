@@ -97,33 +97,62 @@ def test_worker_entry_consolidates_as_a_fixable_plan_entry():
 # --- the invariant behind the decision: /publish does the job, and the worker is not needed -------------------
 
 
-def _publish_routes() -> list[str]:
-    """The paths of the POST routes the API module declares with ``@<router>.post("<path>")``.
+def _mounted_publish_routers(source: str) -> set[str]:
+    """The routers of ``source`` that declare ``@<router>.post("/publish")`` on a function ``publish`` AND that the
+    module mounts with ``app.include_router(<router>)``.
 
     Read from the syntax tree, not by importing the module: the API's runtime stack (fastapi, psycopg2) is
-    not needed to prove that the route is declared, so this runs in every environment.
+    not needed, so this runs in every environment. A route on a router that is never included answers 404, so
+    the decorator alone does not prove that ``POST /publish`` exists.
     """
-    tree = ast.parse(API_MAIN.read_text(encoding="utf-8"))
-    routes: list[str] = []
+    tree = ast.parse(source)
+    declaring: set[str] = set()
+    included: set[str] = set()
     for node in ast.walk(tree):
-        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-            continue
-        for decorator in node.decorator_list:
-            if (
-                isinstance(decorator, ast.Call)
-                and isinstance(decorator.func, ast.Attribute)
-                and decorator.func.attr == "post"
-                and decorator.args
-                and isinstance(decorator.args[0], ast.Constant)
-                and isinstance(decorator.args[0].value, str)
-            ):
-                routes.append(f"{node.name}:{decorator.args[0].value}")
-    return routes
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name == "publish":
+            for decorator in node.decorator_list:
+                if (
+                    isinstance(decorator, ast.Call)
+                    and isinstance(decorator.func, ast.Attribute)
+                    and decorator.func.attr == "post"
+                    and isinstance(decorator.func.value, ast.Name)
+                    and decorator.args
+                    and isinstance(decorator.args[0], ast.Constant)
+                    and decorator.args[0].value == "/publish"
+                ):
+                    declaring.add(decorator.func.value.id)
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "include_router"
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "app"
+            and node.args
+            and isinstance(node.args[0], ast.Name)
+        ):
+            included.add(node.args[0].id)
+    return declaring & included
 
 
-def test_post_publish_exists_in_the_api():
+def test_post_publish_exists_in_the_api_and_its_router_is_mounted():
     """The job the worker placeholder only sketched is done by ``POST /publish`` in the API."""
-    assert "publish:/publish" in _publish_routes()
+    assert _mounted_publish_routers(API_MAIN.read_text(encoding="utf-8")) == {"internal"}
+
+
+def test_the_mount_check_notices_a_router_that_is_never_included():
+    declared = (
+        'internal = APIRouter()\n\n@internal.post("/publish")\ndef publish(request):\n    ...\n'
+    )
+    assert _mounted_publish_routers(declared) == set()
+    assert _mounted_publish_routers(declared + "app.include_router(internal)\n") == {"internal"}
+    # another router being included is not enough, and neither is a route of another name or path
+    assert _mounted_publish_routers(declared + "app.include_router(other)\n") == set()
+    assert (
+        _mounted_publish_routers(
+            declared.replace("/publish", "/other") + "app.include_router(internal)\n"
+        )
+        == set()
+    )
 
 
 def test_the_worker_directory_is_gone():

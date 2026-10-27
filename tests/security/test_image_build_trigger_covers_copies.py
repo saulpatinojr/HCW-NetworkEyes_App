@@ -57,13 +57,16 @@ EVENTS = ("push", "pull_request", "pull_request_target")
 #: entry must name a COPY that exists today, so the list cannot go stale (a test below).
 ALLOWED: dict[tuple[str, str], str] = {
     ("Dockerfile", "."): (
-        "The CLI image's last stage copies the whole build context (`COPY . .`, minus .dockerignore). The files that "
-        "reaches and that no other input names (README.md, LICENSE, NOTICE, docker-compose.yml, docs/, the scripts no "
-        "build step reads, repository settings files) do not change what the image does, and covering them would start "
-        "a build, and strand the *-latest tags, for every documentation commit (tests/security/"
-        "test_release_scripts_behaviour.py pins that README.md and CHANGELOG.md must NOT trigger it). Every code "
-        "directory in that copy is named by the filter or by an explicit COPY, which this test checks. Narrowing the "
-        "copy is REVIEW.md R-017."
+        "The CLI image's last stage copies the whole build context (`COPY . .`, minus .dockerignore), so there is no "
+        "finite list of paths to check for it. The files it reaches that no other input names (README.md, LICENSE, "
+        "NOTICE, docker-compose.yml, docs/, the scripts no build step reads, repository settings files) do not change "
+        "what the image does, and covering them would start a build, and strand the *-latest tags, for every "
+        "documentation commit (tests/security/test_release_scripts_behaviour.py pins that README.md and CHANGELOG.md "
+        "must NOT trigger it). What this test DOES check: every explicit COPY and ADD source of every Dockerfile the "
+        "workflow builds, the Dockerfiles themselves and their .dockerignore. What it does NOT check: what the "
+        "whole-context copy brings in, so a NEW top-level directory of code that the filter does not name and no "
+        "explicit COPY names would not be found (TODO.md T-739 records the hardening). Narrowing the copy is "
+        "REVIEW.md R-017."
     ),
 }
 
