@@ -210,6 +210,7 @@ class TestNoOtherRepository:
             "scripts/ci/sign_image.sh docker.io/<namespace>/<repository>@sha256:<64>",
             "https://hub.docker.com/v2/repositories/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}/tags/",
             "docker build -t network-assessment:local .",  # a local tag, not a Docker Hub repository
+            "docker build -t cna:local .",  # a local tag that still has the old name: not a registry path either
             "postgresql://cna@db.internal/cna?sslmode=disable",  # a database name
         ],
     )
