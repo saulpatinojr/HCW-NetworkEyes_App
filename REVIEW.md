@@ -628,7 +628,7 @@ No image is published from this repository, so there is nothing to scan, sign, r
 ## R-016 — Retire `apps/network-assessment-worker` and its image and service
 
 **Problem**
-`apps/network-assessment-worker/main.py` is a 101-line placeholder: it writes a "NetworkEyes publish placeholder" HTML
+`apps/network-assessment-worker/main.py` is a 102-line placeholder: it writes a "NetworkEyes publish placeholder" HTML
 file for a hard-coded `sample-engagement` and exits. `POST /publish` superseded it
 (`CHANGELOG.md`, "The client-portal publish story is real"). A deployment of the images still runs it as an
 always-on service, so it exits and restarts continuously, and its image is built and scanned on every push.
@@ -647,7 +647,7 @@ Repository owner.
 Approve deleting `apps/network-assessment-worker` and its Dockerfile and build job here, recorded under `Changed` in `CHANGELOG.md`
 and in the release notes so that whoever deploys the images can drop the worker service.
 
-**Decision (owner, 2026-10-27): `retire`.** Implemented in the pull request that carries this record.
+**Decision (owner, 2026-10-27): `retire`.** Implemented on 2026-10-27 (see `CHANGELOG.md` under `Changed`, and `TODO.md` T-738).
 
 **What now applies**
 - `apps/network-assessment-worker` (its `Dockerfile` and `main.py`), its build job in `200-build-images.yml`, its digest and tag

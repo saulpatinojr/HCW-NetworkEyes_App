@@ -47,7 +47,8 @@ export default async function DiagramPage({ params }: PageProps) {
           <h2 className="text-lg font-semibold text-navy-800 dark:text-navy-100">Diagram Workspace</h2>
           {/* TODO(Phase E follow-up): future-state .drawio XML is produced by
               network_assessment/diagram_engine/drawio_generator.py:generate_future_state_topology
-              during assessment-report generation (worker) but is not yet persisted
+              during assessment-report generation (run by the API; the worker this
+              once named was removed, REVIEW.md R-016) but is not yet persisted
               as an engagement document. Once it is, add a Current/Future state
               toggle here to swap between the two XML sources. */}
           <span className="rounded-lg bg-teal-50 dark:bg-teal-900/30 px-3 py-2 text-xs font-semibold text-teal-700 dark:text-teal-300">

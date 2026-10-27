@@ -20,14 +20,14 @@
 # below is about the GitHub ref of this run, and its one Image Push scope on the repository covers all four tags
 # (the release job has no other registry credential than that login). Every tag is checked before any is created,
 # and an existing tag with another digest stops the release (fail closed); a re-run skips tags already correct.
+# Small known gap: between that check and the creation another writer could create the same tag with another digest;
+# the post-check then fails the job, but the tag has been moved. Docker Hub's immutable tags, if the plan offers
+# them, would close it; that was not checked.
 #
 # THE RETIRED WORKER IMAGE (REVIEW.md R-016, owner decision 2026-10-27). 200 no longer builds a worker image, so no
 # `worker-sha-<7>` tag exists for a new build: this workflow neither looks for one nor creates `worker-X.Y.Z`. The
 # release notes below say so, because nobody is notified when the image set changes: whoever deploys the images reads
 # them. Releases made before this change keep their `worker-X.Y.Z` tags, and 370 never prunes those.
-# Small known gap: between that check and the creation another writer could create the same tag with another digest;
-# the post-check then fails the job, but the tag has been moved. Docker Hub's immutable tags, if the plan offers
-# them, would close it; that was not checked.
 #
 # WHICH COMMIT TO TAG. A commit that changes only documentation, tests or another workflow touches nothing 200 builds
 # from, so the path filter gives it no 200 run. The search therefore walks back from the tagged commit to the nearest

@@ -8,7 +8,7 @@ Defects an independent review of ``200-build-images.yml`` found by reading it, k
 * ``tag-images`` verifies that every digest is signed before it moves a tag and records one row per component
   (tags, digest, signed) in the run's step summary: nothing is written back to the repository;
 * ``310-release-version.yml`` promotes the digest ``200`` scanned and signed for the tagged commit, after
-  verifying its signature, lists the digests of all five images in the release notes, and never builds, never
+  verifying its signature, lists the digests of all four images in the release notes, and never builds, never
   pushes layers and never moves ``latest``.
 
 These are static checks of the workflow files; they do not prove a Docker Hub exchange or a registry
