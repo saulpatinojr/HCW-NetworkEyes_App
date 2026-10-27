@@ -51,7 +51,7 @@ def store():
 @pytest.fixture
 def opts():
     """The ARM backend: these tests exercise the per-subscription list loop that
-    ``CNA_DISCOVERY_BACKEND=arm`` keeps for one release (change set D)."""
+    ``NETWORK_ASSESSMENT_DISCOVERY_BACKEND=arm`` keeps for one release (change set D)."""
     return AzureDiscoveryOptions(
         tenant_id="00000000-0000-0000-0000-000000000001",
         subscription_ids=["sub-0001"],
@@ -76,7 +76,7 @@ def discovery(store, opts):
 
 class TestAzureDiscoveryOptions:
     def test_defaults(self, monkeypatch):
-        monkeypatch.delenv("CNA_DISCOVERY_BACKEND", raising=False)
+        monkeypatch.delenv("NETWORK_ASSESSMENT_DISCOVERY_BACKEND", raising=False)
         opts = AzureDiscoveryOptions(tenant_id="tenant-001")
         assert opts.subscription_ids == []
         assert opts.resume is False
@@ -86,20 +86,20 @@ class TestAzureDiscoveryOptions:
         assert not hasattr(opts, "client_secret")
 
     def test_env_selects_the_arm_backend_for_one_release(self, monkeypatch):
-        monkeypatch.setenv("CNA_DISCOVERY_BACKEND", "arm")
+        monkeypatch.setenv("NETWORK_ASSESSMENT_DISCOVERY_BACKEND", "arm")
         opts = AzureDiscoveryOptions(tenant_id="tenant-001")
         assert opts.backend == "arm"
         assert opts.use_resource_graph is False
 
     def test_an_unknown_backend_exits_before_any_query(self, monkeypatch):
-        monkeypatch.setenv("CNA_DISCOVERY_BACKEND", "graphql")
-        with pytest.raises(SystemExit, match="CNA_DISCOVERY_BACKEND"):
+        monkeypatch.setenv("NETWORK_ASSESSMENT_DISCOVERY_BACKEND", "graphql")
+        with pytest.raises(SystemExit, match="NETWORK_ASSESSMENT_DISCOVERY_BACKEND"):
             AzureDiscoveryOptions(tenant_id="tenant-001")
         with pytest.raises(SystemExit, match="not one of"):
             AzureDiscoveryOptions(tenant_id="tenant-001", backend="soap")
 
     def test_the_legacy_flag_maps_to_arm_and_an_explicit_backend_wins(self, monkeypatch):
-        monkeypatch.delenv("CNA_DISCOVERY_BACKEND", raising=False)
+        monkeypatch.delenv("NETWORK_ASSESSMENT_DISCOVERY_BACKEND", raising=False)
         assert AzureDiscoveryOptions(tenant_id="t", use_resource_graph=False).backend == "arm"
         explicit = AzureDiscoveryOptions(
             tenant_id="t", use_resource_graph=False, backend="resource-graph"
@@ -518,7 +518,7 @@ class TestInitCredentials:
         self, discovery, monkeypatch
     ):
         dac = MagicMock()
-        monkeypatch.delenv("CNA_APPLIANCE_CLOUD", raising=False)
+        monkeypatch.delenv("NETWORK_ASSESSMENT_APPLIANCE_CLOUD", raising=False)
         with patch.dict(
             "sys.modules",
             {
@@ -2394,7 +2394,7 @@ class TestCollectFrontDoorWafPolicies:
 
 
 class TestResourceGraphBackend:
-    """``CNA_DISCOVERY_BACKEND=resource-graph`` (the default, change set D): the engine
+    """``NETWORK_ASSESSMENT_DISCOVERY_BACKEND=resource-graph`` (the default, change set D): the engine
     package's ``ResourceGraphDiscovery`` builds the model; ARM runs only the live
     collectors, each fault-isolated."""
 
@@ -2478,7 +2478,7 @@ class TestResourceGraphBackend:
             patch(
                 "network_assessment.modules.network.discovery.azure_discovery.ResourceGraphDiscovery"
             ) as factory,
-            pytest.raises(SystemExit, match="CNA_SCOPES"),
+            pytest.raises(SystemExit, match="NETWORK_ASSESSMENT_SCOPES"),
         ):
             discovery.run()
         factory.assert_not_called()

@@ -230,7 +230,7 @@ jobs:
           context: .
           file: ${{ matrix.file }}
           build-args: |
-            CNA_BUILD_SHA=${{ github.sha }}
+            NETWORK_ASSESSMENT_BUILD_SHA=${{ github.sha }}
           outputs: type=image,name=docker.io/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }},push-by-digest=true,name-canonical=true,push=true
           labels: ${{ steps.meta.outputs.labels }}
           provenance: mode=max,version=v0.2
@@ -372,7 +372,7 @@ jobs:
           file: apps/network-assessment-web/Dockerfile
           target: runner
           build-args: |
-            CNA_BUILD_SHA=${{ github.sha }}
+            NETWORK_ASSESSMENT_BUILD_SHA=${{ github.sha }}
           outputs: type=image,name=docker.io/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }},push-by-digest=true,name-canonical=true,push=true
           labels: ${{ steps.meta_web.outputs.labels }}
           provenance: mode=max,version=v0.2
@@ -400,7 +400,7 @@ jobs:
           file: apps/network-assessment-web/Dockerfile
           target: migrator
           build-args: |
-            CNA_BUILD_SHA=${{ github.sha }}
+            NETWORK_ASSESSMENT_BUILD_SHA=${{ github.sha }}
           outputs: type=image,name=docker.io/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }},push-by-digest=true,name-canonical=true,push=true
           labels: ${{ steps.meta_migrator.outputs.labels }}
           provenance: mode=max,version=v0.2

@@ -32,8 +32,8 @@ pytestmark = pytest.mark.skipif(
 
 def _load_api_main(monkeypatch) -> types.ModuleType:
     monkeypatch.setenv("DATABASE_URL", "")
-    monkeypatch.delenv("CNA_API_TOKEN", raising=False)
-    monkeypatch.delenv("CNA_APPLIANCE_CLOUD", raising=False)
+    monkeypatch.delenv("NETWORK_ASSESSMENT_API_TOKEN", raising=False)
+    monkeypatch.delenv("NETWORK_ASSESSMENT_APPLIANCE_CLOUD", raising=False)
     if str(_REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(_REPO_ROOT))
     name = "network_assessment_api_main_under_test_db_pool"
@@ -218,7 +218,7 @@ def test_pool_is_bounded_with_a_timeout(db, fake_pool, monkeypatch):
     t.start()
     assert held.wait(5)
     start = time.monotonic()
-    with pytest.raises(db.PoolTimeout, match="CNA_DB_POOL_MAX=1"):
+    with pytest.raises(db.PoolTimeout, match="NETWORK_ASSESSMENT_DB_POOL_MAX=1"):
         with db.connection(DSN):
             pass
     assert time.monotonic() - start >= 0.05
@@ -274,25 +274,25 @@ def test_getconn_failure_releases_the_slot(db, fake_pool, monkeypatch):
 
 @pytest.mark.parametrize("raw", ["0", "-1", "abc", "1.5"])
 def test_pool_max_rejects_non_positive_integers(db, monkeypatch, raw):
-    monkeypatch.setenv("CNA_DB_POOL_MAX", raw)
-    with pytest.raises(SystemExit, match="CNA_DB_POOL_MAX"):
-        db._positive_int_env("CNA_DB_POOL_MAX", 10)
+    monkeypatch.setenv("NETWORK_ASSESSMENT_DB_POOL_MAX", raw)
+    with pytest.raises(SystemExit, match="NETWORK_ASSESSMENT_DB_POOL_MAX"):
+        db._positive_int_env("NETWORK_ASSESSMENT_DB_POOL_MAX", 10)
 
 
 @pytest.mark.parametrize("raw", ["0", "-2", "soon"])
 def test_pool_timeout_rejects_non_positive_numbers(db, monkeypatch, raw):
-    monkeypatch.setenv("CNA_DB_POOL_TIMEOUT_SECONDS", raw)
-    with pytest.raises(SystemExit, match="CNA_DB_POOL_TIMEOUT_SECONDS"):
-        db._positive_float_env("CNA_DB_POOL_TIMEOUT_SECONDS", 10.0)
+    monkeypatch.setenv("NETWORK_ASSESSMENT_DB_POOL_TIMEOUT_SECONDS", raw)
+    with pytest.raises(SystemExit, match="NETWORK_ASSESSMENT_DB_POOL_TIMEOUT_SECONDS"):
+        db._positive_float_env("NETWORK_ASSESSMENT_DB_POOL_TIMEOUT_SECONDS", 10.0)
 
 
 def test_env_defaults_and_overrides(db, monkeypatch):
-    monkeypatch.delenv("CNA_DB_POOL_MAX", raising=False)
-    assert db._positive_int_env("CNA_DB_POOL_MAX", 10) == 10
-    monkeypatch.setenv("CNA_DB_POOL_MAX", " 3 ")
-    assert db._positive_int_env("CNA_DB_POOL_MAX", 10) == 3
-    monkeypatch.setenv("CNA_DB_POOL_TIMEOUT_SECONDS", "0.5")
-    assert db._positive_float_env("CNA_DB_POOL_TIMEOUT_SECONDS", 10.0) == 0.5
+    monkeypatch.delenv("NETWORK_ASSESSMENT_DB_POOL_MAX", raising=False)
+    assert db._positive_int_env("NETWORK_ASSESSMENT_DB_POOL_MAX", 10) == 10
+    monkeypatch.setenv("NETWORK_ASSESSMENT_DB_POOL_MAX", " 3 ")
+    assert db._positive_int_env("NETWORK_ASSESSMENT_DB_POOL_MAX", 10) == 3
+    monkeypatch.setenv("NETWORK_ASSESSMENT_DB_POOL_TIMEOUT_SECONDS", "0.5")
+    assert db._positive_float_env("NETWORK_ASSESSMENT_DB_POOL_TIMEOUT_SECONDS", 10.0) == 0.5
 
 
 # ── wiring into the app ──────────────────────────────────────────────────────

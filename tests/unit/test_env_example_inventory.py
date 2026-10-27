@@ -108,7 +108,9 @@ def test_the_scan_finds_the_settings_the_code_reads():
     # would pass with nothing to check.
     names = collect_read_names()
     assert len(names) >= 40
-    assert {"CNA_API_TOKEN", "CNA_AI_MODE", "DATABASE_URL"} <= set(names)
+    assert {"NETWORK_ASSESSMENT_API_TOKEN", "NETWORK_ASSESSMENT_AI_MODE", "DATABASE_URL"} <= set(
+        names
+    )
 
 
 def test_every_setting_the_code_reads_is_listed_in_an_env_example():

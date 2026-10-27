@@ -25,8 +25,8 @@ const FORBIDDEN: readonly Forbidden[] = [
   // The quoted token "update-available" is the web tier's own verdict value (UpdateVerdict) and stays. What must not
   // come back is the label of another repository's update-request issues, which is never written inside quotes.
   { name: "update-available (issue label)", pattern: /(?<!["'])update-available/ },
-  { name: "CNA_APPLIANCE_REPO", pattern: /CNA_APPLIANCE_REPO/ },
-  { name: "CNA_GITHUB_SERVER_URL", pattern: /CNA_GITHUB_SERVER_URL/ },
+  { name: "NETWORK_ASSESSMENT_APPLIANCE_REPO", pattern: /NETWORK_ASSESSMENT_APPLIANCE_REPO/ },
+  { name: "NETWORK_ASSESSMENT_GITHUB_SERVER_URL", pattern: /NETWORK_ASSESSMENT_GITHUB_SERVER_URL/ },
   { name: "applianceLinks", pattern: /applianceLinks/ },
 ];
 
@@ -58,8 +58,8 @@ describe("the web tier does not depend on another repository", () => {
     ]);
     expect(violationsIn("actions/workflows/230-image-update.yml")).toEqual(["230-image-update"]);
     expect(violationsIn("actions/workflows/210-deploy.yml")).toEqual(["210-deploy"]);
-    expect(violationsIn("process.env.CNA_APPLIANCE_REPO")).toEqual(["CNA_APPLIANCE_REPO"]);
-    expect(violationsIn("process.env.CNA_GITHUB_SERVER_URL")).toEqual(["CNA_GITHUB_SERVER_URL"]);
+    expect(violationsIn("process.env.NETWORK_ASSESSMENT_APPLIANCE_REPO")).toEqual(["NETWORK_ASSESSMENT_APPLIANCE_REPO"]);
+    expect(violationsIn("process.env.NETWORK_ASSESSMENT_GITHUB_SERVER_URL")).toEqual(["NETWORK_ASSESSMENT_GITHUB_SERVER_URL"]);
     expect(violationsIn("applianceLinks(repo, url)")).toEqual(["applianceLinks"]);
     for (const labelUse of [
       "label:update-available",

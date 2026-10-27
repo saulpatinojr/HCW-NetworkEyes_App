@@ -24,8 +24,8 @@ The pool is created lazily on first use (so an import, a unit test or a
 lifespan on shutdown. Sizing and the wait budget are declared constants with an
 environment override (``.env.example``), never literals at a call site:
 
-    CNA_DB_POOL_MAX              upper bound of open connections (default 10)
-    CNA_DB_POOL_TIMEOUT_SECONDS  how long a caller waits for a free connection
+    NETWORK_ASSESSMENT_DB_POOL_MAX              upper bound of open connections (default 10)
+    NETWORK_ASSESSMENT_DB_POOL_TIMEOUT_SECONDS  how long a caller waits for a free connection
                                  before ``PoolTimeout`` (default 10)
 
 psycopg2's ``ThreadedConnectionPool`` raises immediately when exhausted; the
@@ -56,7 +56,7 @@ _POOL_MIN = 1
 
 
 class PoolTimeout(RuntimeError):
-    """No pooled connection became free within ``CNA_DB_POOL_TIMEOUT_SECONDS``."""
+    """No pooled connection became free within ``NETWORK_ASSESSMENT_DB_POOL_TIMEOUT_SECONDS``."""
 
 
 def _positive_int_env(name: str, default: int) -> int:
@@ -87,9 +87,9 @@ def _positive_float_env(name: str, default: float) -> float:
     return value
 
 
-POOL_MAX = _positive_int_env("CNA_DB_POOL_MAX", DEFAULT_POOL_MAX)
+POOL_MAX = _positive_int_env("NETWORK_ASSESSMENT_DB_POOL_MAX", DEFAULT_POOL_MAX)
 POOL_TIMEOUT_SECONDS = _positive_float_env(
-    "CNA_DB_POOL_TIMEOUT_SECONDS", DEFAULT_POOL_TIMEOUT_SECONDS
+    "NETWORK_ASSESSMENT_DB_POOL_TIMEOUT_SECONDS", DEFAULT_POOL_TIMEOUT_SECONDS
 )
 
 
@@ -108,7 +108,7 @@ class _Pool:
         if not self._slots.acquire(timeout=self.timeout):
             raise PoolTimeout(
                 f"no database connection became free within {self.timeout:g}s "
-                f"(CNA_DB_POOL_MAX={self._slots._initial_value})"  # noqa: SLF001
+                f"(NETWORK_ASSESSMENT_DB_POOL_MAX={self._slots._initial_value})"  # noqa: SLF001
             )
         try:
             return self._pool.getconn()

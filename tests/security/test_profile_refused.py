@@ -1,8 +1,8 @@
-"""An appliance process never honours ``CNA_PROFILE`` (change set H).
+"""An appliance process never honours ``NETWORK_ASSESSMENT_PROFILE`` (change set H).
 
 The test profile makes Entra validation read its signing keys from a local file. It
 is meant for pytest and local development only; an appliance image started with
-``CNA_PROFILE`` set to any value exits before serving, so no deployment can be
+``NETWORK_ASSESSMENT_PROFILE`` set to any value exits before serving, so no deployment can be
 talked into accepting self-signed tokens.
 """
 
@@ -31,50 +31,66 @@ def _entra():
     return entra
 
 
-_BASE = {"DATABASE_URL": "postgresql://cna@db.internal/cna", "CNA_API_TOKEN": "x" * 32}
+_BASE = {
+    "DATABASE_URL": "postgresql://cna@db.internal/cna",
+    "NETWORK_ASSESSMENT_API_TOKEN": "x" * 32,
+}
 
 
 @pytest.mark.parametrize(
-    "edition_env", [{"CNA_EDITION": "appliance"}, {"CNA_APPLIANCE_CLOUD": "azure"}]
+    "edition_env",
+    [{"NETWORK_ASSESSMENT_EDITION": "appliance"}, {"NETWORK_ASSESSMENT_APPLIANCE_CLOUD": "azure"}],
 )
 @pytest.mark.parametrize("profile", ["test", "dev", "anything"])
 def test_appliance_refuses_any_profile(edition_env: dict[str, str], profile: str):
     entra = _entra()
-    with pytest.raises(SystemExit, match="appliance edition: CNA_PROFILE is not accepted"):
-        entra.refuse_profile_in_appliance({**_BASE, **edition_env, "CNA_PROFILE": profile})
+    with pytest.raises(
+        SystemExit, match="appliance edition: NETWORK_ASSESSMENT_PROFILE is not accepted"
+    ):
+        entra.refuse_profile_in_appliance(
+            {**_BASE, **edition_env, "NETWORK_ASSESSMENT_PROFILE": profile}
+        )
 
 
 def test_local_development_may_set_a_profile():
     entra = _entra()
-    entra.refuse_profile_in_appliance({"CNA_PROFILE": "test"})
+    entra.refuse_profile_in_appliance({"NETWORK_ASSESSMENT_PROFILE": "test"})
 
 
 def test_the_api_startup_check_exits_before_anything_else(api_main):
-    with pytest.raises(SystemExit, match="CNA_PROFILE is not accepted"):
+    with pytest.raises(SystemExit, match="NETWORK_ASSESSMENT_PROFILE is not accepted"):
         api_main._validate_startup_config(
-            {**_BASE, "CNA_EDITION": "appliance", "CNA_PROFILE": "test"}
+            {
+                **_BASE,
+                "NETWORK_ASSESSMENT_EDITION": "appliance",
+                "NETWORK_ASSESSMENT_PROFILE": "test",
+            }
         )
 
 
 def test_half_configured_entra_exits(api_main):
-    with pytest.raises(SystemExit, match="CNA_ENTRA_TENANT_ID and CNA_ENTRA_AUDIENCE"):
-        api_main._validate_startup_config({**_BASE, "CNA_ENTRA_TENANT_ID": "t"})
+    with pytest.raises(
+        SystemExit, match="NETWORK_ASSESSMENT_ENTRA_TENANT_ID and NETWORK_ASSESSMENT_ENTRA_AUDIENCE"
+    ):
+        api_main._validate_startup_config({**_BASE, "NETWORK_ASSESSMENT_ENTRA_TENANT_ID": "t"})
 
 
 def test_appliance_accepts_entra_in_place_of_the_shared_token(api_main):
     env = {
         "DATABASE_URL": _BASE["DATABASE_URL"],
-        "CNA_APPLIANCE_CLOUD": "azure",
-        "CNA_ENTRA_TENANT_ID": "00000000-0000-0000-0000-000000000001",
-        "CNA_ENTRA_AUDIENCE": "api://network-assessment-api-test",
+        "NETWORK_ASSESSMENT_APPLIANCE_CLOUD": "azure",
+        "NETWORK_ASSESSMENT_ENTRA_TENANT_ID": "00000000-0000-0000-0000-000000000001",
+        "NETWORK_ASSESSMENT_ENTRA_AUDIENCE": "api://network-assessment-api-test",
     }
     api_main._validate_startup_config(env)
 
 
 def test_appliance_with_neither_bearer_exits(api_main):
-    with pytest.raises(SystemExit, match="Neither CNA_API_TOKEN nor CNA_ENTRA"):
+    with pytest.raises(
+        SystemExit, match="Neither NETWORK_ASSESSMENT_API_TOKEN nor NETWORK_ASSESSMENT_ENTRA"
+    ):
         api_main._validate_startup_config(
-            {"DATABASE_URL": _BASE["DATABASE_URL"], "CNA_APPLIANCE_CLOUD": "azure"}
+            {"DATABASE_URL": _BASE["DATABASE_URL"], "NETWORK_ASSESSMENT_APPLIANCE_CLOUD": "azure"}
         )
 
 

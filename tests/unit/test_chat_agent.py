@@ -130,12 +130,12 @@ def test_extract_citations_dedupes():
 @pytest.fixture
 def clean_ai_env(monkeypatch):
     for var in (
-        "CNA_AI_MODE",
-        "CNA_APPLIANCE_CLOUD",
-        "CNA_AI_ENGINE_DEFAULT",
+        "NETWORK_ASSESSMENT_AI_MODE",
+        "NETWORK_ASSESSMENT_APPLIANCE_CLOUD",
+        "NETWORK_ASSESSMENT_AI_ENGINE_DEFAULT",
         "AZURE_OPENAI_ENDPOINT",
-        "CNA_BEDROCK_MODEL_ID",
-        "CNA_BEDROCK_INFERENCE_PROFILE_ARN",
+        "NETWORK_ASSESSMENT_BEDROCK_MODEL_ID",
+        "NETWORK_ASSESSMENT_BEDROCK_INFERENCE_PROFILE_ARN",
     ):
         monkeypatch.delenv(var, raising=False)
 
@@ -173,7 +173,7 @@ def test_resolve_engine_vectors(
     clean_ai_env, monkeypatch, mode, cloud, stored, env_default, configured, expected
 ):
     if env_default is not None:
-        monkeypatch.setenv("CNA_AI_ENGINE_DEFAULT", env_default)
+        monkeypatch.setenv("NETWORK_ASSESSMENT_AI_ENGINE_DEFAULT", env_default)
     if expected is None:
         with pytest.raises(ChatConfigError):
             resolve_engine(stored, mode=mode, cloud=cloud, configured=configured)
@@ -184,9 +184,9 @@ def test_resolve_engine_vectors(
 def test_resolve_engine_defaults_from_env(clean_ai_env, monkeypatch):
     # unset mode/cloud => saas on azure, exactly today's behaviour
     assert resolve_engine("bogus") == "azure-openai"
-    monkeypatch.setenv("CNA_APPLIANCE_CLOUD", "aws")
+    monkeypatch.setenv("NETWORK_ASSESSMENT_APPLIANCE_CLOUD", "aws")
     assert resolve_engine(None) == "bedrock"
-    monkeypatch.setenv("CNA_AI_MODE", "byo-api")
+    monkeypatch.setenv("NETWORK_ASSESSMENT_AI_MODE", "byo-api")
     with pytest.raises(ChatConfigError):
         resolve_engine(None)  # env-only configured set has no BYO keys
 
@@ -203,7 +203,7 @@ def test_engine_configured(clean_ai_env, monkeypatch):
     monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://aif.example")
     assert engine_configured("azure-openai")
     assert not engine_configured("bedrock")
-    monkeypatch.setenv("CNA_BEDROCK_MODEL_ID", "anthropic.claude-example")
+    monkeypatch.setenv("NETWORK_ASSESSMENT_BEDROCK_MODEL_ID", "anthropic.claude-example")
     assert engine_configured("bedrock")
     assert not engine_configured("anthropic")
     assert not engine_configured("anthropic", {"anthropic": ""})
@@ -219,14 +219,14 @@ def test_agent_raises_config_error_when_nothing_configured(clean_ai_env):
 
 
 def test_agent_byo_without_keys_raises(clean_ai_env, monkeypatch):
-    monkeypatch.setenv("CNA_AI_MODE", "byo-api")
+    monkeypatch.setenv("NETWORK_ASSESSMENT_AI_MODE", "byo-api")
     monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://aif.example")  # must not rescue byo mode
     with pytest.raises(ChatConfigError, match="AI Engine page"):
         GroundedChatAgent()
 
 
 def test_agent_byo_single_key_overrides_stored(clean_ai_env, monkeypatch):
-    monkeypatch.setenv("CNA_AI_MODE", "byo-api")
+    monkeypatch.setenv("NETWORK_ASSESSMENT_AI_MODE", "byo-api")
     agent = GroundedChatAgent(engine="openai", byo_keys={"anthropic": "sk-a"})
     assert agent.engine == "anthropic"
 
@@ -311,8 +311,8 @@ class _Obj:
 def test_answer_via_mocked_anthropic(monkeypatch):
     import anthropic
 
-    monkeypatch.setenv("CNA_AI_MODE", "byo-api")
-    monkeypatch.delenv("CNA_ANTHROPIC_MODEL", raising=False)
+    monkeypatch.setenv("NETWORK_ASSESSMENT_AI_MODE", "byo-api")
+    monkeypatch.delenv("NETWORK_ASSESSMENT_ANTHROPIC_MODEL", raising=False)
     captured: dict = {}
 
     class FakeMessages:
@@ -354,7 +354,7 @@ def test_answer_via_mocked_anthropic(monkeypatch):
 def test_anthropic_refusal_surfaces_as_text(monkeypatch):
     import anthropic
 
-    monkeypatch.setenv("CNA_AI_MODE", "byo-api")
+    monkeypatch.setenv("NETWORK_ASSESSMENT_AI_MODE", "byo-api")
 
     class FakeAnthropic:
         def __init__(self, **kwargs):
@@ -373,8 +373,8 @@ def test_anthropic_refusal_surfaces_as_text(monkeypatch):
 def test_answer_via_mocked_openai(monkeypatch):
     import openai
 
-    monkeypatch.setenv("CNA_AI_MODE", "byo-api")
-    monkeypatch.setenv("CNA_OPENAI_MODEL", "gpt-test")
+    monkeypatch.setenv("NETWORK_ASSESSMENT_AI_MODE", "byo-api")
+    monkeypatch.setenv("NETWORK_ASSESSMENT_OPENAI_MODEL", "gpt-test")
     captured: dict = {}
 
     class FakeCompletions:
@@ -409,11 +409,11 @@ def test_answer_via_mocked_openai(monkeypatch):
 def test_answer_via_mocked_bedrock(monkeypatch):
     import boto3
 
-    monkeypatch.setenv("CNA_AI_MODE", "saas")
-    monkeypatch.setenv("CNA_APPLIANCE_CLOUD", "aws")
-    monkeypatch.setenv("CNA_BEDROCK_MODEL_ID", "anthropic.claude-example")
+    monkeypatch.setenv("NETWORK_ASSESSMENT_AI_MODE", "saas")
+    monkeypatch.setenv("NETWORK_ASSESSMENT_APPLIANCE_CLOUD", "aws")
+    monkeypatch.setenv("NETWORK_ASSESSMENT_BEDROCK_MODEL_ID", "anthropic.claude-example")
     monkeypatch.setenv(
-        "CNA_BEDROCK_INFERENCE_PROFILE_ARN",
+        "NETWORK_ASSESSMENT_BEDROCK_INFERENCE_PROFILE_ARN",
         "arn:aws:bedrock:us-east-1:123:application-inference-profile/abc",
     )
     captured: dict = {}

@@ -29,7 +29,7 @@ the API (`apps/network-assessment-api`), the worker (`apps/network-assessment-wo
 and publish those images. Please report problems in:
 
 - authentication, sign-in and session handling, authorization and role checks, and the internal bearer
-  (`CNA_API_TOKEN`) that protects service-to-service routes such as `/api/drawio-mcp/*`;
+  (`NETWORK_ASSESSMENT_API_TOKEN`) that protects service-to-service routes such as `/api/drawio-mcp/*`;
 - the handling of cloud credentials and of the administrator-entered AI provider keys (encrypted with AES-256-GCM,
   never to be logged, returned or stored anywhere else);
 - the delivery portal, report and diagram generation, file upload and export paths;

@@ -8,7 +8,7 @@ Recommended tool: azure.advisor.get-recommendation
 
 Connection:
   - Requires Azure MCP Server running locally or accessible via SSE transport
-  - Configured via env vars: CNA_AZURE_MCP_ENDPOINT, CNA_AZURE_MCP_TRANSPORT
+  - Configured via env vars: NETWORK_ASSESSMENT_AZURE_MCP_ENDPOINT, NETWORK_ASSESSMENT_AZURE_MCP_TRANSPORT
   - Default transport: streamable-http (public Azure MCP endpoint default)
   - Graceful degradation: on ImportError or connection failure, returns []
 """
@@ -25,8 +25,8 @@ from network_assessment.core.findings_schema import FindingRecommendation
 
 logger = logging.getLogger("network_assessment.mcp.azure")
 
-_MCP_ENDPOINT = os.getenv("CNA_AZURE_MCP_ENDPOINT", "")
-_MCP_TRANSPORT = os.getenv("CNA_AZURE_MCP_TRANSPORT", "streamable-http")
+_MCP_ENDPOINT = os.getenv("NETWORK_ASSESSMENT_AZURE_MCP_ENDPOINT", "")
+_MCP_TRANSPORT = os.getenv("NETWORK_ASSESSMENT_AZURE_MCP_TRANSPORT", "streamable-http")
 
 
 class AzureMCPClient:

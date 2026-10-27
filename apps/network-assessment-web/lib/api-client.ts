@@ -1,13 +1,13 @@
-// Server-side helper for calling the internal network-assessment-api (CNA_API_INTERNAL_URL).
+// Server-side helper for calling the internal network-assessment-api (NETWORK_ASSESSMENT_API_INTERNAL_URL).
 // Every web→api request must carry a bearer when one is configured (SEC-001 /
-// ARCH-002): the api enforces `Authorization: Bearer <CNA_API_TOKEN>` on every
+// ARCH-002): the api enforces `Authorization: Bearer <NETWORK_ASSESSMENT_API_TOKEN>` on every
 // path except /health and /ready. The token is a runtime secret supplied by the
 // deployment to both containers; it is never logged and never returned to a
 // client.
 //
 // The internal routes (/discovery/*, /intake, /publish) additionally accept an
 // Entra access token for the api's app registration (change set H): when
-// CNA_ENTRA_AUDIENCE is set, `internalApiHeaders` obtains one with the web
+// NETWORK_ASSESSMENT_ENTRA_AUDIENCE is set, `internalApiHeaders` obtains one with the web
 // tier's own managed identity (AZURE_CLIENT_ID) and the api checks its
 // signature, audience and the `Discovery.Run` app role. Nothing here turns
 // authentication off; an unset audience simply falls back to the shared token.
@@ -15,12 +15,12 @@
 /**
  * Build the headers for an internal network-assessment-api request. Merges any caller-supplied
  * headers (e.g. `Content-Type`) with the `Authorization` header when
- * `CNA_API_TOKEN` is set. When the token is unset (local dev), no Authorization
+ * `NETWORK_ASSESSMENT_API_TOKEN` is set. When the token is unset (local dev), no Authorization
  * header is added and the api falls back to unauthenticated mode.
  */
 export function apiHeaders(extra?: Record<string, string>): Record<string, string> {
   const headers: Record<string, string> = { ...(extra ?? {}) };
-  const token = process.env.CNA_API_TOKEN;
+  const token = process.env.NETWORK_ASSESSMENT_API_TOKEN;
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
@@ -51,7 +51,7 @@ async function acquireEntraToken(scope: string): Promise<AcquiredToken> {
 }
 
 /**
- * Headers for a call to an internal network-assessment-api route. With `CNA_ENTRA_AUDIENCE`
+ * Headers for a call to an internal network-assessment-api route. With `NETWORK_ASSESSMENT_ENTRA_AUDIENCE`
  * set the Authorization header carries an Entra token for that audience;
  * otherwise it is `apiHeaders(extra)` (the shared token, or nothing locally).
  */
@@ -59,7 +59,7 @@ export async function internalApiHeaders(
   extra?: Record<string, string>,
   acquire: TokenAcquirer = acquireEntraToken,
 ): Promise<Record<string, string>> {
-  const audience = process.env.CNA_ENTRA_AUDIENCE;
+  const audience = process.env.NETWORK_ASSESSMENT_ENTRA_AUDIENCE;
   if (!audience) {
     return apiHeaders(extra);
   }

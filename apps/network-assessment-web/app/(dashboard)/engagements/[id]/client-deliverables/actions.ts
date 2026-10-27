@@ -282,7 +282,7 @@ export async function publishClientPortal(
   });
   if (!member) return { error: "Access denied." };
 
-  const apiUrl = process.env.CNA_API_INTERNAL_URL;
+  const apiUrl = process.env.NETWORK_ASSESSMENT_API_INTERNAL_URL;
   if (!apiUrl) return { error: "Discovery API is not configured." };
 
   try {

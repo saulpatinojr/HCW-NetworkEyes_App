@@ -22,7 +22,7 @@ running system or a published image.
   sections; the files below cover the older prompt path, the report title block and the chat copilot.)
 
 Code names are not wording and stay: ``clientOrg``, the report types ``condensed`` and ``expanded``, the Dockerfile
-argument ``EDITION``, ``CNA_EDITION``, the module ``edition.py`` and the JSON key ``edition``.
+argument ``EDITION``, ``NETWORK_ASSESSMENT_EDITION``, the module ``edition.py`` and the JSON key ``edition``.
 """
 
 from __future__ import annotations
@@ -499,7 +499,7 @@ class TestTheDocumentsSayUserAndBuild:
             "the lab build and the appliance build",
             "There is no paid edition.",
             "ARG EDITION=appliance",
-            "CNA_EDITION=lab and edition.py",
+            "NETWORK_ASSESSMENT_EDITION=lab and edition.py",
             "`customerLogoUrl` and `clientOrg` are code names",
             "the client secret and APP_CLIENT_ID are technical terms",
             "Users pull the images.",

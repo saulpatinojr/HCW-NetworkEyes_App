@@ -171,7 +171,7 @@ export async function testAzureAccess(params: {
     return { ok: false, error: "Tenant ID is required." };
   }
 
-  const apiUrl = process.env.CNA_API_INTERNAL_URL;
+  const apiUrl = process.env.NETWORK_ASSESSMENT_API_INTERNAL_URL;
   if (!apiUrl) return { ok: false, error: "Discovery API is not configured." };
 
   try {
@@ -297,7 +297,7 @@ export async function testAwsConnection(params: {
     return { ok: false, error: "Role ARN, Access Key ID, and Secret Access Key are all required." };
   }
 
-  const apiUrl = process.env.CNA_API_INTERNAL_URL;
+  const apiUrl = process.env.NETWORK_ASSESSMENT_API_INTERNAL_URL;
   if (!apiUrl) return { ok: false, error: "Discovery API is not configured." };
 
   try {

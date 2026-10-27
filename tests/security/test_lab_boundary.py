@@ -105,13 +105,13 @@ class TestDockerfile:
         assert (
             "--uid 1001" in body and "USER 1001" in body and "USER network-assessment" not in body
         )
-        assert "ENV CNA_EDITION=lab" in body
+        assert "ENV NETWORK_ASSESSMENT_EDITION=lab" in body
         assert 'CMD ["python", "-m", "cna_azure_network_engine.edition"]' in body
 
     def test_the_appliance_stage_is_the_image_as_before(self, stages: dict[str, str]):
         body = stages["final-appliance"]
         assert 'ENTRYPOINT ["network-assessment"]' in body
-        assert "ENV CNA_EDITION=appliance" in body
+        assert "ENV NETWORK_ASSESSMENT_EDITION=appliance" in body
         assert (
             "COPY --from=builder --chown=network-assessment:network-assessment /install /usr/local"
             in body

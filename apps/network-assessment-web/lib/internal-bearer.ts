@@ -1,7 +1,7 @@
 // Check for the internal shared bearer on a web route that only the Python
 // engine calls (ticket #245, owner decision "internal-only").
 //
-// It reuses the one shared secret the tiers already use, `CNA_API_TOKEN` (see
+// It reuses the one shared secret the tiers already use, `NETWORK_ASSESSMENT_API_TOKEN` (see
 // `api-client.ts` for the web→api direction; `apps/network-assessment-api/auth.py` for the api
 // side). The check fails closed: when the token is not configured on this
 // container nothing can match, so every request is refused. The token is never
@@ -26,12 +26,12 @@ function sameSecret(provided: string, expected: string): boolean {
 }
 
 /**
- * True when the request carries `Authorization: Bearer <CNA_API_TOKEN>`.
+ * True when the request carries `Authorization: Bearer <NETWORK_ASSESSMENT_API_TOKEN>`.
  * The comparison takes the same time for every wrong value of the same length and does not stop at the
  * first differing byte.
  */
 export function hasValidInternalBearer(req: Request): boolean {
-  const expected = process.env.CNA_API_TOKEN;
+  const expected = process.env.NETWORK_ASSESSMENT_API_TOKEN;
   if (!expected) return false;
 
   const header = req.headers.get("authorization") ?? "";

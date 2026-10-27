@@ -3,7 +3,7 @@
  * web tier and network_assessment/ai_engine/chat_agent.py can be held to one shared vector
  * table (see ai-engine-rules.test.ts / tests/unit/test_chat_agent.py).
  *
- * The appliance's deploy-time AI mode (CNA_AI_MODE) decides which engine
+ * The appliance's deploy-time AI mode (NETWORK_ASSESSMENT_AI_MODE) decides which engine
  * family is allowed:
  *   saas     — the cloud-native engine for this appliance's cloud:
  *              azure-openai on Azure, bedrock on AWS.

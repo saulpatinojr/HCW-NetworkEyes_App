@@ -520,7 +520,7 @@ Security.
 
 **Impact if unresolved**
 `byo-api` cannot be offered to users. `saas` deployments are unaffected — the code path is
-inert when `CNA_AI_MODE` is `saas` or unset.
+inert when `NETWORK_ASSESSMENT_AI_MODE` is `saas` or unset.
 
 **References**
 - [`CLAUDE.md`](CLAUDE.md) → AI engine rules
@@ -882,7 +882,7 @@ A user cannot tell what "1.0" they run; a new `[1.0.0]` heading would collide.
   (it searches a built-in icon list and echoes posted draw.io XML; no database) used to answer anyone who could reach
   the web app, because the middleware excludes `/api` and the handler had no check. Its one caller is the Python client
   `network_assessment/ai_engine/mcp_client/drawio_mcp_client.py`, which sends no cookie, so a sign-in check would have broken it.
-- **What now applies:** the route answers `401` unless the request carries `Authorization: Bearer <CNA_API_TOKEN>`, the
+- **What now applies:** the route answers `401` unless the request carries `Authorization: Bearer <NETWORK_ASSESSMENT_API_TOKEN>`, the
   shared secret the api and web containers already hold (compared in constant time, never logged, never echoed). With no
   token configured on the web container every request is refused. The Python client sends the same header from the same
   setting. This adds no new setting. Not chosen: `public-exempt` (an intentional open route).

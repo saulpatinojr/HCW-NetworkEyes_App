@@ -228,8 +228,8 @@ RUN chown -R nextjs:nodejs ./node_modules/.prisma ./node_modules/@prisma
 # Commit the image was built from (200-build-images passes github.sha). The web
 # tier compares it with the newest published build (Admin → Updates); empty
 # for local builds, which report the running build as unknown.
-ARG CNA_BUILD_SHA=
-ENV CNA_BUILD_SHA=${CNA_BUILD_SHA}
+ARG NETWORK_ASSESSMENT_BUILD_SHA=
+ENV NETWORK_ASSESSMENT_BUILD_SHA=${NETWORK_ASSESSMENT_BUILD_SHA}
 
 # Numeric uid, see the migrator stage (hadolint DL3066).
 USER 1001

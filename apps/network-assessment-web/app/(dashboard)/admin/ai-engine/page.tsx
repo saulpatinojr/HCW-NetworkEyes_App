@@ -67,12 +67,12 @@ const MODE_COPY = {
   saas: {
     title: "SaaS engine",
     blurb:
-      "This deployment runs with CNA_AI_MODE = saas: the cloud-native GenAI service is set up by your deployment and authenticated with the workload identity. Change the mode in the deployment settings (CNA_AI_MODE) and redeploy.",
+      "This deployment runs with NETWORK_ASSESSMENT_AI_MODE = saas: the cloud-native GenAI service is set up by your deployment and authenticated with the workload identity. Change the mode in the deployment settings (NETWORK_ASSESSMENT_AI_MODE) and redeploy.",
   },
   "byo-api": {
     title: "Bring-your-own API",
     blurb:
-      "This deployment runs with CNA_AI_MODE = byo-api: no cloud AI service is expected. Paste an Anthropic and/or OpenAI API key below — these are the only secrets entered in the app, stored encrypted in the database. With one key that provider is used automatically; with both, the toggle chooses.",
+      "This deployment runs with NETWORK_ASSESSMENT_AI_MODE = byo-api: no cloud AI service is expected. Paste an Anthropic and/or OpenAI API key below — these are the only secrets entered in the app, stored encrypted in the database. With one key that provider is used automatically; with both, the toggle chooses.",
   },
 } as const;
 

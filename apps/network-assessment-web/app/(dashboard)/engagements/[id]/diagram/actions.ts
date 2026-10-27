@@ -238,8 +238,8 @@ export async function generateDiagramFromDiscovery(
   const isMember = await ensureMembership(engagementId, session.user.id);
   if (!isMember) return { error: "Access denied." };
 
-  const apiUrl = process.env.CNA_API_INTERNAL_URL;
-  if (!apiUrl) return { error: "Diagram API is not configured (CNA_API_INTERNAL_URL unset)." };
+  const apiUrl = process.env.NETWORK_ASSESSMENT_API_INTERNAL_URL;
+  if (!apiUrl) return { error: "Diagram API is not configured (NETWORK_ASSESSMENT_API_INTERNAL_URL unset)." };
 
   const engagement = await prisma.engagement.findUnique({
     where: { id: engagementId },
