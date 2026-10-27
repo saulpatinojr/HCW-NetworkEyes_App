@@ -15,7 +15,7 @@ const aeonik = localFont({
 export const metadata: Metadata = {
   title: "NetworkEyes",
   description:
-    "Cloud Network Assessment — multi-user assessment, analysis, and delivery platform",
+    "NetworkEyes: multi-user cloud network assessment, analysis, and delivery",
 };
 
 export default function RootLayout({
