@@ -4,19 +4,38 @@ Closes TODO.md T-603: nothing prevented documentation sprawl from returning.
 Hardened by T-605 – T-608. Runs in CI (repository-guardrails job) and can be
 run locally.
 
-The model (README.md → "Repository conventions"): the repository keeps four
-required documents — README.md, CHANGELOG.md, REVIEW.md, TODO.md — and long-form
-documentation has no destination since the GitHub Wiki was deleted (REVIEW.md R-031). Three more root documents are allowed
-but not required: CLAUDE.md, the agent-instruction file that states the rules an
-AI coding agent must not infer wrongly (the image contract above
-all), and two temporary working documents with a planned retirement,
-CNA-0.90-updates.md and REFACTOR_APP.md. That makes seven root documents at
-most. Vendored agent configuration (.claude/, .agents/, .codex/, .kiro/) is
-excluded. The community-health files GitHub reads from .github/ are permitted, and only where
-GitHub reads them: SECURITY.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md, PULL_REQUEST_TEMPLATE.md,
-SUPPORT.md and FUNDING.md directly in .github/, and markdown files directly in .github/ISSUE_TEMPLATE/
-and .github/PULL_REQUEST_TEMPLATE/ (issue forms are .yml, which is not a document suffix). The same
-name anywhere else, or any other markdown under .github/, is a violation (ticket #247).
+The model is written out once, in README.md ("Documentation map"); this script
+enforces it. What the code allows, as a document file (a file with a suffix from
+DOCUMENT_SUFFIXES) in each place:
+
+* The repository root: the four required documents — README.md, CHANGELOG.md,
+  REVIEW.md, TODO.md — plus two that are allowed but not required: CLAUDE.md, the
+  agent-instruction file that states the rules an AI coding agent must not infer
+  wrongly (the image contract above all), and REFACTOR_APP.md, a temporary working
+  document with a planned retirement. That makes six root documents at most.
+* docs/ — the one home for long-form documentation (REVIEW.md R-031, decided
+  2026-10-27; the GitHub Wiki that held it was deleted). Any document file at any
+  depth below the top-level folder named exactly "docs". Nothing in it is required.
+  The name is compared exactly, not case-folded: git is case-sensitive, so "Docs/"
+  would be a second folder that Windows and macOS checkouts cannot hold beside
+  "docs/". Lookalikes are violations: doc/, documentation/, Docs/, DOCS/, a docs/
+  folder nested anywhere else (src/docs/), and a root file named docs.md. One
+  folder is one home; a second one is a second source of truth. One more refusal
+  inside docs/: GitHub reads community files from docs/ as well as .github/, so the
+  community-file names (SECURITY.md and the rest) directly in docs/, and the
+  ISSUE_TEMPLATE/ and PULL_REQUEST_TEMPLATE/ folders directly under it, stay
+  violations (ticket #247 keeps them in .github/ only).
+* .github/: the community-health files GitHub reads, and only where GitHub reads
+  them: SECURITY.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md, PULL_REQUEST_TEMPLATE.md,
+  SUPPORT.md and FUNDING.md directly in .github/, and markdown files directly in
+  .github/ISSUE_TEMPLATE/ and .github/PULL_REQUEST_TEMPLATE/ (issue forms are .yml,
+  which is not a document suffix). The same name anywhere else, or any other
+  markdown under .github/, is a violation (ticket #247).
+* Nowhere else. Vendored agent configuration (.claude/, .agents/, .codex/, .kiro/)
+  is excluded from the scan.
+
+The rule for docs/ is about location only. Files without a document suffix (the JSON
+role definition in docs/roles/, images, diagrams) were never covered by this script.
 
 The required four are enforced in both directions: a missing required document
 is a violation, not just an extra one (T-605).
@@ -51,13 +70,16 @@ AGENT_INSTRUCTION_DOCUMENTS = {
 }
 
 # Allowed at the root but not required to exist — temporary working documents
-# with a planned retirement (removed again once their release ships).
+# with a planned retirement (removed again once their work ships).
 OPTIONAL_ROOT_DOCUMENTS = {
-    "CNA-0.90-updates.md",
     # The owner-approved refactoring plan this repository executes (HCW App-to-AddOn
     # initiative, 2026-10); retired once its change sets have shipped.
     "REFACTOR_APP.md",
 }
+
+# The one home for long-form documentation (REVIEW.md R-031): the top-level folder with exactly
+# this name. Compared exactly, not case-folded — see the module docstring.
+DOCS_DIRECTORY = "docs"
 
 _ALLOWED_ROOT_LOWER = {
     name.lower()
@@ -117,6 +139,8 @@ _ALLOWED_GITHUB_LOWER = {name.lower() for name in ALLOWED_GITHUB_DOCUMENTS}
 # `.github/PULL_REQUEST_TEMPLATE/<file>`. One level only.
 GITHUB_TEMPLATE_DIRECTORIES = {"ISSUE_TEMPLATE", "PULL_REQUEST_TEMPLATE"}
 
+_GITHUB_TEMPLATE_DIRECTORIES_LOWER = {name.lower() for name in GITHUB_TEMPLATE_DIRECTORIES}
+
 
 def is_excluded(relative: Path) -> bool:
     return any(part in EXCLUDED_DIRS for part in relative.parts)
@@ -126,9 +150,32 @@ def is_document(relative: Path) -> bool:
     return relative.suffix.lower() in DOCUMENT_SUFFIXES
 
 
+def is_under_docs(relative: Path) -> bool:
+    """True for a file inside the top-level docs/ folder, at any depth below it."""
+    return len(relative.parts) > 1 and relative.parts[0] == DOCS_DIRECTORY
+
+
+def is_github_reserved_in_docs(relative: Path) -> bool:
+    """A name GitHub would read as a community file or template when it sits in docs/.
+
+    GitHub looks for SECURITY.md, CONTRIBUTING.md and the other community files, and for the
+    ISSUE_TEMPLATE/ and PULL_REQUEST_TEMPLATE/ folders, in .github/, in the repository root and in
+    docs/ (https://docs.github.com/en/communities/setting-up-your-project-for-healthy-contributions/
+    creating-a-default-community-health-file, read 2026-10-27). The model keeps them in .github/
+    only (ticket #247), so a second copy in docs/ would be a policy that GitHub may show and the
+    repository does not mean. Only the places GitHub reads are refused: the file names directly in
+    docs/, and the two template folders directly under it.
+    """
+    if len(relative.parts) == 2:
+        return relative.name.lower() in _ALLOWED_GITHUB_LOWER
+    return relative.parts[1].lower() in _GITHUB_TEMPLATE_DIRECTORIES_LOWER
+
+
 def is_allowed(relative: Path) -> bool:
     if len(relative.parts) == 1:
         return relative.name.lower() in _ALLOWED_ROOT_LOWER
+    if is_under_docs(relative):
+        return not is_github_reserved_in_docs(relative)
     if relative.parts[0] == ".github":
         if len(relative.parts) == 2:
             return relative.name.lower() in _ALLOWED_GITHUB_LOWER
@@ -195,45 +242,59 @@ def validate() -> bool:
         if missing:
             print(file=sys.stderr)
         print(
-            "Documentation model violation — the repository allows seven root documents",
+            "Documentation model violation — document files are allowed only here:",
             file=sys.stderr,
         )
         print(
-            "at most: README.md, CHANGELOG.md, REVIEW.md and TODO.md (required), CLAUDE.md, and the",
+            "  * the repository root: README.md, CHANGELOG.md, REVIEW.md and TODO.md (required),",
             file=sys.stderr,
         )
         print(
-            "temporary CNA-0.90-updates.md and REFACTOR_APP.md (optional), plus the GitHub community files in",
+            "    CLAUDE.md and the temporary REFACTOR_APP.md (optional), six at most;",
             file=sys.stderr,
         )
         print(
-            ".github/ (SECURITY.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md, PULL_REQUEST_TEMPLATE.md, SUPPORT.md,",
+            "  * the folder named exactly docs/ at the top of the repository, at any depth",
             file=sys.stderr,
         )
         print(
-            "FUNDING.md and the files in .github/ISSUE_TEMPLATE/).",
+            "    (long-form documentation; not Docs/, doc/, documentation/ or src/docs/, and not",
             file=sys.stderr,
         )
-        print("Long-form documentation has no destination yet (REVIEW.md R-031).", file=sys.stderr)
+        print(
+            "    a community-file name such as SECURITY.md, which belongs in .github/);",
+            file=sys.stderr,
+        )
+        print(
+            "  * the GitHub community files in .github/ (SECURITY.md, CONTRIBUTING.md,",
+            file=sys.stderr,
+        )
+        print(
+            "    CODE_OF_CONDUCT.md, PULL_REQUEST_TEMPLATE.md, SUPPORT.md, FUNDING.md and the",
+            file=sys.stderr,
+        )
+        print(
+            "    files in .github/ISSUE_TEMPLATE/ and .github/PULL_REQUEST_TEMPLATE/).",
+            file=sys.stderr,
+        )
+        print('The model is written out in README.md, "Documentation map".', file=sys.stderr)
         print(file=sys.stderr)
         for violation in violations:
             print(f"  {violation}", file=sys.stderr)
         print(file=sys.stderr)
         print(
-            "Move the content to one of the allowed documents",
+            "Move long-form content into docs/, or into one of the other allowed documents,",
             file=sys.stderr,
         )
-        print(
-            "(or ask the owner where it belongs, REVIEW.md R-031), then delete the file.",
-            file=sys.stderr,
-        )
+        print("then delete the file.", file=sys.stderr)
 
     if missing or violations:
         return False
 
+    docs_documents = [relative for relative in documents if is_under_docs(relative)]
     print(
         f"Documentation model OK: {len(root_documents)} root documents, "
-        "nothing outside the allow-list."
+        f"{len(docs_documents)} under docs/, nothing outside the allow-list."
     )
     return True
 

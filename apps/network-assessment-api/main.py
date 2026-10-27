@@ -478,7 +478,7 @@ def intake(body: dict) -> dict:
     )
 
 
-# ─── Client portal publishing (CNA-0.90 §3: the publish story) ───────────────
+# ─── Client portal publishing (the 0.9.0 backlog item "the publish story") ───
 
 
 class PublishRequest(BaseModel):
@@ -1011,7 +1011,7 @@ def _run_azure_discovery(request: DiscoveryStartRequest) -> None:
 
 
 def _run_aws_discovery(request: DiscoveryStartRequest) -> None:
-    """AWS counterpart of _run_azure_discovery (CNA-0.90 §3: AWS end-to-end).
+    """AWS counterpart of _run_azure_discovery (the 0.9.0 backlog item "AWS end-to-end").
 
     Findings come from the network_assessment package's AnalysisEngine AWS rules; the Azure
     path evaluates the typed rule registry instead. Both write through

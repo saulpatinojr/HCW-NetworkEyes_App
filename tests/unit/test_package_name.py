@@ -31,9 +31,7 @@ OLD_ROLE = re.compile(
     rf"(?<![A-Za-z0-9_-]){_UPPER}-(?:ReadOnly|Discovery|Publish|TestConnection|Test)\b"
 )
 BARE_LABEL = re.compile(rf"(?<![A-Za-z0-9_.-]){_UPPER}(?![A-Za-z0-9_-])")
-HISTORY = frozenset(
-    {"CHANGELOG.md", "CNA-0.90-updates.md"}
-)  # dated records keep the names they were written with
+HISTORY = frozenset({"CHANGELOG.md"})  # dated records keep the names they were written with
 # the first engine release was published under the old name; a line that names that release or its files may keep it
 PUBLISHED_ENGINE_RELEASE = re.compile(rf"engine-v0[.]1[.]0|{_SHORT}_azure_network_engine-0[.]1[.]0")
 
