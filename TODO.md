@@ -2197,6 +2197,14 @@ old loop for one release (`CHANGELOG.md` `[Unreleased]`). Open:
   through `scripts/author-rules`-style authoring upstream, never by editing findings by hand.
 - Remove the `arm` backend, `_run_arm`, `_discover_subscription` and the fifteen ARM list collectors in the
   release after the acceptance run; `tests/unit/test_azure_discovery.py` keeps only the live-collector tests.
+  `tests/unit/test_azure_discovery_real_compute_sdk.py` (the real-SDK guard for `_collect_nvas`) and the
+  `azure-mgmt-compute` entries of the `enrichment` and `api` extras go with the loop (change the lock with `uv lock`).
+- While the `arm` backend lives, `_collect_nvas` stores `str(vm.storage_profile.os_disk.os_type)`, and the SDK's
+  `OperatingSystemTypes` is a `(str, Enum)`, so `str()` gives `OperatingSystemTypes.LINUX` (verified with
+  azure-mgmt-compute 39.0.0; 38.4.0 defines the enum the same way) where the Resource Graph backend stores `Linux`
+  and the mocked tests assert `Linux`. Nothing reads the value yet (the web inventory page only declares the
+  field). Fix with `getattr(os_type, "value", os_type)`, or drop it with the loop; tighten `_os_family` in the
+  guard when it is fixed.
 - Deployment note (outside this repository): a deployment may set `CNA_SCOPES` (space-separated scopes) and
   `CNA_DISCOVERY_BACKEND`; the Azure identity needs no `Microsoft.Compute` or
   `Microsoft.Security` SDK permissions beyond Reader for the Resource Graph tables.
