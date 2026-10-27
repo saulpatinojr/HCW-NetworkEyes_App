@@ -43,8 +43,8 @@ class Severity(IntEnum):
 # from. Kept in sync with the design's "Components and Interfaces" sections.
 AREAS: frozenset[str] = frozenset(
     {
-        "app-typescript",  # apps/cna-web (Next.js, incl. AWS-shaped UI views)
-        "python-engine-api",  # network_assessment/ core + apps/cna-api + apps/cna-worker decision
+        "app-typescript",  # apps/network-assessment-web (Next.js, incl. AWS-shaped UI views)
+        "python-engine-api",  # network_assessment/ core + apps/network-assessment-api + apps/network-assessment-worker decision
         "terraform-azure",  # Azure Terraform (left this repository; T-504)
         "terraform-aws",  # AWS Terraform (left this repository; T-504)
         "cicd",  # .github/workflows (200, 300, 310, 370)

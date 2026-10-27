@@ -1,20 +1,20 @@
 # docker-compose.yml — hardened
 # Changes from original:
 #   - version field removed (deprecated in Compose v2; causes warnings)
-#   - image: field added to cna service (run pre-built image OR build)
-#   - read_only: true on cna service (filesystem is immutable at runtime)
+#   - image: field added to network-assessment service (run pre-built image OR build)
+#   - read_only: true on network-assessment service (filesystem is immutable at runtime)
 #   - tmpfs for /tmp (needed by WeasyPrint PDF render and Jinja2 temp writes)
 #   - security_opt: no-new-privileges
-#   - Engagement + output volumes: ro on cna (read-only in prod service)
-#   - cna-dev: mounts source read-write for live editing
-#   - cna-test: dedicated test runner, no .env leak into prod runs
+#   - Engagement + output volumes: ro on network-assessment (read-only in prod service)
+#   - network-assessment-dev: mounts source read-write for live editing
+#   - network-assessment-test: dedicated test runner, no .env leak into prod runs
 #   - Explicit network (no default bridge sharing with other compose projects)
 
 services:
 
-  cna:
+  network-assessment:
     build: .
-    image: cna:local
+    image: network-assessment:local
     read_only: true
     tmpfs:
       - /tmp:size=512m
@@ -26,18 +26,18 @@ services:
       - ./output:/app/output:rw
     command: ["--help"]
     networks:
-      - cna-internal
+      - network-assessment-internal
 
-  cna-dev:
+  network-assessment-dev:
     build: .
     volumes:
       - .:/app:rw
     env_file: .env
     entrypoint: ["python", "-m", "pytest", "tests/", "-v", "--tb=short"]
     networks:
-      - cna-internal
+      - network-assessment-internal
 
-  cna-test:
+  network-assessment-test:
     build: .
     read_only: true
     tmpfs:
@@ -53,24 +53,24 @@ services:
       "--cov=network_assessment", "--cov-report=term-missing"
     ]
     networks:
-      - cna-internal
+      - network-assessment-internal
 
   # Web_Service fallback path (Requirement 7.2): run the Next.js front end
   # locally without the cloud. Builds the runner stage of the web image, which
   # ships as non-root (USER 1001, the `nextjs` user) with its own HEALTHCHECK.
-  cna-web:
+  network-assessment-web:
     build:
-      context: ./apps/cna-web
+      context: ./apps/network-assessment-web
       target: runner
-    image: cna-web:local
+    image: network-assessment-web:local
     security_opt:
       - no-new-privileges:true
     env_file: .env
     ports:
       - "3000:3000"
     networks:
-      - cna-internal
+      - network-assessment-internal
 
 networks:
-  cna-internal:
+  network-assessment-internal:
     driver: bridge

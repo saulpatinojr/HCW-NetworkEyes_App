@@ -51,7 +51,7 @@ def test_api_structured_logging_gap_is_a_fixable_low():
     api = next(f for f in findings if f.dedup_key == "observability:api-structured-json-logging")
     assert api.severity is Severity.LOW
     assert api.blocker_id is None
-    assert api.subject == "apps/cna-api/main.py"
+    assert api.subject == "apps/network-assessment-api/main.py"
 
 
 def test_ai_path_trace_token_coverage_is_fixable():

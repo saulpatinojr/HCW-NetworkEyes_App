@@ -16,6 +16,6 @@ exclude_patterns = [
   "**/.next/**",
   "**/.venv/**",
   "**/__pycache__/**",
-  "apps/cna-web/lib/drawio-mcp/shape-index.json",
-  "apps/cna-web/package-lock.json",
+  "apps/network-assessment-web/lib/drawio-mcp/shape-index.json",
+  "apps/network-assessment-web/package-lock.json",
 ]

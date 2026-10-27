@@ -10,7 +10,7 @@
 #   trivy-config   Trivy configuration scan: Dockerfiles, docker-compose.yml (misconfigurations)
 #   trivy-fs       Trivy filesystem scan: locked dependencies (uv.lock, package-lock.json) and secrets
 #   trivy-image <image>   Trivy scan of an image that is already in the local image store, for example one you
-#                         built with `docker build -t cna:test .`; it is exported to a tar file and scanned from
+#                         built with `docker build -t network-assessment:test .`; it is exported to a tar file and scanned from
 #                         there, so no Docker socket is ever mounted into a container
 #   all            hadolint, actionlint, trivy-config and trivy-fs
 #
@@ -22,8 +22,9 @@
 #
 # How it stays safe: every tool runs in a disposable container (--rm) with all capabilities dropped, no privilege
 # escalation and no Docker socket. The repository is mounted read-only. hadolint and actionlint get no network.
-# Trivy gets network access to download its vulnerability database into a named volume, `cna-trivy-cache`, which is
-# the only thing this script leaves behind; remove it with `docker volume rm cna-trivy-cache`.
+# Trivy gets network access to download its vulnerability database into a named volume, `network-assessment-trivy-cache`, which is
+# the only thing this script leaves behind; remove it with `docker volume rm network-assessment-trivy-cache`. Before the rename of
+# 2026-10-27 the volume was called `cna-trivy-cache`; an old one is not used any more, remove it with `docker volume rm cna-trivy-cache`.
 #
 # The script stops when `docker context show` names an engine other than your own machine (desktop-linux, or
 # default on Linux), or when DOCKER_HOST is set, because a scan against a shared or remote engine is a different
@@ -44,7 +45,7 @@ ACTIONLINT_IMAGE="rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0
 # `latest`: on 2026-03-19 and 2026-03-22 malicious Trivy images were published under moving tags
 # (GHSA-69fq-xp46-6x23); a digest cannot be moved. 0.72.0 or later is required for the plugin path-traversal fix.
 TRIVY_IMAGE="ghcr.io/aquasecurity/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c"
-TRIVY_CACHE_VOLUME="cna-trivy-cache"
+TRIVY_CACHE_VOLUME="network-assessment-trivy-cache"
 # Scratch directory (inside the repository, ignored by git) where trivy-image writes the exported image tar.
 SCRATCH_DIR=".trivy-image-scratch"
 
@@ -125,7 +126,7 @@ run_trivy_fs() {
 
 run_trivy_image() {
   local image="${1:-}"
-  [ -n "$image" ] || fail "trivy-image needs an image name, for example: trivy-image cna:test"
+  [ -n "$image" ] || fail "trivy-image needs an image name, for example: trivy-image network-assessment:test"
   docker image inspect "$image" >/dev/null 2>&1 || fail "image '$image' is not in the local image store"
   say "== trivy image $image (severity $TRIVY_SEVERITY)"
   # Export to a tar file inside a scratch directory of the repository, scan from there, delete it afterwards.

@@ -1,6 +1,6 @@
 """The migrator image ships what it runs and nothing else (TODO.md T-737).
 
-`apps/cna-web/Dockerfile` has a `migrator` target that receives the database-owner connection string and runs
+`apps/network-assessment-web/Dockerfile` has a `migrator` target that receives the database-owner connection string and runs
 `prisma/migrate.sh` (`prisma migrate deploy`, then `prisma/seed-local-admin.js`). It used to copy the builder's whole
 `node_modules`: every devDependency, among them the Go-compiled TypeScript 7 compiler (19 High findings in a Trivy
 scan) and two vulnerable `brace-expansion` versions, none of which `npm audit --omit=dev` can see. These tests keep
@@ -27,7 +27,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB = REPO_ROOT / "apps" / "cna-web"
+WEB = REPO_ROOT / "apps" / "network-assessment-web"
 DOCKERFILE = WEB / "Dockerfile"
 PACKAGE_JSON = WEB / "package.json"
 PACKAGE_LOCK = WEB / "package-lock.json"

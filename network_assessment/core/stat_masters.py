@@ -1,14 +1,14 @@
 """Stat Masters — flat aggregated fact records powering pivots, report tables
 and the chat copilot.
 
-Mirrors the frontend type in apps/cna-web/lib/types/stat-master.ts:
+Mirrors the frontend type in apps/network-assessment-web/lib/types/stat-master.ts:
 8 dimensions (traffic_direction, severity, framework, region,
 subscription_id, resource_type, category, rule_id) + 3 measures
 (finding_count, resource_count, est_monthly_cost_impact).
 
 `build_stat_masters` is a pure function: it accepts both
 network_assessment.core.findings_schema.Finding models and plain dict findings (the shape
-written by apps/cna-api/finding_records.py::finding_to_record and by Prisma
+written by apps/network-assessment-api/finding_records.py::finding_to_record and by Prisma
 Finding rows), and an optional AzureTopology for classification metadata.
 Unknown dimension values fall back to the same labels the frontend
 derive-stat-masters.ts uses ("Unmapped", "Unknown", "default", "Other",
@@ -27,7 +27,7 @@ from network_assessment.core.findings_schema import Finding
 
 STAT_MASTERS_VERSION = "1.0.0"
 
-# Same rule-id extraction pattern as apps/cna-web/lib/derive-stat-masters.ts
+# Same rule-id extraction pattern as apps/network-assessment-web/lib/derive-stat-masters.ts
 _RULE_ID_RE = re.compile(r"\b([A-Z]{2,5}-[A-Z]{2,10}-\d{1,4})\b")
 
 # Fallback labels — keep in sync with derive-stat-masters.ts

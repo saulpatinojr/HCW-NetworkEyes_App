@@ -1,7 +1,7 @@
 """The diagram editor is served by this deployment: customer topology never goes to a public draw.io host.
 
 ``REVIEW.md`` R-019 / issue NE-9. The editor on the Diagram page is the draw.io web app, fetched at image build
-(stage ``drawio-webapp`` of ``apps/cna-web/Dockerfile``) and served under ``/drawio/`` with a Content-Security-Policy
+(stage ``drawio-webapp`` of ``apps/network-assessment-web/Dockerfile``) and served under ``/drawio/`` with a Content-Security-Policy
 that lets it talk to nothing but this origin and runs it in a sandbox. These checks keep that from coming back:
 
 * ``TestTheEditorIsPinned`` — the release is pinned by version and sha256 at the top of the Dockerfile, the download
@@ -11,7 +11,7 @@ that lets it talk to nothing but this origin and runs it in a sandbox. These che
 * ``TestTheWeeklyPinCheck`` — the scheduled workflow that reminds the owner when the pin is behind.
 * ``TestNoLiveFileNamesAPublicDrawioHost`` — no code, configuration, test or workflow file names a public draw.io,
   diagrams.net or drawio.com host. The only thing not read is the vendored editor itself (``public/drawio``), which
-  is third-party code. The web tier has the same check in ``apps/cna-web/lib/drawio-embed.test.ts``, next to the CSP,
+  is third-party code. The web tier has the same check in ``apps/network-assessment-web/lib/drawio-embed.test.ts``, next to the CSP,
   sandbox, header and embed-URL assertions.
 * ``TestTheWebCspFramesOnlyThisOrigin`` — the application's own CSP has no draw.io host in ``frame-src`` or anywhere.
 
@@ -31,8 +31,8 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 THIS_FILE = Path(__file__).resolve()
-DOCKERFILE = REPO_ROOT / "apps" / "cna-web" / "Dockerfile"
-MIDDLEWARE = REPO_ROOT / "apps" / "cna-web" / "middleware.ts"
+DOCKERFILE = REPO_ROOT / "apps" / "network-assessment-web" / "Dockerfile"
+MIDDLEWARE = REPO_ROOT / "apps" / "network-assessment-web" / "middleware.ts"
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "380-drawio-pin-check.yml"
 
 #: A URL, or a well-known bare host such as ``embed.<domain>``, under draw.io's, diagrams.net's or drawio.com's
@@ -51,9 +51,9 @@ SKIPPED_DIRECTORIES = frozenset(
     {"node_modules", ".next", "__pycache__", ".ruff_cache", ".pytest_cache", ".mypy_cache", ".venv"}
 )
 #: The vendored editor (fetched at image build, git-ignored) names its own hosts; skipped at this path and nowhere else.
-VENDORED_EDITOR = "apps/cna-web/public/drawio"
+VENDORED_EDITOR = "apps/network-assessment-web/public/drawio"
 #: The guards themselves spell hosts out to prove their matchers.
-GUARD_FILES = frozenset({"apps/cna-web/lib/drawio-embed.test.ts"})
+GUARD_FILES = frozenset({"apps/network-assessment-web/lib/drawio-embed.test.ts"})
 MAX_BYTES = 2_000_000
 
 VERSION = re.compile(r"^\d+\.\d+\.\d+$")
@@ -189,7 +189,9 @@ class TestTheEditorIsPinned:
         assert "chmod 555" in run and "find /out -type f" in run and "find /out -type d" in run
         # The chmod comes after the licence is copied, so the licence is read-only too.
         assert stage.index("COPY third-party/drawio/LICENSE") < stage.index("chmod 444")
-        licence = REPO_ROOT / "apps" / "cna-web" / "third-party" / "drawio" / "LICENSE"
+        licence = (
+            REPO_ROOT / "apps" / "network-assessment-web" / "third-party" / "drawio" / "LICENSE"
+        )
         assert "Apache License" in licence.read_text(encoding="utf-8")[:200]
 
     def test_the_runner_serves_the_editor_from_its_own_files_and_labels_the_version(self):
@@ -199,9 +201,9 @@ class TestTheEditorIsPinned:
 
     def test_the_downloaded_files_are_not_committed(self):
         ignored = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
-        assert "apps/cna-web/public/drawio/" in ignored
+        assert "apps/network-assessment-web/public/drawio/" in ignored
         dockerignore = (
-            (REPO_ROOT / "apps" / "cna-web" / ".dockerignore")
+            (REPO_ROOT / "apps" / "network-assessment-web" / ".dockerignore")
             .read_text(encoding="utf-8")
             .splitlines()
         )
@@ -232,7 +234,10 @@ class TestTheWeeklyPinCheck:
 
     def test_it_compares_the_dockerfile_pin_with_the_latest_release_and_the_advisories(self):
         text = self._text()
-        assert "ARG DRAWIO_WEBAPP_VERSION=" in text and "apps/cna-web/Dockerfile" in text
+        assert (
+            "ARG DRAWIO_WEBAPP_VERSION=" in text
+            and "apps/network-assessment-web/Dockerfile" in text
+        )
         assert "gh api repos/jgraph/drawio/releases/latest" in text
         assert "repos/jgraph/drawio/security-advisories" in text
 
@@ -267,13 +272,13 @@ class TestNoLiveFileNamesAPublicDrawioHost:
     def test_the_scan_reads_the_places_it_guards(self):
         names = {p.relative_to(REPO_ROOT).as_posix() for p in _scanned_files()}
         for expected in (
-            "apps/cna-web/components/diagrams/DrawioEmbed.tsx",
-            "apps/cna-web/components/diagrams/DrawioEmbed.test.tsx",
-            "apps/cna-web/middleware.ts",
-            "apps/cna-web/next.config.ts",
-            "apps/cna-web/lib/drawio-embed.ts",
-            "apps/cna-web/lib/drawio-mcp/server.ts",
-            "apps/cna-web/Dockerfile",
+            "apps/network-assessment-web/components/diagrams/DrawioEmbed.tsx",
+            "apps/network-assessment-web/components/diagrams/DrawioEmbed.test.tsx",
+            "apps/network-assessment-web/middleware.ts",
+            "apps/network-assessment-web/next.config.ts",
+            "apps/network-assessment-web/lib/drawio-embed.ts",
+            "apps/network-assessment-web/lib/drawio-mcp/server.ts",
+            "apps/network-assessment-web/Dockerfile",
             "network_assessment/ai_engine/mcp_client/drawio_mcp_client.py",
             "tests/unit/test_drawio_mcp_client.py",
             ".github/workflows/380-drawio-pin-check.yml",
@@ -285,7 +290,7 @@ class TestNoLiveFileNamesAPublicDrawioHost:
     def test_only_the_vendored_editor_is_skipped(self, tmp_path):
         # A directory called `drawio` anywhere else is scanned like any other.
         assert "drawio" not in SKIPPED_DIRECTORIES
-        assert VENDORED_EDITOR == "apps/cna-web/public/drawio"
+        assert VENDORED_EDITOR == "apps/network-assessment-web/public/drawio"
 
     def test_no_live_file_names_a_public_draw_io_host(self):
         offenders: list[str] = []

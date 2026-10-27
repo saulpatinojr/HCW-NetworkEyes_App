@@ -69,7 +69,7 @@ def test_classify_walks_mro_for_subclasses():
     """A subclass defined in the caller's module still resolves by its SDK root."""
 
     class WrappedAzureError(_FakeAzureError):
-        __module__ = "apps.cna_api.main"  # defined outside the SDK namespace
+        __module__ = "apps.network_assessment_api.main"  # defined outside the SDK namespace
 
     assert classify_downstream_error(WrappedAzureError(_RAW)) is DownstreamCategory.AZURE
 
@@ -125,8 +125,8 @@ def test_client_message_names_the_category():
 
 def test_full_detail_is_logged_server_side(caplog: pytest.LogCaptureFixture):
     """The raw detail is recorded server-side via ``logger.exception``."""
-    logger = logging.getLogger("cna-api.test")
-    with caplog.at_level(logging.ERROR, logger="cna-api.test"):
+    logger = logging.getLogger("network-assessment-api.test")
+    with caplog.at_level(logging.ERROR, logger="network-assessment-api.test"):
         try:
             raise _FakePsycopg2Error(_RAW)
         except _FakePsycopg2Error as exc:

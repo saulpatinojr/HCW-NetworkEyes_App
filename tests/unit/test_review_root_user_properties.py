@@ -54,9 +54,9 @@ _GROUP_TOKEN = st.from_regex(r"[a-z][a-z0-9_-]{0,10}", fullmatch=True) | st.inte
 _SUBJECT = st.sampled_from(
     [
         "Dockerfile",
-        "apps/cna-api/Dockerfile",
-        "apps/cna-web/Dockerfile",
-        "apps/cna-worker/Dockerfile",
+        "apps/network-assessment-api/Dockerfile",
+        "apps/network-assessment-web/Dockerfile",
+        "apps/network-assessment-worker/Dockerfile",
     ]
 )
 

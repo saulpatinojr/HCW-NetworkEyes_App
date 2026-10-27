@@ -18,7 +18,7 @@ tools reported, and what this module records:
     passed!``. ``ruff format --check`` (the CI/pre-commit gate,
     ``300-test-codebase.yml`` + ``.pre-commit-config.yaml``) initially flagged
     ten files this feature's work introduced (``network_assessment/api_status.py``,
-    ``apps/cna-api/main.py``, ``network_assessment/review/model.py``, and seven
+    ``apps/network-assessment-api/main.py``, ``network_assessment/review/model.py``, and seven
     ``network_assessment/review/areas/*`` modules). ``ruff format`` was run over those files to
     fix the genuine formatting-gate failure this feature introduced (no lint
     rule was silenced and no gate weakened); both ``ruff check`` and ``ruff
@@ -92,7 +92,7 @@ def python_engine_api_verify_findings() -> list[Finding]:
                 "Verified compliant (ruff): 'ruff check network_assessment apps' passes with no "
                 "findings. 'ruff format --check' (the CI/pre-commit gate) flagged "
                 "ten feature-introduced files (network_assessment/api_status.py, "
-                "apps/cna-api/main.py, network_assessment/review/model.py, and seven "
+                "apps/network-assessment-api/main.py, network_assessment/review/model.py, and seven "
                 "network_assessment/review/areas/* modules); 'ruff format' was run over them to "
                 "fix the formatting-gate failure this feature introduced — no lint "
                 "rule silenced, no gate weakened. Both 'ruff check' and 'ruff "

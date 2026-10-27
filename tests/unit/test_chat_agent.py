@@ -140,7 +140,7 @@ def clean_ai_env(monkeypatch):
         monkeypatch.delenv(var, raising=False)
 
 
-# Shared resolver vector table — mirrored by apps/cna-web/lib/ai-engine.test.ts.
+# Shared resolver vector table — mirrored by apps/network-assessment-web/lib/ai-engine.test.ts.
 # (mode, cloud, stored, env_default, configured) -> expected engine (or None = ChatConfigError)
 RESOLVER_VECTORS = [
     # saas: one engine per cloud; stored/env preferences are irrelevant

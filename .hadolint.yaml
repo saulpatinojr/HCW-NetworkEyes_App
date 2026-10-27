@@ -1,4 +1,4 @@
-# hadolint configuration for the four Dockerfiles (Dockerfile, apps/cna-api, apps/cna-worker, apps/cna-web).
+# hadolint configuration for the four Dockerfiles (Dockerfile, apps/network-assessment-api, apps/network-assessment-worker, apps/network-assessment-web).
 # Run from the repository root; CI (`Dockerfile Lint (hadolint)` in 300-test-codebase.yml) and
 # scripts/ci/local-container-checks.sh both pass this file with --config.
 #

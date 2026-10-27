@@ -243,7 +243,7 @@ def _verify_findings() -> list[Finding]:
         documentation map carries (``CHANGELOG.md``, ``REVIEW.md``, ``TODO.md``,
         ``CNA-0.90-updates.md``) resolves on the tree, as do the ``.env.example``
         inventory files README points at (repository root and
-        ``apps/cna-web/``).
+        ``apps/network-assessment-web/``).
       * **Command / workflow-name resolution.** Every workflow filename README
         references by name (``200-build-images.yml``, ``300-test-codebase.yml``,
         ``310-release-version.yml``, ``320-release-engine.yml``, ``370-registry-cleanup.yml``) exists under
@@ -280,7 +280,7 @@ def _verify_findings() -> list[Finding]:
                 "Verified compliant: every relative link in README's "
                 "documentation map resolves (CHANGELOG.md, REVIEW.md, TODO.md, "
                 "CNA-0.90-updates.md) and the documented .env.example inventory "
-                "files resolve (repository root and apps/cna-web/). No broken "
+                "files resolve (repository root and apps/network-assessment-web/). No broken "
                 "documentation link found."
             ),
             dedup_key="documentation:links-resolve",

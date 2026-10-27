@@ -16,7 +16,7 @@ overview, and `TODO.md` is the work queue.
 
 ## What lives where
 
-- **Product code:** `apps/cna-web` (Next.js), `apps/cna-api` and `apps/cna-worker` (Python), the `network_assessment` package, and
+- **Product code:** `apps/network-assessment-web` (Next.js), `apps/network-assessment-api` and `apps/network-assessment-worker` (Python), the `network_assessment` package, and
   `packages/cna-azure-network-engine`. Deployment is not done here: this repository only builds and publishes the
   images. A change to the image tags, the signing identity or
   the runtime environment settings changes what consumers rely on; `CLAUDE.md` explains how to record it.
@@ -41,10 +41,10 @@ uv run --frozen --extra dev pytest tests/unit tests/security tests/packaging pac
 python scripts/validate_documentation_model.py
 ```
 
-For the web app (`apps/cna-web`, Node 24):
+For the web app (`apps/network-assessment-web`, Node 24):
 
 ```bash
-cd apps/cna-web
+cd apps/network-assessment-web
 npm ci
 npm run lint && npm run typecheck && npm test
 ```
@@ -60,8 +60,8 @@ That runs hadolint (Dockerfiles), actionlint (workflows) and two Trivy scans (co
 script header explains the options and where the tool versions come from. CI runs the hadolint and actionlint parts
 as the jobs `Dockerfile Lint (hadolint)` and `Workflow Lint (actionlint)`.
 
-To scan an image you built (for example `docker build --target migrator -t cna:migrator apps/cna-web`), run
-`bash scripts/ci/local-container-checks.sh trivy-image cna:migrator`. CI builds and scans the web `migrator` and `runner`
+To scan an image you built (for example `docker build --target migrator -t network-assessment:migrator apps/network-assessment-web`), run
+`bash scripts/ci/local-container-checks.sh trivy-image network-assessment:migrator`. CI builds and scans the web `migrator` and `runner`
 images in every pull request as the job `Image Scan (Trivy)`; `.trivyignore.yaml` lists the one suppression, with its reason.
 
 ## Rules that are easy to get wrong

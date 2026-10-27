@@ -6,7 +6,7 @@ findings, topology classification). No fabrication, no client environment
 access (DD-008) — this agent never queries Azure; it reasons over data
 already persisted by discovery + analysis.
 
-Engine selection mirrors apps/cna-web/lib/ai-engine.ts exactly — same engine
+Engine selection mirrors apps/network-assessment-web/lib/ai-engine.ts exactly — same engine
 ids, same env vars, same resolution rules. The appliance's deploy-time AI mode
 (``CNA_AI_MODE``) decides which family of engines is allowed:
 
@@ -19,7 +19,7 @@ ids, same env vars, same resolution rules. The appliance's deploy-time AI mode
               authenticated with an API key the admin entered on the AI Engine
               page. Keys live AES-256-GCM encrypted in the AppSetting table
               (see network_assessment.core.credential_crypto) and are passed in already
-              decrypted by the caller (apps/cna-api/routers/chat.py).
+              decrypted by the caller (apps/network-assessment-api/routers/chat.py).
 
 Resolution (byo-api): exactly one key configured → that provider is active
 regardless of the stored setting; both configured → the stored
@@ -54,7 +54,7 @@ logger = logging.getLogger("network_assessment.chat_agent")
 _HTTP_TOO_MANY_REQUESTS = 429
 _HTTP_SERVER_ERROR = 500
 
-# Engine ids — keep in sync with apps/cna-web/lib/ai-engine.ts VALID_ENGINES
+# Engine ids — keep in sync with apps/network-assessment-web/lib/ai-engine.ts VALID_ENGINES
 ENGINE_AZURE_OPENAI = "azure-openai"
 ENGINE_BEDROCK = "bedrock"
 ENGINE_ANTHROPIC = "anthropic"

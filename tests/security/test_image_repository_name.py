@@ -102,7 +102,7 @@ def _contract_files() -> list[Path]:
         ".env.example",
         "CLAUDE.md",
         "README.md",
-        "apps/cna-web/lib/image-update*.ts",
+        "apps/network-assessment-web/lib/image-update*.ts",
     )
     files = {
         p for pattern in patterns for p in REPO_ROOT.glob(pattern) if "node_modules" not in p.parts
@@ -209,7 +209,8 @@ class TestNoOtherRepository:
             "docker.io/hybridcloudworks/img-ne-appliance-app@sha256:" + "a" * 64,
             "scripts/ci/sign_image.sh docker.io/<namespace>/<repository>@sha256:<64>",
             "https://hub.docker.com/v2/repositories/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}/tags/",
-            "docker build -t cna:local .",  # a local tag, not a Docker Hub repository
+            "docker build -t network-assessment:local .",  # a local tag, not a Docker Hub repository
+            "docker build -t cna:local .",  # a local tag that still has the old name: not a registry path either
             "postgresql://cna@db.internal/cna?sslmode=disable",  # a database name
         ],
     )

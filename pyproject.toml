@@ -96,7 +96,7 @@ enrichment = [
     "mcp>=2.3.0,<3",                          # Azure/AWS MCP recommendation clients
 ]
 
-# The cna-api image's runtime dependencies. These are NOT core library deps
+# The network-assessment-api image's runtime dependencies. These are NOT core library deps
 # (the CLI never imports FastAPI), so they live in their own extra rather than
 # in `dependencies`. The API Dockerfile installs `.[api]`, which also pulls the
 # core deps, so the image no longer drifts from a hand-written pip list (PY-021).
@@ -139,7 +139,7 @@ build = [
     "setuptools>=84.2.1",
     "wheel",
 ]
-# apps/cna-worker/main.py imports exactly these two SDKs and does not install
+# apps/network-assessment-worker/main.py imports exactly these two SDKs and does not install
 # the network_assessment package, so its image resolves them from the same lock as the CLI and
 # API images (same versions everywhere) instead of an unpinned `pip install`.
 worker = [

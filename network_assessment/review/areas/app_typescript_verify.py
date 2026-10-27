@@ -12,7 +12,7 @@ records the task-14 consolidation engine can ingest.
 What was run
 ------------
 
-In ``apps/cna-web`` (Node v26, npm v11):
+In ``apps/network-assessment-web`` (Node v26, npm v11):
 
   * ``npm ci`` — installed 581 packages cleanly (exit 0). Install scripts are not
     run by default under this npm's ``allow-scripts`` policy, so the Prisma
@@ -72,7 +72,7 @@ def _passing_check_findings() -> list[Finding]:
             area=_AREA,
             severity=Severity.INFORMATIONAL,
             proposed_action=(
-                "Verified compliant (Requirements 1.1/1.2): in apps/cna-web "
+                "Verified compliant (Requirements 1.1/1.2): in apps/network-assessment-web "
                 "'npm ci' installed cleanly and 'npx tsc --noEmit' passed with no "
                 "errors (exit 0) after generating the Prisma client with "
                 "'npx prisma generate'. The standalone type-check exercises the "
@@ -83,21 +83,21 @@ def _passing_check_findings() -> list[Finding]:
                 "none introduced a type error. Keep the type-check green."
             ),
             dedup_key="app-typescript:tsc-noemit-clean",
-            subject="apps/cna-web (npx tsc --noEmit)",
+            subject="apps/network-assessment-web (npx tsc --noEmit)",
         ),
         Finding(
             area=_AREA,
             severity=Severity.INFORMATIONAL,
             proposed_action=(
                 "Verified compliant (Requirements 1.1/1.2): 'npm run build' "
-                "(next build) succeeds in apps/cna-web (exit 0) — 'Compiled "
+                "(next build) succeeds in apps/network-assessment-web (exit 0) — 'Compiled "
                 "successfully', the in-build TypeScript step passes, and all "
                 "routes generate. This confirms the task-5.1/5.2 TypeScript edits "
                 "build end-to-end under the production compiler, not only the "
                 "standalone type-checker. No build fix required."
             ),
             dedup_key="app-typescript:next-build-succeeds",
-            subject="apps/cna-web (npm run build / next build)",
+            subject="apps/network-assessment-web (npm run build / next build)",
         ),
     ]
 
@@ -108,7 +108,7 @@ def _lint_gap_finding() -> Finding:
         area=_AREA,
         severity=Severity.MEDIUM,
         proposed_action=(
-            "Restore a runnable lint step for apps/cna-web. 'npm run lint' fails "
+            "Restore a runnable lint step for apps/network-assessment-web. 'npm run lint' fails "
             "(exit 1) because the script is 'next lint', which Next.js 16 removed "
             "('Invalid project directory provided, no such directory: .../lint'), "
             "and running ESLint 10 directly fails because there is no flat-config "
@@ -122,7 +122,7 @@ def _lint_gap_finding() -> Finding:
             "entry; no AWS account required."
         ),
         dedup_key="app-typescript:lint-step-not-runnable",
-        subject="apps/cna-web/package.json::scripts.lint (next lint removed; no eslint.config.*)",
+        subject="apps/network-assessment-web/package.json::scripts.lint (next lint removed; no eslint.config.*)",
     )
 
 
@@ -142,7 +142,7 @@ def _middleware_deprecation_finding() -> Finding:
             "app-area entry; no AWS account required."
         ),
         dedup_key="app-typescript:middleware-convention-deprecated",
-        subject="apps/cna-web/middleware.ts",
+        subject="apps/network-assessment-web/middleware.ts",
     )
 
 

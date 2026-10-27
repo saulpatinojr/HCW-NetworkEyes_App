@@ -82,12 +82,17 @@ def test_default_azure_credential_is_built_only_by_the_factory():
 
 
 def test_the_prisma_schema_carries_no_service_principal_columns():
-    schema = (REPO_ROOT / "apps" / "cna-web" / "prisma" / "schema.prisma").read_text(
+    schema = (REPO_ROOT / "apps" / "network-assessment-web" / "prisma" / "schema.prisma").read_text(
         encoding="utf-8"
     )
     assert "spSecretEnc" not in schema and "spClientId" not in schema
     migration = (
-        REPO_ROOT / "apps" / "cna-web" / "prisma" / "migrations" / "20261010000016_drop_sp_secret"
+        REPO_ROOT
+        / "apps"
+        / "network-assessment-web"
+        / "prisma"
+        / "migrations"
+        / "20261010000016_drop_sp_secret"
     )
     assert 'DROP COLUMN "spSecretEnc"' in (migration / "migration.sql").read_text(encoding="utf-8")
     assert "spSecretEnc" in (migration / "down.sql").read_text(encoding="utf-8")

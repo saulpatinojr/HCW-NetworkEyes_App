@@ -1,6 +1,6 @@
 """Findings for the ``app-typescript`` area — AWS-view alignment (Requirement 4.4).
 
-This module records the AWS-view alignment entries for ``apps/cna-web`` demanded
+This module records the AWS-view alignment entries for ``apps/network-assessment-web`` demanded
 by Requirement 4.4:
 
     "WHERE the AWS UI views in the Web_Service retain an Azure-shaped
@@ -105,7 +105,7 @@ def _verified_compliant_findings() -> list[Finding]:
             ),
             dedup_key="app-typescript:aws-view-credential-form-aligned",
             subject=(
-                "apps/cna-web/app/(dashboard)/engagements/[id]/cloud-credentials/"
+                "apps/network-assessment-web/app/(dashboard)/engagements/[id]/cloud-credentials/"
                 "credential-form.tsx"
             ),
         ),
@@ -136,8 +136,8 @@ def _aws_view_alignment_findings() -> list[Finding]:
             ),
             dedup_key="app-typescript:aws-view-discovery-topology-summary",
             subject=(
-                "apps/cna-web/app/api/discovery-jobs/[jobId]/route.ts, "
-                "apps/cna-web/app/(dashboard)/engagements/[id]/connections/"
+                "apps/network-assessment-web/app/api/discovery-jobs/[jobId]/route.ts, "
+                "apps/network-assessment-web/app/(dashboard)/engagements/[id]/connections/"
                 "connections-panel.tsx"
             ),
         ),
@@ -158,8 +158,8 @@ def _aws_view_alignment_findings() -> list[Finding]:
             ),
             dedup_key="app-typescript:aws-view-subscription-tenant-framing",
             subject=(
-                "apps/cna-web/app/(dashboard)/engagements/[id]/connections/page.tsx, "
-                "apps/cna-web/app/(dashboard)/engagements/[id]/discovery/page.tsx"
+                "apps/network-assessment-web/app/(dashboard)/engagements/[id]/connections/page.tsx, "
+                "apps/network-assessment-web/app/(dashboard)/engagements/[id]/discovery/page.tsx"
             ),
         ),
         Finding(
@@ -179,15 +179,15 @@ def _aws_view_alignment_findings() -> list[Finding]:
             ),
             dedup_key="app-typescript:aws-view-inventory-label-and-help",
             subject=(
-                "apps/cna-web/app/(dashboard)/engagements/[id]/page.tsx, "
-                "apps/cna-web/components/ui/sp-help-modal.tsx"
+                "apps/network-assessment-web/app/(dashboard)/engagements/[id]/page.tsx, "
+                "apps/network-assessment-web/components/ui/sp-help-modal.tsx"
             ),
         ),
     ]
 
 
 def app_typescript_findings() -> list[Finding]:
-    """Return the Requirement 4.4 AWS-view alignment findings for ``apps/cna-web``.
+    """Return the Requirement 4.4 AWS-view alignment findings for ``apps/network-assessment-web``.
 
     Combines the verified-compliant credential-capture surface with one fixable
     alignment entry per Azure-shaped AWS-facing view (the discovery topology

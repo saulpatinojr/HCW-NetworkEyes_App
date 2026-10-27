@@ -30,8 +30,8 @@ htmlcov/
 # Next.js
 .next/
 out/
-apps/cna-web/.env.local
-apps/cna-web/.env*.local
+apps/network-assessment-web/.env.local
+apps/network-assessment-web/.env*.local
 
 # Build artifacts — should not be committed
 network_assessment.egg-info/
@@ -39,7 +39,7 @@ network_assessment.egg-info/
 # setuptools build output (a local `pip install --no-build-isolation .` leaves it behind)
 build/
 dist/
-apps/cna-web/tsconfig.tsbuildinfo
+apps/network-assessment-web/tsconfig.tsbuildinfo
 
 # Operational logs and payloads — contain runtime data, not source
 *.log
@@ -54,14 +54,14 @@ checkov_results.txt
 
 # Local pip junk from broken system Python (used as local test env)
 /Lib/
-apps/cna-web/lib/site-packages/
-apps/cna-web/scripts/*.exe
+apps/network-assessment-web/lib/site-packages/
+apps/network-assessment-web/scripts/*.exe
 scripts/*.exe
 PACS/
 
 # Scratch directory of scripts/ci/local-container-checks.sh trivy-image (the exported image tar)
 .trivy-image-scratch/
 
-# Self-hosted draw.io editor: fetched by the drawio-webapp stage of apps/cna-web/Dockerfile (or by hand for local
+# Self-hosted draw.io editor: fetched by the drawio-webapp stage of apps/network-assessment-web/Dockerfile (or by hand for local
 # development, see the comment on that stage), never committed.
-apps/cna-web/public/drawio/
+apps/network-assessment-web/public/drawio/

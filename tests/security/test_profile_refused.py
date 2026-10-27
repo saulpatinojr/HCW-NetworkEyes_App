@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-API_DIR = REPO_ROOT / "apps" / "cna-api"
+API_DIR = REPO_ROOT / "apps" / "network-assessment-api"
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("fastapi") is None or importlib.util.find_spec("jwt") is None,
@@ -66,7 +66,7 @@ def test_appliance_accepts_entra_in_place_of_the_shared_token(api_main):
         "DATABASE_URL": _BASE["DATABASE_URL"],
         "CNA_APPLIANCE_CLOUD": "azure",
         "CNA_ENTRA_TENANT_ID": "00000000-0000-0000-0000-000000000001",
-        "CNA_ENTRA_AUDIENCE": "api://cna-api-test",
+        "CNA_ENTRA_AUDIENCE": "api://network-assessment-api-test",
     }
     api_main._validate_startup_config(env)
 
@@ -80,7 +80,7 @@ def test_appliance_with_neither_bearer_exits(api_main):
 
 @pytest.fixture(scope="module")
 def api_main():
-    from tests.unit.test_cna_api_auth_reliability import _load_api_module
+    from tests.unit.test_network_assessment_api_auth_reliability import _load_api_module
 
     if importlib.util.find_spec("psycopg2") is None:
         pytest.skip("psycopg2 not installed")

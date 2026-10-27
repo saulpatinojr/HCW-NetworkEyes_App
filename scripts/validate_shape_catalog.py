@@ -34,7 +34,7 @@ ROOT = Path(__file__).resolve().parent.parent
 TARGETS = [
     ROOT / "network_assessment" / "diagram_engine" / "data" / "azure_shapes.json",
     ROOT / "network_assessment" / "diagram_engine" / "data" / "aws_shapes.json",
-    ROOT / "apps" / "cna-web" / "lib" / "drawio-mcp" / "shape-index.json",
+    ROOT / "apps" / "network-assessment-web" / "lib" / "drawio-mcp" / "shape-index.json",
 ]
 
 

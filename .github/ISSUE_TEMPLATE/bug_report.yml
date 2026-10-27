@@ -36,9 +36,9 @@ body:
       label: Affected component
       description: Choose the closest one.
       options:
-        - Web app (apps/cna-web)
-        - API (apps/cna-api)
-        - Worker (apps/cna-worker)
+        - Web app (apps/network-assessment-web)
+        - API (apps/network-assessment-api)
+        - Worker (apps/network-assessment-worker)
         - CLI and analysis engine (network_assessment package)
         - Azure network engine package (packages/cna-azure-network-engine)
         - Container images and the image build

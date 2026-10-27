@@ -47,7 +47,7 @@ def test_records_worker_retirement_decision():
     """
     findings = python_engine_api_findings()
     worker = next(f for f in findings if f.dedup_key == "python-engine-api:worker-retirement")
-    assert worker.subject == "apps/cna-worker"
+    assert worker.subject == "apps/network-assessment-worker"
     action = worker.proposed_action.lower()
     assert "retire" in action
     # The action must carry the removal/retention decision (retire => remove).

@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-# Same convention as test_free_tool_wording.py: the `cna-test` compose service builds from a context without `.git`,
+# Same convention as test_free_tool_wording.py: the `network-assessment-test` compose service builds from a context without `.git`,
 # where there is nothing to list. A worktree has `.git` as a file, so the check is `exists()`, not `is_dir()`.
 if shutil.which("git") is None or not (REPO_ROOT / ".git").exists():
     pytest.skip("needs a git checkout and the git program", allow_module_level=True)
@@ -27,7 +27,7 @@ _SHORT = "c" + "na"
 _SECOND_WORD = "plat" + "form"
 _LONG = "Cloud" + r"\s+Network\s+Assessment"
 
-# A letter or digit may not come right before the short name (so `apps/cna-web` and `HCW_<name>` are judged on what
+# A letter or digit may not come right before the short name (so `apps/network-assessment-web` and `HCW_<name>` are judged on what
 # follows), but an underscore, hyphen or slash may. Up to 16 characters that are not letters or digits may separate
 # the two words: a space, hyphen, underscore, bracket, dot, slash, apostrophe, markdown emphasis, a dash, or a line
 # break with an indented continuation (a Windows line break counts as two characters).

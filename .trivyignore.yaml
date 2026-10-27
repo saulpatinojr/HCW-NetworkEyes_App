@@ -7,7 +7,7 @@
 secrets:
   # The Azure Storage emulator (Azurite) key.
   #
-  # Why suppressed: apps/cna-web/lib/blob.ts imports @azure/storage-blob, whose connection-string parser inlines the
+  # Why suppressed: apps/network-assessment-web/lib/blob.ts imports @azure/storage-blob, whose connection-string parser inlines the
   # documented, public development-storage connection string of the local Azurite emulator (account name
   # devstoreaccount1, blob endpoint http://127.0.0.1:10000/devstoreaccount1; Microsoft's Azurite documentation
   # publishes the whole string). It is not a credential for any real account and it appears nowhere in this

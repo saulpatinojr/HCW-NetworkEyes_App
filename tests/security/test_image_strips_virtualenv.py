@@ -19,7 +19,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SHIPPED = {
     "cli (root Dockerfile)": REPO_ROOT / "Dockerfile",
-    "api": REPO_ROOT / "apps" / "cna-api" / "Dockerfile",
+    "api": REPO_ROOT / "apps" / "network-assessment-api" / "Dockerfile",
 }
 UNINSTALL = re.compile(r"^RUN python -m pip uninstall -y pip virtualenv\s*$", re.M)
 
@@ -27,7 +27,10 @@ UNINSTALL = re.compile(r"^RUN python -m pip uninstall -y pip virtualenv\s*$", re
 @pytest.mark.parametrize("name", SHIPPED)
 def test_the_image_uninstalls_pip_and_virtualenv_after_the_copy(name: str) -> None:
     text = SHIPPED[name].read_text(encoding="utf-8")
-    copy = re.compile(r"^COPY --from=builder --chown=cna:cna /install /usr/local", re.M)
+    copy = re.compile(
+        r"^COPY --from=builder --chown=network-assessment:network-assessment /install /usr/local",
+        re.M,
+    )
     copies = [m.start() for m in copy.finditer(text)]
     uninstalls = [m.start() for m in UNINSTALL.finditer(text)]
     assert copies, f"{name}: no copy of the builder's /install into /usr/local"

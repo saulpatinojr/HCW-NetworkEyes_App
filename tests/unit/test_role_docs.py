@@ -17,7 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 ROLE_FILE = REPO_ROOT / "docs" / "roles" / "cna-network-bgp-reader.json"
 MODULE_YAML = REPO_ROOT / "network_assessment" / "modules" / "network" / "module.yaml"
 ENV_EXAMPLE = REPO_ROOT / ".env.example"
-MODAL = REPO_ROOT / "apps" / "cna-web" / "components" / "ui" / "sp-help-modal.tsx"
+MODAL = REPO_ROOT / "apps" / "network-assessment-web" / "components" / "ui" / "sp-help-modal.tsx"
 
 EXPECTED_ACTIONS = [
     "Microsoft.Network/virtualNetworkGateways/getBgpPeerStatus/action",

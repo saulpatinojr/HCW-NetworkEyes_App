@@ -32,7 +32,7 @@ Scans performed (design "6. Security & secrets"):
   * **pip-audit**. Reported **no known vulnerabilities** across the audited
     Python environment. Recorded as a verified-compliant (``INFORMATIONAL``)
     outcome.
-  * **npm audit** (``--prefix apps/cna-web``). Reported **four** advisories: a
+  * **npm audit** (``--prefix apps/network-assessment-web``). Reported **four** advisories: a
     critical ``next`` unauthenticated-RCE class, high-severity ``browserslist``
     and ``sharp``, and a moderate ``baseline-browser-mapping`` DoS. Each is
     recorded as its own finding at its reported severity (Requirement 6.3).
@@ -60,13 +60,13 @@ _BASELINED_SECRET_LOCATIONS: tuple[tuple[str, str, int], ...] = (
     (".env.example", "Basic Auth Credentials", 1),
     (".github/workflows/200-build-images.yml", "Basic Auth Credentials", 1),
     ("TODO.md", "Secret Keyword", 1),
-    ("apps/cna-web/.env.example", "Basic Auth Credentials + Secret Keyword", 3),
-    ("apps/cna-web/app/api/local-admin/route.ts", "Secret Keyword", 1),
+    ("apps/network-assessment-web/.env.example", "Basic Auth Credentials + Secret Keyword", 3),
+    ("apps/network-assessment-web/app/api/local-admin/route.ts", "Secret Keyword", 1),
     ("tests/unit/test_api_errors_properties.py", "AWS Access Key + Basic Auth Credentials", 2),
     ("tests/unit/test_auth.py", "Secret Keyword", 3),
     ("tests/unit/test_aws_discovery.py", "Secret Keyword", 3),
     ("tests/unit/test_azure_discovery.py", "Secret Keyword", 1),
-    ("tests/unit/test_cna_api_error_paths.py", "Secret Keyword", 2),
+    ("tests/unit/test_network_assessment_api_error_paths.py", "Secret Keyword", 2),
     ("tests/unit/test_review_area_cicd_shapin.py", "Hex High Entropy String", 1),
     ("tests/unit/test_review_sha_pin_properties.py", "Hex High Entropy String", 2),
 )
@@ -199,10 +199,10 @@ def security_secrets_findings() -> list[Finding]:
                 "(16.0.0 - 16.3.2): unauthenticated remote code execution on "
                 "Windows-hosted servers and in the Image Optimization API for "
                 "AVIF inputs. Upgrade next to >= 16.3.5 (fix available) in "
-                "apps/cna-web."
+                "apps/network-assessment-web."
             ),
             dedup_key="security-secrets:npm-audit:next",
-            subject="apps/cna-web (next)",
+            subject="apps/network-assessment-web (next)",
         )
     )
     findings.append(
@@ -214,10 +214,10 @@ def security_secrets_findings() -> list[Finding]:
                 "(<= 4.28.6): unbounded memory growth (OOM) via distinct query "
                 "results and an uncaught crash / prototype write via untrusted "
                 "browserslist-stats.json. Upgrade browserslist (fix available) "
-                "in apps/cna-web."
+                "in apps/network-assessment-web."
             ),
             dedup_key="security-secrets:npm-audit:browserslist",
-            subject="apps/cna-web (browserslist)",
+            subject="apps/network-assessment-web (browserslist)",
         )
     )
     findings.append(
@@ -228,10 +228,10 @@ def security_secrets_findings() -> list[Finding]:
                 "npm audit reports a HIGH advisory for 'sharp' (< 0.35.4): "
                 "libheif vulnerabilities (GHSA-g89c-p67h-r497, "
                 "GHSA-2jg2-4ch7-h545). Upgrade sharp to >= 0.35.4 (fix "
-                "available) in apps/cna-web."
+                "available) in apps/network-assessment-web."
             ),
             dedup_key="security-secrets:npm-audit:sharp",
-            subject="apps/cna-web (sharp)",
+            subject="apps/network-assessment-web (sharp)",
         )
     )
     findings.append(
@@ -242,10 +242,10 @@ def security_secrets_findings() -> list[Finding]:
                 "npm audit reports a MODERATE advisory for "
                 "'baseline-browser-mapping' (>= 2.0.0 < 2.11.0): process "
                 "termination on invalid input (denial of service). Upgrade "
-                "baseline-browser-mapping (fix available) in apps/cna-web."
+                "baseline-browser-mapping (fix available) in apps/network-assessment-web."
             ),
             dedup_key="security-secrets:npm-audit:baseline-browser-mapping",
-            subject="apps/cna-web (baseline-browser-mapping)",
+            subject="apps/network-assessment-web (baseline-browser-mapping)",
         )
     )
 

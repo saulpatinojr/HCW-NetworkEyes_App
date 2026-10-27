@@ -62,9 +62,9 @@ on:
     paths:
       - Dockerfile
       - .dockerignore
-      - apps/cna-api/**
-      - apps/cna-worker/**
-      - apps/cna-web/**
+      - apps/network-assessment-api/**
+      - apps/network-assessment-worker/**
+      - apps/network-assessment-web/**
       - network_assessment/**
       - scripts/drawio-headless.sh
       - scripts/ci/sign_image.sh
@@ -163,12 +163,12 @@ jobs:
             sha_prefix: sha-  # not "": an empty prefix gave the bare tag 3762d27 (first real build)
           - name: API
             key: api
-            file: apps/cna-api/Dockerfile
+            file: apps/network-assessment-api/Dockerfile
             raw_tag: api-latest
             sha_prefix: api-sha-
           - name: Worker
             key: worker
-            file: apps/cna-worker/Dockerfile
+            file: apps/network-assessment-worker/Dockerfile
             raw_tag: worker-latest
             sha_prefix: worker-sha-
     steps:
@@ -354,9 +354,9 @@ jobs:
       - name: npm audit — check for known vulnerabilities
         # Fail on critical/high vulnerabilities before building the image.
         # Audit-level=high: moderate issues are warned, not failing (acceptable for beta deps).
-        # Run from apps/cna-web since package-lock.json is scoped to that directory.
+        # Run from apps/network-assessment-web since package-lock.json is scoped to that directory.
         run: |
-          cd apps/cna-web
+          cd apps/network-assessment-web
           npm audit --audit-level=high --omit=dev 2>&1 || {
             echo "::warning::npm audit found issues — review above output"
             echo "::warning::Run 'npm audit fix' locally if issues are exploitable in production context"
@@ -368,8 +368,8 @@ jobs:
         id: build_web
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
         with:
-          context: apps/cna-web
-          file: apps/cna-web/Dockerfile
+          context: apps/network-assessment-web
+          file: apps/network-assessment-web/Dockerfile
           target: runner
           build-args: |
             CNA_BUILD_SHA=${{ github.sha }}
@@ -396,8 +396,8 @@ jobs:
         id: build_migrator
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
         with:
-          context: apps/cna-web
-          file: apps/cna-web/Dockerfile
+          context: apps/network-assessment-web
+          file: apps/network-assessment-web/Dockerfile
           target: migrator
           build-args: |
             CNA_BUILD_SHA=${{ github.sha }}
@@ -424,7 +424,7 @@ jobs:
           # yet, and `docker run` would otherwise prefer a stale locally-cached
           # image over pulling the one just pushed (same issue as the Docker
           # Scout steps above), which would smoke-test the wrong image entirely.
-          docker run -d --name cna-web-smoke \
+          docker run -d --name network-assessment-web-smoke \
             -e DATABASE_URL="postgresql://test:test@localhost:5432/test?sslmode=disable" \
             -e NEXTAUTH_URL="http://localhost:3000" \
             -e NEXTAUTH_SECRET="ci-smoke-secret-not-real" \
@@ -436,13 +436,13 @@ jobs:
           sleep 15
           # Always dump logs so we can diagnose crashes even on failure
           echo "--- container status ---"
-          docker ps -a --filter name=cna-web-smoke --format "table {{.Status}}\t{{.Ports}}"
+          docker ps -a --filter name=network-assessment-web-smoke --format "table {{.Status}}\t{{.Ports}}"
           echo "--- container logs ---"
-          docker logs cna-web-smoke || true
+          docker logs network-assessment-web-smoke || true
           echo "--- end logs ---"
           # Health check returns 503 without a real DB — verify the process started
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/api/health || true)
-          docker rm -f cna-web-smoke
+          docker rm -f network-assessment-web-smoke
           # 200 = healthy DB, 503 = process started but DB unreachable (expected in CI)
           if [ "$STATUS" != "200" ] && [ "$STATUS" != "503" ]; then
             echo "Unexpected status: $STATUS — container may have failed to start"
