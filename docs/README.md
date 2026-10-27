@@ -22,7 +22,8 @@ decision, so nothing has been copied in. Do not restore a page on your own initi
 - A fact that already has a home. The list of settings is `.env.example`, completed work is `CHANGELOG.md`, open work
   is `TODO.md`, and anything that needs the owner is `REVIEW.md`. Link to them instead of copying them, because two
   copies drift apart.
-- Secrets, tokens, keys, tenant or subscription identifiers, customer data or real network topology.
+- Secrets, tokens, keys, tenant or subscription identifiers, personal data, data from a real environment or real
+  network topology.
 - A page named `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SUPPORT.md`, `FUNDING.md` or
   `PULL_REQUEST_TEMPLATE.md` (in any letter case), or a folder named `ISSUE_TEMPLATE` or `PULL_REQUEST_TEMPLATE`,
   directly in this folder. GitHub reads those names from `docs/` as well as from `.github/`, so a copy here would be a
