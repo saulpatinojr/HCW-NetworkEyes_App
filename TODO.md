@@ -19,7 +19,7 @@ claimed anew). Rows checked since: T-728 and T-730 on 2026-10-24; T-721, T-722, 
 | [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-419 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements + appliance migration | T-501 – T-509 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
-| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-737 |
+| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-738 |
 
 ---
 
@@ -2264,9 +2264,9 @@ Nothing publishes until the owner flips the variables below. Open, in order:
      the first) to the same connection: subject claim
      `repo:saulpatinojr@34853639/HCW-NetworkEyes_App@1173847343:ref:refs/tags/v*`, resource
      `hybridcloudworks/img-ne-appliance-app`, scope **Image Push** only (Image Pull is not needed: the repository is
-     public and `310` reads it anonymously). Image Push is push access to the repository, not a limit to five tag
-     names: `310` is written to add only the five version tags (`X.Y.Z`, `api-X.Y.Z`, `worker-X.Y.Z`, `web-X.Y.Z`,
-     `migrator-X.Y.Z`) to digests `200` scanned and signed, and what limits who can run it is the GitHub tag ruleset
+     public and `310` reads it anonymously). Image Push is push access to the repository, not a limit to four tag
+     names: `310` is written to add only the four version tags (`X.Y.Z`, `api-X.Y.Z`, `web-X.Y.Z`,
+     `migrator-X.Y.Z`; the worker image was retired on 2026-10-27, T-738) to digests `200` scanned and signed, and what limits who can run it is the GitHub tag ruleset
      (see "Who can mint the Docker token through a tag" below) and review of the workflow file. Copy the connection id it
      shows.
   3. PowerShell, which reads the id from the prompt so nothing is retyped into the command:
@@ -2313,7 +2313,7 @@ Nothing publishes until the owner flips the variables below. Open, in order:
   Home for the claims Docker received. Docker's guide:
   <https://docs.docker.com/security/authentication/oidc-connections/troubleshoot>. Then close the tickets that
   waited on the connection and set `DOCKERHUB_ENABLED`. What the dry run cannot prove, and the first real build
-  therefore must: the wiring of `tag-images` (its digest table and the verify-before-tag gate), the hand-over of the five
+  therefore must: the wiring of `tag-images` (its digest table and the verify-before-tag gate), the hand-over of the four
   real digests between jobs, the revision label that `docker/metadata-action` puts on the real images, and `310`. None
   of these has run yet.
   Update 2026-10-25: the first real build tagged the CLI image `3762d27`, not `sha-3762d27` (empty `sha_prefix`, now `sha-`); the stray tag can be deleted by hand on Docker Hub, no `370` pattern matches it.
@@ -2334,15 +2334,15 @@ Nothing publishes until the owner flips the variables below. Open, in order:
   `git push origin vX.Y.Z`). `310` accepts a tag on a documentation-only commit after a build, because nothing `200`
   builds from changed since. A tag on a commit that changed a file in `200`'s `on.push.paths` after the last build fails
   with the file names: tag the commit the dry run names instead (the message names that commit). (3) The step `Promote the digests to the
-  release tags` gives the five images their version tags (`X.Y.Z` on the CLI image, `<component>-X.Y.Z` on the others)
-  in two phases: phase 1 checks all five and creates nothing if any tag already exists with another digest (the message
+  release tags` gives the four images their version tags (`X.Y.Z` on the CLI image, `<component>-X.Y.Z` on the others)
+  in two phases: phase 1 checks all four and creates nothing if any tag already exists with another digest (the message
   names the tag and both digests and says that no release tag was created); phase 2 creates the missing ones and reads
   each back. A re-run skips tags that are already correct, so it is safe. If a post-check fails ("After creating it,
   `<component>-X.Y.Z` resolves to ... expected ..."), that tag exists with the wrong digest: delete it on Docker Hub
   (Repository, Tags) and re-run; a re-run refuses to move an existing tag, and so does it if the tag was created by
   something else. The release notes list each version tag, its build-time tag and its digest; the version tags are
   permanent, and `370` keeps the sha tags that share an image with them. A release made before this change tagged
-  only the CLI image, so the other four of its images can still age out.
+  only the CLI image, so the other images of that release can still age out.
 - **Who can mint the Docker token through a tag.** The ruleset "Protect release tags"
   (<https://github.com/saulpatinojr/HCW-NetworkEyes_App/rules/25778333>, read again with
   `gh api repos/saulpatinojr/HCW-NetworkEyes_App/rulesets/25778333` on 2026-10-25, last updated 2026-10-25 10:09
@@ -2485,3 +2485,7 @@ live `Protect main` ruleset (read back 2026-10-25). Still open:
 (3) the first real run of the Docker Scout step in `200-build-images.yml` is the only place Scout itself is exercised, and it cannot be run
 without Docker credentials, so Trivy is the proxy; (4) findings in the base image that have no fix are not covered (`--ignore-unfixed`, like the
 Scout gate's `only-fixed`) and move with the pinned `node:24-alpine` digest.
+
+### T-738 — Note for deployers: the worker image is retired
+Since the owner's decision of 2026-10-27 (`REVIEW.md` R-016, answer `retire`) this repository no longer builds or publishes the `worker` image: `apps/network-assessment-worker` is deleted, a build publishes four images (`cli`, `api`, `web`, `migrator`) and a release gives four version tags. **If your deployment runs a service from the `worker` image (`img-ne-appliance-app:worker-latest`, `worker-sha-<7>` or `worker-<version>`), remove that service; nothing else changes.** The old `worker-` tags stay on Docker Hub, `worker-latest` no longer moves, and the next release's notes say the same (the template is in `310-release-version.yml`). This repository cannot check other people's deployments and notifies no one; the note is in `CHANGELOG.md` for them.
+Open, for the owner: (1) when the old `worker-` tags are not wanted any more, delete them by hand on Docker Hub (repository, Tags), then remove the `worker` pattern and `worker-latest` from `370-registry-cleanup.yml` (it keeps them on purpose so the old sha tags still age out; its header says why) and the matching pins in `tests/security/test_publish_workflow_safety.py` and `tests/security/test_release_scripts_behaviour.py`. (2) Three places in `apps/network-assessment-web` still name the worker as an example and were left alone, because changing them means running the web tests: the comment in `lib/image-update-rules.ts` that lists `{web,api,worker}-sha-<7>`, a test row for `worker-latest` in `lib/image-update-rules.test.ts` (it only tests how a tag is read, so it stays true), and a TODO comment in `app/(dashboard)/engagements/[id]/diagram/page.tsx` that says the future-state diagram is produced "(worker)". Reword them with the next change to the web app.

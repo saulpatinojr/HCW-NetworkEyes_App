@@ -25,7 +25,7 @@ Anything an engineer can solve without external input belongs in [`TODO.md`](TOD
 | [R-013](#r-013--bring-this-repository-live-the-docker-hub-repository-its-oidc-connection-and-the-first-publish) | Bring this repository live: the Docker Hub repository, its OIDC connection, the variables and the first publish | Repository owner | Open — blocks the first image publish from this repository (T-728) |
 | [R-014](#r-014--move-the-wiki-and-delete-the-original-repository) | Move the Wiki, then delete the original repository | Repository owner | Superseded 2026-10-11 — this repository (the renamed original) is the product and is not deleted; the Wiki moves here (R-023) |
 | [R-015](#r-015--decide-the-customer-facing-appliance-repository-names) | Decide the customer-facing appliance repository names | Repository owner | Withdrawn 2026-10-25 — not this repository's decision |
-| [R-016](#r-016--retire-appsnetwork-assessment-worker-and-its-image-and-service) | Retire `apps/network-assessment-worker` — placeholder that runs as an always-on service in a deployment | Repository owner | Open — v1.0 review finding IMG-003 / ARCH-101 |
+| [R-016](#r-016--retire-appsnetwork-assessment-worker-and-its-image-and-service) | Retire `apps/network-assessment-worker` — placeholder that runs as an always-on service in a deployment | Repository owner | Decided 2026-10-27 — retire; implemented in this repository (dropping the service from a deployment is the deployer's step, `TODO.md` T-738) |
 | [R-017](#r-017--stop-publishing-the-cli-image-on-every-push) | Stop building/publishing the CLI image `sha-<7>` (nothing in this repository pulls it except the release) | Repository owner | Open — not blocking |
 | [R-018](#r-018--remove-network_assessmentreview-from-the-shipped-package) | Move `network_assessment/review/**` out of the shipped package and API image | Repository owner | Open — not blocking |
 | [R-019](#r-019--diagram-editor-sends-network-topology-to-embeddiagramsnet) | Diagram editor posts network topology XML to public `embed.diagrams.net`; no offline path | Product owner / Security | Decided 2026-10-25 — self-host; implemented (ticket #248) |
@@ -647,17 +647,40 @@ Repository owner.
 Approve deleting `apps/network-assessment-worker` and its Dockerfile and build job here, recorded under `Changed` in `CHANGELOG.md`
 and in the release notes so that whoever deploys the images can drop the worker service.
 
+**Decision (owner, 2026-10-27): `retire`.** Implemented in the pull request that carries this record.
+
+**What now applies**
+- `apps/network-assessment-worker` (its `Dockerfile` and `main.py`), its build job in `200-build-images.yml`, its digest and tag
+  in `tag-images`, its version tag and digest in `310-release-version.yml` and `scripts/ci/release_digests.sh`, and its `worker`
+  dependency group in `pyproject.toml` and `uv.lock` are removed. The published image set is four images (`cli`, `api`, `web`,
+  `migrator`); the `worker` image and its `worker-<version>` release tag are no longer built or published.
+- **Nothing in the registry was touched.** The existing `worker-sha-<7>`, `worker-latest` and `worker-<version>` tags stay on Docker
+  Hub. `370-registry-cleanup.yml` keeps the `worker` pattern and `worker-latest` on purpose: the old sha tags still age out by the
+  rule they always had (nothing new is deleted), whereas dropping the pattern would make each of them permanent and could stop the
+  whole prune on one tag with no digest. The owner may delete the old `worker-` tags by hand and then remove the pattern.
+- The next release's notes (the template is in `310-release-version.yml`) say that the worker image is gone and that its service
+  can be dropped; `CHANGELOG.md` (Unreleased, `Changed`) and `TODO.md` T-738 say the same, and the one sentence for a deployer is:
+  **if your deployment runs a service from the `worker` image, remove that service; nothing else changes.**
+- Not done here, because it is not this repository's job: removing the worker service from a deployment (the Terraform and
+  the container definitions live outside this repository). Until the deployer does it, the service keeps running whatever
+  worker image it already has; no new one is built.
+- The review engine records the retirement (`network_assessment/review/areas/python_engine_api.py`, finding
+  `python-engine-api:worker-retirement`, id unchanged), and `tests/unit/test_network_assessment_api_worker_decision.py` keeps the
+  invariant: `POST /publish` exists and nothing builds, tags or releases a worker.
+
 **Impact if unresolved**
-Wasted compute, a permanently restarting container in every environment, and documentation that
-describes a component that does nothing.
+Resolved in this repository: no more wasted build and scan time for an image that cannot start, no `worker` row in the digest table
+or the release notes, and no documentation that describes a component that does nothing. Still open outside it: a deployment that
+runs the worker service keeps a permanently restarting container until its owner removes the service.
 
 **References**
 - v1.0 review findings IMG-003, ARCH-004, ARCH-101, PY-016
+- `CHANGELOG.md` (Unreleased, `Changed`), `TODO.md` T-738
 
 ## R-017 — Stop publishing the CLI image on every push
 
 **Problem**
-Nothing in this repository pulls the CLI image (`sha-<7>`) except the release, which gives it the `<version>` tag (the other four images get `<component>-<version>`).
+Nothing in this repository pulls the CLI image (`sha-<7>`) except the release, which gives it the `<version>` tag (the other three images get `<component>-<version>`).
 It is the largest image (draw.io + Electron + Xvfb) and its root
 `COPY . .` ships `TODO.md`, `REVIEW.md` and `network_assessment/review/**` inside an artifact that users pull.
 
