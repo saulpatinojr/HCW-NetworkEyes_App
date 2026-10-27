@@ -3,7 +3,7 @@
 Builds a 10-section executive PPTX deck using python-pptx.
 
 Slide sections (in order):
-  1. Cover — client name, engagement ID, date, CNA branding
+  1. Cover — client name, engagement ID, date, NetworkEyes branding
   2. Engagement Overview — scope, platforms, discovery dates
   3. Methodology — three-tier model, discovery approach, data handling
   4. Executive Summary — findings by severity (bar chart placeholder)

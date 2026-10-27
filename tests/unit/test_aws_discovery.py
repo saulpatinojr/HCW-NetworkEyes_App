@@ -51,7 +51,7 @@ def store():
 @pytest.fixture
 def opts():
     return DiscoveryOptions(
-        org_role_arn="arn:aws:iam::123456789012:role/CNA-ReadOnly",
+        org_role_arn="arn:aws:iam::123456789012:role/NetworkAssessment-ReadOnly",
         regions=["us-east-1"],
         account_ids=["123456789012"],
     )
@@ -349,7 +349,7 @@ class TestRun:
         ):
             discovery.run()
 
-        assert discover.call_args.args[1] == "CNA-ReadOnly"
+        assert discover.call_args.args[1] == "NetworkAssessment-ReadOnly"
 
     def test_discovers_every_account_in_the_org(self, discovery, opts):
         opts.account_ids = []
@@ -452,7 +452,7 @@ class TestRegionLookupEndpoint:
     def test_the_last_resort_is_overridable_for_other_partitions(self, store):
         """The point of declaring it: aws-us-gov and aws-cn callers can change it."""
         opts = DiscoveryOptions(
-            org_role_arn="arn:aws-us-gov:iam::123456789012:role/CNA-ReadOnly",
+            org_role_arn="arn:aws-us-gov:iam::123456789012:role/NetworkAssessment-ReadOnly",
             region_lookup_endpoint="us-gov-west-1",
         )
         d = AWSDiscovery(store=store, options=opts)
@@ -497,7 +497,9 @@ class TestAccessDeniedAuditEvent:
         with patch.object(
             discovery, "_assume_role", side_effect=NetworkAssessmentAuthError("AssumeRole failed")
         ):
-            discovery._discover_account(account, "CNA-ReadOnly", topology, engagement_id)
+            discovery._discover_account(
+                account, "NetworkAssessment-ReadOnly", topology, engagement_id
+            )
 
         audit = store.engagement_dir(engagement_id) / store.AUDIT_LOG_FILE
         assert audit.is_file(), "access-denied path wrote no audit event"
@@ -542,7 +544,9 @@ class TestRegionCheckpointWrite:
             patch.object(discovery, "_get_enabled_regions", return_value=["us-east-1"]),
             patch.object(discovery, "_discover_region", return_value=region_topo),
         ):
-            discovery._discover_account(account, "CNA-ReadOnly", topology, engagement_id)
+            discovery._discover_account(
+                account, "NetworkAssessment-ReadOnly", topology, engagement_id
+            )
 
         checkpoints = sorted(
             (store.engagement_dir(engagement_id) / store.DISCOVERY_DIR).glob("*.json")
@@ -598,17 +602,17 @@ class TestAssumeRole:
         discovery._mgmt_session.client.return_value = sts
 
         with patch(f"{MODULE}.boto3.Session") as session_cls:
-            discovery._assume_role("222222222222", "CNA-ReadOnly")
+            discovery._assume_role("222222222222", "NetworkAssessment-ReadOnly")
 
         kwargs = sts.assume_role.call_args.kwargs
-        assert kwargs["RoleArn"] == "arn:aws:iam::222222222222:role/CNA-ReadOnly"
+        assert kwargs["RoleArn"] == "arn:aws:iam::222222222222:role/NetworkAssessment-ReadOnly"
         assert kwargs["DurationSeconds"] == 3600
         assert "ExternalId" not in kwargs, "no external id was configured"
         assert session_cls.call_args.kwargs["aws_access_key_id"] == "ASIAEXAMPLE"
 
     def test_passes_external_id_when_configured(self, store):
         opts = DiscoveryOptions(
-            org_role_arn="arn:aws:iam::123456789012:role/CNA-ReadOnly",
+            org_role_arn="arn:aws:iam::123456789012:role/NetworkAssessment-ReadOnly",
             external_id="shared-secret-placeholder",
         )
         d = AWSDiscovery(store=store, options=opts)
@@ -624,18 +628,18 @@ class TestAssumeRole:
         d._mgmt_session.client.return_value = sts
 
         with patch(f"{MODULE}.boto3.Session"):
-            d._assume_role("222222222222", "CNA-ReadOnly")
+            d._assume_role("222222222222", "NetworkAssessment-ReadOnly")
 
         assert sts.assume_role.call_args.kwargs["ExternalId"] == "shared-secret-placeholder"
 
     @pytest.mark.parametrize("code", ["AccessDenied", "AccessDeniedException"])
-    def test_access_denied_becomes_cna_auth_error(self, discovery, code):
+    def test_access_denied_becomes_network_assessment_auth_error(self, discovery, code):
         sts = MagicMock()
         sts.assume_role.side_effect = _client_error(code, "not authorized", "AssumeRole")
         discovery._mgmt_session.client.return_value = sts
 
         with pytest.raises(NetworkAssessmentAuthError, match="AssumeRole failed"):
-            discovery._assume_role("222222222222", "CNA-ReadOnly")
+            discovery._assume_role("222222222222", "NetworkAssessment-ReadOnly")
 
     def test_other_client_errors_propagate_unchanged(self, discovery):
         """Only the access-denied codes are translated; the rest must not be swallowed."""
@@ -644,7 +648,7 @@ class TestAssumeRole:
         discovery._mgmt_session.client.return_value = sts
 
         with pytest.raises(botocore.exceptions.ClientError):
-            discovery._assume_role("222222222222", "CNA-ReadOnly")
+            discovery._assume_role("222222222222", "NetworkAssessment-ReadOnly")
 
 
 class TestListOrgAccounts:
@@ -1319,7 +1323,7 @@ class TestDiscoverAccount:
         topology = self._topology()
 
         discovery._discover_account(
-            AWSAccount(account_id="111111111111"), "CNA-ReadOnly", topology, "eng-1"
+            AWSAccount(account_id="111111111111"), "NetworkAssessment-ReadOnly", topology, "eng-1"
         )
 
         assert topology.regions == []
@@ -1331,7 +1335,9 @@ class TestDiscoverAccount:
             patch.object(discovery, "_assume_role") as assume,
             patch.object(discovery, "_get_enabled_regions", return_value=[]),
         ):
-            discovery._discover_account(account, "CNA-ReadOnly", self._topology(), "eng-1")
+            discovery._discover_account(
+                account, "NetworkAssessment-ReadOnly", self._topology(), "eng-1"
+            )
 
         assume.assert_not_called()
 
@@ -1341,9 +1347,11 @@ class TestDiscoverAccount:
             patch.object(discovery, "_assume_role") as assume,
             patch.object(discovery, "_get_enabled_regions", return_value=[]),
         ):
-            discovery._discover_account(account, "CNA-ReadOnly", self._topology(), "eng-1")
+            discovery._discover_account(
+                account, "NetworkAssessment-ReadOnly", self._topology(), "eng-1"
+            )
 
-        assume.assert_called_once_with("222222222222", "CNA-ReadOnly")
+        assume.assert_called_once_with("222222222222", "NetworkAssessment-ReadOnly")
 
     def test_inaccessible_account_writes_one_audit_event_and_returns(self, discovery, store):
         """The T-402 regression: `cloud` travels inside the event dict, not positionally."""
@@ -1352,7 +1360,7 @@ class TestDiscoverAccount:
         with patch.object(
             discovery, "_assume_role", side_effect=NetworkAssessmentAuthError("denied")
         ):
-            discovery._discover_account(account, "CNA-ReadOnly", topology, "eng-1")
+            discovery._discover_account(account, "NetworkAssessment-ReadOnly", topology, "eng-1")
 
         assert topology.regions == []
         args = store.write_audit_event.call_args.args
@@ -1373,7 +1381,7 @@ class TestDiscoverAccount:
             ),
             patch.object(discovery, "_discover_region", return_value=region_topo),
         ):
-            discovery._discover_account(account, "CNA-ReadOnly", topology, "eng-1")
+            discovery._discover_account(account, "NetworkAssessment-ReadOnly", topology, "eng-1")
 
         assert len(topology.regions) == 2
         assert store.write_discovery_checkpoint.call_count == 2
@@ -1396,7 +1404,7 @@ class TestExplicitCredentials:
 
     def test_explicit_keys_build_the_management_session(self, store):
         opts = DiscoveryOptions(
-            org_role_arn="arn:aws:iam::123456789012:role/CNA-ReadOnly",
+            org_role_arn="arn:aws:iam::123456789012:role/NetworkAssessment-ReadOnly",
             account_ids=["111111111111"],
             access_key_id="AKIAEXAMPLE",
             secret_access_key="placeholder-not-real",

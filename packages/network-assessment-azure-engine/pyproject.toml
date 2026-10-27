@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=84.2.1", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "network-assessment-azure-engine"
+version = "0.1.0"
+description = "Azure network assessment engine: topology model, typed rule registry, classifier, Resource Graph normalizer and report renderers. Base install needs pydantic only."
+requires-python = ">=3.14"
+# The base distribution carries no cloud SDK: the downstream lab edition installs it to
+# prove it cannot reach Azure (tests/security/test_edition_boundary.py there). Discovery
+# lives behind the [azure] extra (change set D of REFACTOR_APP.md).
+dependencies = [
+    "pydantic>=2.13,<3",
+]
+license = "Apache-2.0"  # owner decision 2026-10-25; copyright holder Hybrid Cloud Works (2026-10-26): REVIEW.md R-030
+
+[project.optional-dependencies]
+# Live discovery (change set D). Lower bounds are the versions the code was written
+# against; upper bounds follow the monorepo's `enrichment` extra (TODO.md T-413, T-414),
+# whose majors renamed or removed the APIs used. Checked against PyPI on 2026-10-25: each
+# lower bound below is the newest release of that package and no next major exists yet.
+# That the SDK calls behave as coded is open until the acceptance run against a Reader-only
+# identity (TODO.md T-726); no agent session may call live Azure.
+azure = [
+    "azure-identity>=1.26.0",                 # credential chain
+    "azure-mgmt-resourcegraph>=8.0.0,<9",     # QueryRequest/QueryRequestOptions, skip_token
+    "azure-mgmt-network>=33.1.0",             # BGP begin_get_* actions (live only)
+    "azure-mgmt-monitor>=7.0.0,<8",           # diagnostic settings, alert counts
+    "azure-monitor-query>=2.0.0,<3",          # metrics, Traffic Analytics
+    "azure-mgmt-costmanagement>=5.0.0,<6",    # AZ-COST live reads
+    "azure-mgmt-loganalytics>=14.0.0,<15",    # workspace lookup
+]
+# Not needed any more: Defender assessments and NVAs come from Resource Graph
+# (SecurityResources, Resources), so azure-mgmt-security and azure-mgmt-compute are gone.
+
+[tool.setuptools.packages.find]
+include = ["network_assessment_azure_engine*"]
+
+[tool.setuptools.package-data]
+network_assessment_azure_engine = ["py.typed"]
+
+[tool.coverage.run]
+source = ["network_assessment_azure_engine"]
+
+[tool.coverage.report]
+fail_under = 85

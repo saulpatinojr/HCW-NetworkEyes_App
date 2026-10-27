@@ -10,7 +10,7 @@ Design contracts:
   - Upload progress reported via callback (Gap #15)
   - Credentials from environment / instance profile / STS — never hardcoded
 
-Required IAM permissions for CNA-Publish role:
+Required IAM permissions for NetworkAssessment-Publish role:
   s3:PutObject         — upload deliverables
   s3:PutBucketCors     — CORS configuration
   s3:GetObject         — pre-signed URL generation

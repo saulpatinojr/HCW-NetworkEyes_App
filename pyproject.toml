@@ -10,7 +10,7 @@ requires-python = ">=3.14"
 dependencies = [
     # The Azure assessment engine (model, typed rules, classifier, normalizer, renderers):
     # a workspace member under packages/ until it is published (REFACTOR_APP.md change set C).
-    "cna-azure-network-engine",
+    "network-assessment-azure-engine",
     "click>=8.4.2",
     "rich>=15.0.0",
     "azure-identity>=1.26.0",
@@ -157,7 +157,7 @@ worker = [
 # updater, which runs its own bundled uv (older than the one pinned here).
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "packages/cna-azure-network-engine/tests"]
+testpaths = ["tests", "packages/network-assessment-azure-engine/tests"]
 addopts = "-ra -q"
 markers = [
     "aws: needs the [aws] extra (boto3); skipped without it (tests/conftest.py)",
@@ -170,11 +170,11 @@ markers = [
 [tool.ty.environment]
 python-version = "3.14"
 # The engine is a workspace member under packages/: its import root is not a site-packages
-# path, so the checker is told where cna_azure_network_engine resolves from.
-extra-paths = ["packages/cna-azure-network-engine"]
+# path, so the checker is told where network_assessment_azure_engine resolves from.
+extra-paths = ["packages/network-assessment-azure-engine"]
 
 [tool.ty.src]
-include = ["network_assessment", "packages/cna-azure-network-engine/cna_azure_network_engine"]
+include = ["network_assessment", "packages/network-assessment-azure-engine/network_assessment_azure_engine"]
 exclude = ["local"]
 
 [tool.ruff]
@@ -213,14 +213,14 @@ ignore = [
 
 [tool.ruff.lint.isort]
 # The engine is developed in this tree (packages/): group it with the first-party imports.
-known-first-party = ["network_assessment", "cna_azure_network_engine"]
+known-first-party = ["network_assessment", "network_assessment_azure_engine"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S", "N"]   # relax security + naming rules in tests
 "network_assessment/diagram_engine/diagrams_generator.py" = ["N811"]  # VPC imported as SubnetNode is a deliberate alias
 
 [tool.coverage.run]
-source = ["network_assessment", "cna_azure_network_engine"]
+source = ["network_assessment", "network_assessment_azure_engine"]
 omit = [
     # CLI entry points — covered by integration tests, not unit tests
     "network_assessment/cli/*",
@@ -259,7 +259,7 @@ include = ["network_assessment*"]
 # duplicated between network_assessment/ and packages/ (uv resolves it from the path; pip installs it
 # first in CI and in the images). Once published, replace the source with an exact version.
 [tool.uv.workspace]
-members = ["packages/cna-azure-network-engine"]
+members = ["packages/network-assessment-azure-engine"]
 
 [tool.uv.sources]
-cna-azure-network-engine = { workspace = true }
+network-assessment-azure-engine = { workspace = true }

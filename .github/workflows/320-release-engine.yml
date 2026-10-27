@@ -1,6 +1,6 @@
 name: "320 · Release Engine Package"
 
-# Builds, tests and publishes the cna-azure-network-engine wheel on an
+# Builds, tests and publishes the network-assessment-azure-engine wheel on an
 # `engine-v*` tag (REFACTOR_APP.md change set J). Runs on GitHub-hosted
 # runners; nothing here needs a private network or a cloud credential.
 #
@@ -27,7 +27,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  PACKAGE_DIR: packages/cna-azure-network-engine
+  PACKAGE_DIR: packages/network-assessment-azure-engine
 
 jobs:
 
@@ -66,9 +66,9 @@ jobs:
         run: |
           set -euo pipefail
           uv venv --python 3.14 /tmp/engine-venv
-          uv pip install --python /tmp/engine-venv/bin/python dist/cna_azure_network_engine-*.whl
-          /tmp/engine-venv/bin/python -I -c "import cna_azure_network_engine as e; print(e.RULES_VERSION)"
-          /tmp/engine-venv/bin/python -I -m cna_azure_network_engine.edition
+          uv pip install --python /tmp/engine-venv/bin/python dist/network_assessment_azure_engine-*.whl
+          /tmp/engine-venv/bin/python -I -c "import network_assessment_azure_engine as e; print(e.RULES_VERSION)"
+          /tmp/engine-venv/bin/python -I -m network_assessment_azure_engine.edition
 
       - name: Run the package tests against the installed wheel
         run: |

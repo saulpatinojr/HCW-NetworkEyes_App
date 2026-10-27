@@ -22,7 +22,7 @@ def bootstrap_workspace(base: Path) -> dict:
 def publish_placeholder(deliverables_dir: Path, static_site_dir: Path, engagement_id: str) -> Path:
     source = deliverables_dir / f"{engagement_id}-summary.html"
     source.write_text(
-        f"<html><body><h1>{engagement_id}</h1><p>CNA publish placeholder</p></body></html>\n"
+        f"<html><body><h1>{engagement_id}</h1><p>NetworkEyes publish placeholder</p></body></html>\n"
     )
     target = static_site_dir / "index.html"
     copyfile(source, target)

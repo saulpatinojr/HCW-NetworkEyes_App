@@ -60,7 +60,7 @@ _PORTAL_TEMPLATE = """\
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CNA Delivery Portal — {{ engagement_id }}</title>
+<title>NetworkEyes Delivery Portal — {{ engagement_id }}</title>
 <style>
   :root {
     --primary: #1565C0; --bg: #F5F5F5; --card: #FFFFFF;

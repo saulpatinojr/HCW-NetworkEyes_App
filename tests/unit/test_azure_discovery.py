@@ -2529,7 +2529,7 @@ class TestResourceGraphBackend:
     ):
         """The plan's acceptance: a live permission the identity lacks leaves the field
         empty, the run completes, and the live-only rules report ``unknown``."""
-        from cna_azure_network_engine.rules.registry import evaluate
+        from network_assessment_azure_engine.rules.registry import evaluate
 
         messages: list[str] = []
         discovery = self._discovery(store, rg_opts, messages)

@@ -1,4 +1,4 @@
-"""Single outcome→HTTP-status mapping for the CNA API.
+"""Single outcome→HTTP-status mapping for the NetworkEyes API.
 
 Requirement 2 (production-readiness) requires that every API response reflect
 the *actual* result of the operation: a successful outcome returns a 2xx

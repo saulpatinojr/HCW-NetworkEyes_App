@@ -4,7 +4,7 @@ Static checks on the root ``Dockerfile`` (one file, two editions, the lab target
 the engine without ``[azure]`` and copying no ``apps/``), on the lock and the extras (the
 engine's base resolution carries no cloud SDK), and on the CI image job that builds the lab
 target and proves ``import azure`` fails inside it. Then the same proof in a venv built from
-the engine wheel with no extra, through ``cna_azure_network_engine.edition``.
+the engine wheel with no extra, through ``network_assessment_azure_engine.edition``.
 
 The deployable lab edition, its HTTP contract and the checks on the shipped image belong to
 ``HCW-NetworkEyes_AddOn``; here the lab is build-only and never pushed.
@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from cna_azure_network_engine import edition
+from network_assessment_azure_engine import edition
 from tests.packaging.test_engine_wheel import PACKAGE, REPO_ROOT, _in_venv, _python, _run, _uv
 
 DOCKERFILE = REPO_ROOT / "Dockerfile"
@@ -43,7 +43,7 @@ def clean_venv(tmp_path_factory) -> Path:
     out = tmp_path_factory.mktemp("dist")
     built = _run([uv, "build", "--wheel", "--out-dir", str(out), str(PACKAGE)], cwd=REPO_ROOT)
     assert built.returncode == 0, built.stderr[-2000:]
-    wheel = next(out.glob("cna_azure_network_engine-*.whl"))
+    wheel = next(out.glob("network_assessment_azure_engine-*.whl"))
     venv = tmp_path_factory.mktemp("venv")
     assert _run([uv, "venv", "--python", sys.executable, str(venv)]).returncode == 0
     install = _run([uv, "pip", "install", "--python", str(_python(venv)), str(wheel)])
@@ -85,11 +85,11 @@ class TestDockerfile:
     ):
         body = stages["builder-lab"]
         assert 'test "$EDITION" = "lab"' in body
-        assert "--package cna-azure-network-engine" in body
-        assert "./packages/cna-azure-network-engine" in body
+        assert "--package network-assessment-azure-engine" in body
+        assert "./packages/network-assessment-azure-engine" in body
         assert "[azure]" not in body
         assert "--extra" not in body
-        assert "cna_azure_network_engine.edition" in body  # the proof runs at build time
+        assert "network_assessment_azure_engine.edition" in body  # the proof runs at build time
 
     def test_the_lab_final_stage_ships_no_app_no_server_and_no_pip(self, stages: dict[str, str]):
         body = stages["final-lab"]
@@ -106,7 +106,7 @@ class TestDockerfile:
             "--uid 1001" in body and "USER 1001" in body and "USER network-assessment" not in body
         )
         assert "ENV NETWORK_ASSESSMENT_EDITION=lab" in body
-        assert 'CMD ["python", "-m", "cna_azure_network_engine.edition"]' in body
+        assert 'CMD ["python", "-m", "network_assessment_azure_engine.edition"]' in body
 
     def test_the_appliance_stage_is_the_image_as_before(self, stages: dict[str, str]):
         body = stages["final-appliance"]
@@ -137,9 +137,9 @@ class TestLockAndExtras:
         import tomllib
 
         data = tomllib.loads(
-            (REPO_ROOT / "packages" / "cna-azure-network-engine" / "pyproject.toml").read_text(
-                encoding="utf-8"
-            )
+            (
+                REPO_ROOT / "packages" / "network-assessment-azure-engine" / "pyproject.toml"
+            ).read_text(encoding="utf-8")
         )
         base = data["project"]["dependencies"]
         assert all(not dep.startswith(("azure", "msal", "boto3")) for dep in base), base
@@ -157,7 +157,7 @@ class TestLockAndExtras:
                 "--no-emit-project",
                 "--no-emit-workspace",
                 "--package",
-                "cna-azure-network-engine",
+                "network-assessment-azure-engine",
             ],
             cwd=REPO_ROOT,
         )
@@ -247,7 +247,7 @@ class TestVenvProof:
             env.pop(name, None)
         env.update(extra_env)
         return _run(
-            [str(_python(venv)), "-I", "-m", "cna_azure_network_engine.edition"],
+            [str(_python(venv)), "-I", "-m", "network_assessment_azure_engine.edition"],
             cwd=str(venv),
             env=env,
         )

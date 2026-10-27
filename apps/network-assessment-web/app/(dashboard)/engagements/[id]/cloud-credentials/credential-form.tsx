@@ -480,7 +480,7 @@ export function CredentialForm({ engagementId }: { engagementId: string }) {
                   type="text"
                   id="cred-aws-role-arn" value={awsRoleArn}
                   onChange={(e) => setAwsRoleArn(e.target.value)}
-                  placeholder="arn:aws:iam::123456789012:role/CNA-ReadOnly"
+                  placeholder="arn:aws:iam::123456789012:role/NetworkAssessment-ReadOnly"
                   autoComplete="off"
                   className={INPUT_CLS}
                 />

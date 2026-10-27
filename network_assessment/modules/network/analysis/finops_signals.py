@@ -1,6 +1,6 @@
 """FinOps signals — AZ-COST-* findings with the monorepo's static cost estimates.
 
-The rules live in the engine package (``cna_azure_network_engine.rules.azure_cost``,
+The rules live in the engine package (``network_assessment_azure_engine.rules.azure_cost``,
 ``AZ-COST-001..005``) and make no price claims. The monorepo keeps the price table
 (``azure_network_prices``) and attaches ``est_monthly_cost_usd`` — and the ``[VERIFY]``-flagged
 estimate sentence — to its own findings here. ``generate_finops_findings`` evaluates the rules
@@ -18,8 +18,11 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from cna_azure_network_engine.rules import evaluate
-from cna_azure_network_engine.rules.azure_cost import (
+from network_assessment.core.findings_schema import Finding
+from network_assessment.core.topology.azure import AzureSubscriptionTopology, AzureTopology
+from network_assessment.modules.network.analysis import azure_network_prices as prices
+from network_assessment_azure_engine.rules import evaluate
+from network_assessment_azure_engine.rules.azure_cost import (
     R_AZ_COST_FIREWALL_ZERO_TRAFFIC,
     R_AZ_COST_IDLE_GATEWAY,
     R_AZ_COST_NAT_GW_NO_SUBNETS,
@@ -27,9 +30,6 @@ from cna_azure_network_engine.rules.azure_cost import (
     R_AZ_COST_OVERSIZED_GATEWAY,
     next_smaller_vpn_sku,
 )
-from network_assessment.core.findings_schema import Finding
-from network_assessment.core.topology.azure import AzureSubscriptionTopology, AzureTopology
-from network_assessment.modules.network.analysis import azure_network_prices as prices
 
 __all__ = [
     "R_AZ_COST_FIREWALL_ZERO_TRAFFIC",

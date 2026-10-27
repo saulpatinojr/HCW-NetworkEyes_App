@@ -1,2 +1,2 @@
-Audit AWS Security Groups from CNA discovery data.
+Audit AWS Security Groups from NetworkEyes discovery data.
 Observed state only. Flag deviations from CIS AWS v3.0 controls.

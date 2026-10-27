@@ -12,7 +12,7 @@ required_permissions:
   # Azure: the scan is read-only. Reader on each assessed scope covers every list/read
   # call; the optional built-in reader roles cover Defender, cost and Log Analytics; the
   # six POST actions that return BGP state without changing anything are the custom role
-  # docs/roles/cna-network-bgp-reader.json ("CNA Network BGP Reader"). Checked 2026-10-25:
+  # docs/roles/network-assessment-bgp-reader.json ("Network Assessment BGP Reader"). Checked 2026-10-25:
   # every action name below is listed in the Microsoft Learn Azure permissions reference
   # (https://learn.microsoft.com/azure/role-based-access-control/permissions/networking,
   # .../management-and-governance, .../monitor and .../security); `Microsoft.Network/*/read`
@@ -27,12 +27,12 @@ required_permissions:
     - Microsoft.Security/assessments/read  # Security Reader
     - Microsoft.CostManagement/query/action  # Cost Management Reader
     - Microsoft.OperationalInsights/workspaces/query/read  # Log Analytics Reader
-    - Microsoft.Network/virtualNetworkGateways/getBgpPeerStatus/action  # CNA Network BGP Reader
-    - Microsoft.Network/virtualNetworkGateways/getLearnedRoutes/action  # CNA Network BGP Reader
-    - Microsoft.Network/virtualNetworkGateways/getAdvertisedRoutes/action  # CNA Network BGP Reader
-    - Microsoft.Network/virtualHubs/bgpConnections/learnedRoutes/action  # CNA Network BGP Reader
-    - Microsoft.Network/virtualHubs/bgpConnections/advertisedRoutes/action  # CNA Network BGP Reader
-    - Microsoft.Network/expressRouteCircuits/peerings/routeTables/read  # CNA Network BGP Reader
+    - Microsoft.Network/virtualNetworkGateways/getBgpPeerStatus/action  # Network Assessment BGP Reader
+    - Microsoft.Network/virtualNetworkGateways/getLearnedRoutes/action  # Network Assessment BGP Reader
+    - Microsoft.Network/virtualNetworkGateways/getAdvertisedRoutes/action  # Network Assessment BGP Reader
+    - Microsoft.Network/virtualHubs/bgpConnections/learnedRoutes/action  # Network Assessment BGP Reader
+    - Microsoft.Network/virtualHubs/bgpConnections/advertisedRoutes/action  # Network Assessment BGP Reader
+    - Microsoft.Network/expressRouteCircuits/peerings/routeTables/read  # Network Assessment BGP Reader
 ai_recommendations_enabled: true
 framework_mappings:
   - name: AWS Well-Architected Framework

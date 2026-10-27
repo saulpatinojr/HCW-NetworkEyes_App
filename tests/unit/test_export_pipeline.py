@@ -32,7 +32,7 @@ def tmp_output(tmp_path):
     return tmp_path / "diagrams"
 
 
-MINIMAL_XML = """<mxfile host="CNA" version="21.0.0">
+MINIMAL_XML = """<mxfile host="NetworkEyes" version="21.0.0">
   <diagram name="test">
     <mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel>
   </diagram>

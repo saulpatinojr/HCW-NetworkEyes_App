@@ -14,7 +14,7 @@ from pathlib import Path
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-ROLE_FILE = REPO_ROOT / "docs" / "roles" / "cna-network-bgp-reader.json"
+ROLE_FILE = REPO_ROOT / "docs" / "roles" / "network-assessment-bgp-reader.json"
 MODULE_YAML = REPO_ROOT / "network_assessment" / "modules" / "network" / "module.yaml"
 ENV_EXAMPLE = REPO_ROOT / ".env.example"
 MODAL = REPO_ROOT / "apps" / "network-assessment-web" / "components" / "ui" / "sp-help-modal.tsx"
@@ -59,7 +59,7 @@ def test_no_project_source_recommends_network_contributor():
 class TestCustomRoleFile:
     def test_parses_and_lists_exactly_the_six_actions(self):
         role = json.loads(ROLE_FILE.read_text(encoding="utf-8"))
-        assert role["Name"] == "CNA Network BGP Reader"
+        assert role["Name"] == "Network Assessment BGP Reader"
         assert role["IsCustom"] is True
         assert role["Actions"] == EXPECTED_ACTIONS
         assert role["NotActions"] == [] and role["DataActions"] == []
@@ -105,10 +105,10 @@ class TestGuidanceAgrees:
             "Security Reader",
             "Cost Management",
             "Log Analytics Reader",
-            "CNA Network BGP Reader",
+            "Network Assessment BGP Reader",
         ):
             assert role in text
-        assert "docs/roles/cna-network-bgp-reader.json" in text
+        assert "docs/roles/network-assessment-bgp-reader.json" in text
 
     def test_help_modal_shows_the_role_table(self):
         text = MODAL.read_text(encoding="utf-8")
@@ -117,9 +117,9 @@ class TestGuidanceAgrees:
             "Security Reader",
             "Cost Management Reader",
             "Log Analytics Reader",
-            "CNA Network BGP Reader",
+            "Network Assessment BGP Reader",
             "Management Group Reader",
         ):
             assert role in text
-        assert "docs/roles/cna-network-bgp-reader.json" in text
+        assert "docs/roles/network-assessment-bgp-reader.json" in text
         assert "[VERIFY" not in text

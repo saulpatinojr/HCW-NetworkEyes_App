@@ -16,17 +16,17 @@ from network_assessment.core.auth import (
 class TestAWSCredentials:
     def test_constructor_stores_fields(self):
         creds = AWSCredentials(
-            role_arn="arn:aws:iam::123456789012:role/CNA-Discovery",
-            external_id="cna-external-secret",
-            session_name="CNA-Test",
+            role_arn="arn:aws:iam::123456789012:role/NetworkAssessment-Discovery",
+            external_id="network-assessment-external-secret",
+            session_name="NetworkAssessment-Test",
         )
-        assert creds.role_arn == "arn:aws:iam::123456789012:role/CNA-Discovery"
-        assert creds.external_id == "cna-external-secret"
-        assert creds.session_name == "CNA-Test"
+        assert creds.role_arn == "arn:aws:iam::123456789012:role/NetworkAssessment-Discovery"
+        assert creds.external_id == "network-assessment-external-secret"
+        assert creds.session_name == "NetworkAssessment-Test"
 
     def test_session_default_name(self):
         creds = AWSCredentials(role_arn="arn:aws:iam::123:role/R", external_id="ext")
-        assert creds.session_name == "CNA-Discovery"
+        assert creds.session_name == "NetworkAssessment-Discovery"
 
     def test_session_starts_as_none(self):
         creds = AWSCredentials(role_arn="arn:aws:iam::123:role/R", external_id="ext")
@@ -124,9 +124,11 @@ class TestKeyVaultCredentialProvider:
             KeyVaultCredentialProvider()
 
     def test_reads_vault_url_from_env(self, monkeypatch):
-        monkeypatch.setenv("AZURE_KEY_VAULT_URL", "https://cna-vault.vault.azure.net/")
+        monkeypatch.setenv(
+            "AZURE_KEY_VAULT_URL", "https://network-assessment-vault.vault.azure.net/"
+        )
         provider = KeyVaultCredentialProvider()
-        assert provider.vault_url == "https://cna-vault.vault.azure.net/"
+        assert provider.vault_url == "https://network-assessment-vault.vault.azure.net/"
 
     def test_explicit_vault_url_overrides_env(self, monkeypatch):
         monkeypatch.setenv("AZURE_KEY_VAULT_URL", "https://other-vault.vault.azure.net/")
@@ -135,7 +137,9 @@ class TestKeyVaultCredentialProvider:
 
     def test_get_secret_raises_not_implemented(self, monkeypatch):
         """Phase C — SecretClient.get_secret() not yet implemented."""
-        monkeypatch.setenv("AZURE_KEY_VAULT_URL", "https://cna-vault.vault.azure.net/")
+        monkeypatch.setenv(
+            "AZURE_KEY_VAULT_URL", "https://network-assessment-vault.vault.azure.net/"
+        )
         provider = KeyVaultCredentialProvider()
         with pytest.raises(NotImplementedError):
-            provider.get_secret("cna-aws-role-arn-eng-001")
+            provider.get_secret("network-assessment-aws-role-arn-eng-001")

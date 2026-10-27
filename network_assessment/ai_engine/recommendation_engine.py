@@ -37,7 +37,7 @@ class RecommendationEngine:
     Transport fallback chain (first non-empty result wins):
       1. Foundry Agent Service (when FOUNDRY_PROJECT_ENDPOINT + agent id are set) —
          a portal-configured agent with MCP tools + instructions.
-      2. MCPRouter — CNA's direct Azure/AWS MCP HTTP clients.
+      2. MCPRouter — NetworkEyes's direct Azure/AWS MCP HTTP clients.
       3. Curated offline library — guarantees a finding is never left without guidance.
     """
 

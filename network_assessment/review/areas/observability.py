@@ -115,7 +115,7 @@ def _structured_logging_findings() -> list[Finding]:
                 "plain-text lines; error paths log via logger.exception(...) but "
                 "the records were not parseable structured records (Requirement "
                 "8.2 gap). Attach the Core_Engine JSONFormatter to a stdout "
-                "handler on the root logger so every API record — and the cna "
+                "handler on the root logger so every API record — and the network_assessment "
                 "engine records it propagates — is emitted as JSON with at least "
                 "a level and a message. Applied by this task."
             ),

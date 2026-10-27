@@ -238,7 +238,7 @@ export async function addAwsCredential(
     return { error: "Label and read-only Role ARN are required." };
   }
   if (!/^arn:aws[a-z-]*:iam::\d{12}:role\/.+$/.test(awsRoleArn)) {
-    return { error: "Role ARN must look like arn:aws:iam::123456789012:role/CNA-ReadOnly." };
+    return { error: "Role ARN must look like arn:aws:iam::123456789012:role/NetworkAssessment-ReadOnly." };
   }
   if (!awsAccessKeyId || !awsSecretAccessKey) {
     return { error: "Access Key ID and Secret Access Key are required." };
@@ -281,7 +281,7 @@ export async function addAwsCredential(
 }
 
 // ─── Test AWS connection ─────────────────────────────────────────────────────
-// Validated by the CNA API (which has boto3) rather than in the web layer.
+// Validated by the NetworkEyes API (which has boto3) rather than in the web layer.
 
 export async function testAwsConnection(params: {
   roleArn: string;

@@ -95,7 +95,7 @@ _TGW_ATTACHMENT_TYPES: dict[str, AttachmentType] = {
 
 @dataclass
 class DiscoveryOptions:
-    org_role_arn: str  # arn:aws:iam::MGMT:role/CNA-ReadOnly
+    org_role_arn: str  # arn:aws:iam::MGMT:role/NetworkAssessment-ReadOnly
     external_id: str | None = None
     regions: list[str] = field(default_factory=list)  # empty = all enabled regions
     account_ids: list[str] = field(default_factory=list)  # empty = all org accounts
@@ -145,13 +145,13 @@ class AWSDiscovery:
     # ------------------------------------------------------------------ setup
 
     def _assume_role(self, account_id: str, role_name: str) -> boto3.Session:
-        """Assume the CNA read-only role in a member account."""
+        """Assume the NetworkEyes read-only role in a member account."""
         role_arn = f"arn:aws:iam::{account_id}:role/{role_name}"
         sts = self._mgmt.client("sts")
         try:
             kwargs = {
                 "RoleArn": role_arn,
-                "RoleSessionName": "CNA-Discovery",
+                "RoleSessionName": "NetworkAssessment-Discovery",
                 "DurationSeconds": 3600,
             }
             if self.opts.external_id:

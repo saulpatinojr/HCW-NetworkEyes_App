@@ -1,7 +1,7 @@
 """Finding taxonomy — deterministic traffic-direction classification.
 
 The Azure tables (rule ids, categories, resource-type hints) live in the engine package
-(``cna_azure_network_engine.rules.taxonomy``); this module layers the AWS rule ids of
+(``network_assessment_azure_engine.rules.taxonomy``); this module layers the AWS rule ids of
 ``network_assessment/ai_engine/analysis_engine.py`` in front of them and delegates the rest. It returns
 "east_west", "north_south", "management", or "" when no deterministic mapping exists —
 callers treat "" as "unclassified", never guess.
@@ -9,7 +9,7 @@ callers treat "" as "unclassified", never guess.
 
 from __future__ import annotations
 
-from cna_azure_network_engine.rules.taxonomy import (
+from network_assessment_azure_engine.rules.taxonomy import (
     classify_traffic_direction as _engine_classify,
 )
 

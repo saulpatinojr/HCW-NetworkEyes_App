@@ -1,6 +1,6 @@
 """Enums shared by the Azure and AWS topology models.
 
-``SubnetType`` lives in the engine package (``cna_azure_network_engine.model.common``) and is
+``SubnetType`` lives in the engine package (``network_assessment_azure_engine.model.common``) and is
 re-exported here; ``AttachmentType`` and ``PeeringState`` are AWS-only and stay in the monorepo.
 """
 
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from cna_azure_network_engine.model.common import SubnetType
+from network_assessment_azure_engine.model.common import SubnetType
 
 __all__ = [
     "AttachmentType",

@@ -9,8 +9,8 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "cna-azure-network-engine",
     "network-assessment",
+    "network-assessment-azure-engine",
 ]
 
 [[package]]
@@ -626,38 +626,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/c7/0e/7fa0ef50764b67090
 wheels = [
     { url = "https://files.pythonhosted.org/packages/58/50/6c0d534c5f134586a8e1ba4e330569e32f057e33372ae556463212fb4cd3/click-8.5.0-py3-none-any.whl", hash = "sha256:255bc9599cf7748b4b1a446ccc735421bd08a2ae529a8b88597d3de5664ee360", size = 125251, upload-time = "2026-08-26T13:33:12.928Z" },
 ]
-
-[[package]]
-name = "cna-azure-network-engine"
-version = "0.1.0"
-source = { editable = "packages/cna-azure-network-engine" }
-dependencies = [
-    { name = "pydantic" },
-]
-
-[package.optional-dependencies]
-azure = [
-    { name = "azure-identity" },
-    { name = "azure-mgmt-costmanagement" },
-    { name = "azure-mgmt-loganalytics" },
-    { name = "azure-mgmt-monitor" },
-    { name = "azure-mgmt-network" },
-    { name = "azure-mgmt-resourcegraph" },
-    { name = "azure-monitor-query" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "azure-identity", marker = "extra == 'azure'", specifier = ">=1.26.0" },
-    { name = "azure-mgmt-costmanagement", marker = "extra == 'azure'", specifier = ">=5.0.0,<6" },
-    { name = "azure-mgmt-loganalytics", marker = "extra == 'azure'", specifier = ">=14.0.0,<15" },
-    { name = "azure-mgmt-monitor", marker = "extra == 'azure'", specifier = ">=7.0.0,<8" },
-    { name = "azure-mgmt-network", marker = "extra == 'azure'", specifier = ">=33.1.0" },
-    { name = "azure-mgmt-resourcegraph", marker = "extra == 'azure'", specifier = ">=8.0.0,<9" },
-    { name = "azure-monitor-query", marker = "extra == 'azure'", specifier = ">=2.0.0,<3" },
-    { name = "pydantic", specifier = ">=2.13,<3" },
-]
-provides-extras = ["azure"]
 
 [[package]]
 name = "colorama"
@@ -1681,7 +1649,6 @@ dependencies = [
     { name = "azure-mgmt-subscription" },
     { name = "azure-storage-blob" },
     { name = "click" },
-    { name = "cna-azure-network-engine" },
     { name = "cryptography" },
     { name = "defusedxml" },
     { name = "diagrams" },
@@ -1690,6 +1657,7 @@ dependencies = [
     { name = "markdown" },
     { name = "matplotlib" },
     { name = "n2g" },
+    { name = "network-assessment-azure-engine" },
     { name = "openai" },
     { name = "pandas" },
     { name = "pydantic" },
@@ -1772,7 +1740,6 @@ requires-dist = [
     { name = "boto3", marker = "extra == 'aws'", specifier = ">=1.43.118" },
     { name = "cairosvg", marker = "extra == 'enrichment'", specifier = ">=2.9.0,<3" },
     { name = "click", specifier = ">=8.4.2" },
-    { name = "cna-azure-network-engine", editable = "packages/cna-azure-network-engine" },
     { name = "cryptography", specifier = ">=50.0.2" },
     { name = "defusedxml", specifier = ">=0.7.1" },
     { name = "detect-secrets", marker = "extra == 'dev'", specifier = ">=1.5" },
@@ -1785,6 +1752,7 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.10.9" },
     { name = "mcp", marker = "extra == 'enrichment'", specifier = ">=2.3.0,<3" },
     { name = "n2g", specifier = ">=0.3.3" },
+    { name = "network-assessment-azure-engine", editable = "packages/network-assessment-azure-engine" },
     { name = "openai", specifier = ">=3.37.0" },
     { name = "pandas", specifier = ">=3.1.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.7.0" },
@@ -1815,6 +1783,38 @@ worker = [
     { name = "azure-identity", specifier = ">=1.26.0" },
     { name = "azure-storage-blob", specifier = ">=12.31.0" },
 ]
+
+[[package]]
+name = "network-assessment-azure-engine"
+version = "0.1.0"
+source = { editable = "packages/network-assessment-azure-engine" }
+dependencies = [
+    { name = "pydantic" },
+]
+
+[package.optional-dependencies]
+azure = [
+    { name = "azure-identity" },
+    { name = "azure-mgmt-costmanagement" },
+    { name = "azure-mgmt-loganalytics" },
+    { name = "azure-mgmt-monitor" },
+    { name = "azure-mgmt-network" },
+    { name = "azure-mgmt-resourcegraph" },
+    { name = "azure-monitor-query" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "azure-identity", marker = "extra == 'azure'", specifier = ">=1.26.0" },
+    { name = "azure-mgmt-costmanagement", marker = "extra == 'azure'", specifier = ">=5.0.0,<6" },
+    { name = "azure-mgmt-loganalytics", marker = "extra == 'azure'", specifier = ">=14.0.0,<15" },
+    { name = "azure-mgmt-monitor", marker = "extra == 'azure'", specifier = ">=7.0.0,<8" },
+    { name = "azure-mgmt-network", marker = "extra == 'azure'", specifier = ">=33.1.0" },
+    { name = "azure-mgmt-resourcegraph", marker = "extra == 'azure'", specifier = ">=8.0.0,<9" },
+    { name = "azure-monitor-query", marker = "extra == 'azure'", specifier = ">=2.0.0,<3" },
+    { name = "pydantic", specifier = ">=2.13,<3" },
+]
+provides-extras = ["azure"]
 
 [[package]]
 name = "nodeenv"
