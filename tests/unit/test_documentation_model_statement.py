@@ -34,9 +34,7 @@ DOCS_INDEX = REPO_ROOT / "docs" / "README.md"
 REMOVED_DOCUMENT = "CNA-0.90-updates.md"
 
 #: Live documents that state (or point at) the model and must not restate the count of root documents. The README
-#: itself is checked apart: its map says it once and nothing else in the file may. ``TODO.md``, ``REVIEW.md`` and
-#: ``CHANGELOG.md`` are not scanned: they keep dated records that quote old counts on purpose (``TODO.md`` T-605 says
-#: "exactly four documents", ``CHANGELOG.md`` says "seven root documents").
+#: itself is checked apart: its map says it once and nothing else in the file may.
 OTHER_STATEMENT_FILES = (
     "CLAUDE.md",
     ".github/CONTRIBUTING.md",
@@ -44,6 +42,12 @@ OTHER_STATEMENT_FILES = (
     "docs/README.md",
     "REFACTOR_APP.md",
 )
+
+#: The backlog documents keep dated records that quote old counts on purpose (``TODO.md`` T-605 says "exactly four
+#: documents"), so the broad wording check would flag history. They are held to the narrow phrase only, as before:
+#: "<n> root documents at most" or "at most <n> root documents". ``CHANGELOG.md`` ("seven root documents") is history
+#: from top to bottom and is not scanned.
+BACKLOG_FILES = ("TODO.md", "REVIEW.md")
 
 #: The bullet that says where documents live, in each document that has one: (file, text its first line starts with).
 DOCUMENT_BULLETS = (
@@ -76,6 +80,10 @@ _NUMBER_BEFORE_DOCUMENTS = re.compile(
 )
 _ROOT = re.compile(r"\broot\b|\btop[- ]level\b", re.IGNORECASE)
 _LIMIT_WORDS = re.compile(rf"\b{_LIMIT}\b", re.IGNORECASE)
+NARROW_COUNT_PHRASE = re.compile(
+    rf"\b{_NUMBER}\s+root\s+documents?\s+at\s+most\b|\bat\s+most\s+{_NUMBER}\s+root\s+documents?\b",
+    re.IGNORECASE,
+)
 
 
 def restates_the_count(text: str) -> list[str]:
@@ -245,6 +253,29 @@ def test_the_count_is_stated_in_the_readme_map_and_nowhere_else() -> None:
         if (statements := restates_the_count(text))
     }
     assert not offenders, f"the count of root documents is restated: {offenders}"
+
+
+def test_the_backlog_documents_do_not_restate_the_count_in_the_narrow_phrase() -> None:
+    offenders = {
+        name: [m.group(0) for m in NARROW_COUNT_PHRASE.finditer(text)]
+        for name in BACKLOG_FILES
+        if (text := (REPO_ROOT / name).read_text(encoding="utf-8"))
+        and NARROW_COUNT_PHRASE.search(text)
+    }
+    assert not offenders, f"the count of root documents is restated: {offenders}"
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        "six root documents at most",
+        "That makes six\nroot documents at most",
+        "at most six root documents",
+        "AT MOST 6 root document",
+    ],
+)
+def test_the_narrow_phrase_matches_its_forms(phrase: str) -> None:
+    assert NARROW_COUNT_PHRASE.search(phrase)
 
 
 def test_the_docs_index_names_the_community_files_the_validator_refuses_in_docs() -> None:
