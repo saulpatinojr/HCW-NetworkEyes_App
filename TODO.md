@@ -2486,3 +2486,16 @@ Open, for the owner: (1) when the old `worker-` tags are not wanted any more, de
 
 ### T-739 — Harden the build-trigger guard (follow-up to T-738)
 `tests/security/test_image_build_trigger_covers_copies.py` (added with the `packages/**` build trigger on 2026-10-27) is deliberately narrower than it could be. Known limits: (1) the CLI image's `COPY . .` (last stage of the root `Dockerfile`) is on the guard's allow-list, so a NEW top-level directory of code that the path filter of `200-build-images.yml` does not name, and that no explicit `COPY` names, would start no build and would not be found; (2) the guard recognises only `docker/build-push-action` steps in the workflow and `COPY`/`ADD` in a Dockerfile, so a `RUN --mount=type=bind,source=...` in a Dockerfile, or a `run: docker buildx build ...` step in the workflow, would escape it. Suggested hardening: every tracked top-level path must be covered by the filter, excluded by `.dockerignore`, or listed in a small written "does not change the image" list (README.md, LICENSE, NOTICE, docker-compose.yml, docs/ and so on, each with its reason); and the test refuses `--mount=type=bind` in the Dockerfiles and a `docker build` or `docker buildx build` command in a `run:` step. Not built now on purpose: it would fail on every new top-level file until its author classifies it, which is noisy, and the narrower guard already closes the gap that was found (a `COPY` the filter lacks). Narrowing the whole-context copy (`REVIEW.md` R-017) would remove limit 1.
+
+### T-740 — Two follow-ups left open by the 2026-11-04 security clean-up
+Found 2026-11-04 while closing issue #340 (draw.io 32.6.9) and Dependabot's failed `minimatch` security update.
+(1) **`minimatch` 3.1.5 under `eslint-config-next`** is still inside GHSA-g3hv-75wg-m249 (affected "< 11.0.1"; a crafted glob pattern can use
+excessive CPU). eslint-plugin-import 2.32.0, eslint-plugin-jsx-a11y 6.10.2 and eslint-plugin-react 7.37.5 require `minimatch@^3.1.2` and call its
+default export, which minimatch 11 removed, so an override would break those lint rules. Risk: development-only (no image ships it); the patterns
+it reads are this repository's own lint configuration. Close it when those plugins move off minimatch 3 (Dependabot's next `eslint-config-next`
+bump will show it), or the owner dismisses the remaining Dependabot alert with the reason "vulnerable code is not actually used" or "risk is
+tolerable to this project". `lib/npm-overrides.test.ts` allows only this one 3.x path.
+(2) **The two `actions/checkout` steps in `200-build-images.yml`** (the build and rehearsal jobs) still keep `GITHUB_TOKEN` in `.git/config`
+(zizmor `artipacked`). `300` was hardened and is pinned by `tests/unit/test_ci_hygiene.py`; `200` runs only on a push to `main` or by hand, so a
+pull request cannot prove the change. Do it in a change that is followed by the `200` rehearsal (Actions, `200 · Build Container Images`, Run
+workflow, `rehearsal` ticked).

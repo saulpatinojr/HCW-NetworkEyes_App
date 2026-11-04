@@ -138,6 +138,16 @@ def test_every_job_in_300_has_a_timeout() -> None:
 # --- workflow 300: the new jobs ---
 
 
+def test_no_checkout_in_300_leaves_the_token_on_disk() -> None:
+    """By default `actions/checkout` stores GITHUB_TOKEN in .git/config, where every later step can read it (zizmor
+    `artipacked`). No step of 300 pushes with git or needs the stored credential (`gh` calls pass GH_TOKEN), so every
+    checkout turns it off. Added 2026-11-04 for the ten checkouts that still kept it."""
+    for job_id, job in workflow()["jobs"].items():
+        for step in job.get("steps", []):
+            if str(step.get("uses", "")).startswith("actions/checkout@"):
+                assert (step.get("with") or {}).get("persist-credentials") is False, job_id
+
+
 def test_dependency_review_is_pull_request_only_least_privilege_and_sha_pinned() -> None:
     job = workflow()["jobs"]["dependency-review"]
     assert job["if"] == "github.event_name == 'pull_request'"
