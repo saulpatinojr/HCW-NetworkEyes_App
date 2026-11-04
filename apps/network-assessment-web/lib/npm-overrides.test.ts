@@ -39,6 +39,29 @@ describe("postcss-selector-parser", () => {
   });
 });
 
+describe("minimatch", () => {
+  // minimatch below 11.0.1 can spend excessive CPU on a crafted glob pattern (GHSA-g3hv-75wg-m249, moderate; GitHub lists
+  // ">= 7.0.0, < 11.0.1", the npm registry "< 11.0.1", so npm audit still counts the 3.x copy below). Dependabot
+  // could not update it (its only path downgraded eslint 10 to 4), so the "minimatch@^10" override lifts the copy that
+  // eslint, @eslint/config-array and @typescript-eslint/typescript-estree share to 11.x, which they call the same way.
+  // The 3.x copy under eslint-config-next stays: eslint-plugin-import, -jsx-a11y and -react call minimatch 3's default
+  // export, which 11 no longer has. It is lint-time only (not in any image), and its patterns come from this repository's
+  // own lint configuration. This fails if anything other than that one 3.x copy resolves below 11.0.1.
+  it("resolves to 11.0.1 or later outside eslint-config-next's own 3.x copy", () => {
+    const lock = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"));
+    const entries = Object.entries<{ version: string }>(lock.packages).filter(([path]) =>
+      path.endsWith("node_modules/minimatch"),
+    );
+    expect(entries.length).toBeGreaterThan(0);
+    for (const [path, { version }] of entries) {
+      if (path === "node_modules/eslint-config-next/node_modules/minimatch") continue;
+      const [major, minor, patch] = version.split(".").map(Number);
+      const ok = major > 11 || (major === 11 && (minor > 0 || patch >= 1));
+      expect(ok, `${path} is minimatch ${version}, below 11.0.1`).toBe(true);
+    }
+  });
+});
+
 describe("package.json overrides", () => {
   it("finds a literal range in the object form too", () => {
     // The checker itself: "." under a directly used package overrides that package, nested keys override its dependencies.

@@ -2,8 +2,8 @@
 # and the sha256 of its draw.war. Declared here, before the first FROM, so that the runner can record the version in
 # an image label and the weekly check (.github/workflows/380-drawio-pin-check.yml) reads one line. Change both
 # together; tests/security/test_drawio_self_hosted.py checks their shape.
-ARG DRAWIO_WEBAPP_VERSION=32.6.1
-ARG DRAWIO_WEBAPP_SHA256=44dd56958c8408963457dc98f04d2228408ac145c7aa1d8e6895d9c88d5e42aa
+ARG DRAWIO_WEBAPP_VERSION=32.6.9
+ARG DRAWIO_WEBAPP_SHA256=31afc82b7920c409d0591f6126ccb6c377d7800e7f11ab324f88bdf1e4249ce7
 
 # ── Stage 1: deps ────────────────────────────────────────────────────────────
 FROM node:24-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS deps
