@@ -40,7 +40,8 @@ describe("postcss-selector-parser", () => {
 });
 
 describe("minimatch", () => {
-  // minimatch below 11.0.1 can spend excessive CPU on a crafted glob pattern (GHSA-g3hv-75wg-m249, moderate). Dependabot
+  // minimatch below 11.0.1 can spend excessive CPU on a crafted glob pattern (GHSA-g3hv-75wg-m249, moderate; GitHub lists
+  // ">= 7.0.0, < 11.0.1", the npm registry "< 11.0.1", so npm audit still counts the 3.x copy below). Dependabot
   // could not update it (its only path downgraded eslint 10 to 4), so the "minimatch@^10" override lifts the copy that
   // eslint, @eslint/config-array and @typescript-eslint/typescript-estree share to 11.x, which they call the same way.
   // The 3.x copy under eslint-config-next stays: eslint-plugin-import, -jsx-a11y and -react call minimatch 3's default

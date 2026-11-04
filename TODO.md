@@ -2489,13 +2489,20 @@ Open, for the owner: (1) when the old `worker-` tags are not wanted any more, de
 
 ### T-740 — Two follow-ups left open by the 2026-11-04 security clean-up
 Found 2026-11-04 while closing issue #340 (draw.io 32.6.9) and Dependabot's failed `minimatch` security update.
-(1) **`minimatch` 3.1.5 under `eslint-config-next`** is still inside GHSA-g3hv-75wg-m249 (affected "< 11.0.1"; a crafted glob pattern can use
-excessive CPU). eslint-plugin-import 2.32.0, eslint-plugin-jsx-a11y 6.10.2 and eslint-plugin-react 7.37.5 require `minimatch@^3.1.2` and call its
-default export, which minimatch 11 removed, so an override would break those lint rules. Risk: development-only (no image ships it); the patterns
-it reads are this repository's own lint configuration. Close it when those plugins move off minimatch 3 (Dependabot's next `eslint-config-next`
-bump will show it), or the owner dismisses the remaining Dependabot alert with the reason "vulnerable code is not actually used" or "risk is
-tolerable to this project". `lib/npm-overrides.test.ts` allows only this one 3.x path.
-(2) **The two `actions/checkout` steps in `200-build-images.yml`** (the build and rehearsal jobs) still keep `GITHUB_TOKEN` in `.git/config`
-(zizmor `artipacked`). `300` was hardened and is pinned by `tests/unit/test_ci_hygiene.py`; `200` runs only on a push to `main` or by hand, so a
-pull request cannot prove the change. Do it in a change that is followed by the `200` rehearsal (Actions, `200 · Build Container Images`, Run
-workflow, `rehearsal` ticked).
+(1) **`minimatch` 3.1.5 under `eslint-config-next`** is still reported by `npm audit` (5 moderate findings, all this one copy and the plugins
+above it). The two advisory databases disagree about it, as read on 2026-11-04: GitHub's advisory GHSA-g3hv-75wg-m249 (a crafted glob pattern
+can use excessive CPU) lists the affected range as ">= 7.0.0, < 11.0.1", which excludes 3.x, while the npm registry's copy that `npm audit`
+reads (`/-/npm/v1/security/advisories/bulk`) records the same advisory as "< 11.0.1", which includes 3.1.5. No other advisory matches 3.1.5.
+Dependabot reads GitHub's database, so its alert should close once the 10.x copy is lifted; if it stays open against 3.1.5, the ranges have
+been aligned and this item applies to it too. eslint-plugin-import 2.32.0, eslint-plugin-jsx-a11y 6.10.2 and eslint-plugin-react 7.37.5
+require `minimatch@^3.1.2` and call its default export, which minimatch 11 removed, so an override would break those lint rules. Risk:
+development-only (no image ships it); the patterns it reads are this repository's own lint configuration. Close it when those plugins move
+off minimatch 3 (Dependabot's next `eslint-config-next` bump will show it) or the two databases agree that 3.x is not affected.
+`lib/npm-overrides.test.ts` allows only this one 3.x path.
+(2) **The two `actions/checkout` steps in `200-build-images.yml`** (in the `build-images` and `build-web` jobs) still keep `GITHUB_TOKEN` in
+`.git/config` (zizmor `artipacked`); the other two checkouts there (`tag-images`, `rehearse-docker-login`) already set
+`persist-credentials: false`. `300` was hardened and is pinned by `tests/unit/test_ci_hygiene.py`. A pull request cannot prove the change,
+and neither can the rehearsal: both build jobs are skipped when `rehearsal` is ticked (`!inputs.rehearsal`). The proof is a real run of
+both build jobs on `main`: merge the change together with, or just before, a change to a build path (the push starts `200`), or run it by
+hand (Actions, `200 · Build Container Images`, Run workflow, branch `main`, `rehearsal` left unticked), and check that `build-images` and
+`build-web` both pass. That run publishes images, as every push to `main` that touches a build path does.
