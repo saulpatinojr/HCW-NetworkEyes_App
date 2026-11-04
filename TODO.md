@@ -2488,7 +2488,7 @@ Open, for the owner: (1) when the old `worker-` tags are not wanted any more, de
 `tests/security/test_image_build_trigger_covers_copies.py` (added with the `packages/**` build trigger on 2026-10-27) is deliberately narrower than it could be. Known limits: (1) the CLI image's `COPY . .` (last stage of the root `Dockerfile`) is on the guard's allow-list, so a NEW top-level directory of code that the path filter of `200-build-images.yml` does not name, and that no explicit `COPY` names, would start no build and would not be found; (2) the guard recognises only `docker/build-push-action` steps in the workflow and `COPY`/`ADD` in a Dockerfile, so a `RUN --mount=type=bind,source=...` in a Dockerfile, or a `run: docker buildx build ...` step in the workflow, would escape it. Suggested hardening: every tracked top-level path must be covered by the filter, excluded by `.dockerignore`, or listed in a small written "does not change the image" list (README.md, LICENSE, NOTICE, docker-compose.yml, docs/ and so on, each with its reason); and the test refuses `--mount=type=bind` in the Dockerfiles and a `docker build` or `docker buildx build` command in a `run:` step. Not built now on purpose: it would fail on every new top-level file until its author classifies it, which is noisy, and the narrower guard already closes the gap that was found (a `COPY` the filter lacks). Narrowing the whole-context copy (`REVIEW.md` R-017) would remove limit 1.
 
 ### T-740 — Two follow-ups left open by the 2026-11-04 security clean-up
-Found 2026-11-04 while closing issue #340 (draw.io 32.6.9) and Dependabot's failed `minimatch` security update.
+Found 2026-11-04 while closing issue #340 (draw.io 32.6.9) and Dependabot's failed `minimatch` security update. Tracked in issue #346.
 (1) **`minimatch` 3.1.5 under `eslint-config-next`** is still reported by `npm audit` (5 moderate findings, all this one copy and the plugins
 above it). The two advisory databases disagree about it, as read on 2026-11-04: GitHub's advisory GHSA-g3hv-75wg-m249 (a crafted glob pattern
 can use excessive CPU) lists the affected range as ">= 7.0.0, < 11.0.1", which excludes 3.x, while the npm registry's copy that `npm audit`
@@ -2499,10 +2499,9 @@ require `minimatch@^3.1.2` and call its default export, which minimatch 11 remov
 development-only (no image ships it); the patterns it reads are this repository's own lint configuration. Close it when those plugins move
 off minimatch 3 (Dependabot's next `eslint-config-next` bump will show it) or the two databases agree that 3.x is not affected.
 `lib/npm-overrides.test.ts` allows only this one 3.x path.
-(2) **The two `actions/checkout` steps in `200-build-images.yml`** (in the `build-images` and `build-web` jobs) still keep `GITHUB_TOKEN` in
-`.git/config` (zizmor `artipacked`); the other two checkouts there (`tag-images`, `rehearse-docker-login`) already set
-`persist-credentials: false`. `300` was hardened and is pinned by `tests/unit/test_ci_hygiene.py`. A pull request cannot prove the change,
-and neither can the rehearsal: both build jobs are skipped when `rehearsal` is ticked (`!inputs.rehearsal`). The proof is a real run of
-both build jobs on `main`: merge the change together with, or just before, a change to a build path (the push starts `200`), or run it by
-hand (Actions, `200 · Build Container Images`, Run workflow, branch `main`, `rehearsal` left unticked), and check that `build-images` and
-`build-web` both pass. That run publishes images, as every push to `main` that touches a build path does.
+(2) **Done 2026-11-04 (issue #346), pending its proof on `main`.** The two `actions/checkout` steps in `200-build-images.yml` (the
+`build-images` and `build-web` jobs) and the two in `320-release-engine.yml` now set `persist-credentials: false`, so no checkout in any
+workflow leaves `GITHUB_TOKEN` in `.git/config` (zizmor `artipacked`). None of those jobs uses git with the token: the image builds use the
+checked-out files as their build context, and `320`'s release upload passes `GH_TOKEN` to `gh`. `tests/unit/test_ci_hygiene.py` now checks
+every checkout in every workflow. The proof is the `200` run that the merge itself starts (the workflow file is one of `200`'s build paths):
+`build-images` and `build-web` both pass on `main`. `320` runs only on an `engine-v*` tag, so its first proof is the next engine release.

@@ -138,14 +138,23 @@ def test_every_job_in_300_has_a_timeout() -> None:
 # --- workflow 300: the new jobs ---
 
 
-def test_no_checkout_in_300_leaves_the_token_on_disk() -> None:
+def test_no_workflow_checkout_leaves_the_token_on_disk() -> None:
     """By default `actions/checkout` stores GITHUB_TOKEN in .git/config, where every later step can read it (zizmor
-    `artipacked`). No step of 300 pushes with git or needs the stored credential (`gh` calls pass GH_TOKEN), so every
-    checkout turns it off. Added 2026-11-04 for the ten checkouts that still kept it."""
-    for job_id, job in workflow()["jobs"].items():
-        for step in job.get("steps", []):
-            if str(step.get("uses", "")).startswith("actions/checkout@"):
-                assert (step.get("with") or {}).get("persist-credentials") is False, job_id
+    `artipacked`). No workflow here pushes with git or needs the stored credential: `gh` calls pass GH_TOKEN, and the
+    image builds in 200 use the checked-out files as their build context. So every checkout in every workflow turns
+    it off. 300 was done on 2026-11-04 (#345); 200's build jobs and 320 followed (issue #346). Owner and repository
+    names are case-insensitive on GitHub, so the action is matched without regard to case."""
+    found = 0
+    for path in sorted((REPO_ROOT / ".github" / "workflows").glob("*.y*ml")):
+        jobs = (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("jobs") or {}
+        for job_id, job in jobs.items():
+            for step in job.get("steps") or []:
+                if str(step.get("uses", "")).lower().startswith("actions/checkout@"):
+                    found += 1
+                    assert (step.get("with") or {}).get("persist-credentials") is False, (
+                        f"{path.name}: {job_id}"
+                    )
+    assert found >= 20, f"only {found} checkouts found; the workflow glob or the YAML shape changed"
 
 
 def test_dependency_review_is_pull_request_only_least_privilege_and_sha_pinned() -> None:
