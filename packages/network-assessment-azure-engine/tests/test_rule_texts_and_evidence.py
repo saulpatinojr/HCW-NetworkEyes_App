@@ -151,6 +151,39 @@ class TestLinkedWafPolicy:
         )
         assert _waf_findings(agw) == {}
 
+    def test_disabled_policy_wins_over_the_inline_enabled_setting(self) -> None:
+        """A linked policy decides the state: Disabled over inline enabled is disabled."""
+        agw = _gateway(
+            inline_enabled=True, inline_mode="Prevention", policy=_policy("Disabled", "Prevention")
+        )
+        assert agw.effective_waf_enabled is False
+        assert set(_waf_findings(agw)) == {"AZ-NET-007"}
+        # a policy without a state leaves the inline setting in charge
+        agw = _gateway(inline_enabled=True, inline_mode="Prevention", policy=_policy("", ""))
+        assert agw.effective_waf_enabled is True and agw.effective_waf_mode == "Prevention"
+        assert _waf_findings(agw) == {}
+
+    def test_evidence_cites_the_policy_when_the_policy_supplied_the_value(self) -> None:
+        policy = _policy("Enabled", "Detection")
+
+        def refs(agw: ApplicationGateway) -> dict[str, str]:
+            sub = AzureSubscriptionTopology(
+                subscription_id=SUB, tenant_id="t", application_gateways=[agw]
+            )
+            report = evaluate(AzureTopology(source="export", subscriptions=[sub]))
+            return {f.rule_id: f.observed_state.evidence_ref for f in report.findings}
+
+        from_policy = refs(_gateway(inline_enabled=False, inline_mode=None, policy=policy))
+        assert from_policy["AZ-NET-025"] == f"export:{SUB}.waf_policies[id={policy.id}].mode"
+        disabled = refs(
+            _gateway(inline_enabled=False, inline_mode=None, policy=_policy("Disabled", ""))
+        )
+        assert disabled["AZ-NET-007"] == f"export:{SUB}.waf_policies[id={policy.id}].state"
+        inline = _gateway(inline_enabled=True, inline_mode="Detection", policy=None)
+        assert refs(inline)["AZ-NET-025"] == (
+            f"export:{SUB}.application_gateways[id={inline.id}].waf_mode"
+        )
+
     def test_normalizer_links_the_policy_row_to_the_gateway(self) -> None:
         """An export whose gateway carries no inline WAF block and links a policy by id."""
         rows = [

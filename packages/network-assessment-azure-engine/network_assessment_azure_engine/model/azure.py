@@ -223,10 +223,25 @@ class ApplicationGateway(BaseModel):
 
     @property
     def effective_waf_enabled(self) -> bool:
-        """True when the inline WAF setting is on or the linked WAF policy's state is Enabled."""
-        if self.waf_enabled:
-            return True
-        return bool(self.waf_policy and (self.waf_policy.state or "").lower() == "enabled")
+        """The linked policy's state when a policy is attached and states one, else the inline setting.
+
+        A gateway with a policy attached takes its WAF state from the policy, so a Disabled
+        policy over an inline ``enabled`` is disabled; the inline block counts only when no
+        policy (or a policy without a state) is linked.
+        """
+        if self.waf_policy and self.waf_policy.state:
+            return self.waf_policy.state.lower() == "enabled"
+        return self.waf_enabled
+
+    @property
+    def waf_state_from_policy(self) -> bool:
+        """True when ``effective_waf_enabled`` came from the linked policy."""
+        return bool(self.waf_policy and self.waf_policy.state)
+
+    @property
+    def waf_mode_from_policy(self) -> bool:
+        """True when ``effective_waf_mode`` came from the linked policy."""
+        return bool(self.waf_policy and self.waf_policy.mode)
 
     @property
     def effective_waf_mode(self) -> str | None:

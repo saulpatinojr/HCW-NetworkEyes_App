@@ -10,7 +10,11 @@ Rule versions follow the downstream lab edition's table, which is the contract b
 editions pin: ``AZ-NET-002/003/006/007/011/012/014`` are at version 2 (merged platform-subnet
 skip list; threat intelligence read through the linked firewall policy; flow logs and
 Traffic Analytics read from flow-log rows when the topology is an export; subnet IP
-exhaustion derived from ``ipConfigurations``; hedge-free facts and titles).
+exhaustion derived from ``ipConfigurations``; hedge-free facts and titles). ``AZ-NET-007``
+version 2 is "WAF state read through the linked WAF policy" and ``AZ-NET-025`` read the linked
+policy from its first version in the lab edition's port, so the policy read here (issue 350)
+is the behaviour those versions already declare, not a new version: the id:version table and
+``rules_digest()`` are what the lab edition pins, and they do not move.
 
 Every ``learn_url`` is a Microsoft Learn path recorded without a retrieval check and stays
 ``[VERIFY]`` until the owner confirms it; every framework control reference is a claim shown
@@ -576,21 +580,21 @@ def application_gateway_waf_disabled(
     for agw in sub.application_gateways:
         if agw.effective_waf_enabled:
             continue
-        via = (
-            f" and its linked WAF policy {agw.waf_policy.name} has state="
-            f"{agw.waf_policy.state or 'unset'}"
-            if agw.waf_policy
-            else ""
-        )
+        if agw.waf_state_from_policy and agw.waf_policy:
+            via = (
+                f" and its linked WAF policy {agw.waf_policy.name} has state={agw.waf_policy.state}"
+            )
+            path = f"waf_policies[id={agw.waf_policy.id}].state"
+        else:
+            via = ""
+            path = f"application_gateways[id={agw.id}].waf_enabled"
         yield Observation(
             resource_id=agw.id,
             resource_type="Microsoft.Network/applicationGateways",
             region=agw.location,
             fact=f"Application Gateway {agw.name} ({agw.sku_name}) has "
             f"Web Application Firewall disabled{via}.",
-            evidence_ref=evidence_ref_for(
-                topology, sub, f"application_gateways[id={agw.id}].waf_enabled"
-            ),
+            evidence_ref=evidence_ref_for(topology, sub, path),
         )
 
 
@@ -1483,16 +1487,19 @@ def application_gateway_waf_detection_mode(
             continue
         if mode.lower() == _WAF_PREVENTION:
             continue
-        via = f" (from its WAF policy {agw.waf_policy.name})" if agw.waf_policy else ""
+        if agw.waf_mode_from_policy and agw.waf_policy:
+            via = f" (from its WAF policy {agw.waf_policy.name})"
+            path = f"waf_policies[id={agw.waf_policy.id}].mode"
+        else:
+            via = ""
+            path = f"application_gateways[id={agw.id}].waf_mode"
         yield Observation(
             resource_id=agw.id,
             resource_type="Microsoft.Network/applicationGateways",
             region=agw.location,
             fact=f"Application Gateway {agw.name} ({agw.sku_name}) has WAF enabled in "
             f"{mode} mode{via}.",
-            evidence_ref=evidence_ref_for(
-                topology, sub, f"application_gateways[id={agw.id}].waf_mode"
-            ),
+            evidence_ref=evidence_ref_for(topology, sub, path),
             description="Matching requests are logged and not blocked, so the WAF inspects "
             "without protecting.",
             recommendation="After tuning the Detection-mode log for false positives, switch the WAF "
@@ -1600,8 +1607,9 @@ def public_ip_basic_sku(
     evidence="virtual_network_gateways[].sku_name (gateway_type Vpn)",
     description="The VPN gateway uses the Basic SKU, which has no SLA and supports neither BGP, "
     "active-active mode nor availability zones.",
-    remediation="Resize the gateway to VpnGw2 or higher (an AZ SKU for zone redundancy), then enable "
-    "BGP and active-active mode.",
+    remediation="A Basic gateway cannot be resized in place: deploy a new gateway on VpnGw2 or "
+    "higher (an AZ SKU for zone redundancy), recreate its connections with the on-premises "
+    "devices, then delete the Basic gateway; the cut-over interrupts the tunnels.",
 )
 def vpn_gateway_basic_sku(
     sub: AzureSubscriptionTopology, topology: AzureTopology
@@ -1622,8 +1630,9 @@ def vpn_gateway_basic_sku(
             ),
             description="The Basic SKU is limited to 100 Mbps aggregate throughput and supports "
             "neither BGP, active-active mode nor availability zones, and carries no SLA.",
-            recommendation="Resize to VpnGw2 or higher (Generation 2); choose an AZ SKU such as "
-            "VpnGw2AZ for zone redundancy, then enable BGP and active-active mode.",
+            recommendation="Deploy a new gateway on VpnGw2 or higher (Generation 2; an AZ SKU such "
+            "as VpnGw2AZ for zone redundancy), recreate the connections, then delete the Basic "
+            "gateway, which cannot be resized in place; then enable BGP and active-active mode.",
         )
 
 
