@@ -19,7 +19,7 @@
 #   6. HEALTHCHECK added (required for ECS/AKS task definitions)
 #   7. .dockerignore referenced — see .dockerignore in repo root
 
-# python:3.14-slim digest pinned 2026-09-30. Dependabot's docker ecosystem watches
+# python:3.14-slim digest pinned 2026-11-04 (3.14.10, built 2026-10-28). Dependabot's docker ecosystem watches
 # every Dockerfile and bumps this line; nothing else keeps base-image debs current.
 # uv, as a stage rather than an inline `COPY --from=<image>`: Dependabot's docker
 # updater only reads `FROM` lines, so this is the line its weekly bump moves.
@@ -28,7 +28,7 @@ ARG EDITION=appliance
 
 FROM ghcr.io/astral-sh/uv:0.13.6@sha256:af22a52f5eafef3d78e551599d405c02df61919d18028f0cea8eda93bc9986d0 AS uv
 
-FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS builder
+FROM python:3.14-slim@sha256:930e1abba7c4e8f96ed93e8012c35d174d7732752731bbd5e8e757d7ec6f3966 AS builder
 
 ARG NETWORK_ASSESSMENT_VERSION=dev
 WORKDIR /build
@@ -68,7 +68,7 @@ RUN uv pip install --system --no-cache --no-deps --no-build-isolation --prefix=/
 # The engine package alone, without the [azure] extra, into its own prefix. The
 # boundary is proved before the final stage exists: a resolvable azure, msal or
 # boto3 fails the build here, the same check the AddOn's image runs.
-FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS builder-lab
+FROM python:3.14-slim@sha256:930e1abba7c4e8f96ed93e8012c35d174d7732752731bbd5e8e757d7ec6f3966 AS builder-lab
 
 ARG EDITION
 RUN test "$EDITION" = "lab" || { echo "builder-lab is only built for EDITION=lab (got '$EDITION')" >&2; exit 1; }
@@ -92,7 +92,7 @@ RUN uv export --locked --no-default-groups --no-emit-project --no-emit-workspace
 # the final image. The export pipeline (network_assessment/diagram_engine/export_pipeline.py)
 # degrades to XML-only output without it — its own warning promises the CLI
 # is available "inside the Docker container", which is made true here.
-FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS drawio-fetch
+FROM python:3.14-slim@sha256:930e1abba7c4e8f96ed93e8012c35d174d7732752731bbd5e8e757d7ec6f3966 AS drawio-fetch
 
 # bash with pipefail: the checksum step below is a pipe (`echo | sha256sum -c -`), and a failure on the left
 # of a pipe must fail the build (hadolint DL4006). The default /bin/sh would hide it.
@@ -109,7 +109,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
 
 # ---- final stage: lab (build-only) ----
 # No apps/, no server, no EXPOSE, no HEALTHCHECK: the image's only job is the proof.
-FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS final-lab
+FROM python:3.14-slim@sha256:930e1abba7c4e8f96ed93e8012c35d174d7732752731bbd5e8e757d7ec6f3966 AS final-lab
 
 COPY --from=builder-lab /install-lab /usr/local
 RUN python -m pip uninstall -y pip \
@@ -123,7 +123,7 @@ ENV NETWORK_ASSESSMENT_EDITION=lab
 CMD ["python", "-m", "network_assessment_azure_engine.edition"]
 
 # ---- final stage: appliance ----
-FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS final-appliance
+FROM python:3.14-slim@sha256:930e1abba7c4e8f96ed93e8012c35d174d7732752731bbd5e8e757d7ec6f3966 AS final-appliance
 
 ARG NETWORK_ASSESSMENT_VERSION=dev
 LABEL org.opencontainers.image.title="NetworkEyes" \
@@ -132,12 +132,17 @@ LABEL org.opencontainers.image.title="NetworkEyes" \
       org.opencontainers.image.source="https://github.com/saulpatinojr/HCW-NetworkEyes_App" \
       org.opencontainers.image.licenses="Apache-2.0"
 
-# System deps for diagram generation (runtime only). No `apt-get upgrade`: the base is pinned by digest, but
-# these packages are installed unpinned (hadolint DL3008 is ignored with a reason in .hadolint.yaml), so a rebuild
-# on another day gets that day's package versions on top of the same base. The control that matters is the Docker
-# Scout gate in 200-build-images.yml, which refuses fixable critical and high findings at every build. When it
-# fails on a base-image deb, the fix is the Dependabot digest bump, not a rebuild (TODO.md T-702).
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Debian's security updates first, then the system deps for diagram generation (runtime only).
+# `apt-get upgrade` is deliberate (TODO.md T-741): the base is pinned by digest, but a Debian security upload
+# reaches the mirrors days before the official image is rebuilt with it. On 2026-11-05 the Scout gate in
+# 200-build-images.yml refused every build on main for apt 3.0.3 (CVE-2026-109518, DSA-6607-1, fixed in 3.0.4
+# from trixie-security) while the newest python:3.14-slim and debian:trixie-slim digests still shipped 3.0.3, so
+# no digest bump could clear it. The upgrade closes that window; Dependabot's weekly digest bump still moves the
+# base. The packages below are installed unpinned (hadolint DL3008 is ignored with a reason in .hadolint.yaml),
+# so a rebuild on another day gets that day's versions on the same base; the Scout gate, which refuses fixable
+# critical and high findings at every build, is the control that matters.
+RUN apt-get update && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends \
     graphviz libcairo2 libpango-1.0-0 \
     libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 \
     && rm -rf /var/lib/apt/lists/*

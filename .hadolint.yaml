@@ -26,8 +26,10 @@ ignored:
   #   * every FROM is pinned by sha256 digest (tests/unit/test_ci_hygiene.py checks this), and Dependabot opens
   #     a pull request for each new digest every Monday;
   #   * the packages installed on top are few and named in the Dockerfiles (graphviz and the cairo/pango
-  #     libraries, xvfb for draw.io, libc6-compat on Alpine) and never upgraded in place (no `apt-get upgrade`,
-  #     no `apk upgrade`);
+  #     libraries, xvfb for draw.io, libc6-compat on Alpine), and every shipped final stage first applies the
+  #     distribution's security updates (`apt-get upgrade` / `apk upgrade`, TODO.md T-741), because a security
+  #     upload reaches the mirrors days before the official base image is rebuilt with it (CVE-2026-109518,
+  #     2026-11-05: no python:3.14-slim digest existed without it, so the digest bump alone could not clear Scout);
   #   * Python and npm dependencies are not covered by this rule and are locked with hashes (uv.lock,
   #     package-lock.json);
   #   * THE real control: 200-build-images.yml scans each pushed digest with Docker Scout and refuses fixable

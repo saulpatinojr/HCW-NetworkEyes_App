@@ -55,6 +55,17 @@ NEW_JOB_NAMES = {
 APPROVED_HADOLINT_IGNORES = {"DL3008", "DL3018"}
 # Inline pragmas allowed in Dockerfiles: (file, rule).
 APPROVED_INLINE_PRAGMAS = {("Dockerfile", "DL3006")}
+# The stages 200-build-images.yml pushes, scans and tags, by Dockerfile. Each one applies the distribution's
+# security updates before its own packages (TODO.md T-741): a Debian or Alpine security upload reaches the mirrors
+# days before the official base image is rebuilt with it, and on 2026-11-05 no python:3.14-slim digest existed
+# without CVE-2026-109518, so the Scout gate refused every build on main until the upgrade came back. The build-only
+# lab stage of the root Dockerfile is never pushed or scanned and is not listed.
+SHIPPED_STAGES = {
+    "Dockerfile": {"final-appliance"},
+    "apps/network-assessment-api/Dockerfile": {"final"},
+    "apps/network-assessment-web/Dockerfile": {"migrator", "runner"},
+}
+SECURITY_UPGRADE = re.compile(r"(?:^|\s)(?:apt-get upgrade|apk upgrade)(?:\s|$)")
 
 DIGEST = re.compile(r"@sha256:[0-9a-f]{64}\b")
 
@@ -578,6 +589,36 @@ class TestDockerfileHygiene:
                 assert pipefail_shell or "pipefail" in arguments, (
                     f"line {number}: RUN has a pipe without pipefail"
                 )
+
+    def test_every_shipped_stage_applies_the_distribution_security_updates(
+        self, path: Path
+    ) -> None:
+        # T-741: the stages that reach Docker Hub run `apt-get upgrade` / `apk upgrade` in a RUN of their own
+        # stage, after an `apt-get update` where apt is used. The stage list is exact, so a renamed or new
+        # shipped stage must be added here with the upgrade in place.
+        expected = SHIPPED_STAGES[path.relative_to(REPO_ROOT).as_posix()]
+        stages: dict[str, list[tuple[int, str]]] = {}
+        current = ""
+        for number, keyword, arguments in instructions(path):
+            if keyword == "FROM":
+                parts = arguments.split()
+                current = parts[2] if len(parts) >= 3 and parts[1].upper() == "AS" else ""
+                stages.setdefault(current, [])
+            elif keyword == "RUN" and current:
+                stages[current].append((number, arguments))
+        missing = expected - set(stages)
+        assert not missing, f"shipped stage(s) not found as a named FROM: {sorted(missing)}"
+        for stage in sorted(expected):
+            upgrades = [(n, a) for n, a in stages[stage] if SECURITY_UPGRADE.search(a)]
+            assert upgrades, f"stage {stage} has no apt-get upgrade / apk upgrade in any RUN"
+            for number, arguments in upgrades:
+                if "apt-get upgrade" in arguments:
+                    assert arguments.index("apt-get update") < arguments.index("apt-get upgrade"), (
+                        f"line {number}: apt-get upgrade runs without apt-get update before it in the same RUN"
+                    )
+                    assert "rm -rf /var/lib/apt/lists/*" in arguments, (
+                        f"line {number}: the apt lists are left in the layer"
+                    )
 
     def test_inline_hadolint_pragmas_are_the_approved_ones_with_a_reason(self, path: Path) -> None:
         lines = path.read_text(encoding="utf-8").splitlines()
