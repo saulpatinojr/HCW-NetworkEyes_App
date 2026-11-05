@@ -40,25 +40,39 @@ describe("postcss-selector-parser", () => {
 });
 
 describe("minimatch", () => {
-  // minimatch below 11.0.1 can spend excessive CPU on a crafted glob pattern (GHSA-g3hv-75wg-m249, moderate; GitHub lists
-  // ">= 7.0.0, < 11.0.1", the npm registry "< 11.0.1", so npm audit still counts the 3.x copy below). Dependabot
+  // minimatch 7.0.0 to 11.0.0 can spend excessive CPU on a crafted glob pattern (GHSA-g3hv-75wg-m249, moderate). Dependabot
   // could not update it (its only path downgraded eslint 10 to 4), so the "minimatch@^10" override lifts the copy that
   // eslint, @eslint/config-array and @typescript-eslint/typescript-estree share to 11.x, which they call the same way.
-  // The 3.x copy under eslint-config-next stays: eslint-plugin-import, -jsx-a11y and -react call minimatch 3's default
-  // export, which 11 no longer has. It is lint-time only (not in any image), and its patterns come from this repository's
-  // own lint configuration. This fails if anything other than that one 3.x copy resolves below 11.0.1.
+  // The 3.x copy under eslint-config-next stays: eslint-plugin-import 2.32.0, -jsx-a11y 6.10.2 and -react 7.37.5 (the
+  // newest of each on 2026-11-04) require minimatch ^3.1.2 and call it as a function (its default export) and through
+  // `makeRe`; minimatch 11's CommonJS export is an object with neither, so an override would break those rules. Since
+  // 2026-11-04 GitHub and the npm registry both list that advisory as ">= 7.0.0, < 11.0.1", so 3.x is outside it and
+  // `npm audit` is clean. The 3.x advisories that do exist (GHSA-3ppc-4f35-3m26 and GHSA-7r86-cg39-jmmj below 3.1.3,
+  // GHSA-23c5-xmqv-rm74 below 3.1.4) are what the second check guards. It is lint-time only (not in any image), and its
+  // patterns come from this repository's own lint configuration.
+  const lock = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"));
+  const entries = Object.entries<{ version: string }>(lock.packages).filter(([path]) =>
+    path.endsWith("node_modules/minimatch"),
+  );
+  const pluginCopy = "node_modules/eslint-config-next/node_modules/minimatch";
+
   it("resolves to 11.0.1 or later outside eslint-config-next's own 3.x copy", () => {
-    const lock = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"));
-    const entries = Object.entries<{ version: string }>(lock.packages).filter(([path]) =>
-      path.endsWith("node_modules/minimatch"),
-    );
     expect(entries.length).toBeGreaterThan(0);
     for (const [path, { version }] of entries) {
-      if (path === "node_modules/eslint-config-next/node_modules/minimatch") continue;
+      if (path === pluginCopy) continue;
       const [major, minor, patch] = version.split(".").map(Number);
       const ok = major > 11 || (major === 11 && (minor > 0 || patch >= 1));
       expect(ok, `${path} is minimatch ${version}, below 11.0.1`).toBe(true);
     }
+  });
+
+  it("keeps eslint-config-next's 3.x copy, while it exists, at 3.1.4 or later", () => {
+    // No entry is fine too: that is the plugins having moved off minimatch 3, which ends this exception for good.
+    const entry = entries.find(([path]) => path === pluginCopy);
+    if (!entry) return;
+    const [major, minor, patch] = entry[1].version.split(".").map(Number);
+    const ok = major > 3 || (major === 3 && (minor > 1 || (minor === 1 && patch >= 4)));
+    expect(ok, `${pluginCopy} is minimatch ${entry[1].version}, below 3.1.4`).toBe(true);
   });
 });
 
