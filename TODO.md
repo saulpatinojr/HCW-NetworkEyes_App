@@ -1876,6 +1876,10 @@ from the same review are `REVIEW.md` → R-016 – R-022.
   `migrator-latest`. The ask: fail on any `*-latest` reference and deploy the `@sha256:` reference.
 
 ### T-702 — Python lockfile and pinned floors (PY-020, IMG-004)
+- **Amended 2026-11-04 (T-741):** the distribution security upgrade (`apt-get upgrade` / `apk upgrade`) is back in
+  every shipped final stage. The sentence below that a Scout finding on a base package "is now fixed by the
+  Dependabot digest bump" held only while the official image had been rebuilt after the security upload; on
+  2026-11-05 it had not been, and no digest could clear the gate. The lockfile part of this ticket is unchanged.
 - **Status:** Done 2026-09-30 — `uv.lock` (145 packages, universal, hashed) is committed and every
   Python Dockerfile installs from it: `uv export --locked` (fails on drift) → `uv pip install
   --require-hashes --no-deps --prefix=/install`, the `network-assessment` wheel built with `--no-build-isolation`
@@ -2509,3 +2513,34 @@ no checkout in any workflow leaves `GITHUB_TOKEN` in `.git/config` (zizmor `arti
 builds use the checked-out files as their build context, and `320`'s release upload passes `GH_TOKEN` to `gh`. `tests/unit/test_ci_hygiene.py`
 checks every checkout in every workflow. The proof: the `200` run that the merge started, run 41897552511, completed with `build-images` (CLI
 and API), `build-web` and `tag-images` all successful. `320` runs only on an `engine-v*` tag, so its first exercise is the next engine release.
+
+### T-741 — The Scout gate refused every build on main for a Debian security update no base digest carried
+- **Status:** Done 2026-11-04. **What happened:** the `200 · Build Container Images` run on `main` at 506cacbf
+  (run 41963906936, 2026-11-05 03:52 UTC) failed both `build-images` jobs (CLI and API) at the Docker Scout step on
+  one fixable HIGH, CVE-2026-109518 in `libapt-pkg7.0` 3.0.3 (Debian 13.7; DSA-6607-1; fixed in 3.0.4, published
+  to `trixie-security` only; an on-path attacker who controls a mirror or proxy can make apt install an unverified
+  package). The commit that started the run touched only a test file, `TODO.md` and `CHANGELOG.md`, so the finding
+  came from the base image layer, not from anything this repository installs. `build-web` passed and
+  `tag-images` was skipped, so no tag moved and nothing was published from that commit. **Why the documented fix
+  could not work:** T-702 and `CLAUDE.md` said a Scout finding on a base package is fixed by Dependabot's digest
+  bump, never by an upgrade in the Dockerfile. Checked on 2026-11-04 by running the images: the newest
+  `python:3.14-slim` (index digest `930e1abb…`, built 2026-10-28, Python 3.14.10) and the newest
+  `debian:trixie-slim` (built 2026-10-27) both still ship apt 3.0.3; `apt-cache policy` inside the new image shows
+  3.0.4 only from `deb.debian.org/debian-security trixie-security`. The official image is rebuilt on Debian's
+  schedule, not on a DSA, so a digest bump could not clear the gate and every push to `main` would have stayed
+  unpublished until that rebuild. **The fix:** every shipped final stage applies the distribution's security
+  updates before its own packages (`apt-get upgrade -y --no-install-recommends` in the CLI and API images,
+  `apk upgrade --no-cache` in the web image's `migrator` and `runner` stages; the build-only `final-lab` stage is
+  never pushed or scanned and is unchanged), the `python:3.14-slim` digest moves to the current one, and the
+  reasons in `CLAUDE.md`, `.hadolint.yaml` and the Dockerfiles say so. `tests/unit/test_ci_hygiene.py` now fails
+  if a shipped stage drops the upgrade, so the T-702 decision cannot drift back without a reviewed change. What
+  this costs: the image is the pinned base plus that day's security updates, so two builds of one commit can
+  differ in base packages; `.hadolint.yaml` already records that the images are not reproducible for the same
+  reason (the packages on top are unpinned), and the Scout gate at every build is the control. The same remedy
+  cleared the same kind of failure in 2026-08 (the OpenSSL release; the `[Unreleased]` entry "Cleared the Docker
+  Scout CVE gate" in `CHANGELOG.md`) before T-702 removed it. Dependabot's weekly digest bump stays: it keeps the base layer itself
+  current, so the upgrade step has less to do. **Found on the way:** the root `.dockerignore` did not exclude
+  `node_modules`, so a local CLI build from a developer tree that had run `npm ci` shipped the whole web tier's
+  `node_modules` (Windows binaries included) through the root Dockerfile's `COPY . .`, and the local Scout scan
+  flagged Go module packages inside it that the published image never had (CI builds from a clean checkout). It
+  now excludes `**/node_modules/` and `**/.next/`.

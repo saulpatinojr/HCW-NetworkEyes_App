@@ -1,10 +1,10 @@
-# python:3.14-slim digest pinned 2026-09-30 — see root Dockerfile for the same pattern.
+# python:3.14-slim digest pinned 2026-11-04 (3.14.10, built 2026-10-28) — see root Dockerfile for the same pattern.
 # uv, as a stage rather than an inline `COPY --from=<image>`: Dependabot's docker
 # updater only reads `FROM` lines, so this is the line its weekly bump moves.
 # Keep the version in step with the `uv==` pins in 300-test-codebase.yml.
 FROM ghcr.io/astral-sh/uv:0.13.6@sha256:af22a52f5eafef3d78e551599d405c02df61919d18028f0cea8eda93bc9986d0 AS uv
 
-FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS builder
+FROM python:3.14-slim@sha256:930e1abba7c4e8f96ed93e8012c35d174d7732752731bbd5e8e757d7ec6f3966 AS builder
 
 WORKDIR /build
 
@@ -42,7 +42,7 @@ RUN uv pip install --system --no-cache --no-deps --no-build-isolation --prefix=/
 # Pinned draw.io desktop release, verified by checksum before it can reach
 # the final image. Used headlessly (see scripts/drawio-headless.sh) so the
 # encyclopedia report's diagram SVGs render instead of silently degrading.
-FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS drawio-fetch
+FROM python:3.14-slim@sha256:930e1abba7c4e8f96ed93e8012c35d174d7732752731bbd5e8e757d7ec6f3966 AS drawio-fetch
 
 # bash with pipefail, see the root Dockerfile (hadolint DL4006).
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -57,7 +57,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
   && echo "${DRAWIO_SHA256}  /tmp/drawio.deb" | sha256sum -c -
 
 # ---- final stage ----
-FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170
+# Named so tests/unit/test_ci_hygiene.py can find the shipped stage; the build target is unchanged (it is the last stage).
+FROM python:3.14-slim@sha256:930e1abba7c4e8f96ed93e8012c35d174d7732752731bbd5e8e757d7ec6f3966 AS final
 
 # Non-root user — uid/gid 1001 (matches root Dockerfile's network-assessment user).
 RUN groupadd --gid 1001 network-assessment \
@@ -70,11 +71,17 @@ RUN groupadd --gid 1001 network-assessment \
 # chain (deb deps, xvfb, wrapper) at build time rather than at first render.
 COPY --from=drawio-fetch /tmp/drawio.deb /tmp/drawio.deb
 COPY --chmod=755 scripts/drawio-headless.sh /usr/local/bin/drawio
-# No `apt-get upgrade`: the image is the pinned base digest plus these packages
-# (see the root Dockerfile; a Scout finding on a base deb is fixed by the
-# Dependabot digest bump, TODO.md T-702).
-RUN apt-get update \
- && apt-get install -y --no-install-recommends /tmp/drawio.deb xvfb xauth libasound2t64 \
+# Debian's security updates first (`apt-get upgrade`, deliberate: a security upload reaches the mirrors before
+# the official base image is rebuilt with it, and on 2026-11-05 no python:3.14-slim digest was free of
+# CVE-2026-109518; see the root Dockerfile and TODO.md T-741), then these packages. `Acquire::Retries=0` closes
+# that CVE's retry path while the base's apt 3.0.3 is the one doing the upgrade (see the root Dockerfile).
+# PUBLISH_CACHE_BUST, named in the command, keeps the publish workflow from reusing a cached upgrade layer on a
+# later run of the same commit (see the root Dockerfile's final-appliance stage).
+ARG PUBLISH_CACHE_BUST=
+RUN printf 'upgrade run: %s\n' "${PUBLISH_CACHE_BUST}" \
+ && apt-get -o Acquire::Retries=0 update --error-on=any \
+ && apt-get -o Acquire::Retries=0 upgrade -y --no-install-recommends \
+ && apt-get -o Acquire::Retries=0 install -y --no-install-recommends /tmp/drawio.deb xvfb xauth libasound2t64 \
       graphviz libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libpangoft2-1.0-0 \
       libharfbuzz0b libgdk-pixbuf-2.0-0 \
  && rm -rf /var/lib/apt/lists/* /tmp/drawio.deb \

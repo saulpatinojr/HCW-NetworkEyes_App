@@ -59,3 +59,10 @@ tests/
 
 # Vendored agent configuration, kept out of version control and out of every image
 local/
+
+# Node — the web tier's installed dependencies and build output, present in a developer tree after `npm ci` and
+# `next build`. The root Dockerfile's `COPY . .` shipped the whole tree into a local CLI image on 2026-11-04 (Windows
+# binaries included, and Go module packages that Docker Scout flagged as fixable HIGHs; TODO.md T-741). CI builds from
+# a clean checkout, so the published images never carried them; this keeps a local build honest too.
+**/node_modules/
+**/.next/

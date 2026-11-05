@@ -140,9 +140,16 @@ change under `Changed` in `CHANGELOG.md` (and in the release notes) where a cons
   image installs (`uv export --locked` + `--require-hashes`); after editing a
   dependency, extra or dependency group in `pyproject.toml`, run `uv lock` and
   commit both files — `300-test-codebase` fails on drift. Never edit `uv.lock`
-  by hand, never add a package to a Dockerfile with a bare `pip install`, and
-  never re-add `apt-get upgrade` / `apk upgrade` to a final stage: a Docker Scout
-  finding on a base-image package is fixed by Dependabot's digest bump. The uv
+  by hand, and never add a package to a Dockerfile with a bare `pip install`.
+  Every shipped final stage runs the distribution's security upgrade
+  (`apt-get upgrade` / `apk upgrade`) on top of the digest-pinned base, and keeps
+  it: a Debian or Alpine security upload reaches the mirrors days before the
+  official image is rebuilt with it, and on 2026-11-05 no `python:3.14-slim`
+  digest existed without CVE-2026-109518, so the Docker Scout gate refused every
+  build on `main` until the upgrade came back (`TODO.md` T-741;
+  `tests/unit/test_ci_hygiene.py` fails if a shipped stage drops it). Dependabot's
+  digest bump still moves the base; on its own it is not the fix for a Scout
+  finding. The uv
   version is pinned in the `FROM ghcr.io/astral-sh/uv:… AS uv` stage of each
   Python Dockerfile and the `uv==` steps of `300-test-codebase.yml`; when
   Dependabot bumps the stage, move the workflow pins with it.

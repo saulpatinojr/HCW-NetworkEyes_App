@@ -80,18 +80,23 @@ RUN node_modules/.bin/prisma generate
 FROM node:24-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS migrator
 WORKDIR /app
 
-# No `apk upgrade`: the base is pinned by digest, but libc6-compat is installed unpinned (hadolint DL3018 is
-# ignored with a reason in .hadolint.yaml), so a rebuild on another day gets that day's package version on the
-# same base. The control that matters is the Docker Scout gate in 200-build-images.yml (fixable critical and high
-# findings fail the build). Dependabot's docker ecosystem bumps the digest; a Scout finding on a base apk is
-# fixed there (TODO.md T-702).
+# Alpine's security updates first (`apk upgrade`, deliberate, TODO.md T-741): the base is pinned by digest, but a
+# security upload reaches the mirrors before the official image is rebuilt with it, and on 2026-11-05 the Scout
+# gate in 200-build-images.yml (fixable critical and high findings fail the build) refused the Debian images on
+# exactly that gap (CVE-2026-109518; see the root Dockerfile). libc6-compat is installed unpinned (hadolint DL3018
+# is ignored with a reason in .hadolint.yaml), so a rebuild on another day gets that day's package version on the
+# same base. Dependabot's docker ecosystem still bumps the digest.
 #
 # The bundled npm CLI is unused here (prisma is invoked directly via
 # node_modules/.bin) and periodically carries fixable CVEs in its own
 # vendored deps (tar, brace-expansion, undici) — strip it.
 #
-# One layer for both (hadolint DL3059).
-RUN apk add --no-cache libc6-compat \
+# One layer for all three (hadolint DL3059). PUBLISH_CACHE_BUST, named in the command, keeps the publish workflow
+# from reusing a cached upgrade layer on a later run of the same commit (see the root Dockerfile).
+ARG PUBLISH_CACHE_BUST=
+RUN printf 'upgrade run: %s\n' "${PUBLISH_CACHE_BUST}" \
+ && apk upgrade --no-cache \
+ && apk add --no-cache libc6-compat \
  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 
 # Non-root user for the migrator (IMG-002). This container receives the DB-owner
@@ -193,8 +198,14 @@ ENV HOSTNAME="0.0.0.0"
 # periodically carries fixable CVEs in its own vendored deps (tar,
 # brace-expansion, undici) — strip it.
 #
-# One layer for the user, the group and the strip (hadolint DL3059).
-RUN addgroup --system --gid 1001 nodejs \
+# Alpine's security updates first (`apk upgrade`, deliberate: see the migrator stage above and TODO.md T-741).
+#
+# One layer for the upgrade, the user, the group and the strip (hadolint DL3059). PUBLISH_CACHE_BUST as in the
+# migrator stage.
+ARG PUBLISH_CACHE_BUST=
+RUN printf 'upgrade run: %s\n' "${PUBLISH_CACHE_BUST}" \
+ && apk upgrade --no-cache \
+ && addgroup --system --gid 1001 nodejs \
  && adduser --system --uid 1001 nextjs \
  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 
