@@ -2489,19 +2489,23 @@ Open, for the owner: (1) when the old `worker-` tags are not wanted any more, de
 
 ### T-740 — Two follow-ups left open by the 2026-11-04 security clean-up
 Found 2026-11-04 while closing issue #340 (draw.io 32.6.9) and Dependabot's failed `minimatch` security update. Tracked in issue #346.
-(1) **`minimatch` 3.1.5 under `eslint-config-next`** is still reported by `npm audit` (5 moderate findings, all this one copy and the plugins
-above it). The two advisory databases disagree about it, as read on 2026-11-04: GitHub's advisory GHSA-g3hv-75wg-m249 (a crafted glob pattern
-can use excessive CPU) lists the affected range as ">= 7.0.0, < 11.0.1", which excludes 3.x, while the npm registry's copy that `npm audit`
-reads (`/-/npm/v1/security/advisories/bulk`) records the same advisory as "< 11.0.1", which includes 3.1.5. No other advisory matches 3.1.5.
-Dependabot reads GitHub's database, so its alert should close once the 10.x copy is lifted; if it stays open against 3.1.5, the ranges have
-been aligned and this item applies to it too. eslint-plugin-import 2.32.0, eslint-plugin-jsx-a11y 6.10.2 and eslint-plugin-react 7.37.5
-require `minimatch@^3.1.2` and call its default export, which minimatch 11 removed, so an override would break those lint rules. Risk:
-development-only (no image ships it); the patterns it reads are this repository's own lint configuration. Close it when those plugins move
-off minimatch 3 (Dependabot's next `eslint-config-next` bump will show it) or the two databases agree that 3.x is not affected.
-`lib/npm-overrides.test.ts` allows only this one 3.x path.
-(2) **Done 2026-11-04 (issue #346), pending its proof on `main`.** The two `actions/checkout` steps in `200-build-images.yml` (the
-`build-images` and `build-web` jobs) and the two in `320-release-engine.yml` now set `persist-credentials: false`, so no checkout in any
-workflow leaves `GITHUB_TOKEN` in `.git/config` (zizmor `artipacked`). None of those jobs uses git with the token: the image builds use the
-checked-out files as their build context, and `320`'s release upload passes `GH_TOKEN` to `gh`. `tests/unit/test_ci_hygiene.py` now checks
-every checkout in every workflow. The proof is the `200` run that the merge itself starts (the workflow file is one of `200`'s build paths):
-`build-images` and `build-web` both pass on `main`. `320` runs only on an `engine-v*` tag, so its first proof is the next engine release.
+(1) **Done 2026-11-04 (issue #346): the two advisory databases now agree, and `npm audit` reports nothing.** When this was written earlier
+the same day, `minimatch` 3.1.5 under `eslint-config-next` was reported by `npm audit` (5 moderate findings, all this one copy and the plugins
+above it) because the databases disagreed: GitHub's advisory GHSA-g3hv-75wg-m249 (a crafted glob pattern can use excessive CPU) listed
+">= 7.0.0, < 11.0.1", which excludes 3.x, while the npm registry's copy that `npm audit` reads (`/-/npm/v1/security/advisories/bulk`) said
+"< 11.0.1". Read again at 2026-11-04 21:30 UTC, the registry's copy says ">= 7.0.0 <11.0.1" too (GitHub's advisory was updated at 16:50 UTC),
+`npm audit --json` on a fresh `npm ci` reports 0 findings, Dependabot alert 121 is withdrawn and no npm alert is open. The 3.x copy itself
+stays, and it cannot be lifted: eslint-plugin-import 2.32.0, eslint-plugin-jsx-a11y 6.10.2 and eslint-plugin-react 7.37.5 (the newest of each
+on 2026-11-04; `eslint-config-next` 16.4.5 and the 16.5 canary require the same three) need `minimatch@^3.1.2` and call it as a function
+(`lib/rules/order.js:510` in -import, `lib/util/mayHaveAccessibleLabel.js:75` in -jsx-a11y, `lib/rules/jsx-pascal-case.js:66` in -react) and
+through `makeRe` (`lib/rules/no-internal-modules.js:51` in -import); minimatch 11's CommonJS export is an object with neither, so an override
+would break those rules. Risk: development-only (no image ships it); the patterns it reads are this repository's own lint configuration.
+`lib/npm-overrides.test.ts` allows only this one 3.x path and, since this closed, also fails if that copy ever drops below 3.1.4 (the 3.x
+advisories GHSA-3ppc-4f35-3m26, GHSA-7r86-cg39-jmmj and GHSA-23c5-xmqv-rm74 end there). The copy goes away on its own when those plugins
+move off minimatch 3; nothing here needs doing for that.
+(2) **Done 2026-11-04 (issue #346) and proven on `main`.** The two `actions/checkout` steps in `200-build-images.yml` (the
+`build-images` and `build-web` jobs) and the two in `320-release-engine.yml` set `persist-credentials: false` (#347, merged as `e23ce4b`), so
+no checkout in any workflow leaves `GITHUB_TOKEN` in `.git/config` (zizmor `artipacked`). None of those jobs uses git with the token: the image
+builds use the checked-out files as their build context, and `320`'s release upload passes `GH_TOKEN` to `gh`. `tests/unit/test_ci_hygiene.py`
+checks every checkout in every workflow. The proof: the `200` run that the merge started, run 41897552511, completed with `build-images` (CLI
+and API), `build-web` and `tag-images` all successful. `320` runs only on an `engine-v*` tag, so its first exercise is the next engine release.
