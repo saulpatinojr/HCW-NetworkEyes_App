@@ -73,9 +73,10 @@ COPY --from=drawio-fetch /tmp/drawio.deb /tmp/drawio.deb
 COPY --chmod=755 scripts/drawio-headless.sh /usr/local/bin/drawio
 # Debian's security updates first (`apt-get upgrade`, deliberate: a security upload reaches the mirrors before
 # the official base image is rebuilt with it, and on 2026-11-05 no python:3.14-slim digest was free of
-# CVE-2026-109518; see the root Dockerfile and TODO.md T-741), then these packages.
-RUN apt-get update \
- && apt-get upgrade -y --no-install-recommends \
+# CVE-2026-109518; see the root Dockerfile and TODO.md T-741), then these packages. `Acquire::Retries=0` closes
+# that CVE's retry path while the base's apt 3.0.3 is the one doing the upgrade (see the root Dockerfile).
+RUN apt-get -o Acquire::Retries=0 update \
+ && apt-get -o Acquire::Retries=0 upgrade -y --no-install-recommends \
  && apt-get install -y --no-install-recommends /tmp/drawio.deb xvfb xauth libasound2t64 \
       graphviz libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libpangoft2-1.0-0 \
       libharfbuzz0b libgdk-pixbuf-2.0-0 \

@@ -65,7 +65,7 @@ SHIPPED_STAGES = {
     "apps/network-assessment-api/Dockerfile": {"final"},
     "apps/network-assessment-web/Dockerfile": {"migrator", "runner"},
 }
-SECURITY_UPGRADE = re.compile(r"(?:^|\s)(?:apt-get upgrade|apk upgrade)(?:\s|$)")
+SECURITY_UPGRADE = re.compile(r"(?:^|\s)(?:apt-get(?: -o \S+)* upgrade|apk upgrade)(?:\s|$)")
 
 DIGEST = re.compile(r"@sha256:[0-9a-f]{64}\b")
 
@@ -612,9 +612,18 @@ class TestDockerfileHygiene:
             upgrades = [(n, a) for n, a in stages[stage] if SECURITY_UPGRADE.search(a)]
             assert upgrades, f"stage {stage} has no apt-get upgrade / apk upgrade in any RUN"
             for number, arguments in upgrades:
-                if "apt-get upgrade" in arguments:
-                    assert arguments.index("apt-get update") < arguments.index("apt-get upgrade"), (
+                if "apt-get" in arguments:
+                    assert arguments.index(" update") < arguments.index(" upgrade"), (
                         f"line {number}: apt-get upgrade runs without apt-get update before it in the same RUN"
+                    )
+                    # The apt doing the upgrade is still the base image's. While that apt is below 3.0.4 it has
+                    # CVE-2026-109518, whose exploit needs a download retry, so the update and the upgrade both
+                    # run with retries off (a mirror hiccup fails the build instead of retrying).
+                    assert "apt-get -o Acquire::Retries=0 update" in arguments, (
+                        f"line {number}: the apt-get update before the upgrade runs with retries on"
+                    )
+                    assert "apt-get -o Acquire::Retries=0 upgrade" in arguments, (
+                        f"line {number}: apt-get upgrade runs with retries on"
                     )
                     assert "rm -rf /var/lib/apt/lists/*" in arguments, (
                         f"line {number}: the apt lists are left in the layer"

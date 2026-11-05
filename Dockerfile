@@ -140,8 +140,11 @@ LABEL org.opencontainers.image.title="NetworkEyes" \
 # no digest bump could clear it. The upgrade closes that window; Dependabot's weekly digest bump still moves the
 # base. The packages below are installed unpinned (hadolint DL3008 is ignored with a reason in .hadolint.yaml),
 # so a rebuild on another day gets that day's versions on the same base; the Scout gate, which refuses fixable
-# critical and high findings at every build, is the control that matters.
-RUN apt-get update && apt-get upgrade -y --no-install-recommends \
+# critical and high findings at every build, is the control that matters. `Acquire::Retries=0` on the update and
+# the upgrade: the apt doing this upgrade is still the base's 3.0.3, and CVE-2026-109518 needs a download retry to
+# slip an unverified package in, so the retry path is closed until the upgraded apt is in place (a mirror hiccup
+# then fails the build instead of retrying).
+RUN apt-get -o Acquire::Retries=0 update && apt-get -o Acquire::Retries=0 upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends \
     graphviz libcairo2 libpango-1.0-0 \
     libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 \
