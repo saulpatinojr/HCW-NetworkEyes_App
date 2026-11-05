@@ -143,9 +143,18 @@ LABEL org.opencontainers.image.title="NetworkEyes" \
 # critical and high findings at every build, is the control that matters. `Acquire::Retries=0` on the update and
 # the upgrade: the apt doing this upgrade is still the base's 3.0.3, and CVE-2026-109518 needs a download retry to
 # slip an unverified package in, so the retry path is closed until the upgraded apt is in place (a mirror hiccup
-# then fails the build instead of retrying).
-RUN apt-get -o Acquire::Retries=0 update && apt-get -o Acquire::Retries=0 upgrade -y --no-install-recommends \
-    && apt-get install -y --no-install-recommends \
+# then fails the build instead of retrying). PUBLISH_CACHE_BUST is a per-run value the publish workflow passes
+# (its run id and attempt); naming it in the command makes this layer's cache key differ on every run, so a
+# rebuild of the same commit cannot reuse an older upgrade result from the Actions build cache after a newer
+# security upload has reached the mirrors. Unset on a local build, which is fine: the layer is then cached as usual.
+# `--error-on=any` makes the update fail if any index (trixie-security above all) cannot be fetched, instead of
+# succeeding with a warning and leaving apt unupgraded; the install keeps retries off too, in case the upgrade
+# found nothing to do and the base's apt is still the one installing.
+ARG PUBLISH_CACHE_BUST=
+RUN printf 'upgrade run: %s\n' "${PUBLISH_CACHE_BUST}" \
+    && apt-get -o Acquire::Retries=0 update --error-on=any \
+    && apt-get -o Acquire::Retries=0 upgrade -y --no-install-recommends \
+    && apt-get -o Acquire::Retries=0 install -y --no-install-recommends \
     graphviz libcairo2 libpango-1.0-0 \
     libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 \
     && rm -rf /var/lib/apt/lists/*

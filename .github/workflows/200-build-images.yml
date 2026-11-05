@@ -237,6 +237,7 @@ jobs:
           file: ${{ matrix.file }}
           build-args: |
             NETWORK_ASSESSMENT_BUILD_SHA=${{ github.sha }}
+            PUBLISH_CACHE_BUST=${{ github.run_id }}-${{ github.run_attempt }}
           outputs: type=image,name=docker.io/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }},push-by-digest=true,name-canonical=true,push=true
           labels: ${{ steps.meta.outputs.labels }}
           provenance: mode=max,version=v0.2
@@ -381,6 +382,7 @@ jobs:
           target: runner
           build-args: |
             NETWORK_ASSESSMENT_BUILD_SHA=${{ github.sha }}
+            PUBLISH_CACHE_BUST=${{ github.run_id }}-${{ github.run_attempt }}
           outputs: type=image,name=docker.io/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }},push-by-digest=true,name-canonical=true,push=true
           labels: ${{ steps.meta_web.outputs.labels }}
           provenance: mode=max,version=v0.2
@@ -409,6 +411,7 @@ jobs:
           target: migrator
           build-args: |
             NETWORK_ASSESSMENT_BUILD_SHA=${{ github.sha }}
+            PUBLISH_CACHE_BUST=${{ github.run_id }}-${{ github.run_attempt }}
           outputs: type=image,name=docker.io/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }},push-by-digest=true,name-canonical=true,push=true
           labels: ${{ steps.meta_migrator.outputs.labels }}
           provenance: mode=max,version=v0.2

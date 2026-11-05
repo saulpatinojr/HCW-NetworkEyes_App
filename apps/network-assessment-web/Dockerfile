@@ -91,8 +91,11 @@ WORKDIR /app
 # node_modules/.bin) and periodically carries fixable CVEs in its own
 # vendored deps (tar, brace-expansion, undici) — strip it.
 #
-# One layer for all three (hadolint DL3059).
-RUN apk upgrade --no-cache \
+# One layer for all three (hadolint DL3059). PUBLISH_CACHE_BUST, named in the command, keeps the publish workflow
+# from reusing a cached upgrade layer on a later run of the same commit (see the root Dockerfile).
+ARG PUBLISH_CACHE_BUST=
+RUN printf 'upgrade run: %s\n' "${PUBLISH_CACHE_BUST}" \
+ && apk upgrade --no-cache \
  && apk add --no-cache libc6-compat \
  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 
@@ -197,8 +200,11 @@ ENV HOSTNAME="0.0.0.0"
 #
 # Alpine's security updates first (`apk upgrade`, deliberate: see the migrator stage above and TODO.md T-741).
 #
-# One layer for the upgrade, the user, the group and the strip (hadolint DL3059).
-RUN apk upgrade --no-cache \
+# One layer for the upgrade, the user, the group and the strip (hadolint DL3059). PUBLISH_CACHE_BUST as in the
+# migrator stage.
+ARG PUBLISH_CACHE_BUST=
+RUN printf 'upgrade run: %s\n' "${PUBLISH_CACHE_BUST}" \
+ && apk upgrade --no-cache \
  && addgroup --system --gid 1001 nodejs \
  && adduser --system --uid 1001 nextjs \
  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack

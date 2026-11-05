@@ -75,9 +75,13 @@ COPY --chmod=755 scripts/drawio-headless.sh /usr/local/bin/drawio
 # the official base image is rebuilt with it, and on 2026-11-05 no python:3.14-slim digest was free of
 # CVE-2026-109518; see the root Dockerfile and TODO.md T-741), then these packages. `Acquire::Retries=0` closes
 # that CVE's retry path while the base's apt 3.0.3 is the one doing the upgrade (see the root Dockerfile).
-RUN apt-get -o Acquire::Retries=0 update \
+# PUBLISH_CACHE_BUST, named in the command, keeps the publish workflow from reusing a cached upgrade layer on a
+# later run of the same commit (see the root Dockerfile's final-appliance stage).
+ARG PUBLISH_CACHE_BUST=
+RUN printf 'upgrade run: %s\n' "${PUBLISH_CACHE_BUST}" \
+ && apt-get -o Acquire::Retries=0 update --error-on=any \
  && apt-get -o Acquire::Retries=0 upgrade -y --no-install-recommends \
- && apt-get install -y --no-install-recommends /tmp/drawio.deb xvfb xauth libasound2t64 \
+ && apt-get -o Acquire::Retries=0 install -y --no-install-recommends /tmp/drawio.deb xvfb xauth libasound2t64 \
       graphviz libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libpangoft2-1.0-0 \
       libharfbuzz0b libgdk-pixbuf-2.0-0 \
  && rm -rf /var/lib/apt/lists/* /tmp/drawio.deb \

@@ -168,6 +168,34 @@ def test_no_workflow_checkout_leaves_the_token_on_disk() -> None:
     assert found >= 20, f"only {found} checkouts found; the workflow glob or the YAML shape changed"
 
 
+def test_every_cached_image_build_passes_a_per_run_cache_bust() -> None:
+    """200's image builds import the Actions BuildKit cache (`cache-from: type=gha`). The shipped stages' security
+    upgrade layers (T-741) name `PUBLISH_CACHE_BUST` in their command so that a rebuild of the same commit cannot reuse
+    an older upgrade result after a newer security upload reached the mirrors; that only works when every cached
+    build passes a value that differs per run. The run id plus attempt is unique per build."""
+    path = REPO_ROOT / ".github" / "workflows" / "200-build-images.yml"
+    jobs = (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("jobs") or {}
+    found = 0
+    for job_id, job in jobs.items():
+        for step in job.get("steps") or []:
+            with_ = step.get("with") or {}
+            if not str(step.get("uses", "")).lower().startswith("docker/build-push-action@"):
+                continue
+            if "cache-from" not in with_:
+                continue
+            found += 1
+            build_args = str(with_.get("build-args", ""))
+            assert (
+                "PUBLISH_CACHE_BUST=${{ github.run_id }}-${{ github.run_attempt }}"
+                in build_args.split("\n")
+            ), (
+                f"200-build-images.yml: {job_id} builds with the Actions cache but passes no per-run PUBLISH_CACHE_BUST"
+            )
+    assert found == 3, (
+        f"{found} cached build steps found; expected the CLI/API matrix, runner and migrator builds"
+    )
+
+
 def test_dependency_review_is_pull_request_only_least_privilege_and_sha_pinned() -> None:
     job = workflow()["jobs"]["dependency-review"]
     assert job["if"] == "github.event_name == 'pull_request'"
@@ -598,6 +626,7 @@ class TestDockerfileHygiene:
         # shipped stage must be added here with the upgrade in place.
         expected = SHIPPED_STAGES[path.relative_to(REPO_ROOT).as_posix()]
         stages: dict[str, list[tuple[int, str]]] = {}
+        declared: dict[str, int] = {}  # stage -> line of its `ARG PUBLISH_CACHE_BUST`
         current = ""
         for number, keyword, arguments in instructions(path):
             if keyword == "FROM":
@@ -606,12 +635,28 @@ class TestDockerfileHygiene:
                 stages.setdefault(current, [])
             elif keyword == "RUN" and current:
                 stages[current].append((number, arguments))
+            elif (
+                keyword == "ARG"
+                and current
+                and arguments.split("=")[0].strip() == "PUBLISH_CACHE_BUST"
+            ):
+                declared[current] = number
         missing = expected - set(stages)
         assert not missing, f"shipped stage(s) not found as a named FROM: {sorted(missing)}"
         for stage in sorted(expected):
             upgrades = [(n, a) for n, a in stages[stage] if SECURITY_UPGRADE.search(a)]
             assert upgrades, f"stage {stage} has no apt-get upgrade / apk upgrade in any RUN"
             for number, arguments in upgrades:
+                # The publish workflow builds with the Actions cache, so a rebuild of the same commit would reuse
+                # an older upgrade layer after a newer security upload reached the mirrors. PUBLISH_CACHE_BUST is
+                # a per-run value; naming it in the command changes the layer's cache key on every run. An ARG
+                # declared but not used in the command would not do that.
+                assert stage in declared and declared[stage] < number, (
+                    f"line {number}: the upgrade RUN has no `ARG PUBLISH_CACHE_BUST` earlier in stage {stage}"
+                )
+                assert "${PUBLISH_CACHE_BUST}" in arguments, (
+                    f"line {number}: the upgrade RUN does not name PUBLISH_CACHE_BUST, so its cache key never changes"
+                )
                 if "apt-get" in arguments:
                     assert arguments.index(" update") < arguments.index(" upgrade"), (
                         f"line {number}: apt-get upgrade runs without apt-get update before it in the same RUN"
@@ -619,11 +664,17 @@ class TestDockerfileHygiene:
                     # The apt doing the upgrade is still the base image's. While that apt is below 3.0.4 it has
                     # CVE-2026-109518, whose exploit needs a download retry, so the update and the upgrade both
                     # run with retries off (a mirror hiccup fails the build instead of retrying).
-                    assert "apt-get -o Acquire::Retries=0 update" in arguments, (
-                        f"line {number}: the apt-get update before the upgrade runs with retries on"
+                    assert "apt-get -o Acquire::Retries=0 update --error-on=any" in arguments, (
+                        f"line {number}: the apt-get update before the upgrade runs with retries on, or can succeed"
+                        " with a warning when an index (trixie-security) cannot be fetched (missing --error-on=any)"
                     )
                     assert "apt-get -o Acquire::Retries=0 upgrade" in arguments, (
                         f"line {number}: apt-get upgrade runs with retries on"
+                    )
+                    # The install in the same RUN keeps retries off too: if the upgrade had nothing to do, the apt
+                    # installing the packages is still the base's.
+                    assert "apt-get install" not in arguments, (
+                        f"line {number}: an apt-get install after the upgrade runs with retries on"
                     )
                     assert "rm -rf /var/lib/apt/lists/*" in arguments, (
                         f"line {number}: the apt lists are left in the layer"
