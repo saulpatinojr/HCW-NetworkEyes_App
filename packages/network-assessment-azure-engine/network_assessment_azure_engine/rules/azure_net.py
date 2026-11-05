@@ -10,7 +10,11 @@ Rule versions follow the downstream lab edition's table, which is the contract b
 editions pin: ``AZ-NET-002/003/006/007/011/012/014`` are at version 2 (merged platform-subnet
 skip list; threat intelligence read through the linked firewall policy; flow logs and
 Traffic Analytics read from flow-log rows when the topology is an export; subnet IP
-exhaustion derived from ``ipConfigurations``; hedge-free facts and titles).
+exhaustion derived from ``ipConfigurations``; hedge-free facts and titles). ``AZ-NET-007``
+version 2 is "WAF state read through the linked WAF policy" and ``AZ-NET-025`` read the linked
+policy from its first version in the lab edition's port, so the policy read here (issue 350)
+is the behaviour those versions already declare, not a new version: the id:version table and
+``rules_digest()`` are what the lab edition pins, and they do not move.
 
 Every ``learn_url`` is a Microsoft Learn path recorded without a retrieval check and stays
 ``[VERIFY]`` until the owner confirms it; every framework control reference is a claim shown
@@ -31,7 +35,12 @@ from network_assessment_azure_engine.model.azure import (
     VNet,
 )
 from network_assessment_azure_engine.rules import frameworks as fw
-from network_assessment_azure_engine.rules.registry import NotEvaluable, Observation, rule
+from network_assessment_azure_engine.rules.registry import (
+    NotEvaluable,
+    Observation,
+    evidence_ref_for,
+    rule,
+)
 
 # ---------------------------------------------------------------------------
 # Rule ids — stable across runs, never reused
@@ -271,11 +280,14 @@ def _usable_addresses(prefixes: list[str]) -> int:
     ),
     applies_to="export",
     evidence="vnets[].ddos_protection_enabled",
+    description="The VNet has no DDoS Protection plan attached, so its public endpoints get only the "
+    "platform's basic infrastructure protection.",
+    remediation="Attach a DDoS Network Protection plan to the VNet, or enable DDoS IP Protection on "
+    "the public IPs that face the internet.",
 )
 def vnet_without_ddos_protection(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
-    sub_id = sub.subscription_id
     for vnet in sub.vnets:
         if not vnet.ddos_protection_enabled:
             yield Observation(
@@ -284,7 +296,9 @@ def vnet_without_ddos_protection(
                 region=vnet.location,
                 fact=f"VNet {vnet.name} ({vnet.id}) in {vnet.location} has "
                 f"DDoS Protection Standard disabled.",
-                evidence_ref=f"discovery:azure_{sub_id}.vnets[id={vnet.id}].ddos_protection_enabled",
+                evidence_ref=evidence_ref_for(
+                    topology, sub, f"vnets[id={vnet.id}].ddos_protection_enabled"
+                ),
             )
 
 
@@ -309,11 +323,14 @@ def vnet_without_ddos_protection(
     ),
     applies_to="export",
     evidence="vnets[].subnets[].nsg_id",
+    description="The subnet has no network security group, so nothing filters the traffic into or out "
+    "of the workloads on it.",
+    remediation="Create a network security group with deny-by-default rules and associate it with the "
+    "subnet, or with every network interface on it.",
 )
 def subnet_without_nsg(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
-    sub_id = sub.subscription_id
     for vnet in sub.vnets:
         for subnet in vnet.subnets:
             if subnet.nsg_id or _is_platform_subnet(subnet.name):
@@ -323,8 +340,9 @@ def subnet_without_nsg(
                 resource_type="Microsoft.Network/virtualNetworks/subnets",
                 region=vnet.location,
                 fact=f"Subnet {subnet.name} ({subnet.id}) in VNet {vnet.name} has no NSG attached.",
-                evidence_ref=f"discovery:azure_{sub_id}.vnets[id={vnet.id}]"
-                f".subnets[id={subnet.id}].nsg_id",
+                evidence_ref=evidence_ref_for(
+                    topology, sub, f"vnets[id={vnet.id}].subnets[id={subnet.id}].nsg_id"
+                ),
             )
 
 
@@ -352,11 +370,14 @@ def subnet_without_nsg(
     ),
     applies_to="export",
     evidence="firewalls[].threat_intel_mode (or the linked firewall policy's)",
+    description="The firewall's threat intelligence mode is Alert or Off, so traffic to and from "
+    "known malicious IP addresses and domains is logged or ignored, not blocked.",
+    remediation="Set threat intelligence to Deny on the firewall policy (or on the firewall itself "
+    "when no policy is linked), after reviewing the alert log for allowlist entries.",
 )
 def firewall_threat_intel_not_deny(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
-    sub_id = sub.subscription_id
     for firewall in sub.firewalls:
         mode = firewall.effective_threat_intel_mode
         if mode.lower() == "deny":
@@ -368,7 +389,9 @@ def firewall_threat_intel_not_deny(
             region=firewall.location,
             fact=f"Azure Firewall {firewall.name} has ThreatIntelMode='{mode}'{via}. "
             f"Known malicious IPs and domains are not actively blocked.",
-            evidence_ref=f"discovery:azure_{sub_id}.firewalls[id={firewall.id}].threat_intel_mode",
+            evidence_ref=evidence_ref_for(
+                topology, sub, f"firewalls[id={firewall.id}].threat_intel_mode"
+            ),
         )
 
 
@@ -395,6 +418,10 @@ def firewall_threat_intel_not_deny(
     applies_to="export",
     evidence="express_route_circuits[]",
     needs_properties=False,
+    description="The subscription has one ExpressRoute circuit, so a circuit or provider outage "
+    "removes its private connectivity to on-premises.",
+    remediation="Add a second circuit in a different peering location, or a site-to-site VPN as a "
+    "failover path, and advertise the same prefixes over both.",
 )
 def single_expressroute_circuit(
     sub: AzureSubscriptionTopology, topology: AzureTopology
@@ -406,9 +433,10 @@ def single_expressroute_circuit(
             resource_id=er.id,
             resource_type="Microsoft.Network/expressRouteCircuits",
             region=er.location,
-            fact=f"Only one ExpressRoute circuit ({er.name}, {er.bandwidth_mbps}Mbps via "
-            f"{er.service_provider or 'unknown provider'}) found in subscription {sub_id}.",
-            evidence_ref=f"discovery:azure_{sub_id}.express_route_circuits",
+            fact=f"Only one ExpressRoute circuit ({er.name}, "
+            f"{f'{er.bandwidth_mbps} Mbps' if er.bandwidth_mbps else 'bandwidth not in the export'} "
+            f"via {er.service_provider or 'unknown provider'}) found in subscription {sub_id}.",
+            evidence_ref=evidence_ref_for(topology, sub, "express_route_circuits"),
         )
 
 
@@ -428,11 +456,14 @@ def single_expressroute_circuit(
     ),
     applies_to="export",
     evidence="vnets[].peerings[].allow_gateway_transit, virtual_network_gateways[].subnet_id",
+    description="A peering on the VNet advertises gateway transit, but the VNet has no virtual "
+    "network gateway, so peered VNets that rely on it have no route to on-premises.",
+    remediation="Turn off gateway transit on the peering, or deploy the gateway in this VNet and set "
+    "the peered VNets to use remote gateways.",
 )
 def peering_gateway_transit_without_gateway(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
-    sub_id = sub.subscription_id
     for vnet in sub.vnets:
         # A gateway has no vnet_id — it lives in a GatewaySubnet, and an ARM subnet id
         # nests under its VNet id as "<vnet_id>/subnets/<name>" (TODO.md T-410).
@@ -452,8 +483,11 @@ def peering_gateway_transit_without_gateway(
                     f"allow_gateway_transit=True but no virtual network gateway "
                     f"exists in this VNet. Spoke VNets attempting to use this "
                     f"transit path will have no effective route.",
-                    evidence_ref=f"discovery:azure_{sub_id}.vnets[id={vnet.id}]"
-                    f".peerings[name={peering.name}].allow_gateway_transit",
+                    evidence_ref=evidence_ref_for(
+                        topology,
+                        sub,
+                        f"vnets[id={vnet.id}].peerings[name={peering.name}].allow_gateway_transit",
+                    ),
                 )
 
 
@@ -479,11 +513,14 @@ def peering_gateway_transit_without_gateway(
     ),
     applies_to="export",
     evidence="vnets[].flow_logs_enabled (an export: networkwatchers/flowlogs rows projected onto the VNet)",
+    description="No flow log targets the VNet, so the traffic it carries leaves no record for "
+    "incident investigation or traffic analysis.",
+    remediation="Create a VNet flow log in Network Watcher for the VNet, send it to a storage account "
+    "and enable Traffic Analytics on it.",
 )
 def vnet_without_flow_logs(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation | NotEvaluable]:
-    sub_id = sub.subscription_id
     if _export_without_flow_logs(topology):
         yield NotEvaluable(_NO_FLOW_LOG_ROWS)
         return
@@ -496,7 +533,9 @@ def vnet_without_flow_logs(
                 fact=f"VNet {vnet.name} ({vnet.id}) in {vnet.location} has "
                 f"flow_logs_enabled=False. Network traffic to/from this VNet "
                 f"produces no telemetry for incident investigation.",
-                evidence_ref=f"discovery:azure_{sub_id}.vnets[id={vnet.id}].flow_logs_enabled",
+                evidence_ref=evidence_ref_for(
+                    topology, sub, f"vnets[id={vnet.id}].flow_logs_enabled"
+                ),
             )
 
 
@@ -528,22 +567,35 @@ def vnet_without_flow_logs(
         ),
     ),
     applies_to="export",
-    evidence="application_gateways[].waf_enabled",
+    evidence="application_gateways[].waf_enabled (or the linked WAF policy's state)",
+    description="The Application Gateway runs without a web application firewall: neither its inline "
+    "WAF setting nor a linked WAF policy is enabled, so HTTP requests reach the backends "
+    "uninspected.",
+    remediation="Link a WAF policy in Prevention mode with the current OWASP core rule set to the "
+    "gateway (WAF_v2 SKU), or enable the inline WAF configuration.",
 )
 def application_gateway_waf_disabled(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
-    sub_id = sub.subscription_id
     for agw in sub.application_gateways:
-        if not agw.waf_enabled:
-            yield Observation(
-                resource_id=agw.id,
-                resource_type="Microsoft.Network/applicationGateways",
-                region=agw.location,
-                fact=f"Application Gateway {agw.name} ({agw.sku_name}) has "
-                f"Web Application Firewall disabled.",
-                evidence_ref=f"discovery:azure_{sub_id}.application_gateways[id={agw.id}].waf_enabled",
+        if agw.effective_waf_enabled:
+            continue
+        if agw.waf_state_from_policy and agw.waf_policy:
+            via = (
+                f" and its linked WAF policy {agw.waf_policy.name} has state={agw.waf_policy.state}"
             )
+            path = f"waf_policies[id={agw.waf_policy.id}].state"
+        else:
+            via = ""
+            path = f"application_gateways[id={agw.id}].waf_enabled"
+        yield Observation(
+            resource_id=agw.id,
+            resource_type="Microsoft.Network/applicationGateways",
+            region=agw.location,
+            fact=f"Application Gateway {agw.name} ({agw.sku_name}) has "
+            f"Web Application Firewall disabled{via}.",
+            evidence_ref=evidence_ref_for(topology, sub, path),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -569,6 +621,10 @@ def application_gateway_waf_disabled(
     applies_to="live-only",
     inputs=("network_metrics",),
     evidence="network_metrics.gateway_metrics[].utilization_pct",
+    description="Azure Monitor reports the gateway's bandwidth utilisation above 80 percent, so the "
+    "tunnels and connections through it are near the gateway's throughput limit.",
+    remediation="Resize the gateway to the next SKU, or split connections across a second gateway, "
+    "and review the utilisation trend over 30 days.",
 )
 def gateway_saturation(
     sub: AzureSubscriptionTopology, topology: AzureTopology
@@ -583,7 +639,7 @@ def gateway_saturation(
                 resource_id=sub_id,
                 resource_type="Microsoft.Network/virtualNetworkGateways",
                 fact=f"Gateway {gm.gateway_name} has {gm.utilization_pct}% utilization.",
-                evidence_ref=f"discovery:azure_{sub_id}.network_metrics",
+                evidence_ref=evidence_ref_for(topology, sub, "network_metrics"),
             )
 
 
@@ -601,6 +657,11 @@ def gateway_saturation(
     applies_to="live-only",
     inputs=("network_metrics",),
     evidence="network_metrics.firewall_metrics[]",
+    description="The firewall recorded no rule hits and no processed data in the 24-hour metric "
+    "window, so no traffic is routed through it.",
+    remediation="Add 0.0.0.0/0 routes with the firewall's private IP as the next hop on the spoke "
+    "subnets and confirm the hub peering forwards traffic; if the firewall is no longer "
+    "needed, decommission it.",
 )
 def firewall_without_traffic(
     sub: AzureSubscriptionTopology, topology: AzureTopology
@@ -621,7 +682,7 @@ def firewall_without_traffic(
                 resource_type="Microsoft.Network/azureFirewalls",
                 fact=f"Firewall {fm.firewall_name} recorded 0 rule hits or 0 data processed "
                 f"in 24 hours.",
-                evidence_ref=f"discovery:azure_{sub_id}.network_metrics",
+                evidence_ref=evidence_ref_for(topology, sub, "network_metrics"),
                 description="No traffic reached the firewall's rules in the metric window: "
                 "the routing in place does not send flows through it.",
             )
@@ -645,6 +706,10 @@ def firewall_without_traffic(
     applies_to="live-only",
     inputs=("network_metrics",),
     evidence="network_metrics.lb_metrics[].snat_port_utilization_pct",
+    description="The load balancer used more than 80 percent of its SNAT ports in the metric window, "
+    "so new outbound connections fail once the ports run out.",
+    remediation="Attach a NAT gateway to the backend subnets for outbound traffic, or add outbound "
+    "rules with more public IPs and a larger port allocation per instance.",
 )
 def load_balancer_snat_exhaustion(
     sub: AzureSubscriptionTopology, topology: AzureTopology
@@ -660,7 +725,7 @@ def load_balancer_snat_exhaustion(
                 resource_type="Microsoft.Network/loadBalancers",
                 fact=f"Load Balancer {lm.lb_name} used {lm.snat_port_utilization_pct}% "
                 f"of allocated SNAT ports.",
-                evidence_ref=f"discovery:azure_{sub_id}.network_metrics",
+                evidence_ref=evidence_ref_for(topology, sub, "network_metrics"),
             )
 
 
@@ -678,11 +743,14 @@ def load_balancer_snat_exhaustion(
     applies_to="export",
     evidence="vnets[].subnets[].ip_configuration_count against the prefix size minus the 5 reserved "
     "addresses (80 percent); network_metrics.vnet_utilization when a live collector ran",
+    description="The subnet's IP configurations use 80 percent or more of its usable addresses, so "
+    "there is little room for new network interfaces, scaling or private endpoints.",
+    remediation="Add an address prefix to the subnet, or move workloads to a larger subnet, and plan "
+    "address space with growth in mind.",
 )
 def vnet_ip_exhaustion(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
-    sub_id = sub.subscription_id
     for vnet in sub.vnets:
         for subnet in vnet.subnets:
             if not subnet.ip_configuration_count:
@@ -703,8 +771,11 @@ def vnet_ip_exhaustion(
                 fact=f"Subnet {subnet.name} ({', '.join(prefixes)}) in VNet {vnet.name} lists "
                 f"{subnet.ip_configuration_count} ipConfigurations against {usable} usable "
                 f"addresses ({pct:.0f} percent).",
-                evidence_ref=f"discovery:azure_{sub_id}.vnets[id={vnet.id}]"
-                f".subnets[id={subnet.id}].ip_configuration_count",
+                evidence_ref=evidence_ref_for(
+                    topology,
+                    sub,
+                    f"vnets[id={vnet.id}].subnets[id={subnet.id}].ip_configuration_count",
+                ),
             )
     metrics = sub.network_metrics
     if not metrics:
@@ -716,7 +787,7 @@ def vnet_ip_exhaustion(
                 resource_type="Microsoft.Network/virtualNetworks",
                 title="VNet IP space utilization exceeds 85%",
                 fact=f"VNet {vnet_id} has {util}% of its address space allocated to subnets.",
-                evidence_ref=f"discovery:azure_{sub_id}.network_metrics",
+                evidence_ref=evidence_ref_for(topology, sub, "network_metrics"),
             )
 
 
@@ -738,11 +809,15 @@ def vnet_ip_exhaustion(
     ),
     applies_to="export",
     evidence="vnets[].subnets[].route_table_name, route_tables[].routes[]",
+    description="A subnet in a spoke VNet has no route table, or a route table without a 0.0.0.0/0 "
+    "route to a virtual appliance, so its internet-bound traffic bypasses the hub "
+    "firewall.",
+    remediation="Associate a route table with the subnet that sends 0.0.0.0/0 to the hub firewall's "
+    "private IP, and keep the BGP propagation setting consistent with the hub design.",
 )
 def spoke_subnet_bypasses_hub_firewall(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
-    sub_id = sub.subscription_id
     rt_by_name = {rt.name: rt for rt in sub.route_tables}
     for vnet in sub.vnets:
         if not _is_spoke(vnet):
@@ -760,8 +835,11 @@ def spoke_subnet_bypasses_hub_firewall(
                     fact=f"Subnet {subnet.name} in spoke VNet {vnet.name} has no route table. "
                     f"Internet-bound traffic egresses directly rather than through the "
                     f"hub NVA/firewall.",
-                    evidence_ref=f"discovery:azure_{sub_id}"
-                    f".vnets[id={vnet.id}].subnets[id={subnet.id}].route_table_name",
+                    evidence_ref=evidence_ref_for(
+                        topology,
+                        sub,
+                        f"vnets[id={vnet.id}].subnets[id={subnet.id}].route_table_name",
+                    ),
                 )
                 continue
             has_forced_route = any(
@@ -777,7 +855,9 @@ def spoke_subnet_bypasses_hub_firewall(
                     fact=f"Subnet {subnet.name} in spoke VNet {vnet.name} has route table "
                     f"{rt.name} but no default route (0.0.0.0/0) pointing to a "
                     f"VirtualAppliance. Internet traffic does not traverse the hub firewall.",
-                    evidence_ref=f"discovery:azure_{sub_id}.route_tables[name={rt.name}].routes",
+                    evidence_ref=evidence_ref_for(
+                        topology, sub, f"route_tables[name={rt.name}].routes"
+                    ),
                 )
 
 
@@ -802,6 +882,10 @@ def spoke_subnet_bypasses_hub_firewall(
     applies_to="live-only",
     inputs=("observability",),
     evidence="observability.firewalls_with_diagnostics",
+    description="One or more Azure Firewalls send no diagnostic logs to a Log Analytics workspace, so "
+    "their rule and threat intelligence logs are not kept.",
+    remediation="Add a diagnostic setting on each firewall that sends the firewall log categories to "
+    "a Log Analytics workspace, and set a retention period.",
 )
 def firewall_without_diagnostics(
     sub: AzureSubscriptionTopology, topology: AzureTopology
@@ -818,7 +902,9 @@ def firewall_without_diagnostics(
             fact=f"{missing} of {obs.firewalls_total} Azure Firewall(s) in subscription {sub_id} "
             f"have no Log Analytics diagnostic sink. Firewall rule logs and threat intel "
             f"logs are lost.",
-            evidence_ref=f"discovery:azure_{sub_id}.observability.firewalls_with_diagnostics",
+            evidence_ref=evidence_ref_for(
+                topology, sub, "observability.firewalls_with_diagnostics"
+            ),
         )
 
 
@@ -840,6 +926,9 @@ def firewall_without_diagnostics(
     applies_to="export",
     evidence="flow_logs[].traffic_analytics_enabled (networkwatchers/flowlogs rows; unknown when an export "
     "has none); observability.traffic_analytics_enabled when a live collector ran",
+    description="A flow log is enabled without Traffic Analytics, so the flows are stored but not "
+    "aggregated into the traffic view.",
+    remediation="Enable Traffic Analytics on the flow log and point it at a Log Analytics workspace.",
 )
 def traffic_analytics_missing(
     sub: AzureSubscriptionTopology, topology: AzureTopology
@@ -855,8 +944,9 @@ def traffic_analytics_missing(
                 resource_type="Microsoft.Network/networkWatchers/flowLogs",
                 fact=f"Flow log {flow_log.name} targeting {flow_log.target_resource_id} is enabled "
                 f"with Traffic Analytics disabled.",
-                evidence_ref=f"discovery:azure_{sub_id}.flow_logs[id={flow_log.id}]"
-                f".traffic_analytics_enabled",
+                evidence_ref=evidence_ref_for(
+                    topology, sub, f"flow_logs[id={flow_log.id}].traffic_analytics_enabled"
+                ),
             )
     obs = sub.observability
     if obs and obs.nsg_flow_logs_enabled > 0 and obs.traffic_analytics_enabled == 0:
@@ -866,7 +956,7 @@ def traffic_analytics_missing(
             title="NSG Flow Logs are enabled but Traffic Analytics is disabled",
             fact=f"Subscription has {obs.nsg_flow_logs_enabled} active flow logs, but "
             f"{obs.traffic_analytics_enabled} have Traffic Analytics enabled.",
-            evidence_ref=f"discovery:azure_{sub_id}.observability",
+            evidence_ref=evidence_ref_for(topology, sub, "observability"),
         )
 
 
@@ -889,6 +979,10 @@ def traffic_analytics_missing(
     applies_to="live-only",
     inputs=("observability",),
     evidence="observability.bastion_with_diagnostics",
+    description="One or more Bastion hosts send no diagnostic logs to a Log Analytics workspace, so "
+    "the RDP and SSH sessions through them leave no audit trail.",
+    remediation="Add a diagnostic setting on each Bastion host that sends the BastionAuditLogs "
+    "category to a Log Analytics workspace.",
 )
 def bastion_without_diagnostics(
     sub: AzureSubscriptionTopology, topology: AzureTopology
@@ -905,7 +999,7 @@ def bastion_without_diagnostics(
             fact=f"{missing} of {obs.bastion_total} Bastion host(s) in subscription {sub_id} "
             f"have no Log Analytics diagnostic sink. SSH/RDP session audit trails are "
             f"unavailable.",
-            evidence_ref=f"discovery:azure_{sub_id}.observability.bastion_with_diagnostics",
+            evidence_ref=evidence_ref_for(topology, sub, "observability.bastion_with_diagnostics"),
         )
 
 
@@ -926,6 +1020,10 @@ def bastion_without_diagnostics(
     applies_to="live-only",
     inputs=("network_metrics",),
     evidence="network_metrics.er_circuit_metrics[]",
+    description="The ExpressRoute circuit's bandwidth utilisation is above 80 percent of its "
+    "provisioned bandwidth in the metric window.",
+    remediation="Increase the circuit bandwidth with the provider, or add a circuit and spread "
+    "traffic across both.",
 )
 def expressroute_saturation(
     sub: AzureSubscriptionTopology, topology: AzureTopology
@@ -947,7 +1045,7 @@ def expressroute_saturation(
                 f"{em.primary_utilization_pct}% "
                 f"(provisioned {em.bandwidth_mbps_provisioned} Mbps). "
                 f"At this rate the circuit will saturate under load.",
-                evidence_ref=f"discovery:azure_{sub_id}.network_metrics.er_circuit_metrics",
+                evidence_ref=evidence_ref_for(topology, sub, "network_metrics.er_circuit_metrics"),
             )
 
 
@@ -969,6 +1067,11 @@ def expressroute_saturation(
     applies_to="live-only",
     inputs=("network_metrics",),
     evidence="network_metrics.ddos_attack_events_24h",
+    description="Azure Monitor reported an active DDoS attack on one or more public IPs in the last "
+    "24 hours.",
+    remediation="Review the DDoS mitigation reports and flow logs for the affected IPs, confirm a "
+    "DDoS Protection plan covers them, and open a support case if the mitigation did not "
+    "hold.",
 )
 def ddos_attack_detected(
     sub: AzureSubscriptionTopology, topology: AzureTopology
@@ -985,7 +1088,7 @@ def ddos_attack_detected(
             fact=f"Azure Monitor reported IfUnderDDoSAttack > 0 on "
             f"{metrics.ddos_attack_events_24h} public IP(s) "
             f"in the last 24 hours. Affected IPs: {ips or 'unknown'}.",
-            evidence_ref=f"discovery:azure_{sub_id}.network_metrics.ddos_attack_events_24h",
+            evidence_ref=evidence_ref_for(topology, sub, "network_metrics.ddos_attack_events_24h"),
         )
 
 
@@ -1010,11 +1113,14 @@ def ddos_attack_detected(
     ),
     applies_to="export",
     evidence="front_door_waf_policies[].policy_mode",
+    description="The Front Door WAF policy runs in Detection mode, so requests that match its rules "
+    "are logged and still forwarded to the origin.",
+    remediation="Switch the policy to Prevention mode after reviewing the detection log for false "
+    "positives, and keep the managed rule set current.",
 )
 def front_door_waf_detection_mode(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
-    sub_id = sub.subscription_id
     for policy in sub.front_door_waf_policies:
         if str(policy.policy_mode).lower() == "detection":
             yield Observation(
@@ -1025,8 +1131,9 @@ def front_door_waf_detection_mode(
                 f"Malicious requests are logged but not blocked. "
                 f"Custom rules: {policy.custom_rules_count}, "
                 f"Managed rule sets: {policy.managed_rules_count}.",
-                evidence_ref=f"discovery:azure_{sub_id}"
-                f".front_door_waf_policies[id={policy.id}].policy_mode",
+                evidence_ref=evidence_ref_for(
+                    topology, sub, f"front_door_waf_policies[id={policy.id}].policy_mode"
+                ),
             )
 
 
@@ -1046,11 +1153,14 @@ def front_door_waf_detection_mode(
     applies_to="live-only",
     inputs=("network_metrics",),
     evidence="network_metrics.appgw_metrics[]",
+    description="The Application Gateway's average backend latency is above 2000 ms, or more than 5 "
+    "percent of its requests failed, in the last 24 hours.",
+    remediation="Check backend health and the health probe, raise the backend pool or the gateway's "
+    "autoscale limits, and review the access log for the failing requests.",
 )
 def application_gateway_high_latency(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
-    sub_id = sub.subscription_id
     metrics = sub.network_metrics
     if not metrics:
         return
@@ -1081,8 +1191,9 @@ def application_gateway_high_latency(
             fact=f"App Gateway {agm.appgw_name}: avg backend latency "
             f"{latency_str} (threshold 2000ms), failure rate {fail_pct} "
             f"(threshold 5%). WAF rule hits (24h): {agm.waf_rule_hits_24h}.",
-            evidence_ref=f"discovery:azure_{sub_id}.network_metrics"
-            f".appgw_metrics[name={agm.appgw_name}]",
+            evidence_ref=evidence_ref_for(
+                topology, sub, f"network_metrics.appgw_metrics[name={agm.appgw_name}]"
+            ),
         )
 
 
@@ -1109,11 +1220,15 @@ def application_gateway_high_latency(
     ),
     applies_to="export",
     evidence="nsgs[].security_rules[] (Allow, Inbound, internet source, port 22 or 3389)",
+    description="An NSG rule allows inbound traffic on port 22 or 3389 from any internet source, so "
+    "the management ports of every resource behind it are reachable from the internet.",
+    remediation="Remove the internet source from the rule. Use Azure Bastion for browser-based "
+    "access, or restrict the source to corporate IP ranges, and use just-in-time VM "
+    "access where Microsoft Defender for Cloud is enabled.",
 )
 def nsg_allows_remote_access_from_internet(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
-    sub_id = sub.subscription_id
     for nsg in sub.nsgs:
         for nsg_rule in nsg.security_rules:
             if nsg_rule.access.lower() != "allow" or nsg_rule.direction.lower() != "inbound":
@@ -1130,8 +1245,9 @@ def nsg_allows_remote_access_from_internet(
                 region=nsg.location,
                 fact=f"NSG {nsg.name} rule {nsg_rule.name} (priority {nsg_rule.priority}) allows "
                 f"inbound traffic on port(s) {ports} from {', '.join(_sources(nsg_rule))}.",
-                evidence_ref=f"discovery:azure_{sub_id}.nsgs[id={nsg.id}]"
-                f".security_rules[name={nsg_rule.name}]",
+                evidence_ref=evidence_ref_for(
+                    topology, sub, f"nsgs[id={nsg.id}].security_rules[name={nsg_rule.name}]"
+                ),
                 description="Direct RDP/SSH exposure to the internet is a primary vector for "
                 "brute-force and ransomware campaigns.",
                 recommendation="Remove the internet source from the rule. Use Azure Bastion for "
@@ -1161,11 +1277,14 @@ def nsg_allows_remote_access_from_internet(
     ),
     applies_to="export",
     evidence="nsgs[].security_rules[] (Allow, any source, any port, any protocol)",
+    description="An NSG rule allows traffic from any source on every port and protocol, so the NSG "
+    "applies no filtering to the flows the rule matches.",
+    remediation="Replace the wildcard rule with rules that permit only the required source ranges, "
+    "ports and protocols; deny by default and allow explicitly.",
 )
 def nsg_wildcard_allow_all(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
-    sub_id = sub.subscription_id
     for nsg in sub.nsgs:
         for nsg_rule in nsg.security_rules:
             if nsg_rule.access.lower() != "allow":
@@ -1185,8 +1304,9 @@ def nsg_wildcard_allow_all(
                 f"{', '.join(_sources(nsg_rule))} to "
                 f"{nsg_rule.destination_address_prefix or 'any destination'} on all ports "
                 f"and protocols.",
-                evidence_ref=f"discovery:azure_{sub_id}.nsgs[id={nsg.id}]"
-                f".security_rules[name={nsg_rule.name}]",
+                evidence_ref=evidence_ref_for(
+                    topology, sub, f"nsgs[id={nsg.id}].security_rules[name={nsg_rule.name}]"
+                ),
                 description="The rule disables network-layer access control for every flow it "
                 "matches.",
                 recommendation="Replace the wildcard rule with rules that permit only the required "
@@ -1213,11 +1333,15 @@ def nsg_wildcard_allow_all(
     ),
     applies_to="export",
     evidence="route_tables[].routes[] (0.0.0.0/0 → Internet)",
+    description="A route table sends 0.0.0.0/0 straight to the internet, so traffic from its subnets "
+    "reaches the internet without passing a firewall or network virtual appliance.",
+    remediation="Point the default route at the Azure Firewall or NVA private IP for centralised "
+    "egress inspection; keep a direct Internet next hop only on dedicated egress subnets "
+    "with a documented reason.",
 )
 def route_table_default_route_to_internet(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
-    sub_id = sub.subscription_id
     for rt in _route_tables(sub):
         direct = [
             r
@@ -1234,7 +1358,7 @@ def route_table_default_route_to_internet(
             fact=f"Route table {rt.name} has a default route (0.0.0.0/0) with next hop "
             f"Internet ({names}); it is associated with "
             f"{len(rt.associated_subnet_ids)} subnet(s).",
-            evidence_ref=f"discovery:azure_{sub_id}.route_tables[id={rt.id}].routes",
+            evidence_ref=evidence_ref_for(topology, sub, f"route_tables[id={rt.id}].routes"),
             description="Traffic from the associated subnets leaves directly to the Internet "
             "without passing a firewall or NVA.",
             recommendation="Point the default route at the Azure Firewall or NVA private IP for "
@@ -1259,11 +1383,14 @@ def route_table_default_route_to_internet(
     ),
     applies_to="export",
     evidence="route_tables[].disable_bgp_route_propagation",
+    description="A route table has BGP route propagation turned off, so routes learned from VPN or "
+    "ExpressRoute gateways are not added to its subnets.",
+    remediation="Enable BGP route propagation on the route table, or add a static route for every "
+    "on-premises prefix the subnets need.",
 )
 def route_table_bgp_propagation_disabled(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
-    sub_id = sub.subscription_id
     for rt in _route_tables(sub):
         if not rt.disable_bgp_route_propagation:
             continue
@@ -1273,8 +1400,9 @@ def route_table_bgp_propagation_disabled(
             region=rt.location,
             fact=f"Route table {rt.name} has disable_bgp_route_propagation=True; it is "
             f"associated with {len(rt.associated_subnet_ids)} subnet(s).",
-            evidence_ref=f"discovery:azure_{sub_id}.route_tables[id={rt.id}]"
-            f".disable_bgp_route_propagation",
+            evidence_ref=evidence_ref_for(
+                topology, sub, f"route_tables[id={rt.id}].disable_bgp_route_propagation"
+            ),
             description="Routes learned over VPN or ExpressRoute are not added to the associated "
             "subnets; on-premises prefixes reach them only through static routes.",
             recommendation="Confirm the setting is intentional. Where the subnets need on-premises "
@@ -1299,11 +1427,14 @@ def route_table_bgp_propagation_disabled(
     ),
     applies_to="export",
     evidence="vnets[].dns_servers",
+    description="The VNet uses custom DNS servers, so name resolution for private endpoints and Azure "
+    "services depends on those servers forwarding to Azure DNS.",
+    remediation="Configure the custom DNS servers to forward the Azure private DNS zones to "
+    "168.63.129.16 and make them highly available, or use Azure DNS Private Resolver.",
 )
 def vnet_custom_dns_servers(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
-    sub_id = sub.subscription_id
     for vnet in sub.vnets:
         custom = [d for d in vnet.dns_servers if d != _AZURE_PROVIDED_DNS]
         if not custom:
@@ -1313,7 +1444,7 @@ def vnet_custom_dns_servers(
             resource_type="Microsoft.Network/virtualNetworks",
             region=vnet.location,
             fact=f"VNet {vnet.name} ({vnet.location}) uses custom DNS servers: {', '.join(custom)}.",
-            evidence_ref=f"discovery:azure_{sub_id}.vnets[id={vnet.id}].dns_servers",
+            evidence_ref=evidence_ref_for(topology, sub, f"vnets[id={vnet.id}].dns_servers"),
             description="Private DNS zone resolution for private endpoints depends on these "
             "servers forwarding to Azure DNS.",
             recommendation="Confirm the custom DNS servers forward Azure Private DNS zones through "
@@ -1341,24 +1472,34 @@ def vnet_custom_dns_servers(
         ),
     ),
     applies_to="export",
-    evidence="application_gateways[].waf_mode",
+    evidence="application_gateways[].waf_mode (or the linked WAF policy's mode)",
+    description="The Application Gateway's WAF, inline or through its linked WAF policy, runs in "
+    "Detection mode, so matching requests are logged and still forwarded to the backends.",
+    remediation="Switch the WAF policy to Prevention mode after reviewing the detection log for false "
+    "positives, and keep the OWASP core rule set current.",
 )
 def application_gateway_waf_detection_mode(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
-    sub_id = sub.subscription_id
     for agw in sub.application_gateways:
-        if not agw.waf_enabled or not agw.waf_mode:
+        mode = agw.effective_waf_mode
+        if not agw.effective_waf_enabled or not mode:
             continue
-        if agw.waf_mode.lower() == _WAF_PREVENTION:
+        if mode.lower() == _WAF_PREVENTION:
             continue
+        if agw.waf_mode_from_policy and agw.waf_policy:
+            via = f" (from its WAF policy {agw.waf_policy.name})"
+            path = f"waf_policies[id={agw.waf_policy.id}].mode"
+        else:
+            via = ""
+            path = f"application_gateways[id={agw.id}].waf_mode"
         yield Observation(
             resource_id=agw.id,
             resource_type="Microsoft.Network/applicationGateways",
             region=agw.location,
             fact=f"Application Gateway {agw.name} ({agw.sku_name}) has WAF enabled in "
-            f"{agw.waf_mode} mode.",
-            evidence_ref=f"discovery:azure_{sub_id}.application_gateways[id={agw.id}].waf_mode",
+            f"{mode} mode{via}.",
+            evidence_ref=evidence_ref_for(topology, sub, path),
             description="Matching requests are logged and not blocked, so the WAF inspects "
             "without protecting.",
             recommendation="After tuning the Detection-mode log for false positives, switch the WAF "
@@ -1381,11 +1522,13 @@ def application_gateway_waf_detection_mode(
     ),
     applies_to="export",
     evidence="load_balancers[].sku_name",
+    description="The load balancer uses the Basic SKU, which has no SLA, no availability-zone support "
+    "and was retired by Microsoft on 30 September 2025.",
+    remediation="Upgrade the load balancer to the Standard SKU and upgrade its public IPs with it.",
 )
 def load_balancer_basic_sku(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
-    sub_id = sub.subscription_id
     for lb in sub.load_balancers:
         if lb.sku_name.lower() != _SKU_BASIC:
             continue
@@ -1394,7 +1537,7 @@ def load_balancer_basic_sku(
             resource_type="Microsoft.Network/loadBalancers",
             region=lb.location,
             fact=f"Load balancer {lb.name} ({lb.lb_type}) in {lb.location} has sku_name=Basic.",
-            evidence_ref=f"discovery:azure_{sub_id}.load_balancers[id={lb.id}].sku_name",
+            evidence_ref=evidence_ref_for(topology, sub, f"load_balancers[id={lb.id}].sku_name"),
             description="The Basic SKU has no SLA, no zone redundancy and no HTTPS health probes, "
             "and Microsoft retired it on 30 September 2025 (Microsoft Learn, read 2026-10-25).",
             recommendation="Upgrade to the Standard SKU, which is secure by default (closed without "
@@ -1418,11 +1561,14 @@ def load_balancer_basic_sku(
     ),
     applies_to="export",
     evidence="public_ips[].sku_name",
+    description="The public IP uses the Basic SKU, which is open by default, not zone-redundant and "
+    "was retired by Microsoft on 30 September 2025.",
+    remediation="Upgrade the public IP to the Standard SKU and attach a network security group to the "
+    "resource it fronts.",
 )
 def public_ip_basic_sku(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
-    sub_id = sub.subscription_id
     for pip in sub.public_ips:
         if pip.sku_name.lower() != _SKU_BASIC:
             continue
@@ -1433,7 +1579,7 @@ def public_ip_basic_sku(
             region=pip.location,
             fact=f"Public IP {pip.name} in {pip.location} has sku_name=Basic and is attached "
             f"to {attached}.",
-            evidence_ref=f"discovery:azure_{sub_id}.public_ips[id={pip.id}].sku_name",
+            evidence_ref=evidence_ref_for(topology, sub, f"public_ips[id={pip.id}].sku_name"),
             description="Basic public IPs are open by default, not zone-redundant, and Microsoft "
             "retired them on 30 September 2025 (Microsoft Learn, read 2026-10-25).",
             recommendation="Upgrade the public IP to the Standard SKU, which requires an NSG for "
@@ -1459,11 +1605,16 @@ def public_ip_basic_sku(
     ),
     applies_to="export",
     evidence="virtual_network_gateways[].sku_name (gateway_type Vpn)",
+    description="The VPN gateway uses the Basic SKU, which has no SLA and supports neither BGP, "
+    "active-active mode nor availability zones.",
+    remediation="A Basic gateway cannot be resized in place. Remove its connections, delete the "
+    "Basic gateway, create the replacement on a supported AZ SKU (VpnGw1AZ or higher; new "
+    "non-AZ VpnGw gateways are no longer permitted), then recreate the connections with the "
+    "on-premises devices; the tunnels are down for the whole sequence.",
 )
 def vpn_gateway_basic_sku(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
-    sub_id = sub.subscription_id
     for gw in sub.virtual_network_gateways:
         if gw.gateway_type != _GATEWAY_TYPE_VPN:
             continue
@@ -1475,11 +1626,15 @@ def vpn_gateway_basic_sku(
             resource_type="Microsoft.Network/virtualNetworkGateways",
             region=gw.location,
             fact=f"VPN gateway {gw.name} in {gw.location} has sku_name=Basic.",
-            evidence_ref=f"discovery:azure_{sub_id}.virtual_network_gateways[id={gw.id}].sku_name",
+            evidence_ref=evidence_ref_for(
+                topology, sub, f"virtual_network_gateways[id={gw.id}].sku_name"
+            ),
             description="The Basic SKU is limited to 100 Mbps aggregate throughput and supports "
             "neither BGP, active-active mode nor availability zones, and carries no SLA.",
-            recommendation="Resize to VpnGw2 or higher (Generation 2); choose an AZ SKU such as "
-            "VpnGw2AZ for zone redundancy, then enable BGP and active-active mode.",
+            recommendation="The Basic gateway cannot be resized in place: remove its connections, "
+            "delete it, create the replacement on a supported AZ SKU (VpnGw1AZ or higher, "
+            "Generation 2), recreate the connections, then enable BGP and active-active mode; "
+            "the tunnels are down for the whole sequence.",
         )
 
 
@@ -1496,11 +1651,14 @@ def vpn_gateway_basic_sku(
     ),
     applies_to="export",
     evidence="virtual_network_gateways[].generation (gateway_type Vpn)",
+    description="The VPN gateway is Generation 1, whose SKUs top out at 1.25 Gbps aggregate "
+    "throughput; Generation 2 SKUs reach 10 Gbps.",
+    remediation="Resize the gateway to a Generation 2 SKU (VpnGw2 to VpnGw5, or their AZ variants) in "
+    "a maintenance window.",
 )
 def vpn_gateway_generation1(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
-    sub_id = sub.subscription_id
     for gw in sub.virtual_network_gateways:
         if gw.gateway_type != _GATEWAY_TYPE_VPN or not gw.generation:
             continue
@@ -1511,7 +1669,9 @@ def vpn_gateway_generation1(
             resource_type="Microsoft.Network/virtualNetworkGateways",
             region=gw.location,
             fact=f"VPN gateway {gw.name} (SKU: {gw.sku_name}) reports generation={gw.generation}.",
-            evidence_ref=f"discovery:azure_{sub_id}.virtual_network_gateways[id={gw.id}].generation",
+            evidence_ref=evidence_ref_for(
+                topology, sub, f"virtual_network_gateways[id={gw.id}].generation"
+            ),
             description="Generation 1 SKUs top out at 1.25 Gbps aggregate throughput; Generation 2 "
             "SKUs reach 10 Gbps (VpnGw5; Microsoft Learn SKU table, read 2026-10-25).",
             recommendation="Resize to a Generation 2 SKU (VpnGw2 to VpnGw5, or their AZ variants) "
@@ -1533,11 +1693,14 @@ def vpn_gateway_generation1(
     ),
     applies_to="export",
     evidence="virtual_network_gateways[].connections[].connection_status",
+    description="A gateway connection reports a status other than Connected, so the tunnel to its "
+    "remote network is down.",
+    remediation="Check the connection in the portal and the on-premises device logs; confirm the "
+    "pre-shared key, the IKE parameters and that UDP 500 and 4500 are allowed.",
 )
 def gateway_connection_not_connected(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
-    sub_id = sub.subscription_id
     for gw in sub.virtual_network_gateways:
         for conn in gw.connections:
             if conn.connection_status.lower() in _CONNECTED_STATES:
@@ -1548,8 +1711,12 @@ def gateway_connection_not_connected(
                 region=gw.location,
                 fact=f"Connection {conn.name} ({conn.connection_type}) on gateway {gw.name} "
                 f"has connection_status={conn.connection_status}.",
-                evidence_ref=f"discovery:azure_{sub_id}.virtual_network_gateways[id={gw.id}]"
-                f".connections[name={conn.name}].connection_status",
+                evidence_ref=evidence_ref_for(
+                    topology,
+                    sub,
+                    f"virtual_network_gateways[id={gw.id}]"
+                    f".connections[name={conn.name}].connection_status",
+                ),
                 description="Traffic for this connection's remote prefixes has no tunnel to use.",
                 recommendation="Check the connection in the portal and the on-premises device logs; "
                 "confirm the pre-shared key, IKE parameters and that UDP 500/4500 are allowed.",
@@ -1572,11 +1739,14 @@ def gateway_connection_not_connected(
     ),
     applies_to="export",
     evidence="private_endpoints[].service_connections[].connection_state",
+    description="A private endpoint connection is in the Pending state, so traffic to the target "
+    "service does not use the private path until the connection is approved.",
+    remediation="Approve the pending connection on the target resource's private endpoint connections "
+    "page, after confirming the request comes from a subscription you own.",
 )
 def private_endpoint_connection_pending(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
-    sub_id = sub.subscription_id
     for pe in sub.private_endpoints:
         for sc in pe.service_connections:
             if sc.connection_state.lower() != _PENDING:
@@ -1588,13 +1758,17 @@ def private_endpoint_connection_pending(
                 region=pe.location,
                 fact=f"Private endpoint {pe.name} connection {sc.connection_name} to {target} "
                 f"has connection_state=Pending.",
-                evidence_ref=f"discovery:azure_{sub_id}.private_endpoints[id={pe.id}]"
-                f".service_connections[name={sc.connection_name}].connection_state",
+                evidence_ref=evidence_ref_for(
+                    topology,
+                    sub,
+                    f"private_endpoints[id={pe.id}]"
+                    f".service_connections[name={sc.connection_name}].connection_state",
+                ),
                 description="Traffic to the private service does not flow until the connection "
                 "is approved.",
                 recommendation="Approve the pending connection on the target resource's private "
-                "endpoint connections blade after confirming the request comes from the "
-                "expected subscription.",
+                "endpoint connections blade after confirming the request comes from a "
+                "subscription you own.",
                 affected_resources=(pe.id,),
             )
 
@@ -1618,6 +1792,11 @@ def private_endpoint_connection_pending(
     ),
     applies_to="export",
     evidence="firewalls[], virtual_wans[].hubs[].azure_firewall_id, route_tables[].routes[]",
+    description="The subscription has VNets but no Azure Firewall, no secured Virtual WAN hub and no "
+    "default route to a network virtual appliance, so its traffic passes no central "
+    "inspection point.",
+    remediation="Deploy Azure Firewall (Standard or Premium) in a hub VNet or a secured Virtual WAN "
+    "hub, route spoke subnets through it with UDRs, and set Threat Intelligence to Deny.",
 )
 def no_firewall_with_vnets(
     sub: AzureSubscriptionTopology, topology: AzureTopology
@@ -1633,7 +1812,7 @@ def no_firewall_with_vnets(
         resource_type="Microsoft.Network/azureFirewalls",
         fact=f"Subscription {label} has {len(sub.vnets)} VNet(s), no Azure Firewall, no secured "
         f"Virtual WAN hub and no 0.0.0.0/0 route to a VirtualAppliance.",
-        evidence_ref=f"discovery:azure_{sub_id}.firewalls",
+        evidence_ref=evidence_ref_for(topology, sub, "firewalls"),
         description="East-west and north-south traffic in this subscription passes no central "
         "inspection point.",
         recommendation="Deploy Azure Firewall (Standard or Premium) in a hub VNet or a secured "
@@ -1657,6 +1836,10 @@ def no_firewall_with_vnets(
     applies_to="export",
     evidence="bastion_hosts[]",
     needs_properties=False,
+    description="The subscription has VNets but no Azure Bastion host, so RDP and SSH access to its "
+    "VMs needs a public IP, a VPN or a just-in-time path.",
+    remediation="Deploy Azure Bastion (Standard SKU) for RDP and SSH access without exposing the VMs "
+    "to the internet.",
 )
 def no_bastion_with_vnets(
     sub: AzureSubscriptionTopology, topology: AzureTopology
@@ -1669,7 +1852,7 @@ def no_bastion_with_vnets(
         resource_id=_subscription_resource_id(sub),
         resource_type="Microsoft.Network/bastionHosts",
         fact=f"Subscription {label} has {len(sub.vnets)} VNet(s) and no Azure Bastion host.",
-        evidence_ref=f"discovery:azure_{sub_id}.bastion_hosts",
+        evidence_ref=evidence_ref_for(topology, sub, "bastion_hosts"),
         description="RDP/SSH access to VMs in this subscription needs a public IP, a VPN or a "
         "just-in-time path instead of a browser-based bastion.",
         recommendation="Deploy Azure Bastion (Standard SKU) for RDP/SSH without exposing VMs to the "

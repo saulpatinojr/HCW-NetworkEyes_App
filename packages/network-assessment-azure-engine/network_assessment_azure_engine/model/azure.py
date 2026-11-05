@@ -6,7 +6,8 @@ export both populate it: fields a collector fills stay, fields an export carries
 
 Version 1.4.0 — change set C of REFACTOR_APP.md.
   Added: AzureFirewallPolicy (+ AzureFirewall.firewall_policy, effective_threat_intel_mode),
-         AppGatewayWafPolicy (+ ApplicationGateway.waf_policy_id, waf_policy, sku_tier),
+         AppGatewayWafPolicy (+ ApplicationGateway.waf_policy_id, waf_policy, sku_tier,
+         effective_waf_enabled, effective_waf_mode),
          FlowLog (+ AzureSubscriptionTopology.flow_logs, AzureNSG.flow_log_ids),
          AzureSubnet.ip_configuration_count, AzureSubscriptionTopology.firewall_policies /
          waf_policies, AzureTopology.source / resource_counts / unmapped_types /
@@ -219,6 +220,36 @@ class ApplicationGateway(BaseModel):
     waf_policy_id: str | None = None
     waf_policy: AppGatewayWafPolicy | None = None
     frontend_ip_configs: list[str] = Field(default_factory=list)
+
+    @property
+    def effective_waf_enabled(self) -> bool:
+        """The linked policy's state when a policy is attached and states one, else the inline setting.
+
+        A gateway with a policy attached takes its WAF state from the policy, so a Disabled
+        policy over an inline ``enabled`` is disabled; the inline block counts only when no
+        policy (or a policy without a state) is linked.
+        """
+        if self.waf_policy and self.waf_policy.state:
+            return self.waf_policy.state.lower() == "enabled"
+        return self.waf_enabled
+
+    @property
+    def waf_state_from_policy(self) -> bool:
+        """True when ``effective_waf_enabled`` came from the linked policy."""
+        return bool(self.waf_policy and self.waf_policy.state)
+
+    @property
+    def waf_mode_from_policy(self) -> bool:
+        """True when ``effective_waf_mode`` came from the linked policy."""
+        return bool(self.waf_policy and self.waf_policy.mode)
+
+    @property
+    def effective_waf_mode(self) -> str | None:
+        """The linked policy's mode when a policy is attached and states one, else the inline mode."""
+        if self.waf_policy and self.waf_policy.mode:
+            return self.waf_policy.mode
+        return self.waf_mode
+
     ssl_policy_name: str | None = None
     autoscale_min: int | None = None
     autoscale_max: int | None = None

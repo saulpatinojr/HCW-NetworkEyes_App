@@ -39,7 +39,7 @@ class TestContract:
         assert TOPOLOGY_MODEL_VERSION == "1.4.0"
         assert RULES_VERSION == "2026.10.0"
         assert FINDINGS_SCHEMA_VERSION == "1.1.0"
-        assert engine.__version__ == "0.1.0"
+        assert engine.__version__ == "0.1.1"
 
     def test_observed_state_carries_its_state(self):
         assert ObservedState(fact="f", evidence_ref="e").state == "observed"
