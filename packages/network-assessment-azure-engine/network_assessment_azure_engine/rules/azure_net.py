@@ -1607,9 +1607,10 @@ def public_ip_basic_sku(
     evidence="virtual_network_gateways[].sku_name (gateway_type Vpn)",
     description="The VPN gateway uses the Basic SKU, which has no SLA and supports neither BGP, "
     "active-active mode nor availability zones.",
-    remediation="A Basic gateway cannot be resized in place: deploy a new gateway on VpnGw2 or "
-    "higher (an AZ SKU for zone redundancy), recreate its connections with the on-premises "
-    "devices, then delete the Basic gateway; the cut-over interrupts the tunnels.",
+    remediation="A Basic gateway cannot be resized in place. Remove its connections, delete the "
+    "Basic gateway, create the replacement on a supported AZ SKU (VpnGw1AZ or higher; new "
+    "non-AZ VpnGw gateways are no longer permitted), then recreate the connections with the "
+    "on-premises devices; the tunnels are down for the whole sequence.",
 )
 def vpn_gateway_basic_sku(
     sub: AzureSubscriptionTopology, topology: AzureTopology
@@ -1630,9 +1631,10 @@ def vpn_gateway_basic_sku(
             ),
             description="The Basic SKU is limited to 100 Mbps aggregate throughput and supports "
             "neither BGP, active-active mode nor availability zones, and carries no SLA.",
-            recommendation="Deploy a new gateway on VpnGw2 or higher (Generation 2; an AZ SKU such "
-            "as VpnGw2AZ for zone redundancy), recreate the connections, then delete the Basic "
-            "gateway, which cannot be resized in place; then enable BGP and active-active mode.",
+            recommendation="The Basic gateway cannot be resized in place: remove its connections, "
+            "delete it, create the replacement on a supported AZ SKU (VpnGw1AZ or higher, "
+            "Generation 2), recreate the connections, then enable BGP and active-active mode; "
+            "the tunnels are down for the whole sequence.",
         )
 
 

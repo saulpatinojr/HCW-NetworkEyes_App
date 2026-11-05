@@ -18,8 +18,19 @@ from network_assessment_azure_engine import (
     evaluate,
     normalize_resource_graph,
 )
+from network_assessment_azure_engine.discovery.resource_graph import (
+    CONTAINERS_QUERY,
+    DEFENDER_QUERY,
+    NETWORK_QUERY,
+    NVA_QUERY,
+    ResourceGraphDiscovery,
+    Scope,
+    filter_to_scopes,
+    referenced_policy_rows,
+)
 from network_assessment_azure_engine.findings.enforcer import ObservedStateEnforcer
 from network_assessment_azure_engine.model.azure import AppGatewayWafPolicy, ApplicationGateway
+from network_assessment_azure_engine.normalize.resource_graph import normalize_rows
 from network_assessment_azure_engine.rules import evidence_ref_for, rule_metadata
 
 ENFORCER = ObservedStateEnforcer()
@@ -204,3 +215,89 @@ class TestLinkedWafPolicy:
         report = evaluate(topology)
         by_rule = {f.rule_id for f in report.findings}
         assert "AZ-NET-007" not in by_rule and "AZ-NET-025" in by_rule
+
+
+OTHER_RG_POLICY = (
+    f"/subscriptions/{SUB}/resourceGroups/hcw-other-rg/providers/Microsoft.Network"
+    "/ApplicationGatewayWebApplicationFirewallPolicies/hcw-other-waf"
+)
+
+
+def _rows_with_policy_in_another_resource_group(state: str) -> list[dict]:
+    """The fixture export, its gateway now linked to a policy that lives in another resource group."""
+    rows = export_rows()
+    agw = next(r for r in rows if r["type"].lower().endswith("/applicationgateways"))
+    agw["properties"]["firewallPolicy"] = {"id": OTHER_RG_POLICY}
+    agw["properties"]["webApplicationFirewallConfiguration"]["enabled"] = True
+    rows = [r for r in rows if not r["type"].lower().endswith("firewallpolicies")]
+    rows.append(
+        {
+            "id": OTHER_RG_POLICY,
+            "name": "hcw-other-waf",
+            "type": "microsoft.network/applicationgatewaywebapplicationfirewallpolicies",
+            "location": "eastus",
+            "resourceGroup": "hcw-other-rg",
+            "subscriptionId": SUB,
+            "properties": {"policySettings": {"state": state, "mode": "Prevention"}},
+        }
+    )
+    return rows
+
+
+class TestPolicyOutsideTheDiscoveryScope:
+    """A resource-group scope keeps the gateway and would drop its policy; the policy is handed
+    over for the lookup only, so a Disabled policy in another resource group is still read."""
+
+    def test_referenced_policy_rows_hands_over_only_the_policies_in_scope_rows_name(self):
+        rows = _rows_with_policy_in_another_resource_group("Disabled")
+        in_scope = filter_to_scopes(rows, [Scope(SUB, "hcw-sample-rg")])
+        assert not any(r["id"] == OTHER_RG_POLICY for r in in_scope)
+        referenced = referenced_policy_rows(rows, in_scope)
+        assert [r["id"] for r in referenced] == [OTHER_RG_POLICY]
+        # a policy already in scope is not handed over twice
+        assert referenced_policy_rows(rows, rows) == []
+
+    def test_scoped_discovery_reads_the_disabled_policy_and_az_net_007_fires(self):
+        from test_resource_graph_discovery import FakeClient, fixture, single_page
+
+        rows = _rows_with_policy_in_another_resource_group("Disabled")
+        client = FakeClient(
+            {
+                NETWORK_QUERY: single_page(rows),
+                CONTAINERS_QUERY: single_page(fixture("containers")),
+                DEFENDER_QUERY: single_page(fixture("defender")),
+                NVA_QUERY: single_page(fixture("nva")),
+            }
+        )
+        messages: list[str] = []
+        topology = ResourceGraphDiscovery(
+            None, [Scope(SUB, "hcw-sample-rg")], progress=messages.append, client=client
+        ).run()
+        sub = topology.subscriptions[0]
+        agw = sub.application_gateways[0]
+        assert agw.waf_policy is not None and agw.waf_policy.state == "Disabled"
+        assert agw.waf_enabled is True and agw.effective_waf_enabled is False
+        # the policy resolves the reference and is not part of the scoped resource set
+        assert sub.waf_policies == []
+        assert "microsoft.network/applicationgatewaywebapplicationfirewallpolicies" not in (
+            topology.resource_counts
+        )
+        assert not any("WAF policy" in w and "not in the export" in w for w in topology.warnings)
+        assert any("1 referenced policy row(s) outside it" in m for m in messages)
+        findings = {f.rule_id: f for f in evaluate(topology).findings}
+        assert "AZ-NET-007" in findings
+        assert findings["AZ-NET-007"].observed_state.evidence_ref == (
+            f"discovery:{SUB}.waf_policies[id={OTHER_RG_POLICY}].state"
+        )
+
+    def test_facts_carry_the_effective_waf_state(self):
+        """``NormalizedExport.facts`` and AZ-NET-007 cannot contradict each other."""
+        rows = _rows_with_policy_in_another_resource_group("Disabled")
+        export = normalize_rows(rows)
+        agw = export.topology.subscriptions[0].application_gateways[0]
+        assert export.facts[agw.id]["wafEnabled"] is False
+        assert export.facts[agw.id]["wafMode"] == "Prevention"
+        in_scope = filter_to_scopes(rows, [Scope(SUB, "hcw-sample-rg")])
+        scoped = normalize_rows(in_scope, referenced=referenced_policy_rows(rows, in_scope))
+        assert scoped.facts[agw.id]["wafEnabled"] is False
+        assert OTHER_RG_POLICY not in scoped.facts  # no facts for a referenced row

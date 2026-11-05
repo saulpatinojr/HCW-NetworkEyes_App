@@ -282,7 +282,13 @@ def _parent(rid: str, child_segment: str) -> str:
 
 
 class _Normalizer:
-    def __init__(self, rows: list[ArgRow], warnings: list[str], has_properties: bool) -> None:
+    def __init__(
+        self,
+        rows: list[ArgRow],
+        warnings: list[str],
+        has_properties: bool,
+        referenced: list[ArgRow] | None = None,
+    ) -> None:
         self.rows = rows
         self.has_properties = has_properties
         self.warnings: list[str] = list(warnings)
@@ -292,6 +298,13 @@ class _Normalizer:
         self._missing: set[tuple[str, str]] = set()
         for r in self.rows:
             self.by_type[r.type].append(r)
+        # Rows outside the input's scope that an in-scope resource references by id (a WAF
+        # or firewall policy in another resource group). They resolve references and nothing
+        # else: not counted, not listed on the topology, no facts, not in ``index``.
+        self.referenced: list[ArgRow] = [
+            r for r in (referenced or []) if r.id.lower() not in self.index
+        ]
+        self._referenced_ids = {r.id.lower() for r in self.referenced}
 
     # ── helpers ───────────────────────────────────────────────────────────
 
@@ -311,7 +324,12 @@ class _Normalizer:
         return row
 
     def fact(self, row: ArgRow, **values: Any) -> None:
+        if row.id.lower() in self._referenced_ids:
+            return  # a referenced row is not part of the export's resource set
         self.facts[row.id] = {k: v for k, v in values.items() if v not in (None, [], {})}
+
+    def referenced_of(self, short_type: str) -> list[ArgRow]:
+        return [r for r in self.referenced if r.type == NETWORK_PREFIX + short_type]
 
     def rows_of(self, short_type: str) -> list[ArgRow]:
         return self.by_type.get(NETWORK_PREFIX + short_type, [])
@@ -854,9 +872,8 @@ class _Normalizer:
         self.fact(
             r,
             sku=agw.sku_name,
-            wafEnabled=agw.waf_enabled
-            or bool(policy and (policy.state or "").lower() == "enabled"),
-            wafMode=(policy.mode if policy else agw.waf_mode),
+            wafEnabled=agw.effective_waf_enabled,
+            wafMode=agw.effective_waf_mode,
             zones=r.zones,
         )
         return agw
@@ -989,10 +1006,14 @@ class _Normalizer:
                 self.waf_policy(r) for r in rows("applicationgatewaywebapplicationfirewallpolicies")
             )
         }
-        # policies in other subscriptions still resolve: index them globally
-        for r in self.rows_of("firewallpolicies"):
+        # policies in other subscriptions still resolve: index them globally; so do the
+        # referenced rows a scoped discovery hands over from outside its scope
+        for r in [*self.rows_of("firewallpolicies"), *self.referenced_of("firewallpolicies")]:
             fw_policies.setdefault(r.id.lower(), self.firewall_policy(r))
-        for r in self.rows_of("applicationgatewaywebapplicationfirewallpolicies"):
+        for r in [
+            *self.rows_of("applicationgatewaywebapplicationfirewallpolicies"),
+            *self.referenced_of("applicationgatewaywebapplicationfirewallpolicies"),
+        ]:
             waf_policies.setdefault(r.id.lower(), self.waf_policy(r))
 
         connections_by_gw: dict[str, list[ArgRow]] = defaultdict(list)
@@ -1167,13 +1188,17 @@ def normalize_rows(
     *,
     warnings: list[str] | None = None,
     has_properties: bool | None = None,
+    referenced: Iterable[dict[str, Any] | ArgRow] | None = None,
 ) -> NormalizedExport:
     """Map Resource Graph rows (dicts as the export carries them, or ``ArgRow``) onto the model.
 
     ``warnings`` are the caller's ingestion warnings (``rows_from_document`` produces the paging
-    ones); ``has_properties`` is detected when not given. Raises ``ValueError`` when no usable
-    ``microsoft.network/*`` row exists. Returns the topology plus the per-resource facts the
-    rules read, for callers that show them.
+    ones); ``has_properties`` is detected when not given. ``referenced`` are rows outside the
+    input's scope that an in-scope resource references by id (a scoped discovery's WAF or
+    firewall policies in another resource group): they resolve those references and are not
+    counted, listed or given facts. Raises ``ValueError`` when no usable ``microsoft.network/*``
+    row exists. Returns the topology plus the per-resource facts the rules read, for callers
+    that show them.
     """
     collected: list[str] = list(warnings or [])
     parsed = _as_rows(rows, collected)
@@ -1183,7 +1208,8 @@ def normalize_rows(
         has_properties = any(r.properties for r in parsed)
     if not has_properties:
         collected.insert(0, NO_PROPERTIES_WARNING)
-    return _Normalizer(parsed, collected, has_properties).run()
+    extra = _as_rows(referenced or [], collected)
+    return _Normalizer(parsed, collected, has_properties, referenced=extra).run()
 
 
 def normalize_resource_graph(
@@ -1191,6 +1217,9 @@ def normalize_resource_graph(
     *,
     warnings: list[str] | None = None,
     has_properties: bool | None = None,
+    referenced: Iterable[dict[str, Any] | ArgRow] | None = None,
 ) -> AzureTopology:
     """Resource Graph rows -> ``AzureTopology`` (``source="export"``); see ``normalize_rows``."""
-    return normalize_rows(rows, warnings=warnings, has_properties=has_properties).topology
+    return normalize_rows(
+        rows, warnings=warnings, has_properties=has_properties, referenced=referenced
+    ).topology

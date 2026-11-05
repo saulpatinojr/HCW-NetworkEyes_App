@@ -155,6 +155,33 @@ def filter_to_scopes(rows: list[dict], scopes: list[Scope]) -> list[dict]:
     return kept
 
 
+# Row types whose ``properties.firewallPolicy.id`` names a policy the rules read through.
+_POLICY_HOLDERS = frozenset(
+    {"microsoft.network/applicationgateways", "microsoft.network/azurefirewalls"}
+)
+
+
+def referenced_policy_rows(rows: list[dict], in_scope: list[dict]) -> list[dict]:
+    """Rows outside the scopes that an in-scope gateway or firewall references by policy id.
+
+    A resource-group scope keeps the gateway and drops a WAF or firewall policy that lives in
+    another resource group, and the rules then fall back to the gateway's inline settings
+    (AZ-NET-007 misses a Disabled policy, AZ-NET-003 a policy's threat-intelligence mode). The
+    policy rows the kept rows name are returned so the normalizer can resolve the reference
+    without adding them to the scoped topology's resource set.
+    """
+    kept = {str(r.get("id", "")).lower() for r in in_scope}
+    wanted: set[str] = set()
+    for row in in_scope:
+        if str(row.get("type", "")).lower() not in _POLICY_HOLDERS:
+            continue
+        props = row.get("properties") or {}
+        ref = (props.get("firewallPolicy") or {}).get("id") if isinstance(props, dict) else None
+        if isinstance(ref, str) and ref.lower() not in kept:
+            wanted.add(ref.lower())
+    return [r for r in rows if str(r.get("id", "")).lower() in wanted]
+
+
 # ── Paged queries ────────────────────────────────────────────────────────────
 
 
@@ -554,8 +581,12 @@ class ResourceGraphDiscovery:
         )
         rows, truncated = self._query(NETWORK_QUERY, subs)
         in_scope = filter_to_scopes(rows, self.scopes)
-        self._progress(f"Resource Graph: {len(rows)} row(s) received, {len(in_scope)} in scope")
-        topology = normalize_resource_graph(in_scope)
+        referenced = referenced_policy_rows(rows, in_scope)
+        self._progress(
+            f"Resource Graph: {len(rows)} row(s) received, {len(in_scope)} in scope"
+            + (f", {len(referenced)} referenced policy row(s) outside it" if referenced else "")
+        )
+        topology = normalize_resource_graph(in_scope, referenced=referenced)
         topology.source = "discovery"
         self._progress("Resource Graph: resource containers…")
         attach_containers(topology, self._query(CONTAINERS_QUERY, subs)[0])
@@ -587,6 +618,7 @@ __all__ = [
     "filter_to_scopes",
     "identify_nva",
     "parse_scopes",
+    "referenced_policy_rows",
     "query_all",
     "subscriptions_of",
 ]
