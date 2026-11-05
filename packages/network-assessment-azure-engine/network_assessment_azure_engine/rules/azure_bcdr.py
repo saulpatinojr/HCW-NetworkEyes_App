@@ -17,7 +17,7 @@ from collections.abc import Iterator
 from network_assessment_azure_engine.findings.schema import FindingSeverity
 from network_assessment_azure_engine.model.azure import AzureSubscriptionTopology, AzureTopology
 from network_assessment_azure_engine.rules.frameworks import BCDR_FRAMEWORK
-from network_assessment_azure_engine.rules.registry import Observation, rule
+from network_assessment_azure_engine.rules.registry import Observation, evidence_ref_for, rule
 
 R_AZ_BCDR_FW_NOT_ZONE_REDUNDANT = "AZ-BCDR-001"
 R_AZ_BCDR_VPN_ACTIVE_PASSIVE = "AZ-BCDR-002"
@@ -68,7 +68,6 @@ Rows = Iterator[Observation]
     "routed through it is interrupted by a zone outage.",
 )
 def firewall_not_zone_redundant(sub: AzureSubscriptionTopology, topology: AzureTopology) -> Rows:
-    sub_id = sub.subscription_id
     for firewall in sub.firewalls:
         if len(firewall.zones) >= _MIN_REDUNDANCY_ZONES:
             continue
@@ -79,7 +78,7 @@ def firewall_not_zone_redundant(sub: AzureSubscriptionTopology, topology: AzureT
             title=f"Azure Firewall '{firewall.name}' is not zone-redundant",
             fact=f"Azure Firewall {firewall.name} ({firewall.sku_tier} tier) in {firewall.location} "
             f"is deployed in {len(firewall.zones)} availability zone(s).",
-            evidence_ref=f"discovery:azure_{sub_id}.firewalls[id={firewall.id}].zones",
+            evidence_ref=evidence_ref_for(topology, sub, f"firewalls[id={firewall.id}].zones"),
         )
 
 
@@ -100,7 +99,6 @@ def firewall_not_zone_redundant(sub: AzureSubscriptionTopology, topology: AzureT
     "planned maintenance.",
 )
 def vpn_gateway_active_passive(sub: AzureSubscriptionTopology, topology: AzureTopology) -> Rows:
-    sub_id = sub.subscription_id
     for gw in sub.virtual_network_gateways:
         if gw.gateway_type != _GATEWAY_TYPE_VPN or gw.active_active:
             continue
@@ -110,7 +108,9 @@ def vpn_gateway_active_passive(sub: AzureSubscriptionTopology, topology: AzureTo
             region=gw.location,
             title=f"VPN gateway '{gw.name}' runs in active-passive mode",
             fact=f"VPN gateway {gw.name} (SKU: {gw.sku_name}) has active_active=False.",
-            evidence_ref=f"discovery:azure_{sub_id}.virtual_network_gateways[id={gw.id}].active_active",
+            evidence_ref=evidence_ref_for(
+                topology, sub, f"virtual_network_gateways[id={gw.id}].active_active"
+            ),
         )
 
 
@@ -145,7 +145,9 @@ def single_expressroute_gateway(sub: AzureSubscriptionTopology, topology: AzureT
         title=f"Single ExpressRoute gateway '{gw.name}' terminates all circuit connectivity",
         fact=f"Subscription {sub_id} has {len(sub.express_route_circuits)} ExpressRoute circuit(s) "
         f"({circuit_names}) but only one ExpressRoute gateway ({gw.name}, SKU: {gw.sku_name}).",
-        evidence_ref=f"discovery:azure_{sub_id}.virtual_network_gateways[gateway_type=ExpressRoute]",
+        evidence_ref=evidence_ref_for(
+            topology, sub, "virtual_network_gateways[gateway_type=ExpressRoute]"
+        ),
         affected_resources=tuple(c.id for c in sub.express_route_circuits),
     )
 
@@ -188,7 +190,7 @@ def single_firewall_spof(sub: AzureSubscriptionTopology, topology: AzureTopology
         fact=f"One Azure Firewall ({firewall.name}, {firewall.sku_tier} tier, "
         f"{len(firewall.zones)} zone(s)) was discovered across the tenant while {vnet_count} "
         f"VNets were discovered.",
-        evidence_ref=f"discovery:azure_{sub_id}.firewalls[id={firewall.id}]",
+        evidence_ref=evidence_ref_for(topology, sub, f"firewalls[id={firewall.id}]"),
     )
 
 
@@ -208,7 +210,6 @@ def single_firewall_spof(sub: AzureSubscriptionTopology, topology: AzureTopology
     "this gateway.",
 )
 def gateway_not_zone_redundant(sub: AzureSubscriptionTopology, topology: AzureTopology) -> Rows:
-    sub_id = sub.subscription_id
     for gw in sub.virtual_network_gateways:
         if gw.sku_name.lower() == _SKU_BASIC or len(gw.zones) >= _MIN_REDUNDANCY_ZONES:
             continue
@@ -219,7 +220,9 @@ def gateway_not_zone_redundant(sub: AzureSubscriptionTopology, topology: AzureTo
             title=f"Gateway '{gw.name}' is not zone-redundant",
             fact=f"{gw.gateway_type} gateway {gw.name} (SKU: {gw.sku_name}) is deployed in "
             f"{len(gw.zones)} availability zone(s).",
-            evidence_ref=f"discovery:azure_{sub_id}.virtual_network_gateways[id={gw.id}].zones",
+            evidence_ref=evidence_ref_for(
+                topology, sub, f"virtual_network_gateways[id={gw.id}].zones"
+            ),
         )
 
 
@@ -241,7 +244,6 @@ def gateway_not_zone_redundant(sub: AzureSubscriptionTopology, topology: AzureTo
 def application_gateway_not_zone_redundant(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Rows:
-    sub_id = sub.subscription_id
     for agw in sub.application_gateways:
         if _V2_SKU_MARKER not in agw.sku_name.lower():
             continue
@@ -253,7 +255,9 @@ def application_gateway_not_zone_redundant(
             region=agw.location,
             fact=f"Application Gateway {agw.name} ({agw.sku_name}) in {agw.location} is deployed "
             f"in {len(agw.zones)} availability zone(s).",
-            evidence_ref=f"discovery:azure_{sub_id}.application_gateways[id={agw.id}].zones",
+            evidence_ref=evidence_ref_for(
+                topology, sub, f"application_gateways[id={agw.id}].zones"
+            ),
         )
 
 
@@ -275,7 +279,6 @@ def application_gateway_not_zone_redundant(
 def load_balancer_not_zone_redundant(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Rows:
-    sub_id = sub.subscription_id
     for lb in sub.load_balancers:
         if lb.sku_name.lower() != _SKU_STANDARD:
             continue
@@ -288,5 +291,5 @@ def load_balancer_not_zone_redundant(
             region=lb.location,
             fact=f"Load balancer {lb.name} ({lb.lb_type}, Standard SKU) in {lb.location} has "
             f"{len(set(zones))} availability zone(s) on its frontend.",
-            evidence_ref=f"discovery:azure_{sub_id}.load_balancers[id={lb.id}].zones",
+            evidence_ref=evidence_ref_for(topology, sub, f"load_balancers[id={lb.id}].zones"),
         )

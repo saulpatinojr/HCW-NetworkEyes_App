@@ -17,7 +17,7 @@ from collections.abc import Iterator
 from network_assessment_azure_engine.findings.schema import FindingSeverity
 from network_assessment_azure_engine.model.azure import AzureSubscriptionTopology, AzureTopology
 from network_assessment_azure_engine.rules.frameworks import FINOPS_FRAMEWORK
-from network_assessment_azure_engine.rules.registry import Observation, rule
+from network_assessment_azure_engine.rules.registry import Observation, evidence_ref_for, rule
 
 R_AZ_COST_ORPHANED_PIP = "AZ-COST-001"
 R_AZ_COST_IDLE_GATEWAY = "AZ-COST-002"
@@ -71,7 +71,6 @@ def next_smaller_vpn_sku(sku: str) -> str | None:
     description="A public IP is billed while unattached.",
 )
 def orphaned_public_ips(sub: AzureSubscriptionTopology, topology: AzureTopology) -> Rows:
-    sub_id = sub.subscription_id
     for pip in sub.public_ips:
         if pip.associated_resource_type or pip.associated_resource_id:
             continue
@@ -82,7 +81,9 @@ def orphaned_public_ips(sub: AzureSubscriptionTopology, topology: AzureTopology)
             title=f"Orphaned public IP '{pip.name}' incurs charges with no workload",
             fact=f"Public IP {pip.name} ({pip.sku_name} SKU) in {pip.location} has "
             f"associated_resource_type=None — it is not attached to any resource.",
-            evidence_ref=f"discovery:azure_{sub_id}.public_ips[id={pip.id}].associated_resource_type",
+            evidence_ref=evidence_ref_for(
+                topology, sub, f"public_ips[id={pip.id}].associated_resource_type"
+            ),
         )
 
 
@@ -97,12 +98,12 @@ def orphaned_public_ips(sub: AzureSubscriptionTopology, topology: AzureTopology)
     applies_to="live-only",
     inputs=("network_metrics",),
     evidence="network_metrics.gateway_metrics[].ingress_bytes_24h / egress_bytes_24h",
-    remediation="Confirm the gateway is still required. If tunnels are unused, decommission the "
-    "gateway and its public IPs. If traffic is expected, investigate tunnel and routing health.",
+    remediation="Confirm the gateway is still required. If its tunnels are unused, decommission "
+    "the gateway and its public IPs; if traffic belongs on them, investigate tunnel and routing "
+    "health.",
     description="An idle gateway continues to accrue hourly charges.",
 )
 def idle_gateways(sub: AzureSubscriptionTopology, topology: AzureTopology) -> Rows:
-    sub_id = sub.subscription_id
     metrics = sub.network_metrics
     if not metrics:
         return
@@ -120,8 +121,9 @@ def idle_gateways(sub: AzureSubscriptionTopology, topology: AzureTopology) -> Ro
             title=f"Gateway '{gm.gateway_name}' billed but moved zero traffic in 24 hours",
             fact=f"{gm.gateway_type} gateway {gm.gateway_name} (SKU: {gw.sku_name or 'unknown'}) "
             f"recorded 0 ingress and 0 egress bytes over the 24-hour metric window.",
-            evidence_ref=f"discovery:azure_{sub_id}.network_metrics"
-            f".gateway_metrics[name={gm.gateway_name}]",
+            evidence_ref=evidence_ref_for(
+                topology, sub, f"network_metrics.gateway_metrics[name={gm.gateway_name}]"
+            ),
         )
 
 
@@ -137,9 +139,11 @@ def idle_gateways(sub: AzureSubscriptionTopology, topology: AzureTopology) -> Ro
     inputs=("network_metrics",),
     evidence="network_metrics.gateway_metrics[].utilization_pct (gateway_type Vpn)",
     description="A smaller SKU on the same ladder serves the observed peak.",
+    remediation="Resize the VPN gateway to the next smaller SKU on the same ladder after reviewing "
+    "30 days of utilisation and planned growth; the resize interrupts connectivity briefly, so "
+    "schedule a window.",
 )
 def oversized_vpn_gateways(sub: AzureSubscriptionTopology, topology: AzureTopology) -> Rows:
-    sub_id = sub.subscription_id
     metrics = sub.network_metrics
     if not metrics:
         return
@@ -160,8 +164,11 @@ def oversized_vpn_gateways(sub: AzureSubscriptionTopology, topology: AzureTopolo
             title=f"VPN gateway '{gm.gateway_name}' SKU is oversized for observed traffic",
             fact=f"VPN gateway {gm.gateway_name} (SKU: {gw.sku_name}) peaked at "
             f"{gm.utilization_pct:.1f}% of provisioned bandwidth over the 24-hour metric window.",
-            evidence_ref=f"discovery:azure_{sub_id}.network_metrics"
-            f".gateway_metrics[name={gm.gateway_name}].utilization_pct",
+            evidence_ref=evidence_ref_for(
+                topology,
+                sub,
+                f"network_metrics.gateway_metrics[name={gm.gateway_name}].utilization_pct",
+            ),
             recommendation=f"Evaluate resizing from {gw.sku_name} to {smaller} after reviewing a "
             f"longer utilization window (30+ days) and planned growth. Gateway resize causes "
             f"brief connectivity interruption — schedule a window.",
@@ -183,7 +190,6 @@ def oversized_vpn_gateways(sub: AzureSubscriptionTopology, topology: AzureTopolo
     description="An unattached NAT gateway is billed hourly while providing no egress path.",
 )
 def idle_nat_gateways(sub: AzureSubscriptionTopology, topology: AzureTopology) -> Rows:
-    sub_id = sub.subscription_id
     for nat in sub.nat_gateways:
         if nat.associated_subnet_ids:
             continue
@@ -194,7 +200,9 @@ def idle_nat_gateways(sub: AzureSubscriptionTopology, topology: AzureTopology) -
             title=f"NAT gateway '{nat.name}' has no associated subnets",
             fact=f"NAT gateway {nat.name} in {nat.location} has associated_subnet_ids=[] — no "
             f"subnet routes outbound traffic through it.",
-            evidence_ref=f"discovery:azure_{sub_id}.nat_gateways[id={nat.id}].associated_subnet_ids",
+            evidence_ref=evidence_ref_for(
+                topology, sub, f"nat_gateways[id={nat.id}].associated_subnet_ids"
+            ),
         )
 
 
@@ -215,7 +223,6 @@ def idle_nat_gateways(sub: AzureSubscriptionTopology, topology: AzureTopology) -
     description="A deployed firewall accrues hourly charges regardless of traffic.",
 )
 def firewalls_without_traffic(sub: AzureSubscriptionTopology, topology: AzureTopology) -> Rows:
-    sub_id = sub.subscription_id
     metrics = sub.network_metrics
     if not metrics:
         return
@@ -239,6 +246,7 @@ def firewalls_without_traffic(sub: AzureSubscriptionTopology, topology: AzureTop
             title=f"Azure Firewall '{fm.firewall_name}' billed while processing zero traffic",
             fact=f"Azure Firewall {fm.firewall_name} ({tier} tier) recorded 0 network, "
             f"application, and NAT rule hits over the 24-hour metric window.",
-            evidence_ref=f"discovery:azure_{sub_id}.network_metrics"
-            f".firewall_metrics[name={fm.firewall_name}]",
+            evidence_ref=evidence_ref_for(
+                topology, sub, f"network_metrics.firewall_metrics[name={fm.firewall_name}]"
+            ),
         )

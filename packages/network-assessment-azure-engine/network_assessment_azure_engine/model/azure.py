@@ -6,7 +6,8 @@ export both populate it: fields a collector fills stay, fields an export carries
 
 Version 1.4.0 — change set C of REFACTOR_APP.md.
   Added: AzureFirewallPolicy (+ AzureFirewall.firewall_policy, effective_threat_intel_mode),
-         AppGatewayWafPolicy (+ ApplicationGateway.waf_policy_id, waf_policy, sku_tier),
+         AppGatewayWafPolicy (+ ApplicationGateway.waf_policy_id, waf_policy, sku_tier,
+         effective_waf_enabled, effective_waf_mode),
          FlowLog (+ AzureSubscriptionTopology.flow_logs, AzureNSG.flow_log_ids),
          AzureSubnet.ip_configuration_count, AzureSubscriptionTopology.firewall_policies /
          waf_policies, AzureTopology.source / resource_counts / unmapped_types /
@@ -219,6 +220,21 @@ class ApplicationGateway(BaseModel):
     waf_policy_id: str | None = None
     waf_policy: AppGatewayWafPolicy | None = None
     frontend_ip_configs: list[str] = Field(default_factory=list)
+
+    @property
+    def effective_waf_enabled(self) -> bool:
+        """True when the inline WAF setting is on or the linked WAF policy's state is Enabled."""
+        if self.waf_enabled:
+            return True
+        return bool(self.waf_policy and (self.waf_policy.state or "").lower() == "enabled")
+
+    @property
+    def effective_waf_mode(self) -> str | None:
+        """The linked policy's mode when a policy is attached and states one, else the inline mode."""
+        if self.waf_policy and self.waf_policy.mode:
+            return self.waf_policy.mode
+        return self.waf_mode
+
     ssl_policy_name: str | None = None
     autoscale_min: int | None = None
     autoscale_max: int | None = None

@@ -63,6 +63,17 @@ _LEARN_PREFIX = "https://learn.microsoft.com/"
 _PLATFORM = "azure"
 
 
+def evidence_ref_for(topology: AzureTopology, sub: AzureSubscriptionTopology, path: str) -> str:
+    """The ``evidence_ref`` of an observation: ``<source>:<subscription id>.<path>``.
+
+    The prefix names where the evidence came from, which is the topology's ``source``:
+    ``export:`` when a Resource Graph export was normalised (the lab edition's uploaded file),
+    ``discovery:`` when live discovery built the topology. A reader can tell from the prefix
+    which input to open to see the evidence; the path is the model field the rule read.
+    """
+    return f"{topology.source}:{sub.subscription_id}.{path}"
+
+
 @dataclass(frozen=True)
 class RuleMeta:
     """Everything a rule states about itself; stamped onto every finding it emits."""
