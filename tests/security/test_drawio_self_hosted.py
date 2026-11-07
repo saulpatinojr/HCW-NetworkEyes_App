@@ -146,7 +146,7 @@ class TestTheEditorIsPinned:
         run = _run_containing(_stage(_dockerfile(), "drawio-webapp"), "sha256sum -c -")
         steps = [step.strip() for step in run.split("&&")]
         positions = {
-            "download": next(i for i, s in enumerate(steps) if s.startswith("wget ")),
+            "download": next(i for i, s in enumerate(steps) if s.startswith("curl ")),
             "check": next(
                 i
                 for i, s in enumerate(steps)

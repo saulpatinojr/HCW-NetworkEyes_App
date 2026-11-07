@@ -52,11 +52,11 @@ NEW_JOB_NAMES = {
 }
 
 # The only rules `.hadolint.yaml` may ignore; adding to this set is a reviewed decision.
-APPROVED_HADOLINT_IGNORES = {"DL3008", "DL3018"}
+APPROVED_HADOLINT_IGNORES = {"DL3008"}
 # Inline pragmas allowed in Dockerfiles: (file, rule).
 APPROVED_INLINE_PRAGMAS = {("Dockerfile", "DL3006")}
 # The stages 200-build-images.yml pushes, scans and tags, by Dockerfile. Each one applies the distribution's
-# security updates before its own packages (TODO.md T-741): a Debian or Alpine security upload reaches the mirrors
+# security updates before its own packages (TODO.md T-741): a Debian security upload reaches the mirrors
 # days before the official base image is rebuilt with it, and on 2026-11-05 no python:3.14-slim digest existed
 # without CVE-2026-109518, so the Scout gate refused every build on main until the upgrade came back. The build-only
 # lab stage of the root Dockerfile is never pushed or scanned and is not listed.
@@ -65,7 +65,7 @@ SHIPPED_STAGES = {
     "apps/network-assessment-api/Dockerfile": {"final"},
     "apps/network-assessment-web/Dockerfile": {"migrator", "runner"},
 }
-SECURITY_UPGRADE = re.compile(r"(?:^|\s)(?:apt-get(?: -o \S+)* upgrade|apk upgrade)(?:\s|$)")
+SECURITY_UPGRADE = re.compile(r"(?:^|\s)apt-get(?: -o \S+)* upgrade(?:\s|$)")
 
 DIGEST = re.compile(r"@sha256:[0-9a-f]{64}\b")
 
@@ -566,6 +566,34 @@ class TestDockerfileHygiene:
                 continue  # a reference to an earlier stage, not an external image
             assert DIGEST.search(image), f"{path.name}:{number} FROM {image} has no digest"
 
+    def test_every_runtime_base_image_is_debian_trixie(self, path: Path) -> None:
+        # One distribution for every image (owner decision 2026-11-07, TODO.md T-741): the web image left
+        # node:24-alpine when a HIGH musl finding (CVE-2026-107891) had its fix only in Alpine edge. Every external
+        # base names trixie in its tag, so a Dependabot bump stays on Debian 13 and a floating tag that moves to the
+        # next Debian release cannot change one image's distribution unnoticed. The one exception is the uv stage,
+        # which no image runs on: its binary is copied into a Python stage.
+        stages: set[str] = set()
+        for number, keyword, arguments in instructions(path):
+            if keyword != "FROM":
+                continue
+            parts = arguments.split()
+            image = parts[0]
+            if len(parts) >= 3 and parts[1].upper() == "AS":
+                stages.add(parts[2])
+            if image in stages or image.startswith("final-"):
+                continue
+            if image.startswith("ghcr.io/astral-sh/uv:") and parts[2:3] == ["uv"]:
+                continue
+            assert "alpine" not in image.lower(), f"{path.name}:{number} FROM {image} is Alpine"
+            assert re.match(r"(?:node|python):[^@]*-trixie[^@]*@sha256:", image), (
+                f"{path.name}:{number} FROM {image} is not a node or python image tagged for Debian trixie"
+            )
+
+    def test_no_dockerfile_uses_apk(self, path: Path) -> None:
+        for number, keyword, arguments in instructions(path):
+            if keyword == "RUN":
+                assert not re.search(r"\bapk\b", arguments), f"line {number}: apk in a Debian image"
+
     def test_user_is_numeric(self, path: Path) -> None:
         users = [(n, a) for n, k, a in instructions(path) if k == "USER"]
         assert users, "every Dockerfile drops root"
@@ -621,7 +649,7 @@ class TestDockerfileHygiene:
     def test_every_shipped_stage_applies_the_distribution_security_updates(
         self, path: Path
     ) -> None:
-        # T-741: the stages that reach Docker Hub run `apt-get upgrade` / `apk upgrade` in a RUN of their own
+        # T-741: the stages that reach Docker Hub run `apt-get upgrade` in a RUN of their own
         # stage, after an `apt-get update` where apt is used. The stage list is exact, so a renamed or new
         # shipped stage must be added here with the upgrade in place.
         expected = SHIPPED_STAGES[path.relative_to(REPO_ROOT).as_posix()]
@@ -645,7 +673,7 @@ class TestDockerfileHygiene:
         assert not missing, f"shipped stage(s) not found as a named FROM: {sorted(missing)}"
         for stage in sorted(expected):
             upgrades = [(n, a) for n, a in stages[stage] if SECURITY_UPGRADE.search(a)]
-            assert upgrades, f"stage {stage} has no apt-get upgrade / apk upgrade in any RUN"
+            assert upgrades, f"stage {stage} has no apt-get upgrade in any RUN"
             for number, arguments in upgrades:
                 # The publish workflow builds with the Actions cache, so a rebuild of the same commit would reuse
                 # an older upgrade layer after a newer security upload reached the mirrors. PUBLISH_CACHE_BUST is

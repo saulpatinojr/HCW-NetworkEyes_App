@@ -19,8 +19,12 @@
 #   6. HEALTHCHECK added (required for ECS/AKS task definitions)
 #   7. .dockerignore referenced — see .dockerignore in repo root
 
-# python:3.14-slim digest pinned 2026-11-04 (3.14.10, built 2026-10-28). Dependabot's docker ecosystem watches
-# every Dockerfile and bumps this line; nothing else keeps base-image debs current.
+# python:3.14.10-slim-trixie digest pinned 2026-11-07 (Python 3.14.10 on Debian 13 "trixie", built 2026-11-05; the
+# same digest python:3.14-slim pointed to that day). The tag names the Debian release on purpose: every image in this
+# repository is Debian trixie (the web image's node:24-trixie-slim included), so a future Debian release under the
+# floating tag cannot move one image to another distribution unnoticed. Dependabot's docker ecosystem watches every
+# Dockerfile and bumps the digest on each FROM line; the `apt-get upgrade` in the final stage keeps the debs current
+# between bumps (TODO.md T-741).
 # uv, as a stage rather than an inline `COPY --from=<image>`: Dependabot's docker
 # updater only reads `FROM` lines, so this is the line its weekly bump moves.
 # Keep the version in step with the `uv==` pins in 300-test-codebase.yml.
@@ -28,7 +32,7 @@ ARG EDITION=appliance
 
 FROM ghcr.io/astral-sh/uv:0.13.6@sha256:af22a52f5eafef3d78e551599d405c02df61919d18028f0cea8eda93bc9986d0 AS uv
 
-FROM python:3.14-slim@sha256:930e1abba7c4e8f96ed93e8012c35d174d7732752731bbd5e8e757d7ec6f3966 AS builder
+FROM python:3.14.10-slim-trixie@sha256:af8a5aa14780025dbfbcfbc81bd8a91ebd87711dd5b0f48ed71090949dd7cb1d AS builder
 
 ARG NETWORK_ASSESSMENT_VERSION=dev
 WORKDIR /build
@@ -68,7 +72,7 @@ RUN uv pip install --system --no-cache --no-deps --no-build-isolation --prefix=/
 # The engine package alone, without the [azure] extra, into its own prefix. The
 # boundary is proved before the final stage exists: a resolvable azure, msal or
 # boto3 fails the build here, the same check the AddOn's image runs.
-FROM python:3.14-slim@sha256:930e1abba7c4e8f96ed93e8012c35d174d7732752731bbd5e8e757d7ec6f3966 AS builder-lab
+FROM python:3.14.10-slim-trixie@sha256:af8a5aa14780025dbfbcfbc81bd8a91ebd87711dd5b0f48ed71090949dd7cb1d AS builder-lab
 
 ARG EDITION
 RUN test "$EDITION" = "lab" || { echo "builder-lab is only built for EDITION=lab (got '$EDITION')" >&2; exit 1; }
@@ -92,7 +96,7 @@ RUN uv export --locked --no-default-groups --no-emit-project --no-emit-workspace
 # the final image. The export pipeline (network_assessment/diagram_engine/export_pipeline.py)
 # degrades to XML-only output without it — its own warning promises the CLI
 # is available "inside the Docker container", which is made true here.
-FROM python:3.14-slim@sha256:930e1abba7c4e8f96ed93e8012c35d174d7732752731bbd5e8e757d7ec6f3966 AS drawio-fetch
+FROM python:3.14.10-slim-trixie@sha256:af8a5aa14780025dbfbcfbc81bd8a91ebd87711dd5b0f48ed71090949dd7cb1d AS drawio-fetch
 
 # bash with pipefail: the checksum step below is a pipe (`echo | sha256sum -c -`), and a failure on the left
 # of a pipe must fail the build (hadolint DL4006). The default /bin/sh would hide it.
@@ -109,7 +113,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
 
 # ---- final stage: lab (build-only) ----
 # No apps/, no server, no EXPOSE, no HEALTHCHECK: the image's only job is the proof.
-FROM python:3.14-slim@sha256:930e1abba7c4e8f96ed93e8012c35d174d7732752731bbd5e8e757d7ec6f3966 AS final-lab
+FROM python:3.14.10-slim-trixie@sha256:af8a5aa14780025dbfbcfbc81bd8a91ebd87711dd5b0f48ed71090949dd7cb1d AS final-lab
 
 COPY --from=builder-lab /install-lab /usr/local
 RUN python -m pip uninstall -y pip \
@@ -123,7 +127,7 @@ ENV NETWORK_ASSESSMENT_EDITION=lab
 CMD ["python", "-m", "network_assessment_azure_engine.edition"]
 
 # ---- final stage: appliance ----
-FROM python:3.14-slim@sha256:930e1abba7c4e8f96ed93e8012c35d174d7732752731bbd5e8e757d7ec6f3966 AS final-appliance
+FROM python:3.14.10-slim-trixie@sha256:af8a5aa14780025dbfbcfbc81bd8a91ebd87711dd5b0f48ed71090949dd7cb1d AS final-appliance
 
 ARG NETWORK_ASSESSMENT_VERSION=dev
 LABEL org.opencontainers.image.title="NetworkEyes" \

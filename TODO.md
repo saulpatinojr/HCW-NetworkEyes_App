@@ -283,8 +283,8 @@ Each one actively misleads an engineer or a workflow run.
   which Dependabot also watches).
   Two traps when regenerating this lockfile: (1) it is stored with **LF** endings while
   `package.json` is **CRLF**, and npm rewrites the lockfile as CRLF on this platform — convert back
-  or the diff becomes the whole file; (2) regenerate with **npm 11+**, matching the `node:24-alpine`
-  image, because npm 10 silently strips the `libc` fields that select the musl vs glibc native
+  or the diff becomes the whole file; (2) regenerate with **npm 11+**, matching the web image's Node 24 (`node:24-trixie-slim` since
+  2026-11-07; `node:24-alpine` before), because npm 10 silently strips the `libc` fields that select the musl vs glibc native
   binaries for `@next/swc` and `@tailwindcss/oxide`. Also note `npm update` floats the entire tree —
   it pulled in 119 package changes including major transitive jumps (`immer` 10 → 11) — so prefer
   targeted `overrides` plus `npm install --package-lock-only` for security-only work.
@@ -2482,7 +2482,7 @@ reports 0, and `lib/npm-overrides.test.ts` fails if the lockfile resolves an old
 live `Protect main` ruleset (read back 2026-10-25). Still open:
 (3) the first real run of the Docker Scout step in `200-build-images.yml` is the only place Scout itself is exercised, and it cannot be run
 without Docker credentials, so Trivy is the proxy; (4) findings in the base image that have no fix are not covered (`--ignore-unfixed`, like the
-Scout gate's `only-fixed`) and move with the pinned `node:24-alpine` digest.
+Scout gate's `only-fixed`) and move with the pinned `node:24-trixie-slim` digest (`node:24-alpine` until 2026-11-07).
 
 ### T-738 — Note for deployers: the worker image is retired
 Since the owner's decision of 2026-10-27 (`REVIEW.md` R-016, answer `retire`) this repository no longer builds or publishes the `worker` image: `apps/network-assessment-worker` is deleted, a build publishes four images (`cli`, `api`, `web`, `migrator`) and a release gives four version tags. **If your deployment runs a service from the `worker` image (`img-ne-appliance-app:worker-latest`, `worker-sha-<7>` or `worker-<version>`), remove that service; nothing else changes.** The old `worker-` tags stay on Docker Hub, `worker-latest` no longer moves, and the next release's notes say the same (the template is in `310-release-version.yml`). This repository cannot check other people's deployments and notifies no one; the note is in `CHANGELOG.md` for them.
@@ -2544,3 +2544,25 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   `node_modules` (Windows binaries included) through the root Dockerfile's `COPY . .`, and the local Scout scan
   flagged Go module packages inside it that the published image never had (CI builds from a clean checkout). It
   now excludes `**/node_modules/` and `**/.next/`.
+- **Amended 2026-11-07: the web image moved off Alpine, and every image is now Debian 13 "trixie".** The same gate
+  then refused the web image: `200 · Build Container Images` failed `build-web` at the Docker Scout step on `main`
+  in run 42162544462 (2026-11-06, at 9a90addc) and run 42346971213 (2026-11-07, at 55b68fdc), both on one fixable
+  HIGH, CVE-2026-107891 in Alpine's `musl` 1.2.6-r3 (`pkg:apk/alpine/musl@1.2.6-r3`, Alpine 3.24.4; Scout names
+  1.2.6-r6 as the fix). The CLI and API jobs passed and `tag-images` was skipped, so nothing was published from
+  either commit. The fixed build was only in Alpine edge, not in the v3.24 branch the image runs, so neither the
+  `apk upgrade` above nor a digest bump could clear it. **The fix (owner decision: one distribution, no mixed
+  environments):** all six stages of `apps/network-assessment-web/Dockerfile` move from `node:24-alpine` to
+  `node:24-trixie-slim@sha256:0820eaa8…` (Node 24.22.2, built 2026-11-05), and the Python images' `FROM` lines
+  name the Debian release, `python:3.14.10-slim-trixie@sha256:af8a5aa1…` (built 2026-11-05; the same digest
+  `python:3.14-slim` resolved to that day). The `migrator` and `runner` stages run the same `apt-get upgrade` the
+  Python final stages run (retries off, `--error-on=any`, `PUBLISH_CACHE_BUST`); `libc6-compat` is gone (Debian is
+  glibc); the user keeps uid 1001, now made with `groupadd`/`useradd` and given the primary group `nodejs`
+  (gid 1001) explicitly; the build-only
+  `drawio-webapp` stage installs `curl`, `ca-certificates` and `unzip` because the slim base has no busybox; the
+  runner installs nothing (`libssl3t64`, which Prisma's engines load, is in the base, and the HEALTHCHECK uses
+  `node`). The deps, builder and migrator-deps stages now fail the build unless Prisma fetched the
+  `debian-openssl-3.0.x` engines. `.hadolint.yaml` drops the DL3018 (apk) ignore, and
+  `tests/unit/test_ci_hygiene.py` now fails on any base that is not a `-trixie` node or python image and on any
+  `apk` in a `RUN`. **Not checked here:** no image was built and hadolint was not run in the session that made the
+  change (no Docker daemon, and downloading linters was refused); the pull request's `Dockerfile Lint (hadolint)`
+  and `Image Scan (Trivy)` jobs and the next `200` run on `main` are the proof.

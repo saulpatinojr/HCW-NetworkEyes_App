@@ -12,11 +12,11 @@
 failure-threshold: style
 
 ignored:
-  # DL3008 (pin apt-get package versions) and DL3018 (pin apk package versions).
+  # DL3008 (pin apt-get package versions).
   #
-  # Why ignored: the Debian and Alpine mirrors keep only the current build of each package in a release. A pin
+  # Why ignored: the Debian mirrors keep only the current build of each package in a release. A pin
   # such as `libcairo2=1.18.4-1` stops installing the day the distribution ships a security update, and nothing
-  # in this repository moves it forward: Dependabot's docker ecosystem reads FROM lines, not apt or apk pins.
+  # in this repository moves it forward: Dependabot's docker ecosystem reads FROM lines, not apt pins.
   # The result would be an image build that fails without a code change, or a pin that someone loosens under
   # pressure.
   #
@@ -26,8 +26,8 @@ ignored:
   #   * every FROM is pinned by sha256 digest (tests/unit/test_ci_hygiene.py checks this), and Dependabot opens
   #     a pull request for each new digest every Monday;
   #   * the packages installed on top are few and named in the Dockerfiles (graphviz and the cairo/pango
-  #     libraries, xvfb for draw.io, libc6-compat on Alpine), and every shipped final stage first applies the
-  #     distribution's security updates (`apt-get upgrade` / `apk upgrade`, TODO.md T-741), because a security
+  #     libraries, xvfb for draw.io, curl and unzip in the web image's build-only draw.io stage), and every
+  #     shipped final stage first applies Debian's security updates (`apt-get upgrade`, TODO.md T-741), because a security
   #     upload reaches the mirrors days before the official base image is rebuilt with it (CVE-2026-109518,
   #     2026-11-05: no python:3.14-slim digest existed without it, so the digest bump alone could not clear Scout);
   #   * Python and npm dependencies are not covered by this rule and are locked with hashes (uv.lock,
@@ -36,5 +36,7 @@ ignored:
   #     critical or high findings before any tag moves, and scripts/ci/local-container-checks.sh runs a Trivy
   #     scan with the same intent.
   # Revisit if the images move to a Debian snapshot mirror (then the pins would be stable and checkable).
+  # DL3018 (the same rule for Alpine's apk) was ignored here too until 2026-11-07, when the web image moved from
+  # node:24-alpine to node:24-trixie-slim: no Dockerfile uses apk any more, so the ignore was removed rather than
+  # kept unused, and tests/unit/test_ci_hygiene.py no longer approves it.
   - DL3008
-  - DL3018

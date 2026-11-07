@@ -5,18 +5,29 @@
 ARG DRAWIO_WEBAPP_VERSION=32.6.9
 ARG DRAWIO_WEBAPP_SHA256=31afc82b7920c409d0591f6126ccb6c377d7800e7f11ab324f88bdf1e4249ce7
 
+# Every stage is node:24-trixie-slim (Debian 13, glibc), the same Debian release as the Python images, digest pinned
+# 2026-11-07 (Node 24.22.2, built 2026-11-05). Dependabot's docker ecosystem bumps all six FROM lines together.
+# Until 2026-11-07 the stages were node:24-alpine: the Scout gate in 200-build-images.yml refused every web build
+# on main from 2026-11-06 on a HIGH finding in Alpine's musl (CVE-2026-107891) whose fix was only in Alpine edge,
+# and the owner chose one distribution for every image instead of a second one to track (TODO.md T-741).
+# The base already carries libssl3t64 (libssl.so.3), which Prisma's engines load; the deps, builder and
+# migrator-deps stages check that the engines Prisma fetched are the debian-openssl-3.0.x builds this runs. Those are
+# the amd64 names, the only platform 200-build-images.yml builds; an arm64 build would fetch linux-arm64-openssl-3.0.x
+# and the checks would need that name.
+
 # ── Stage 1: deps ────────────────────────────────────────────────────────────
-FROM node:24-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS deps
+FROM node:24-trixie-slim@sha256:0820eaa85e07d0490446dd01d14707e17e6108a36988cf374899cd057eb3812d AS deps
 WORKDIR /app
 
-# Install native build tools (needed by some optional Prisma packages).
-RUN apk add --no-cache libc6-compat
-
+# No extra packages: Alpine needed libc6-compat for glibc-built binaries, and Debian is glibc already. npm picks
+# the *-linux-x64-gnu builds of the native packages (Next.js SWC, sharp, lightningcss, tailwind oxide) from the
+# lockfile. The trailing test fails the build if Prisma fetched an engine for another platform.
 COPY package.json package-lock.json* ./
-RUN npm ci --legacy-peer-deps
+RUN npm ci --legacy-peer-deps \
+ && test -f node_modules/@prisma/engines/libquery_engine-debian-openssl-3.0.x.so.node
 
 # ── Stage 2: builder ─────────────────────────────────────────────────────────
-FROM node:24-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS builder
+FROM node:24-trixie-slim@sha256:0820eaa85e07d0490446dd01d14707e17e6108a36988cf374899cd057eb3812d AS builder
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
@@ -29,7 +40,10 @@ COPY . .
 # handler and the Python client re-filter on every call.
 #
 # One layer for both steps (hadolint DL3059): they read the same COPY . . layer, so splitting them cached nothing.
+# The generated client must hold the debian-openssl-3.0.x query engine, the one the runner (same base) loads; the
+# test fails the build if Prisma detected another platform.
 RUN npx prisma generate \
+ && test -f node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node \
  && node scripts/filter-shape-index.mjs lib/drawio-mcp/shape-index.json
 
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -55,13 +69,11 @@ RUN npm run build
 # (its own postinstall script, the same download the deps stage makes), and the
 # client is generated from the schema. The generated client is what seed-local-admin.js
 # loads, so this stage does not depend on the builder (no Next.js build).
-FROM node:24-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS migrator-deps
+FROM node:24-trixie-slim@sha256:0820eaa85e07d0490446dd01d14707e17e6108a36988cf374899cd057eb3812d AS migrator-deps
 WORKDIR /src
 
 # Prisma checkpoint telemetry would try to reach the network and write under $HOME.
 ENV CHECKPOINT_DISABLE=1
-
-RUN apk add --no-cache libc6-compat
 
 COPY package.json package-lock.json scripts/migrator-lockfile.mjs ./
 RUN node migrator-lockfile.mjs /src /app
@@ -71,39 +83,44 @@ RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
  && node node_modules/@prisma/engines/scripts/postinstall.js
 
 COPY prisma/schema.prisma ./prisma/schema.prisma
-RUN node_modules/.bin/prisma generate
+# The schema engine (`prisma migrate deploy`) and the query engine (seed-local-admin.js) must be the
+# debian-openssl-3.0.x builds the migrator (same base) runs; the tests fail the build otherwise.
+RUN node_modules/.bin/prisma generate \
+ && test -f node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x \
+ && test -f node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node
 
 # ── Stage 4: migrator ─────────────────────────────────────────────────────────
 # Standalone image used exclusively to run `prisma migrate deploy` once per
 # deployment (via workflow 210). Keeping CLI deps out of the runtime image avoids
 # chasing Prisma's transitive dep tree (effect, fast-check, etc.) across upgrades.
-FROM node:24-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS migrator
+FROM node:24-trixie-slim@sha256:0820eaa85e07d0490446dd01d14707e17e6108a36988cf374899cd057eb3812d AS migrator
 WORKDIR /app
 
-# Alpine's security updates first (`apk upgrade`, deliberate, TODO.md T-741): the base is pinned by digest, but a
-# security upload reaches the mirrors before the official image is rebuilt with it, and on 2026-11-05 the Scout
-# gate in 200-build-images.yml (fixable critical and high findings fail the build) refused the Debian images on
-# exactly that gap (CVE-2026-109518; see the root Dockerfile). libc6-compat is installed unpinned (hadolint DL3018
-# is ignored with a reason in .hadolint.yaml), so a rebuild on another day gets that day's package version on the
-# same base. Dependabot's docker ecosystem still bumps the digest.
+# Debian's security updates first (`apt-get upgrade`, deliberate, TODO.md T-741): the base is pinned by digest, but
+# a security upload reaches the mirrors before the official image is rebuilt with it, and on 2026-11-05 the Scout
+# gate in 200-build-images.yml (fixable critical and high findings fail the build) refused the Python images on
+# exactly that gap (CVE-2026-109518; see the root Dockerfile, whose final stage this RUN mirrors: retries off while
+# the base's apt does the upgrade, `--error-on=any` so a missing trixie-security index fails the build).
+# Dependabot's docker ecosystem still bumps the digest. Nothing is installed on top: libssl3t64, which Prisma's
+# engines load, is part of the base.
 #
 # The bundled npm CLI is unused here (prisma is invoked directly via
 # node_modules/.bin) and periodically carries fixable CVEs in its own
 # vendored deps (tar, brace-expansion, undici) — strip it.
 #
-# One layer for all three (hadolint DL3059). PUBLISH_CACHE_BUST, named in the command, keeps the publish workflow
+# Non-root user for the migrator (IMG-002). This container receives the DB-owner connection string and the
+# local-admin hash, so it must not run as uid 0. Mirror the runner stage's uid/gid 1001.
+#
+# One layer for all of it (hadolint DL3059). PUBLISH_CACHE_BUST, named in the command, keeps the publish workflow
 # from reusing a cached upgrade layer on a later run of the same commit (see the root Dockerfile).
 ARG PUBLISH_CACHE_BUST=
 RUN printf 'upgrade run: %s\n' "${PUBLISH_CACHE_BUST}" \
- && apk upgrade --no-cache \
- && apk add --no-cache libc6-compat \
- && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
-
-# Non-root user for the migrator (IMG-002). This container receives the DB-owner
-# connection string and the local-admin hash, so it must not run as uid 0.
-# Mirror the runner stage's uid/gid 1001.
-RUN addgroup --system --gid 1001 nodejs \
- && adduser --system --uid 1001 nextjs
+ && apt-get -o Acquire::Retries=0 update --error-on=any \
+ && apt-get -o Acquire::Retries=0 upgrade -y --no-install-recommends \
+ && rm -rf /var/lib/apt/lists/* \
+ && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+ && groupadd --system --gid 1001 nodejs \
+ && useradd --system --uid 1001 --gid nodejs --no-create-home --shell /usr/sbin/nologin nextjs
 
 # `prisma migrate deploy` needs the whole Prisma CLI dependency tree, not just the
 # prisma/@prisma/.prisma directories: prisma depends on @prisma/config (c12,
@@ -146,17 +163,22 @@ CMD ["./prisma/migrate.sh"]
 # The build fails if the checksum differs. Everything the embedded editor does not use is deleted before the files
 # can reach the runner: the Java and OAuth server side (WEB-INF), the viewer and integration bundles, the template
 # gallery, the math renderer, source maps and every language file but English. What remains is about 65 MB.
-FROM node:24-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS drawio-webapp
+FROM node:24-trixie-slim@sha256:0820eaa85e07d0490446dd01d14707e17e6108a36988cf374899cd057eb3812d AS drawio-webapp
 
-# ash with pipefail: the checksum step is a pipe (`echo | sha256sum -c -`) and a failure on its left must fail the
-# build (hadolint DL4006).
-SHELL ["/bin/ash", "-o", "pipefail", "-c"]
+# bash with pipefail: the checksum step is a pipe (`echo | sha256sum -c -`) and a failure on its left must fail the
+# build (hadolint DL4006). Debian's default /bin/sh (dash) has no pipefail.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # The values are declared at the top of this file; redeclaring the names brings them into this stage.
 ARG DRAWIO_WEBAPP_VERSION
 ARG DRAWIO_WEBAPP_SHA256
 
-RUN wget -q -O /tmp/draw.war "https://github.com/jgraph/drawio/releases/download/v${DRAWIO_WEBAPP_VERSION}/draw.war" \
+# The slim base has neither a downloader nor unzip (Alpine's busybox had both): curl, its CA bundle and unzip are
+# installed here, in a stage that never ships (the runner copies only /out), and then used once.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl unzip \
+ && rm -rf /var/lib/apt/lists/* \
+ && curl -fsSL -o /tmp/draw.war "https://github.com/jgraph/drawio/releases/download/v${DRAWIO_WEBAPP_VERSION}/draw.war" \
  && echo "${DRAWIO_WEBAPP_SHA256}  /tmp/draw.war" | sha256sum -c - \
  && mkdir /out \
  && unzip -q /tmp/draw.war -d /out \
@@ -184,7 +206,7 @@ RUN find /out -type d -exec chmod 555 {} + \
  && find /out -type f -exec chmod 444 {} +
 
 # ── Stage 5: runner ──────────────────────────────────────────────────────────
-FROM node:24-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS runner
+FROM node:24-trixie-slim@sha256:0820eaa85e07d0490446dd01d14707e17e6108a36988cf374899cd057eb3812d AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -198,15 +220,19 @@ ENV HOSTNAME="0.0.0.0"
 # periodically carries fixable CVEs in its own vendored deps (tar,
 # brace-expansion, undici) — strip it.
 #
-# Alpine's security updates first (`apk upgrade`, deliberate: see the migrator stage above and TODO.md T-741).
+# Debian's security updates first (`apt-get upgrade`, deliberate: see the migrator stage above and TODO.md T-741).
+# Nothing is installed on top: libssl3t64, which the Prisma query engine loads, is part of the base, and the
+# HEALTHCHECK below uses node, so the runner needs no curl or wget.
 #
 # One layer for the upgrade, the user, the group and the strip (hadolint DL3059). PUBLISH_CACHE_BUST as in the
 # migrator stage.
 ARG PUBLISH_CACHE_BUST=
 RUN printf 'upgrade run: %s\n' "${PUBLISH_CACHE_BUST}" \
- && apk upgrade --no-cache \
- && addgroup --system --gid 1001 nodejs \
- && adduser --system --uid 1001 nextjs \
+ && apt-get -o Acquire::Retries=0 update --error-on=any \
+ && apt-get -o Acquire::Retries=0 upgrade -y --no-install-recommends \
+ && rm -rf /var/lib/apt/lists/* \
+ && groupadd --system --gid 1001 nodejs \
+ && useradd --system --uid 1001 --gid nodejs --no-create-home --shell /usr/sbin/nologin nextjs \
  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 
 # Because outputFileTracingRoot is set to the repo root (two levels above the
