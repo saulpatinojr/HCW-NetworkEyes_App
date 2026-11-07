@@ -37,7 +37,7 @@ FROM python:3.14.10-slim-trixie@sha256:af8a5aa14780025dbfbcfbc81bd8a91ebd87711dd
 ARG NETWORK_ASSESSMENT_VERSION=dev
 WORKDIR /build
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get -o Acquire::Retries=0 update --error-on=any && apt-get -o Acquire::Retries=0 install -y --no-install-recommends \
     graphviz libcairo2 libpango-1.0-0 \
     libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 \
     && rm -rf /var/lib/apt/lists/*
@@ -105,7 +105,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ARG DRAWIO_VERSION=31.3.2
 ARG DRAWIO_SHA256=725453f32ef7f2f63f8b50b374857a5c312e2aaabcf221cb0600332741ae1094
 
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+RUN apt-get -o Acquire::Retries=0 update --error-on=any && apt-get -o Acquire::Retries=0 install -y --no-install-recommends curl ca-certificates \
   && rm -rf /var/lib/apt/lists/* \
   && curl -fsSL -o /tmp/drawio.deb \
      "https://github.com/jgraph/drawio-desktop/releases/download/v${DRAWIO_VERSION}/drawio-amd64-${DRAWIO_VERSION}.deb" \
@@ -169,8 +169,8 @@ RUN printf 'upgrade run: %s\n' "${PUBLISH_CACHE_BUST}" \
 # required. `drawio --version` proves the whole chain at build time.
 COPY --from=drawio-fetch /tmp/drawio.deb /tmp/drawio.deb
 COPY --chmod=755 scripts/drawio-headless.sh /usr/local/bin/drawio
-RUN apt-get update \
- && apt-get install -y --no-install-recommends /tmp/drawio.deb xvfb xauth libasound2t64 \
+RUN apt-get -o Acquire::Retries=0 update --error-on=any \
+ && apt-get -o Acquire::Retries=0 install -y --no-install-recommends /tmp/drawio.deb xvfb xauth libasound2t64 \
  && rm -rf /var/lib/apt/lists/* /tmp/drawio.deb \
  && drawio --version
 

@@ -638,6 +638,7 @@ jobs:
           set -euo pipefail
           sandbox=(--rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --entrypoint sh)
           test "$(docker image inspect network-assessment-scan-migrator:ci --format '{{.Config.User}}')" = "1001"
+          test "$(docker image inspect network-assessment-scan-runner:ci --format '{{.Config.User}}')" = "1001"
           top="$(docker run "${sandbox[@]}" network-assessment-scan-migrator:ci -c 'ls -A node_modules')"
           bins="$(docker run "${sandbox[@]}" network-assessment-scan-migrator:ci -c 'ls -A node_modules/.bin')"
           failed=0
@@ -677,6 +678,11 @@ jobs:
           docker run "${sandbox[@]}" network-assessment-scan-runner:ci \
             -c 'test ! -e node_modules/prisma && test ! -e node_modules/.bin/prisma && test -d node_modules/@prisma/client && test -d node_modules/.prisma/client' \
             || { echo "::error::the web runner image must hold the Prisma client and engine but not the CLI"; failed=1; }
+          # The build checks only that Prisma fetched the Debian (glibc, OpenSSL 3) engine; loading it proves the runner's
+          # libraries satisfy it, which a wrong base (musl, or a missing libssl) would not.
+          docker run "${sandbox[@]}" network-assessment-scan-runner:ci \
+            -c 'node -e "require(\"./node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node\")"' \
+            || { echo "::error::the Prisma query engine does not load in the web runner"; failed=1; }
           exit "$failed"
       - name: Export the images and download the Trivy database
         run: |

@@ -119,8 +119,8 @@ RUN printf 'upgrade run: %s\n' "${PUBLISH_CACHE_BUST}" \
  && apt-get -o Acquire::Retries=0 upgrade -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/* \
  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
- && groupadd --system --gid 1001 nodejs \
- && useradd --system --uid 1001 --gid nodejs --no-create-home --shell /usr/sbin/nologin nextjs
+ && groupadd --gid 1001 nodejs \
+ && useradd --uid 1001 --gid nodejs --no-create-home --shell /usr/sbin/nologin nextjs
 
 # `prisma migrate deploy` needs the whole Prisma CLI dependency tree, not just the
 # prisma/@prisma/.prisma directories: prisma depends on @prisma/config (c12,
@@ -175,8 +175,8 @@ ARG DRAWIO_WEBAPP_SHA256
 
 # The slim base has neither a downloader nor unzip (Alpine's busybox had both): curl, its CA bundle and unzip are
 # installed here, in a stage that never ships (the runner copies only /out), and then used once.
-RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates curl unzip \
+RUN apt-get -o Acquire::Retries=0 update --error-on=any \
+ && apt-get -o Acquire::Retries=0 install -y --no-install-recommends ca-certificates curl unzip \
  && rm -rf /var/lib/apt/lists/* \
  && curl -fsSL -o /tmp/draw.war "https://github.com/jgraph/drawio/releases/download/v${DRAWIO_WEBAPP_VERSION}/draw.war" \
  && echo "${DRAWIO_WEBAPP_SHA256}  /tmp/draw.war" | sha256sum -c - \
@@ -231,8 +231,8 @@ RUN printf 'upgrade run: %s\n' "${PUBLISH_CACHE_BUST}" \
  && apt-get -o Acquire::Retries=0 update --error-on=any \
  && apt-get -o Acquire::Retries=0 upgrade -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/* \
- && groupadd --system --gid 1001 nodejs \
- && useradd --system --uid 1001 --gid nodejs --no-create-home --shell /usr/sbin/nologin nextjs \
+ && groupadd --gid 1001 nodejs \
+ && useradd --uid 1001 --gid nodejs --no-create-home --shell /usr/sbin/nologin nextjs \
  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 
 # Because outputFileTracingRoot is set to the repo root (two levels above the

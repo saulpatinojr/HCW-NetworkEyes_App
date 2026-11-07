@@ -708,6 +708,38 @@ class TestDockerfileHygiene:
                         f"line {number}: the apt lists are left in the layer"
                     )
 
+    def test_every_apt_get_runs_with_retries_off(self, path: Path) -> None:
+        # CVE-2026-109518 (apt below 3.0.4) needs a download retry to slip an unverified package in, and a stage
+        # that never ships can still hand files to one that does (drawio-webapp's unzip writes what the runner
+        # copies). So every apt-get in every stage runs with retries off, and every update refuses to carry on
+        # past an index it could not fetch.
+        for number, keyword, arguments in instructions(path):
+            if keyword != "RUN":
+                continue
+            for match in re.finditer(r"apt-get\s+(?!-o Acquire::Retries=0\s)(\S+)", arguments):
+                raise AssertionError(
+                    f"line {number}: `apt-get {match.group(1)}` runs with download retries on"
+                )
+            assert not re.search(
+                r"apt-get -o Acquire::Retries=0 update(?! --error-on=any)", arguments
+            ), f"line {number}: apt-get update can succeed with an index it could not fetch"
+
+    def test_the_shipped_web_stages_install_no_packages(self, path: Path) -> None:
+        # The web runner and migrator take only the base image and its security updates; everything else they
+        # hold is copied from a build stage. An install there would add packages (and scanner surface) to a
+        # shipped image without anything else noticing.
+        if path.relative_to(REPO_ROOT).as_posix() != "apps/network-assessment-web/Dockerfile":
+            return
+        current = ""
+        for number, keyword, arguments in instructions(path):
+            if keyword == "FROM":
+                parts = arguments.split()
+                current = parts[2] if len(parts) >= 3 and parts[1].upper() == "AS" else ""
+            elif keyword == "RUN" and current in {"runner", "migrator"}:
+                assert not re.search(r"apt-get(?:\s+-o\s+\S+)*\s+install\b", arguments), (
+                    f"line {number}: stage {current} installs a package"
+                )
+
     def test_inline_hadolint_pragmas_are_the_approved_ones_with_a_reason(self, path: Path) -> None:
         lines = path.read_text(encoding="utf-8").splitlines()
         relative = path.relative_to(REPO_ROOT).as_posix()

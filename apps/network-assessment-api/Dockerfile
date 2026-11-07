@@ -51,7 +51,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ARG DRAWIO_VERSION=31.3.2
 ARG DRAWIO_SHA256=725453f32ef7f2f63f8b50b374857a5c312e2aaabcf221cb0600332741ae1094
 
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+RUN apt-get -o Acquire::Retries=0 update --error-on=any && apt-get -o Acquire::Retries=0 install -y --no-install-recommends curl ca-certificates \
   && rm -rf /var/lib/apt/lists/* \
   && curl -fsSL -o /tmp/drawio.deb \
      "https://github.com/jgraph/drawio-desktop/releases/download/v${DRAWIO_VERSION}/drawio-amd64-${DRAWIO_VERSION}.deb" \
