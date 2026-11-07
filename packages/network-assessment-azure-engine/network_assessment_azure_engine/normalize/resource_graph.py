@@ -30,6 +30,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from network_assessment_azure_engine.model.azure import (
     AppGatewayWafPolicy,
+    AppGatewayWafScope,
     ApplicationGateway,
     AzureBastionHost,
     AzureFirewall,
@@ -831,6 +832,49 @@ class _Normalizer:
             mode=_get(p, "policySettings", "mode"),
         )
 
+    def waf_scopes(
+        self, r: ArgRow, policies: dict[str, AppGatewayWafPolicy]
+    ) -> list[AppGatewayWafScope]:
+        """The WAF policies linked to single listeners and path rules of a gateway (issue #352).
+
+        Such a policy overrides the gateway-wide one for its listener or path. A referenced
+        policy that is not in the input is kept with ``policy=None`` and warned once.
+        """
+        p = r.prop
+        # (kind, item, the id Azure would give it when the export row carries none)
+        found: list[tuple[str, Any, str]] = [
+            ("listener", item, f"{r.id}/httpListeners/{_get(item, 'name') or f'#{i}'}")
+            for i, item in enumerate(_get(p, "httpListeners", default=[]) or [])
+        ]
+        for m, path_map in enumerate(_get(p, "urlPathMaps", default=[]) or []):
+            map_id = str(
+                _get(path_map, "id") or f"{r.id}/urlPathMaps/{_get(path_map, 'name') or f'#{m}'}"
+            )
+            found += [
+                ("path_rule", item, f"{map_id}/pathRules/{_get(item, 'name') or f'#{i}'}")
+                for i, item in enumerate(
+                    _get(path_map, "properties", "pathRules", default=[]) or []
+                )
+            ]
+        scopes: list[AppGatewayWafScope] = []
+        for kind, item, fallback_id in found:
+            policy_id = _ref(_get(item, "properties", "firewallPolicy"))
+            if not policy_id:
+                continue
+            policy = policies.get(policy_id.lower())
+            if policy is None:
+                self.lookup(policy_id, "WAF policy", r)
+            scopes.append(
+                AppGatewayWafScope(
+                    kind=kind,  # type: ignore[arg-type]
+                    id=str(_get(item, "id") or fallback_id),
+                    name=str(_get(item, "name") or ""),
+                    policy_id=policy_id,
+                    policy=policy,
+                )
+            )
+        return scopes
+
     def app_gateway(
         self, r: ArgRow, policies: dict[str, AppGatewayWafPolicy]
     ) -> ApplicationGateway:
@@ -863,6 +907,8 @@ class _Normalizer:
             waf_rule_set_version=_get(waf, "ruleSetVersion"),
             waf_policy_id=policy_id,
             waf_policy=policy,
+            waf_scopes=self.waf_scopes(r, policies),
+            listener_count=len(_get(p, "httpListeners", default=[]) or []),
             ssl_policy_name=_get(p, "sslPolicy", "policyName"),
             autoscale_min=_int(_get(p, "autoscaleConfiguration", "minCapacity")),
             autoscale_max=_int(_get(p, "autoscaleConfiguration", "maxCapacity")),

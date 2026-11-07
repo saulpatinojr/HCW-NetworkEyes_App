@@ -161,24 +161,56 @@ _POLICY_HOLDERS = frozenset(
 )
 
 
+def _policy_ref(props: object) -> str | None:
+    """``props.firewallPolicy.id`` when it is a string, else None."""
+    if not isinstance(props, dict):
+        return None
+    ref = (props.get("firewallPolicy") or {}).get("id")
+    return ref if isinstance(ref, str) else None
+
+
+def _policy_refs(row: dict) -> list[str]:
+    """Every policy id a gateway or firewall row names.
+
+    The resource's own ``properties.firewallPolicy`` and, on an Application Gateway, the
+    policy each ``httpListeners[]`` entry and each ``urlPathMaps[].pathRules[]`` entry may
+    link, which overrides the gateway-wide one for that listener or path (issue #352).
+    """
+    props = row.get("properties") or {}
+    refs = [_policy_ref(props)]
+    if str(row.get("type", "")).lower() == "microsoft.network/applicationgateways" and isinstance(
+        props, dict
+    ):
+        for listener in props.get("httpListeners") or []:
+            if isinstance(listener, dict):
+                refs.append(_policy_ref(listener.get("properties")))
+        for path_map in props.get("urlPathMaps") or []:
+            if not isinstance(path_map, dict):
+                continue
+            for path_rule in (path_map.get("properties") or {}).get("pathRules") or []:
+                if isinstance(path_rule, dict):
+                    refs.append(_policy_ref(path_rule.get("properties")))
+    return [ref for ref in refs if ref]
+
+
 def referenced_policy_rows(rows: list[dict], in_scope: list[dict]) -> list[dict]:
     """Rows outside the scopes that an in-scope gateway or firewall references by policy id.
 
     A resource-group scope keeps the gateway and drops a WAF or firewall policy that lives in
     another resource group, and the rules then fall back to the gateway's inline settings
     (AZ-NET-007 misses a Disabled policy, AZ-NET-003 a policy's threat-intelligence mode). The
-    policy rows the kept rows name are returned so the normalizer can resolve the reference
-    without adding them to the scoped topology's resource set.
+    policy rows the kept rows name, the gateway-wide one and those of its listeners and path
+    rules, are returned so the normalizer can resolve the references without adding them to
+    the scoped topology's resource set.
     """
     kept = {str(r.get("id", "")).lower() for r in in_scope}
     wanted: set[str] = set()
     for row in in_scope:
         if str(row.get("type", "")).lower() not in _POLICY_HOLDERS:
             continue
-        props = row.get("properties") or {}
-        ref = (props.get("firewallPolicy") or {}).get("id") if isinstance(props, dict) else None
-        if isinstance(ref, str) and ref.lower() not in kept:
-            wanted.add(ref.lower())
+        for ref in _policy_refs(row):
+            if ref.lower() not in kept:
+                wanted.add(ref.lower())
     return [r for r in rows if str(r.get("id", "")).lower() in wanted]
 
 

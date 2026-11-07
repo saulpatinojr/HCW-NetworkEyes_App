@@ -2075,7 +2075,7 @@ member (`CHANGELOG.md` `[Unreleased]`). Open:
   the lab build's normalizer fills fields 1.3.0 lacks (firewall and WAF policies, flow logs,
   `ip_configuration_count`, export provenance). The lab build's `core-update` PR replaces `lab-1.0.0`
   with it and deletes `src/network_assessment/{model,rules,classify,ingestion/normalize}` (plan section
-  21); its `/api/health model.version` then reads `1.4.0`, and its `rules_digest()` pin equals this
+  21); its `/api/health model.version` then reads the engine's `TOPOLOGY_MODEL_VERSION` (`1.5.0` since engine 0.1.2), and its `rules_digest()` pin equals this
   tree's `tests/unit/test_registry.py` table.
 - The static cost estimates (`est_monthly_cost_usd`, `azure_network_prices.py`) stay in the monorepo
   (`finops_signals.attach_cost_estimates`); the engine's `AZ-COST-*` findings carry none. If the

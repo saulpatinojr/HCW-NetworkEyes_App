@@ -37,7 +37,7 @@ from network_assessment_azure_engine.rules import (
     rules_table,
 )
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 __all__ = [
     "FINDINGS_SCHEMA_VERSION",

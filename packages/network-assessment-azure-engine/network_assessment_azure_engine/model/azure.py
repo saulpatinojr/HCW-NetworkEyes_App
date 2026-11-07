@@ -4,6 +4,13 @@ Moved from the monorepo's ``network_assessment.core.topology.azure`` (itself the
 ``network_assessment.core.topology_schema``); the monorepo re-exports it. Live discovery and a Resource Graph
 export both populate it: fields a collector fills stay, fields an export carries were added.
 
+Version 1.5.0 — WAF policies set on a single listener or path rule (issue #352).
+  Added: AppGatewayWafScope (+ ApplicationGateway.waf_scopes, listener_count,
+         gateway_policy_unused) — a WAF policy linked to one
+         ``httpListeners[]`` entry or one ``urlPathMaps[].pathRules[]`` entry, which overrides the
+         gateway-wide policy for that listener or path.
+  All additions default, so 1.4.0 checkpoints remain valid.
+
 Version 1.4.0 — change set C of REFACTOR_APP.md.
   Added: AzureFirewallPolicy (+ AzureFirewall.firewall_policy, effective_threat_intel_mode),
          AppGatewayWafPolicy (+ ApplicationGateway.waf_policy_id, waf_policy, sku_tier,
@@ -49,12 +56,13 @@ from pydantic import BaseModel, Field
 
 from network_assessment_azure_engine.model.common import SubnetType
 
-TOPOLOGY_MODEL_VERSION = "1.4.0"
+TOPOLOGY_MODEL_VERSION = "1.5.0"
 
 __all__ = [
     "TOPOLOGY_MODEL_VERSION",
     "AzureFirewallPolicy",
     "AppGatewayWafPolicy",
+    "AppGatewayWafScope",
     "FlowLog",
     "TopologySource",
     "AppGatewayMetric",
@@ -204,6 +212,22 @@ class AppGatewayWafPolicy(BaseModel):
     mode: str | None = None  # "Detection" | "Prevention"
 
 
+class AppGatewayWafScope(BaseModel):
+    """A WAF policy linked to one listener or one path rule of an Application Gateway.
+
+    Azure lets ``httpListeners[].properties.firewallPolicy`` and
+    ``urlPathMaps[].properties.pathRules[].properties.firewallPolicy`` name a policy that
+    overrides the gateway-wide one for that listener or path. ``policy`` is None when the
+    referenced policy row was not in the input (the scope is then not evaluable).
+    """
+
+    kind: Literal["listener", "path_rule"]
+    id: str  # the listener's or path rule's own sub-resource id
+    name: str
+    policy_id: str
+    policy: AppGatewayWafPolicy | None = None
+
+
 class ApplicationGateway(BaseModel):
     id: str
     name: str
@@ -219,6 +243,8 @@ class ApplicationGateway(BaseModel):
     waf_rule_set_version: str | None = None
     waf_policy_id: str | None = None
     waf_policy: AppGatewayWafPolicy | None = None
+    waf_scopes: list[AppGatewayWafScope] = Field(default_factory=list)
+    listener_count: int = 0  # httpListeners[] entries in the input; 0 when unknown
     frontend_ip_configs: list[str] = Field(default_factory=list)
 
     @property
@@ -232,6 +258,23 @@ class ApplicationGateway(BaseModel):
         if self.waf_policy and self.waf_policy.state:
             return self.waf_policy.state.lower() == "enabled"
         return self.waf_enabled
+
+    @property
+    def gateway_policy_unused(self) -> bool:
+        """True when every listener has its own resolved WAF policy, so the gateway-wide WAF
+        setting applies to no traffic (Azure: a per-site policy overrides the global one)."""
+        if self.listener_count <= 0:
+            return False
+        gateway = (self.waf_policy_id or "").lower()
+        own = {
+            s.id.lower()
+            for s in self.waf_scopes
+            if s.kind == "listener"
+            and s.policy is not None
+            and s.policy.state
+            and s.policy_id.lower() != gateway
+        }
+        return len(own) >= self.listener_count
 
     @property
     def waf_state_from_policy(self) -> bool:

@@ -34,7 +34,7 @@ from network_assessment_azure_engine.rules.registry import RULES as _registry_di
 # Re-pin when a rule is added, removed or re-versioned — and bump RULES_VERSION with it.
 # The table is the digest's input, so rules_digest() is checked without a hex literal
 # (the secrets scanner's entropy plugin would flag one).
-PINNED_RULES_VERSION = "2026.10.0"
+PINNED_RULES_VERSION = "2026.11.0"
 # The downstream lab edition (HCW-NetworkEyes_AddOn) pins the same table; both move together.
 PINNED_VERSIONS = {
     **{f"AZ-NET-{n:03d}": 1 for n in range(1, 34)},
@@ -43,10 +43,11 @@ PINNED_VERSIONS = {
     "AZ-NET-002": 2,  # merged platform-subnet skip list
     "AZ-NET-003": 2,  # threat intelligence read through the linked firewall policy
     "AZ-NET-006": 2,  # flow logs read from flow-log rows when the topology is an export
-    "AZ-NET-007": 2,  # WAF state read through the linked WAF policy
+    "AZ-NET-007": 3,  # WAF state per gateway, listener and path rule (issue #352)
     "AZ-NET-011": 2,  # subnet exhaustion derived from ipConfigurations
     "AZ-NET-012": 2,  # hedge-free facts and title
     "AZ-NET-014": 2,  # Traffic Analytics read from flow-log rows
+    "AZ-NET-025": 2,  # WAF mode per gateway, listener and path rule (issue #352)
 }
 
 EXPECTED_IDS = sorted(PINNED_VERSIONS)
@@ -130,6 +131,7 @@ class TestEveryRuleMeta:
             "AZ-NET-011",
             "AZ-NET-012",
             "AZ-NET-014",
+            "AZ-NET-025",
         }
 
 
@@ -318,7 +320,7 @@ class TestUnknowns:
         sub = AzureSubscriptionTopology(subscription_id=SUB, tenant_id="t", vnets=[_vnet(False)])
         report = evaluate(self._topology(sub))
         assert report.rules_version == RULES_VERSION
-        assert report.model_version == "1.4.0"
+        assert report.model_version == "1.5.0"
         for f in report.findings:
             assert f.rule_version == RULES[f.rule_id][0].version
             assert f.learn_url == RULES[f.rule_id][0].learn_url

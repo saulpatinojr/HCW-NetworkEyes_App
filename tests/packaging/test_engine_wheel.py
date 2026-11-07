@@ -114,7 +114,7 @@ class TestWheel:
         )
         assert result.returncode == 0, result.stderr[-2000:]
         version, model, count = result.stdout.split()
-        assert version == "2026.10.0" and model == "1.4.0" and int(count) == 45
+        assert version == "2026.11.0" and model == "1.5.0" and int(count) == 45
 
     def test_clean_venv_holds_no_forbidden_distribution(self, clean_venv: Path):
         result = _in_venv(
