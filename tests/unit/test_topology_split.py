@@ -49,7 +49,7 @@ class TestSeparateVersions:
     def test_each_model_carries_its_own_version(self):
         # The Azure model moved to the engine package and gained the export fields (1.4.0);
         # the AWS model stays in the monorepo at 1.3.0.
-        assert azure.AZURE_TOPOLOGY_VERSION == "1.4.0"
+        assert azure.AZURE_TOPOLOGY_VERSION == "1.5.0"
         assert aws.AWS_TOPOLOGY_VERSION == "1.3.0"
 
     def test_each_root_model_defaults_to_its_own_version(self):

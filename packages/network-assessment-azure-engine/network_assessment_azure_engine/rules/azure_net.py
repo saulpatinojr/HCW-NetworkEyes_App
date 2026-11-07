@@ -28,6 +28,7 @@ from collections.abc import Iterator
 
 from network_assessment_azure_engine.findings.schema import FindingSeverity
 from network_assessment_azure_engine.model.azure import (
+    ApplicationGateway,
     AzureRouteTable,
     AzureSubscriptionTopology,
     AzureTopology,
@@ -544,7 +545,7 @@ def vnet_without_flow_logs(
     title="Application Gateway WAF is disabled",
     severity=FindingSeverity.HIGH,
     category="Application Security",
-    version=2,
+    version=3,
     learn_url=_LEARN_APPGW_WAF,
     frameworks=(
         fw.WAF_NS4,
@@ -567,10 +568,11 @@ def vnet_without_flow_logs(
         ),
     ),
     applies_to="export",
-    evidence="application_gateways[].waf_enabled (or the linked WAF policy's state)",
-    description="The Application Gateway runs without a web application firewall: neither its inline "
-    "WAF setting nor a linked WAF policy is enabled, so HTTP requests reach the backends "
-    "uninspected.",
+    evidence="application_gateways[].waf_enabled (or the linked WAF policy's state, per gateway, "
+    "listener and path rule)",
+    description="The Application Gateway, or one of its listeners or path rules, runs without a web "
+    "application firewall: neither the inline WAF setting nor the WAF policy that applies there is "
+    "enabled, so HTTP requests reach the backends uninspected.",
     remediation="Link a WAF policy in Prevention mode with the current OWASP core rule set to the "
     "gateway (WAF_v2 SKU), or enable the inline WAF configuration.",
 )
@@ -578,6 +580,7 @@ def application_gateway_waf_disabled(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
     for agw in sub.application_gateways:
+        yield from _waf_scope_disabled(agw, sub, topology)
         if agw.effective_waf_enabled:
             continue
         if agw.waf_state_from_policy and agw.waf_policy:
@@ -595,6 +598,57 @@ def application_gateway_waf_disabled(
             fact=f"Application Gateway {agw.name} ({agw.sku_name}) has "
             f"Web Application Firewall disabled{via}.",
             evidence_ref=evidence_ref_for(topology, sub, path),
+        )
+
+
+_WAF_SCOPE_LABEL = {"listener": "listener", "path_rule": "path rule"}
+
+
+def _waf_scope_disabled(
+    agw: ApplicationGateway, sub: AzureSubscriptionTopology, topology: AzureTopology
+) -> Iterator[Observation]:
+    """AZ-NET-007 per listener and path rule: a policy linked there overrides the gateway's.
+
+    A scope whose policy row is absent, or states no ``state``, is skipped: the policy that
+    applies there is not known (issue #352).
+    """
+    for scope in agw.waf_scopes:
+        policy = scope.policy
+        if policy is None or not policy.state or policy.state.lower() == "enabled":
+            continue
+        yield Observation(
+            resource_id=scope.id,
+            resource_type="Microsoft.Network/applicationGateways",
+            region=agw.location,
+            fact=f"Application Gateway {agw.name} ({agw.sku_name}) {_WAF_SCOPE_LABEL[scope.kind]} "
+            f"{scope.name} has Web Application Firewall disabled: its own WAF policy "
+            f"{policy.name} has state={policy.state}.",
+            evidence_ref=evidence_ref_for(topology, sub, f"waf_policies[id={policy.id}].state"),
+        )
+
+
+def _waf_scope_detection(
+    agw: ApplicationGateway, sub: AzureSubscriptionTopology, topology: AzureTopology
+) -> Iterator[Observation]:
+    """AZ-NET-025 per listener and path rule: an enabled policy there in Detection mode."""
+    for scope in agw.waf_scopes:
+        policy = scope.policy
+        if policy is None or not policy.state or policy.state.lower() != "enabled":
+            continue
+        if not policy.mode or policy.mode.lower() == _WAF_PREVENTION:
+            continue
+        yield Observation(
+            resource_id=scope.id,
+            resource_type="Microsoft.Network/applicationGateways",
+            region=agw.location,
+            fact=f"Application Gateway {agw.name} ({agw.sku_name}) {_WAF_SCOPE_LABEL[scope.kind]} "
+            f"{scope.name} has WAF enabled in {policy.mode} mode (from its own WAF policy "
+            f"{policy.name}).",
+            evidence_ref=evidence_ref_for(topology, sub, f"waf_policies[id={policy.id}].mode"),
+            description="Matching requests are logged and not blocked, so the WAF inspects "
+            "without protecting.",
+            recommendation="After tuning the Detection-mode log for false positives, switch the WAF "
+            "policy to Prevention with a current OWASP core rule set.",
         )
 
 
@@ -1458,7 +1512,7 @@ def vnet_custom_dns_servers(
     title="Application Gateway WAF in Detection mode",
     severity=FindingSeverity.MEDIUM,
     category="Application Security",
-    version=1,
+    version=2,
     learn_url=_LEARN_APPGW_WAF,
     frameworks=(
         fw.WAF_NS4,
@@ -1472,9 +1526,11 @@ def vnet_custom_dns_servers(
         ),
     ),
     applies_to="export",
-    evidence="application_gateways[].waf_mode (or the linked WAF policy's mode)",
-    description="The Application Gateway's WAF, inline or through its linked WAF policy, runs in "
-    "Detection mode, so matching requests are logged and still forwarded to the backends.",
+    evidence="application_gateways[].waf_mode (or the linked WAF policy's mode, per gateway, "
+    "listener and path rule)",
+    description="The Application Gateway's WAF, inline or through the WAF policy linked to the gateway "
+    "or to one of its listeners or path rules, runs in Detection mode, so matching requests are "
+    "logged and still forwarded to the backends.",
     remediation="Switch the WAF policy to Prevention mode after reviewing the detection log for false "
     "positives, and keep the OWASP core rule set current.",
 )
@@ -1482,6 +1538,7 @@ def application_gateway_waf_detection_mode(
     sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
     for agw in sub.application_gateways:
+        yield from _waf_scope_detection(agw, sub, topology)
         mode = agw.effective_waf_mode
         if not agw.effective_waf_enabled or not mode:
             continue

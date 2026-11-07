@@ -49,7 +49,7 @@ logger = logging.getLogger("network_assessment_azure_engine.rules")
 
 # Calendar version of the registry. Bump it, and re-pin the id:version table in the tests,
 # whenever a rule id is added or a rule's ``version`` moves.
-RULES_VERSION = "2026.10.0"
+RULES_VERSION = "2026.11.0"
 
 # ``export``: evaluable from a Resource Graph export of the network resources.
 # ``live-only``: needs a live collector (Azure Monitor metrics, diagnostic settings, BGP
