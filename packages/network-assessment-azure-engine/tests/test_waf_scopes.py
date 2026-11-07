@@ -57,6 +57,8 @@ def _rows(
     listener_policy: str | None = None,
     path_policy: str | None = None,
     policies: list[dict],
+    gateway_state: str = "Enabled",
+    extra_listener: bool = False,
 ) -> tuple[list[dict], str]:
     """The fixture export with one gateway whose gateway-wide policy is Enabled in Prevention.
 
@@ -83,6 +85,14 @@ def _rows(
     if path_policy:
         path_rule["properties"]["firewallPolicy"] = {"id": path_policy}
     props["httpListeners"] = [listener]
+    if extra_listener:
+        props["httpListeners"].append(
+            {
+                "id": f"{agw['id']}/httpListeners/hcw-sample-plain",
+                "name": "hcw-sample-plain",
+                "properties": {},
+            }
+        )
     props["urlPathMaps"] = [
         {
             "id": f"{agw['id']}/urlPathMaps/hcw-sample-map",
@@ -90,7 +100,7 @@ def _rows(
             "properties": {"pathRules": [path_rule]},
         }
     ]
-    rows += [_policy_row(GATEWAY_POLICY, "Enabled", "Prevention"), *policies]
+    rows += [_policy_row(GATEWAY_POLICY, gateway_state, "Prevention"), *policies]
     return rows, agw["id"]
 
 
@@ -235,3 +245,69 @@ class TestListenerPolicyOutsideTheDiscoveryScope:
         assert findings[("AZ-NET-007", listener_id)].observed_state.evidence_ref == (
             f"discovery:{SUB}.waf_policies[id={OTHER_RG_LISTENER_POLICY}].state"
         )
+
+
+class TestGatewayAndScopeTogether:
+    """Review of the first push: no duplicate for the gateway's own policy, no gateway finding
+    when the gateway-wide setting applies to no listener."""
+
+    def test_a_listener_linked_to_the_gateway_policy_adds_no_second_finding(self) -> None:
+        rows, agw_id = _rows(listener_policy=GATEWAY_POLICY, policies=[], gateway_state="Disabled")
+        assert set(_waf_findings(rows)) == {("AZ-NET-007", agw_id)}
+
+    def test_every_listener_with_its_own_enabled_policy_silences_the_gateway(self) -> None:
+        rows, _ = _rows(
+            listener_policy=LISTENER_POLICY,
+            policies=[_policy_row(LISTENER_POLICY, "Enabled", "Prevention")],
+            gateway_state="Disabled",
+        )
+        agw = normalize_resource_graph(rows).subscriptions[0].application_gateways[0]
+        assert agw.listener_count == 1 and agw.gateway_policy_unused is True
+        assert _waf_findings(rows) == {}
+
+    def test_a_listener_without_its_own_policy_keeps_the_gateway_finding(self) -> None:
+        rows, agw_id = _rows(
+            listener_policy=LISTENER_POLICY,
+            policies=[_policy_row(LISTENER_POLICY, "Enabled", "Prevention")],
+            gateway_state="Disabled",
+            extra_listener=True,
+        )
+        agw = normalize_resource_graph(rows).subscriptions[0].application_gateways[0]
+        assert agw.listener_count == 2 and agw.gateway_policy_unused is False
+        assert set(_waf_findings(rows)) == {("AZ-NET-007", agw_id)}
+
+    def test_a_scope_finding_carries_its_own_recommendation(self) -> None:
+        rows, agw_id = _rows(
+            listener_policy=LISTENER_POLICY,
+            policies=[_policy_row(LISTENER_POLICY, "Disabled", "Prevention")],
+        )
+        finding = _waf_findings(rows)[("AZ-NET-007", f"{agw_id}/httpListeners/hcw-sample-listener")]
+        assert "linked to this listener" in finding.remediation
+
+    def test_a_row_without_sub_resource_ids_gets_azure_shaped_unique_ids(self) -> None:
+        rows, agw_id = _rows(
+            listener_policy=LISTENER_POLICY,
+            path_policy=PATH_POLICY,
+            policies=[
+                _policy_row(LISTENER_POLICY, "Disabled", "Prevention"),
+                _policy_row(PATH_POLICY, "Disabled", "Prevention"),
+            ],
+        )
+        agw = next(r for r in rows if r["type"].lower().endswith("/applicationgateways"))
+        for listener in agw["properties"]["httpListeners"]:
+            listener.pop("id")
+        for path_map in agw["properties"]["urlPathMaps"]:
+            path_map.pop("id")
+            for path_rule in path_map["properties"]["pathRules"]:
+                path_rule.pop("id")
+        ids = {
+            s.id
+            for s in normalize_resource_graph(rows)
+            .subscriptions[0]
+            .application_gateways[0]
+            .waf_scopes
+        }
+        assert ids == {
+            f"{agw_id}/httpListeners/hcw-sample-listener",
+            f"{agw_id}/urlPathMaps/hcw-sample-map/pathRules/hcw-sample-api",
+        }

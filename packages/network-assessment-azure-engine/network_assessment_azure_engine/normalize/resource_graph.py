@@ -841,16 +841,23 @@ class _Normalizer:
         policy that is not in the input is kept with ``policy=None`` and warned once.
         """
         p = r.prop
-        found: list[tuple[str, Any]] = [
-            ("listener", item) for item in (_get(p, "httpListeners", default=[]) or [])
+        # (kind, item, the id Azure would give it when the export row carries none)
+        found: list[tuple[str, Any, str]] = [
+            ("listener", item, f"{r.id}/httpListeners/{_get(item, 'name') or f'#{i}'}")
+            for i, item in enumerate(_get(p, "httpListeners", default=[]) or [])
         ]
-        for path_map in _get(p, "urlPathMaps", default=[]) or []:
+        for m, path_map in enumerate(_get(p, "urlPathMaps", default=[]) or []):
+            map_id = str(
+                _get(path_map, "id") or f"{r.id}/urlPathMaps/{_get(path_map, 'name') or f'#{m}'}"
+            )
             found += [
-                ("path_rule", item)
-                for item in (_get(path_map, "properties", "pathRules", default=[]) or [])
+                ("path_rule", item, f"{map_id}/pathRules/{_get(item, 'name') or f'#{i}'}")
+                for i, item in enumerate(
+                    _get(path_map, "properties", "pathRules", default=[]) or []
+                )
             ]
         scopes: list[AppGatewayWafScope] = []
-        for kind, item in found:
+        for kind, item, fallback_id in found:
             policy_id = _ref(_get(item, "properties", "firewallPolicy"))
             if not policy_id:
                 continue
@@ -860,7 +867,7 @@ class _Normalizer:
             scopes.append(
                 AppGatewayWafScope(
                     kind=kind,  # type: ignore[arg-type]
-                    id=str(_get(item, "id") or f"{r.id}/{kind}/{_get(item, 'name') or ''}"),
+                    id=str(_get(item, "id") or fallback_id),
                     name=str(_get(item, "name") or ""),
                     policy_id=policy_id,
                     policy=policy,
@@ -901,6 +908,7 @@ class _Normalizer:
             waf_policy_id=policy_id,
             waf_policy=policy,
             waf_scopes=self.waf_scopes(r, policies),
+            listener_count=len(_get(p, "httpListeners", default=[]) or []),
             ssl_policy_name=_get(p, "sslPolicy", "policyName"),
             autoscale_min=_int(_get(p, "autoscaleConfiguration", "minCapacity")),
             autoscale_max=_int(_get(p, "autoscaleConfiguration", "maxCapacity")),

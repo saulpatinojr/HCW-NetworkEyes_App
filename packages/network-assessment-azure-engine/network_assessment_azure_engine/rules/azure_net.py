@@ -28,6 +28,7 @@ from collections.abc import Iterator
 
 from network_assessment_azure_engine.findings.schema import FindingSeverity
 from network_assessment_azure_engine.model.azure import (
+    AppGatewayWafScope,
     ApplicationGateway,
     AzureRouteTable,
     AzureSubscriptionTopology,
@@ -581,7 +582,7 @@ def application_gateway_waf_disabled(
 ) -> Iterator[Observation]:
     for agw in sub.application_gateways:
         yield from _waf_scope_disabled(agw, sub, topology)
-        if agw.effective_waf_enabled:
+        if agw.effective_waf_enabled or agw.gateway_policy_unused:
             continue
         if agw.waf_state_from_policy and agw.waf_policy:
             via = (
@@ -610,9 +611,10 @@ def _waf_scope_disabled(
     """AZ-NET-007 per listener and path rule: a policy linked there overrides the gateway's.
 
     A scope whose policy row is absent, or states no ``state``, is skipped: the policy that
-    applies there is not known (issue #352).
+    applies there is not known (issue #352). A scope linked to the gateway's own policy adds
+    nothing to the gateway-wide finding and is skipped too.
     """
-    for scope in agw.waf_scopes:
+    for scope in _own_policy_scopes(agw):
         policy = scope.policy
         if policy is None or not policy.state or policy.state.lower() == "enabled":
             continue
@@ -624,14 +626,22 @@ def _waf_scope_disabled(
             f"{scope.name} has Web Application Firewall disabled: its own WAF policy "
             f"{policy.name} has state={policy.state}.",
             evidence_ref=evidence_ref_for(topology, sub, f"waf_policies[id={policy.id}].state"),
+            recommendation=f"Enable the WAF policy linked to this {_WAF_SCOPE_LABEL[scope.kind]} "
+            "in Prevention mode, or remove the link so the gateway-wide policy applies.",
         )
+
+
+def _own_policy_scopes(agw: ApplicationGateway) -> list[AppGatewayWafScope]:
+    """The listener and path-rule scopes whose policy is not the gateway's own."""
+    gateway = (agw.waf_policy_id or "").lower()
+    return [s for s in agw.waf_scopes if s.policy_id.lower() != gateway]
 
 
 def _waf_scope_detection(
     agw: ApplicationGateway, sub: AzureSubscriptionTopology, topology: AzureTopology
 ) -> Iterator[Observation]:
     """AZ-NET-025 per listener and path rule: an enabled policy there in Detection mode."""
-    for scope in agw.waf_scopes:
+    for scope in _own_policy_scopes(agw):
         policy = scope.policy
         if policy is None or not policy.state or policy.state.lower() != "enabled":
             continue
@@ -1540,7 +1550,7 @@ def application_gateway_waf_detection_mode(
     for agw in sub.application_gateways:
         yield from _waf_scope_detection(agw, sub, topology)
         mode = agw.effective_waf_mode
-        if not agw.effective_waf_enabled or not mode:
+        if not agw.effective_waf_enabled or not mode or agw.gateway_policy_unused:
             continue
         if mode.lower() == _WAF_PREVENTION:
             continue
