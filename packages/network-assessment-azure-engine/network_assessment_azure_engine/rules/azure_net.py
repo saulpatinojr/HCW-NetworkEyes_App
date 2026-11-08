@@ -712,7 +712,7 @@ def gateway_saturation(
 
 @rule(
     id=R_AZ_FW_NO_HITS,
-    title="Azure Firewall present but processes 0 traffic",
+    title="Azure Firewall with no rule hits or no processed data",
     severity=FindingSeverity.HIGH,
     category="Network Security",
     version=2,  # framework note states what was observed (issue 364)
@@ -728,8 +728,8 @@ def gateway_saturation(
     applies_to="live-only",
     inputs=("network_metrics",),
     evidence="network_metrics.firewall_metrics[]",
-    description="The firewall recorded no rule hits and no processed data in the 24-hour metric "
-    "window, so no traffic is routed through it.",
+    description="Azure Monitor reports zero rule hits, or zero data processed, for the firewall in "
+    "the 24-hour metric window.",
     remediation="Add 0.0.0.0/0 routes with the firewall's private IP as the next hop on the spoke "
     "subnets and confirm the hub peering forwards traffic; if the firewall is no longer "
     "needed, decommission it.",
@@ -754,8 +754,8 @@ def firewall_without_traffic(
                 fact=f"Firewall {fm.firewall_name} recorded 0 rule hits or 0 data processed "
                 f"in 24 hours.",
                 evidence_ref=evidence_ref_for(topology, sub, "network_metrics"),
-                description="No traffic reached the firewall's rules in the metric window: "
-                "the routing in place does not send flows through it.",
+                description="Azure Monitor reported zero rule hits or zero data processed for "
+                "this firewall in the 24-hour metric window.",
             )
 
 
