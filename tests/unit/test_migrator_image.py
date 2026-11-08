@@ -214,6 +214,22 @@ def test_runner_files_stay_owned_by_root_and_only_the_cache_is_writable() -> Non
     )
 
 
+def test_the_builder_drops_group_and_world_write_from_everything_the_runner_copies() -> None:
+    """The build writes some output group- and world-writable (.next/server, found by the Image Scan job on the
+    first run of the root-owned runner). Root ownership alone would leave those files writable by the app's user,
+    so the builder removes the bits in the layer that creates them, for every path the runner takes from it."""
+    builds = [c for c in runs("builder") if "npm run build" in c]
+    assert len(builds) == 1, builds
+    stripped = re.search(r"chmod -R go-w ([^&]+)", builds[0])
+    assert stripped, builds[0]
+    taken = {
+        a.split()[-2].removeprefix("/app/")
+        for _, a in copies("runner")
+        if a.startswith("--from=builder")
+    }
+    assert taken <= set(stripped.group(1).split()), (taken, stripped.group(1))
+
+
 # --- package.json and the lockfile ---
 
 

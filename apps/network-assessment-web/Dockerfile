@@ -48,7 +48,11 @@ RUN npx prisma generate \
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN npm run build
+# The build writes some of its output group- and world-writable (seen in .next/server). The runner copies these
+# files owned by root, and the Image Scan check in 300-test-codebase.yml refuses any file under /app that a user
+# other than root can write, so the write bits come off here, in the same layer, for everything the runner copies.
+RUN npm run build \
+ && chmod -R go-w .next/standalone .next/static public node_modules/.prisma node_modules/@prisma
 
 # ── Stage 3: migrator-deps ───────────────────────────────────────────────────
 # The migrator's own dependency tree: the Prisma CLI, @prisma/client and what they
