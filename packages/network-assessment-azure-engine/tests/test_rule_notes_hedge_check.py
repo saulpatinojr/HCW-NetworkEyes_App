@@ -87,7 +87,7 @@ class TestRegistrationChecksTheNotes:
 
 
 class TestCustomerValuesAreNeverAPlainString:
-    @pytest.mark.parametrize("values", ["hub-may-01", b"hub-may-01", ""])
+    @pytest.mark.parametrize("values", ["hub-may-01", b"hub-may-01", bytearray(b"hub-may-01"), ""])
     def test_scan_text_refuses_a_string(self, values):
         with pytest.raises(TypeError, match="customer_values"):
             ENFORCER.scan_text("Listener hub-may-01 has no WAF.", values)
