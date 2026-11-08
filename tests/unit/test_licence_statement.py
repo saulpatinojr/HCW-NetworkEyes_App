@@ -96,3 +96,21 @@ def test_readme_points_at_the_licence_and_notice() -> None:
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     assert "(LICENSE)" in readme
     assert "(NOTICE)" in readme
+
+
+def test_engine_package_carries_the_same_licence_and_copyright() -> None:
+    """The engine wheel ships ``packages/network-assessment-azure-engine/LICENSE`` and ``NOTICE`` (PEP 639).
+
+    setuptools reads ``license-files`` only from the package directory, so LICENSE there is a copy. It must stay
+    byte-identical to the root one, and the package NOTICE must name the same copyright holder as the root NOTICE.
+    """
+    package = REPO_ROOT / "packages" / "network-assessment-azure-engine"
+    assert (package / "LICENSE").read_bytes() == (REPO_ROOT / "LICENSE").read_bytes()
+    root_copyright = next(
+        line
+        for line in (REPO_ROOT / "NOTICE").read_text(encoding="utf-8").splitlines()
+        if line.startswith("Copyright ")
+    )
+    notice = (package / "NOTICE").read_text(encoding="utf-8")
+    assert root_copyright in notice.splitlines()
+    assert "Apache License, Version 2.0" in notice

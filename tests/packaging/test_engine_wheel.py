@@ -105,6 +105,31 @@ class TestWheel:
         assert requires == ["pydantic<3,>=2.13"], requires
         assert "Requires-Python: >=3.14" in text
 
+    def test_wheel_ships_the_licence_text_and_notice(self, wheel: Path):
+        """Apache-2.0 section 4: whoever redistributes the wheel must pass on LICENSE and NOTICE.
+
+        engine-v0.1.2 declared ``License-Expression: Apache-2.0`` but shipped neither file, so the lab
+        build's image redistributed the engine without them. PEP 639 puts them under
+        ``.dist-info/licenses/`` and names each in a ``License-File:`` line of METADATA.
+        """
+        import zipfile
+
+        with zipfile.ZipFile(wheel) as zf:
+            names = zf.namelist()
+            dist_info = next(n.split("/", 1)[0] for n in names if n.endswith(".dist-info/METADATA"))
+            metadata = zf.read(f"{dist_info}/METADATA").decode()
+            record = zf.read(f"{dist_info}/RECORD").decode()
+            shipped_licence = zf.read(f"{dist_info}/licenses/LICENSE")
+            shipped_notice = zf.read(f"{dist_info}/licenses/NOTICE").decode()
+        assert "License-Expression: Apache-2.0" in metadata.splitlines()
+        assert "License-File: LICENSE" in metadata.splitlines()
+        assert "License-File: NOTICE" in metadata.splitlines()
+        for name in ("LICENSE", "NOTICE"):
+            assert f"{dist_info}/licenses/{name}" in names
+            assert f"{dist_info}/licenses/{name}," in record
+        assert shipped_licence == (REPO_ROOT / "LICENSE").read_bytes()
+        assert "Copyright 2026 Hybrid Cloud Works" in shipped_notice
+
     def test_import_in_clean_venv_pulls_no_cloud_sdk(self, clean_venv: Path):
         result = _in_venv(
             clean_venv,

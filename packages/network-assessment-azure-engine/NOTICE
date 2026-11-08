@@ -1,0 +1,22 @@
+network-assessment-azure-engine
+Part of HCW NetworkEyes App (Cloud Network Assessment)
+https://github.com/saulpatinojr/HCW-NetworkEyes_App
+
+Copyright 2026 Hybrid Cloud Works
+
+This package is licensed under the Apache License, Version 2.0. The full text
+is in the file LICENSE next to this one; in an installed wheel both files are in
+the package's .dist-info/licenses/ folder.
+
+This package bundles no third-party code, fonts or images. Its dependencies
+(pydantic, and the Azure libraries of the optional [azure] extra) keep their own
+licences and are not copied into it.
+
+Names that are NOT covered by the Apache License
+
+The names "Hybrid Cloud Works" and "NetworkEyes".
+  Licence: none. Section 6 of the Apache License (Trademarks) grants no
+           permission to use them, "except as required for reasonable and
+           customary use in describing the origin of the Work and reproducing
+           the content of the NOTICE file". This does not take away anything
+           the Apache License gives you for the code.
