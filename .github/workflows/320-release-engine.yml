@@ -33,7 +33,7 @@ jobs:
 
   build-test:
     name: Build and test the wheel
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     permissions:
       contents: read
@@ -87,7 +87,7 @@ jobs:
 
   publish-pypi:
     name: Publish to PyPI (trusted publishing)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     needs: [build-test]
     if: vars.PYPI_PUBLISH_ENABLED == 'true'
@@ -110,7 +110,7 @@ jobs:
 
   release-upload:
     name: Attach the artifacts to the GitHub Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     needs: [build-test]
     permissions:

@@ -2,9 +2,10 @@
 
 This is a *verify-then-close-gaps* record for the numbered GitHub Actions
 workflows under ``.github/workflows/``. Since the deployment layer left the core
-(``TODO.md`` T-504) the tree holds four workflows — ``200-build-images``,
-``300-test-codebase``, ``310-release-version``, ``320-release-engine`` and ``370-registry-cleanup``; the
-this repository holds no deploy or operations workflow. The audit against Requirement 5 covers
+(``TODO.md`` T-504) the tree holds seven workflows — ``200-build-images``,
+``300-test-codebase``, ``310-release-version``, ``320-release-engine`` and ``370-registry-cleanup``
+(build, test, release, registry), ``380-drawio-pin-check`` (a weekly reminder) and the owner-approved
+``390-repository-admin`` (manual, dry-run by default); this repository holds no deploy or operations workflow. The audit against Requirement 5 covers
 runner topology (5.1, 5.2), least-privilege ``permissions`` blocks, concurrency
 guards, and per-job timeouts. Third-party action SHA-pinning (5.3) is recorded
 separately by spec task 9.3 — this module deliberately does not record it so the
@@ -12,9 +13,9 @@ two tasks do not double-count. The R-003 escalation for the AWS deploy workflow
 (5.4) left this repository with that workflow.
 
 Runner topology (5.2). Every workflow runs on GitHub-hosted runners
-(``ubuntu-latest``). Until 2026-09-18 the self-hosted runner was the sole
-executor for ``200``, ``300`` and ``310`` and each was recorded as a single
-point of failure (design Property 13); when that runner was retired the three
+(``ubuntu-26.04``, pinned since 2026-11-07; ``ubuntu-latest`` before that).
+Until 2026-09-18 the self-hosted runner was the sole executor for ``200``,
+``300`` and ``310`` and each was recorded as a single point of failure (design Property 13); when that runner was retired the three
 workflows moved to GitHub-hosted runners, which closed the finding. The classifier and the SPOF record stay so
 a future workflow that pins ``runs-on: self-hosted`` alone is flagged again;
 each GitHub-hosted workflow is recorded as an informational non-SPOF so every
@@ -38,25 +39,35 @@ _AREA = "cicd"
 # The workflows whose sole executor is the self-hosted runner (every job
 # declares ``runs-on: self-hosted`` with no GitHub-hosted fallback and no runner
 # matrix). Empty since 2026-09-18: the runner was retired and every workflow
-# runs on ``ubuntu-latest``. Keep this in sync with a grep over the workflow
-# tree:
+# runs on a GitHub-hosted image (``ubuntu-26.04`` since 2026-11-07). Keep this in
+# sync with a grep over the workflow tree:
 #   grep -rL 'runs-on: ubuntu' .github/workflows/*.yml
 SELF_HOSTED_ONLY_WORKFLOWS: tuple[str, ...] = ()
 
 # The GitHub-hosted workflows — recorded so coverage of every workflow is
 # explicit and the "not a SPOF" outcome is captured rather than merely omitted.
+# The classifier below does not care which GitHub-hosted label a workflow uses
+# (ubuntu-26.04, ubuntu-latest or any other): only the lone ``self-hosted`` label
+# is a SPOF.
 GITHUB_HOSTED_WORKFLOWS: tuple[str, ...] = (
     "200-build-images.yml",
     "300-test-codebase.yml",
     "310-release-version.yml",
     "320-release-engine.yml",
     "370-registry-cleanup.yml",
+    "380-drawio-pin-check.yml",
+    "390-repository-admin.yml",
 )
 
 # The single self-hosted runner label. A workflow whose executor set is exactly
 # this label — no GitHub-hosted fallback and no runner matrix — is a
 # single point of failure (design Property 13, Requirement 5.2).
 SELF_HOSTED_RUNNER: str = "self-hosted"
+
+# The GitHub-hosted image every workflow job pins (``runs-on: ubuntu-26.04``),
+# named in the informational records. A pinned label changes only when someone
+# edits it; ``ubuntu-latest`` moves whenever GitHub moves it.
+GITHUB_HOSTED_RUNNER: str = "ubuntu-26.04"
 
 
 def is_self_hosted_spof(runners: set[str]) -> bool:
@@ -116,7 +127,7 @@ def cicd_findings() -> list[Finding]:
                 area=_AREA,
                 severity=Severity.INFORMATIONAL,
                 proposed_action=(
-                    f"Verified: {workflow} runs on ubuntu-latest (GitHub-hosted); "
+                    f"Verified: {workflow} runs on {GITHUB_HOSTED_RUNNER} (GitHub-hosted); "
                     "no self-hosted runner is involved, so it is not a self-hosted "
                     "single point of failure and no runner-topology change is "
                     "needed."

@@ -57,7 +57,7 @@
 # Actions > General > Workflow permissions can stay on read-only.
 name: "310 · Release CLI Tool"
 
-# Runs on GitHub-hosted runners (ubuntu-latest): the release retags with a short-lived Docker Hub
+# Runs on GitHub-hosted runners (ubuntu-26.04): the release retags with a short-lived Docker Hub
 # OIDC credential and creates the GitHub Release with GITHUB_TOKEN;
 # no private network or cloud credentials are involved. The self-hosted runner
 # the original repository used is retired.
@@ -101,7 +101,7 @@ jobs:
 
   verify:
     name: Find and verify the image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # A pushed tag needs publishing switched on; the dry run does not, and runs from main only.
     if: >-
       (github.event_name == 'push' && vars.DOCKERHUB_ENABLED == 'true') ||
@@ -209,7 +209,7 @@ jobs:
   release:
     name: Promote and release
     needs: verify
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # Only a pushed tag writes anything, and only with publishing on. A Run workflow dry run never reaches this job.
     if: github.event_name == 'push' && vars.DOCKERHUB_ENABLED == 'true'
     timeout-minutes: 15

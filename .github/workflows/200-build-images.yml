@@ -1,6 +1,6 @@
 name: "200 · Build Container Images"
 
-# Runs on GitHub-hosted runners (ubuntu-latest). Nothing here needs a private
+# Runs on GitHub-hosted runners (ubuntu-26.04). Nothing here needs a private
 # network, a cloud credential or a stored token: images build with buildx (GitHub Actions cache) and
 # push to Docker Hub through its OIDC connection. This workflow is the only publisher of the images and
 # calls nothing outside this repository and its own Docker Hub repository. The self-hosted runner the original
@@ -147,7 +147,7 @@ jobs:
   # outputs below carry one value per image. `tag-images` re-validates every
   # digest before it touches a tag.
   build-images:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # Pushing needs the Docker Hub OIDC connection; the variable is the owner's switch.
     if: vars.DOCKERHUB_ENABLED == 'true' && !inputs.rehearsal && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     timeout-minutes: 45
@@ -287,7 +287,7 @@ jobs:
           echo "${KEY}: ${DIGEST} -> ${TAGS_JSON}"
 
   build-web:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # Pushing needs the Docker Hub OIDC connection; the variable is the owner's switch.
     if: vars.DOCKERHUB_ENABLED == 'true' && !inputs.rehearsal && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     timeout-minutes: 45
@@ -512,7 +512,7 @@ jobs:
   # notes of 310 repeat the digests. If any digest does not verify, the table says `no` for it and the job stops
   # before it tags anything.
   tag-images:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # Main only, like the rehearsal: the OIDC connection's ruleset and the signing identity both name refs/heads/main.
     if: vars.DOCKERHUB_ENABLED == 'true' && !inputs.rehearsal && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) # owner step: Docker Hub OIDC connection + variables (REFACTOR_APP.md change set J)
     timeout-minutes: 15
@@ -754,7 +754,7 @@ jobs:
   # writes nothing to the repository.
   # The real build jobs above stay skipped: they need DOCKERHUB_ENABLED == 'true' and `!inputs.rehearsal`.
   rehearse-docker-login:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # Main only: the connection's ruleset names refs/heads/main only.
     if: inputs.rehearsal && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     timeout-minutes: 25

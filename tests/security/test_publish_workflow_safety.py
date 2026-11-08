@@ -445,7 +445,7 @@ class TestDockerLoginRehearsal:
     ):
         text = yaml.safe_dump(
             {**self.job, "runs-on": "runner"}
-        )  # ubuntu-latest is a runner label, not a tag
+        )  # a runner label is not an image tag
         assert "latest" not in text
         for forbidden in (
             "docker tag",
