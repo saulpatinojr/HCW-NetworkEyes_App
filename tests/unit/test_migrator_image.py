@@ -11,7 +11,7 @@ What is pinned here:
 * the Dockerfile text: the migrator copies nothing from the builder and takes `node_modules` from its own
   `migrator-deps` stage, which installs from a lockfile with `npm ci --omit=dev --ignore-scripts`; the runner still
   takes only the generated Prisma client from the builder (so `prisma` moving to `dependencies` cannot enlarge it);
-  the numeric user, the exec-form `CMD`/`HEALTHCHECK` and the file ownership stay as they were;
+  the numeric user and the exec-form `CMD`/`HEALTHCHECK` stay as they were, and the migrator's file ownership too;
 * the runner's files stay owned by root (no `--chown`), and the only directory its user owns is `app/.next/cache`
   (issue 358);
 * `package.json`: `prisma` is a production dependency (the migrator runs it) at the same range as `@prisma/client`;

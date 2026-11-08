@@ -2588,11 +2588,18 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   and `@next/swc-linux-x64-musl` beside the glibc builds. Regenerated with npm 11.21.2: the 125 entries that carry
   `os`/`cpu` were removed and `npm install --package-lock-only --ignore-scripts --legacy-peer-deps` fetched them
   again at the versions their parents pin. No package was added or removed and no version or integrity hash
-  changed; 48 entries gained `libc` (`["musl"]` or `["glibc"]`) and npm 11 corrected five dev flags (`@types/react`,
-  `csstype`, `react-is`, `typescript`, `undici`; none reaches an image's runtime set). A fresh `npm ci` on a glibc
+  changed; 48 entries gained `libc` (`["musl"]` or `["glibc"]`) and npm 11 changed five dev flags (`@types/react`,
+  `csstype`, `react-is`, `typescript`, `undici`). `react-is` is a required peer of `recharts`, which the charts use
+  at run time, so marking it dev would have dropped it from `npm audit --omit=dev` while the image still ships it;
+  it is now declared in `dependencies` (`^16.13.1`, the version already locked). `undici` is only an optional peer
+  of `openai` and nothing in the app imports it. A fresh `npm ci` on a glibc
   host went from 703 to 695 packages, and `node_modules/@img` and `node_modules/@next` no longer hold a musl
   build. `tests/unit/test_migrator_image.py` fails if an x64/arm64 musl entry loses `libc: ["musl"]`. Same method
   next time (a plain `npm install --package-lock-only` keeps existing entries and adds nothing).
+- **(1b) The build's own output is not writable by others.** The first CI run of the new Image Scan step found
+  files under `.next/server` that `npm run build` wrote group- and world-writable; owned by root they were still
+  writable by uid 1001. The builder now runs `chmod -R go-w` on every path the runner copies from it, in the build
+  layer, and `tests/unit/test_migrator_image.py` checks that every such path is covered.
 - **(3) Dependabot does not offer Python 3.15 for the CLI and API images.** The docker entry of
   `.github/dependabot.yml` ignores semver-minor and -major updates of `python`: CI tests 3.14 only (the required
   check is `Unit Tests (Python 3.14)`, `requires-python >= 3.14`, ruff `py314`), so a 3.15 base would ship code no
