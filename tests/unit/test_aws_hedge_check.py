@@ -115,20 +115,45 @@ def test_names_containing_a_hedge_word_still_give_the_full_analysis(word: str) -
 
 
 @pytest.mark.parametrize("word", HEDGE_WORDS)
-def test_a_name_that_is_only_a_hedge_word_is_withheld_not_fatal(word: str, caplog) -> None:
-    """A VPC named exactly ``may``: its findings that quote it are withheld; the rest renders."""
+def test_a_name_that_is_only_a_hedge_word_is_reported_without_the_name(word: str, caplog) -> None:
+    """A VPC named exactly ``may``: the finding that quotes it is reported with the name left out."""
     vpc = _vpc("hcw-sample-")
     vpc.name = word
-    with caplog.at_level(logging.WARNING, logger="network_assessment.analysis"):
+    with caplog.at_level(logging.INFO, logger="network_assessment.analysis"):
         report = _engine().run(aws_topology=_topology(vpc, _vpc("hcw-other-")))
-    assert [(u.rule_id, u.reason) for u in report.unknowns] == [
-        ("AWS-NET-002", HEDGED_WORDING_REASON)
+    assert report.unknowns == []
+    assert sorted(f.rule_id for f in report.findings) == sorted(
+        f.rule_id for f in BASELINE.findings for _ in range(2)
+    )
+    flow_log = [
+        f for f in report.findings if f.resource_id == vpc.id and f.rule_id == "AWS-NET-002"
     ]
-    assert report.total_count > 0, "the other findings are still reported"
+    assert [f.observed_state.fact for f in flow_log] == [
+        f"VPC {vpc.id} {analysis_module.NAME_NOT_SHOWN} has no flow logs enabled."
+    ]
     assert all(word not in f.observed_state.fact.split() for f in report.findings)
     for record in caplog.records:
         assert not re.search(rf"\b{word}\b", record.getMessage(), re.IGNORECASE)
-    assert not re.search(rf"\b{word}\b", HEDGED_WORDING_REASON, re.IGNORECASE)
+
+
+@pytest.mark.parametrize(
+    "sg_name", ["Default SG - should be removed", "web servers may need ssh", "may"]
+)
+def test_a_critical_finding_is_never_lost_to_a_security_group_name(sg_name: str) -> None:
+    """AWS allows spaces in security group names, so a name can fail the hedge check on its own.
+    The CRITICAL finding is still reported, without the name, and still escalated (DD-016)."""
+    vpc = _vpc("hcw-sample-")
+    sg = vpc.security_groups[0]
+    sg.name = sg_name
+    sg.rules[0].protocol = "-1"
+    engine = _engine()
+    report = engine.run(aws_topology=_topology(vpc))
+    open_all = [f for f in report.findings if f.rule_id == "AWS-NET-005"]
+    assert len(open_all) == 1 and open_all[0].severity == FindingSeverity.CRITICAL
+    assert sg_name not in open_all[0].observed_state.fact
+    assert f"{sg.id} {analysis_module.NAME_NOT_SHOWN} in VPC" in open_all[0].observed_state.fact
+    assert report.critical_count == 1
+    assert report.unknowns == []
 
 
 def _hedged_vpc_check(self, vpc, account_id, region):
@@ -147,7 +172,8 @@ def _hedged_vpc_check(self, vpc, account_id, region):
             ),
             framework_mappings=[FrameworkMapping(framework="Test", control="T-1")],
             status=FindingStatus.OPEN,
-        )
+        ),
+        customer_name=vpc.name,  # leaving the name out must not excuse our own "may be"
     )
 
 
@@ -159,8 +185,9 @@ def _hedged_vpc_check(self, vpc, account_id, region):
         ("hcw-sample-", {"tags": {"note": "may be"}}, None),
         ("hcw-sample-", {"tags": {"may be exposed.": "x"}}, None),
         ("hcw-sample-", {}, "may be exposed."),
+        ("may be exposed. ", {}, None),
     ],
-    ids=["plain", "hedge-in-name", "tag-value", "tag-key", "account-display-name"],
+    ids=["plain", "hedge-in-name", "tag-value", "tag-key", "account-display-name", "spaced-name"],
 )
 def test_our_own_hedge_is_never_reported(monkeypatch, prefix, extra, account_name) -> None:
     """Our "may be" is refused whatever the names, tags or display names hold."""

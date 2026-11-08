@@ -1077,6 +1077,13 @@ def _run_aws_discovery(request: DiscoveryStartRequest) -> None:
         report = engine.run(aws_topology=topology)
         all_findings = [finding_to_record(f) for f in report.findings]
         _log(f"Analysis → {len(all_findings)} finding(s).")
+        if report.unknowns:
+            # Rule ids only, like the Azure path: a rule whose finding was withheld for hedged
+            # wording is listed here, so a missing finding is never silent. No resource names.
+            _log(
+                f"{len(report.unknowns)} rule(s) could not be answered from this topology: "
+                + ", ".join(u.rule_id for u in report.unknowns)
+            )
 
         # Tag findings with a traffic-direction plane (same as the Azure path)
         for f in all_findings:
