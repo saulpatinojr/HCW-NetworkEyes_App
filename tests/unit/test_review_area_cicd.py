@@ -37,16 +37,18 @@ def test_findings_are_well_formed_and_in_area():
 
 
 def test_topology_covers_all_core_workflows():
-    """5.1: exactly five workflows, all GitHub-hosted since the runner retired."""
+    """5.1: exactly seven workflows, all GitHub-hosted since the runner retired."""
     assert len(SELF_HOSTED_ONLY_WORKFLOWS) == 0
-    assert len(GITHUB_HOSTED_WORKFLOWS) == 5
-    assert len(_ALL_WORKFLOWS) == 5
+    assert len(GITHUB_HOSTED_WORKFLOWS) == 7
+    assert len(_ALL_WORKFLOWS) == 7
     assert GITHUB_HOSTED_WORKFLOWS == (
         "200-build-images.yml",
         "300-test-codebase.yml",
         "310-release-version.yml",
         "320-release-engine.yml",
         "370-registry-cleanup.yml",
+        "380-drawio-pin-check.yml",
+        "390-repository-admin.yml",
     )
     # No workflow is both self-hosted-only and GitHub-hosted.
     assert not set(SELF_HOSTED_ONLY_WORKFLOWS) & set(GITHUB_HOSTED_WORKFLOWS)
@@ -97,7 +99,7 @@ def test_all_core_workflows_are_covered():
         if f.dedup_key.startswith("cicd:self-hosted-spof:")
     }
     assert covered == set(_ALL_WORKFLOWS)
-    assert len(covered) == 5
+    assert len(covered) == 7
 
 
 def test_best_practice_gaps_are_recorded():
@@ -211,16 +213,30 @@ def test_all_workflow_files_parse_as_yaml():
 
 
 def test_every_workflow_job_runs_on_the_pinned_github_hosted_image():
-    """5.2 against the real tree: every ``runs-on`` is the pinned ubuntu-26.04 label.
+    """5.2 against the real tree: every job's ``runs-on`` is the pinned ubuntu-26.04 label.
 
-    A pinned image changes only when someone edits the label; ``ubuntu-latest`` moves
-    when GitHub moves it. A ``self-hosted`` label here would also need a SPOF record.
+    Read from the parsed workflow, job by job, so a label written in any YAML form
+    (a list, a flow mapping, extra spacing) is seen. A pinned image changes only when
+    someone edits the label; ``ubuntu-latest`` moves when GitHub moves it. A
+    ``self-hosted`` label here would also need a SPOF record.
     """
-    labels = {}
+    import yaml
+
+    labels: dict[str, list[str]] = {}
     for path in sorted(_WORKFLOW_DIR.glob("*.yml")):
-        for line in path.read_text(encoding="utf-8").splitlines():
-            stripped = line.strip()
-            if stripped.startswith("runs-on:"):
-                labels.setdefault(stripped.split(":", 1)[1].strip(), []).append(path.name)
-    assert labels, "no runs-on line found under .github/workflows"
+        jobs = (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("jobs") or {}
+        assert jobs, f"{path.name} has no jobs"
+        for name, job in jobs.items():
+            if "uses" in job:  # a reusable-workflow call runs where that workflow says
+                continue
+            runs_on = job.get("runs-on")
+            assert runs_on is not None, f"{path.name}: job {name} has no runs-on"
+            for label in runs_on if isinstance(runs_on, list) else [runs_on]:
+                labels.setdefault(str(label), []).append(f"{path.name}:{name}")
+    assert labels, "no job found under .github/workflows"
     assert set(labels) == {GITHUB_HOSTED_RUNNER}, labels
+
+
+def test_every_workflow_file_is_in_the_audit():
+    """The runner audit names every workflow file, so a new one cannot go unrecorded."""
+    assert {path.name for path in _WORKFLOW_DIR.glob("*.yml")} == set(_ALL_WORKFLOWS)

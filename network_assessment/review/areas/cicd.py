@@ -2,9 +2,10 @@
 
 This is a *verify-then-close-gaps* record for the numbered GitHub Actions
 workflows under ``.github/workflows/``. Since the deployment layer left the core
-(``TODO.md`` T-504) the tree holds four workflows — ``200-build-images``,
-``300-test-codebase``, ``310-release-version``, ``320-release-engine`` and ``370-registry-cleanup``; the
-this repository holds no deploy or operations workflow. The audit against Requirement 5 covers
+(``TODO.md`` T-504) the tree holds seven workflows — ``200-build-images``,
+``300-test-codebase``, ``310-release-version``, ``320-release-engine`` and ``370-registry-cleanup``
+(build, test, release, registry), ``380-drawio-pin-check`` (a weekly reminder) and the owner-approved
+``390-repository-admin`` (manual, dry-run by default); this repository holds no deploy or operations workflow. The audit against Requirement 5 covers
 runner topology (5.1, 5.2), least-privilege ``permissions`` blocks, concurrency
 guards, and per-job timeouts. Third-party action SHA-pinning (5.3) is recorded
 separately by spec task 9.3 — this module deliberately does not record it so the
@@ -54,6 +55,8 @@ GITHUB_HOSTED_WORKFLOWS: tuple[str, ...] = (
     "310-release-version.yml",
     "320-release-engine.yml",
     "370-registry-cleanup.yml",
+    "380-drawio-pin-check.yml",
+    "390-repository-admin.yml",
 )
 
 # The single self-hosted runner label. A workflow whose executor set is exactly

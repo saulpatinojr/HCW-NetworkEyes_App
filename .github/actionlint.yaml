@@ -2,8 +2,8 @@
 # 300-test-codebase.yml and by `bash scripts/ci/local-container-checks.sh actionlint`.
 #
 # ubuntu-26.04 is a GitHub-hosted runner label, not a self-hosted one. It is
-# listed here only because actionlint 1.7.12, the release both pin, predates
-# it and reports `label "ubuntu-26.04" is unknown` on every job. Once a
+# listed here only because actionlint 1.7.12, the release that the CI job and
+# the local script both pin, predates it and reports `label "ubuntu-26.04" is unknown` on every job. Once a
 # release carrying the label is pinned, this file can go.
 self-hosted-runner:
   labels:
