@@ -33,6 +33,7 @@ _PROPERTY_SETTINGS = settings(max_examples=100)
 # Any of these in the set means there is a fallback executor, so the workflow is
 # not a self-hosted single point of failure.
 _GITHUB_HOSTED_RUNNERS = (
+    "ubuntu-26.04",
     "ubuntu-latest",
     "ubuntu-22.04",
     "windows-latest",

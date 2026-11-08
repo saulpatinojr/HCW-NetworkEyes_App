@@ -44,7 +44,7 @@ concurrency:
 jobs:
   admin:
     name: repository-admin
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     environment: admin-ops
     timeout-minutes: 10
     steps:

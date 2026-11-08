@@ -10,12 +10,17 @@ here carries a blocker_id. The deploy and operations workflows left the core
 with the deployment layer (TODO.md T-504) and are reviewed in the appliances.
 """
 
+from pathlib import Path
+
 from network_assessment.review import AREAS, Severity, consolidate
 from network_assessment.review.areas import cicd_findings, cicd_verify_findings
 from network_assessment.review.areas.cicd import (
+    GITHUB_HOSTED_RUNNER,
     GITHUB_HOSTED_WORKFLOWS,
     SELF_HOSTED_ONLY_WORKFLOWS,
 )
+
+_WORKFLOW_DIR = Path(__file__).resolve().parents[2] / ".github" / "workflows"
 
 # The full set of numbered workflows under .github/workflows/.
 _ALL_WORKFLOWS = SELF_HOSTED_ONLY_WORKFLOWS + GITHUB_HOSTED_WORKFLOWS
@@ -71,7 +76,7 @@ def test_every_self_hosted_only_workflow_is_flagged_as_a_spof():
 
 
 def test_github_hosted_workflow_recorded_as_informational_non_spof():
-    """5.2 counter-case: every ubuntu-latest workflow is not a self-hosted SPOF."""
+    """5.2 counter-case: every GitHub-hosted (ubuntu-26.04) workflow is not a self-hosted SPOF."""
     findings = cicd_findings()
     for workflow in GITHUB_HOSTED_WORKFLOWS:
         informational_spof = [
@@ -80,7 +85,7 @@ def test_github_hosted_workflow_recorded_as_informational_non_spof():
         assert len(informational_spof) == 1, workflow
         assert informational_spof[0].severity is Severity.INFORMATIONAL
         assert informational_spof[0].subject.endswith(workflow)
-        assert "ubuntu-latest" in informational_spof[0].proposed_action
+        assert "ubuntu-26.04" in informational_spof[0].proposed_action
 
 
 def test_all_core_workflows_are_covered():
@@ -203,3 +208,19 @@ def test_all_workflow_files_parse_as_yaml():
     for path in files:
         # yaml.safe_load raises on malformed YAML; a clean parse is the assertion.
         yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def test_every_workflow_job_runs_on_the_pinned_github_hosted_image():
+    """5.2 against the real tree: every ``runs-on`` is the pinned ubuntu-26.04 label.
+
+    A pinned image changes only when someone edits the label; ``ubuntu-latest`` moves
+    when GitHub moves it. A ``self-hosted`` label here would also need a SPOF record.
+    """
+    labels = {}
+    for path in sorted(_WORKFLOW_DIR.glob("*.yml")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if stripped.startswith("runs-on:"):
+                labels.setdefault(stripped.split(":", 1)[1].strip(), []).append(path.name)
+    assert labels, "no runs-on line found under .github/workflows"
+    assert set(labels) == {GITHUB_HOSTED_RUNNER}, labels

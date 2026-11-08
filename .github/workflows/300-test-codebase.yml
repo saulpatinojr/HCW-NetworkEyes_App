@@ -15,7 +15,7 @@
 #     the "Protect main" ruleset and are never renamed; the new names are listed in CHANGELOG.md.
 name: "300 · Test Codebase"
 
-# Runs on GitHub-hosted runners (ubuntu-latest): every job is self-contained
+# Runs on GitHub-hosted runners (ubuntu-26.04): every job is self-contained
 # (setup-python, pip cache, docker) and needs no private network or cloud
 # credentials, so pull requests are checked from day one without registering a
 # runner. The self-hosted runner the original repository used is retired.
@@ -45,7 +45,7 @@ jobs:
   # ------------------------------------------------------------------
   secret-scan:
     name: Secret Scanning
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     continue-on-error: true  # gitleaks requires paid license on private repos — non-blocking
     steps:
@@ -94,7 +94,7 @@ jobs:
   # (.pre-commit-config.yaml) instead of being restated here and drifting.
   detect-secrets:
     name: Secret Scanning (detect-secrets, gating)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -117,7 +117,7 @@ jobs:
   # ------------------------------------------------------------------
   lint:
     name: Lint & Format
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -141,13 +141,13 @@ jobs:
   # 2b. Web tier — lint, type-check, unit tests (TODO.md T-419)
   # ------------------------------------------------------------------
   # The same fast checks the Python package gets, for apps/network-assessment-web. Runs on
-  # the runner's own Node (ubuntu-latest ships a current LTS; the image build
+  # the runner's own Node (the ubuntu-26.04 image ships a current LTS; the image build
   # in 200 is the authoritative Node 24 run) — actions/setup-node is not used
   # because every action here is SHA-pinned and no audited digest for it
   # exists in this repository yet.
   web:
     name: Web lint, typecheck & tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     defaults:
       run:
@@ -178,7 +178,7 @@ jobs:
   # summary. The required `web` job above type-checks with the pinned tsc 7 (package.json "@typescript/native").
   typescript-canary:
     name: TypeScript canary (does not block)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     defaults:
       run:
@@ -261,7 +261,7 @@ jobs:
   # ------------------------------------------------------------------
   test:
     name: Unit Tests (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     needs: [lint]  # secret-scan is non-blocking (continue-on-error)
     strategy:
@@ -325,7 +325,7 @@ jobs:
   # ------------------------------------------------------------------
   repository-guardrails:
     name: Repository Guardrails
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     needs: [test]
     steps:
@@ -353,7 +353,7 @@ jobs:
   # ------------------------------------------------------------------
   docker-build:
     name: Docker Build Smoke Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     needs: [test]
     steps:
@@ -381,7 +381,7 @@ jobs:
   # boundary proof, and this job is where it runs. `import azure` must fail.
   lab-image:
     name: Lab Boundary Image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     needs: [test]
     steps:
@@ -434,7 +434,7 @@ jobs:
   # identically.
   lockfile:
     name: Python Lockfile Consistency
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -476,7 +476,7 @@ jobs:
   # ------------------------------------------------------------------
   pip-audit:
     name: Python Dependency Audit (pip-audit)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     needs: [lint]
     steps:
@@ -520,7 +520,7 @@ jobs:
   # the two pins identical.
   dockerfile-lint:
     name: Dockerfile Lint (hadolint)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     # Checkout only: the workflow-level `pull-requests: read` is not needed here.
     permissions:
@@ -550,7 +550,7 @@ jobs:
   # that is what the local command in scripts/ci/local-container-checks.sh does too. No network, read-only checkout.
   workflow-lint:
     name: Workflow Lint (actionlint)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     # Checkout only: the workflow-level `pull-requests: read` is not needed here.
     permissions:
@@ -579,7 +579,7 @@ jobs:
   dependency-review:
     name: Dependency Review
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -616,7 +616,7 @@ jobs:
   # and the scan step has no network. There is no Docker socket in any of them.
   image-scan:
     name: Image Scan (Trivy)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     permissions:
       contents: read

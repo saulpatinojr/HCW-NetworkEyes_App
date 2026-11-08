@@ -81,7 +81,7 @@ jobs:
     # (registry-1.docker.io, used by docker login/push/pull in
     # 200-build-images.yml) is unaffected, which is why builds always work
     # fine from the VPS but this API-only job doesn't.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # A dry run lists and deletes nothing, so it may run before publishing is switched on; it proves the
     # credential, the Docker Hub listing and the retention rule. A real prune still needs DOCKERHUB_ENABLED.
     if: vars.DOCKERHUB_ENABLED == 'true' || inputs.dry_run == 'true' # owner step: Docker Hub OIDC connection + variables (REFACTOR_APP.md change set J)
