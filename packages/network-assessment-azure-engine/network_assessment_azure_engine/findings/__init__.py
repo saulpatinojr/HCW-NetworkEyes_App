@@ -3,6 +3,7 @@
 from network_assessment_azure_engine.findings.enforcer import (
     ObservedStateEnforcer,
     ObservedStateViolation,
+    is_maskable,
 )
 from network_assessment_azure_engine.findings.schema import (
     FINDINGS_SCHEMA_VERSION,
@@ -26,4 +27,5 @@ __all__ = [
     "ObservedStateEnforcer",
     "ObservedStateViolation",
     "Unknown",
+    "is_maskable",
 ]
