@@ -719,7 +719,11 @@ def gateway_saturation(
     learn_url=_LEARN_FIREWALL_LOGS,
     frameworks=(
         fw.WAF_NS4,
-        fw.cisa("3.2", fw.CISA_TRAFFIC, "Zero rule hits: no traffic passes through the firewall"),
+        fw.cisa(
+            "3.2",
+            fw.CISA_TRAFFIC,
+            "Zero rule hits or zero data processed in 24 hours was observed on the firewall",
+        ),
     ),
     applies_to="live-only",
     inputs=("network_metrics",),

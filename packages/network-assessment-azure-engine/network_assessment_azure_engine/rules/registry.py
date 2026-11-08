@@ -6,8 +6,9 @@ Microsoft Learn URL, at least one framework mapping, an ``applies_to`` of ``expo
 ``(subscription, topology) -> observations`` over the topology checkpoint (DD-008).
 
 ``evaluate(topology)`` runs every rule over every unblocked subscription, enforces the
-observed-state discipline on every finding (DD-002: ``fact``, ``title`` and ``description``
-carry no hedge language in the engine's own wording; customer identifiers such as
+observed-state discipline on every finding (DD-002: ``fact``, ``title``, ``description``,
+``remediation`` and the framework notes carry no hedge language in the engine's own wording;
+customer identifiers such as
 ``may-promo-listener`` excuse the hedge word inside them, free text never does), stamps the
 rule's metadata (``rule_version``, ``learn_url``, ``remediation``, frameworks, traffic plane),
 deduplicates on ``"{rule_id}:{resource_id}"``
@@ -377,13 +378,25 @@ def _materialize(customer_values: Iterable[str]) -> Container[str]:
 def _validate(finding: Finding, customer_values: Iterable[str] = ()) -> None:
     """DD-002 on every field a reader treats as a statement of fact.
 
+    The fact, title, description and remediation, and the note (``alignment``) of every
+    framework mapping on the finding.
+
     ``customer_values`` excuse the hedge word inside an identifier, so a resource named
     ``may-promo-listener`` is not read as hedge language; the engine's own words around it still are.
     """
     customer_values = _materialize(customer_values)
     _ENFORCER.validate(finding, customer_values)  # observed_state.fact → ObservedStateViolation
-    for field_name in ("title", "description"):
-        text = getattr(finding, field_name) or ""
+    # A rule can set its own remediation (``Observation.recommendation``) or build a whole
+    # ``Finding`` with its own framework mappings, so those are checked here as well as at
+    # registration.
+    texts = [
+        (name, getattr(finding, name) or "") for name in ("title", "description", "remediation")
+    ]
+    texts += [
+        (f"framework_mappings[{i}].alignment", mapping.alignment or "")
+        for i, mapping in enumerate(finding.framework_mappings)
+    ]
+    for field_name, text in texts:
         hedges = _ENFORCER.scan_text(text, customer_values)
         if hedges:
             raise ObservedStateViolation(
@@ -431,6 +444,8 @@ def evaluate_subscription(
     can excuse a hedge word in that check (collected from ``topology`` when not given; a
     caller's iterable is read once into a set).
     """
+    if customer_values is not None:
+        check_customer_values(customer_values)  # before any early return: refused on every call
     if sub.discovery_blocked:
         return []
     register = seen if seen is not None else set()

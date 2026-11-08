@@ -26,7 +26,13 @@ from network_assessment_azure_engine.findings.schema import (
     FrameworkMapping,
     ObservedState,
 )
-from network_assessment_azure_engine.rules import rule, rule_metadata
+from network_assessment_azure_engine.rules import (
+    HEDGED_WORDING_REASON,
+    Observation,
+    evaluate,
+    rule,
+    rule_metadata,
+)
 from network_assessment_azure_engine.rules.registry import evaluate_subscription
 
 ENFORCER = ObservedStateEnforcer()
@@ -107,9 +113,80 @@ class TestCustomerValuesAreNeverAPlainString:
         with pytest.raises(TypeError, match="customer_values"):
             evaluate_subscription(sub, topology, customer_values="hub-may-01")
 
+    def test_evaluate_subscription_refuses_a_string_for_a_blocked_subscription(self):
+        """A blocked subscription returns early; the string is refused before that."""
+        sub = AzureSubscriptionTopology(subscription_id=SUB, tenant_id="t", discovery_blocked=True)
+        topology = AzureTopology(engagement_id="hcw-sample", tenant_id="t", subscriptions=[sub])
+        with pytest.raises(TypeError, match="customer_values"):
+            evaluate_subscription(sub, topology, customer_values="hub-may-01")
+
     def test_a_one_item_set_still_excuses_the_identifier(self):
         """The supported way to pass one identifier."""
         text = "Listener hub-may-01 has no WAF."
         assert ENFORCER.scan_text(text, {"hub-may-01"}) == []
         assert ENFORCER.scan_text(text, ["hub-may-01"]) == []
         assert ENFORCER.scan_text(text) == ["may"]
+
+
+class TestEvaluationChecksTheNotesARuleSetsItself:
+    """A rule can set its own remediation (``Observation.recommendation``) or build a ``Finding``
+    with its own framework mappings, after registration; evaluation checks those too."""
+
+    @staticmethod
+    def _report():
+        sub = AzureSubscriptionTopology(subscription_id=SUB, tenant_id="t")
+        return evaluate(
+            AzureTopology(engagement_id="hcw-sample", tenant_id="t", subscriptions=[sub])
+        )
+
+    def test_a_hedged_recommendation_is_withheld(self, scratch_registry):
+        @rule(**_meta())
+        def hedged(sub, topo):
+            yield Observation(
+                resource_id="/r",
+                resource_type="t",
+                fact="Port 22 is open to the internet.",
+                evidence_ref="e",
+                recommendation="Close port 22; it could be scanned.",
+            )
+
+        report = self._report()
+        assert report.findings == []
+        assert [(u.rule_id, u.reason) for u in report.unknowns] == [
+            ("AZ-TEST-364", HEDGED_WORDING_REASON)
+        ]
+
+    def test_a_hedged_note_on_a_rule_built_finding_is_withheld(self, scratch_registry):
+        @rule(**_meta())
+        def hedged(sub, topo):
+            yield Finding(
+                rule_id="AZ-TEST-364",
+                severity=FindingSeverity.LOW,
+                title="Port 22 is open",
+                resource_id="/r",
+                observed_state=ObservedState(fact="Port 22 is open.", evidence_ref="e"),
+                framework_mappings=[
+                    FrameworkMapping(framework="Test", alignment="Open ports suggest exposure")
+                ],
+            )
+
+        report = self._report()
+        assert report.findings == []
+        assert [u.rule_id for u in report.unknowns] == ["AZ-TEST-364"]
+
+    def test_a_clean_recommendation_quoting_an_identifier_is_reported(self, scratch_registry):
+        @rule(**_meta())
+        def clean(sub, topo):
+            yield Observation(
+                resource_id="/r",
+                resource_type="t",
+                fact="Port 22 is open to the internet.",
+                evidence_ref="e",
+                recommendation="Close port 22 on the network security group.",
+            )
+
+        report = self._report()
+        assert [f.remediation for f in report.findings] == [
+            "Close port 22 on the network security group."
+        ]
+        assert report.unknowns == []
