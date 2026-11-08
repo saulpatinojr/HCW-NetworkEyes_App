@@ -67,6 +67,19 @@ def wheel(tmp_path_factory) -> Path:
 
 
 @pytest.fixture(scope="module")
+def sdist(tmp_path_factory) -> Path:
+    """The source archive, built the way 320-release-engine.yml builds it (``uv build``)."""
+    if not _uv():
+        pytest.skip("needs uv to build the source archive")
+    out = tmp_path_factory.mktemp("sdist")
+    result = _run([_uv(), "build", "--sdist", "--out-dir", str(out), str(PACKAGE)], cwd=REPO_ROOT)
+    assert result.returncode == 0, result.stderr[-2000:]
+    archives = sorted(out.glob("network_assessment_azure_engine-*.tar.gz"))
+    assert len(archives) == 1, [a.name for a in out.iterdir()]
+    return archives[0]
+
+
+@pytest.fixture(scope="module")
 def clean_venv(tmp_path_factory, wheel: Path) -> Path:
     """A fresh interpreter with only the wheel and what it declares."""
     venv = tmp_path_factory.mktemp("venv")
@@ -104,6 +117,48 @@ class TestWheel:
         ]
         assert requires == ["pydantic<3,>=2.13"], requires
         assert "Requires-Python: >=3.14" in text
+
+    def test_wheel_ships_the_licence_text_and_notice(self, wheel: Path):
+        """Apache-2.0 section 4: whoever redistributes the wheel must pass on LICENSE and NOTICE.
+
+        engine-v0.1.2 declared ``License-Expression: Apache-2.0`` but shipped neither file, so the lab
+        build's image redistributed the engine without them. PEP 639 puts them under
+        ``.dist-info/licenses/`` and names each in a ``License-File:`` line of METADATA.
+        """
+        import zipfile
+
+        with zipfile.ZipFile(wheel) as zf:
+            names = zf.namelist()
+            dist_info = next(n.split("/", 1)[0] for n in names if n.endswith(".dist-info/METADATA"))
+            metadata = zf.read(f"{dist_info}/METADATA").decode()
+            record = zf.read(f"{dist_info}/RECORD").decode()
+            shipped_licence = zf.read(f"{dist_info}/licenses/LICENSE")
+            shipped_notice = zf.read(f"{dist_info}/licenses/NOTICE").decode()
+        assert "License-Expression: Apache-2.0" in metadata.splitlines()
+        assert "License-File: LICENSE" in metadata.splitlines()
+        assert "License-File: NOTICE" in metadata.splitlines()
+        for name in ("LICENSE", "NOTICE"):
+            assert f"{dist_info}/licenses/{name}" in names
+            assert f"{dist_info}/licenses/{name}," in record
+        assert shipped_licence == (REPO_ROOT / "LICENSE").read_bytes()
+        assert "Copyright 2026 Hybrid Cloud Works" in shipped_notice
+
+    def test_sdist_ships_the_licence_text_and_notice(self, sdist: Path):
+        """The release publishes the source archive beside the wheel (320-release-engine.yml), so
+        Apache-2.0 section 4 applies to it too: LICENSE and NOTICE at its top level, named in PKG-INFO."""
+        import tarfile
+
+        with tarfile.open(sdist) as tf:
+            names = tf.getnames()
+            top = names[0].split("/", 1)[0]
+            pkg_info = tf.extractfile(f"{top}/PKG-INFO").read().decode()
+            shipped_licence = tf.extractfile(f"{top}/LICENSE").read()
+            shipped_notice = tf.extractfile(f"{top}/NOTICE").read().decode()
+        assert "License-Expression: Apache-2.0" in pkg_info.splitlines()
+        assert "License-File: LICENSE" in pkg_info.splitlines()
+        assert "License-File: NOTICE" in pkg_info.splitlines()
+        assert shipped_licence == (REPO_ROOT / "LICENSE").read_bytes()
+        assert "Copyright 2026 Hybrid Cloud Works" in shipped_notice
 
     def test_import_in_clean_venv_pulls_no_cloud_sdk(self, clean_venv: Path):
         result = _in_venv(

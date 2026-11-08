@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "network-assessment-azure-engine"
-version = "0.1.2"
+version = "0.1.3"
 description = "Azure network assessment engine: topology model, typed rule registry, classifier, Resource Graph normalizer and report renderers. Base install needs pydantic only."
 requires-python = ">=3.14"
 # The base distribution carries no cloud SDK: the downstream lab edition installs it to
@@ -14,6 +14,10 @@ dependencies = [
     "pydantic>=2.13,<3",
 ]
 license = "Apache-2.0"  # owner decision 2026-10-25; copyright holder Hybrid Cloud Works (2026-10-26): REVIEW.md R-030
+# PEP 639: the wheel and sdist carry the licence text and NOTICE (Apache-2.0 section 4). setuptools resolves
+# these globs from this directory and refuses "..", so LICENSE is a byte copy of the root one and NOTICE is
+# this package's own; tests/packaging/test_engine_wheel.py fails if either drifts or leaves the wheel.
+license-files = ["LICENSE", "NOTICE"]
 
 [project.optional-dependencies]
 # Live discovery (change set D). Lower bounds are the versions the code was written
