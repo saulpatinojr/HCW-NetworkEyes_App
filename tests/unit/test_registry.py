@@ -1,7 +1,7 @@
 """The Azure rule registry's contract (plan section 14, change set B).
 
 Ids are unique and never reused, every rule carries a Learn URL and a framework mapping,
-every title and every emitted description is hedge-free, live-only rules stay registered,
+every title, remediation, framework note and emitted description is hedge-free, live-only rules stay registered,
 and ``RULES_VERSION`` moves with the id set: the digest below is pinned, so adding, removing
 or re-versioning a rule fails here until both the digest and ``RULES_VERSION`` are updated
 together.
@@ -35,7 +35,7 @@ from network_assessment_azure_engine.rules.registry import RULES as _registry_di
 # Re-pin when a rule is added, removed or re-versioned — and bump RULES_VERSION with it.
 # The table is the digest's input, so rules_digest() is checked without a hex literal
 # (the secrets scanner's entropy plugin would flag one).
-PINNED_RULES_VERSION = "2026.11.0"
+PINNED_RULES_VERSION = "2026.11.1"
 # The downstream lab edition (HCW-NetworkEyes_AddOn) pins the same table; both move together.
 PINNED_VERSIONS = {
     **{f"AZ-NET-{n:03d}": 1 for n in range(1, 34)},
@@ -45,9 +45,11 @@ PINNED_VERSIONS = {
     "AZ-NET-003": 2,  # threat intelligence read through the linked firewall policy
     "AZ-NET-006": 2,  # flow logs read from flow-log rows when the topology is an export
     "AZ-NET-007": 3,  # WAF state per gateway, listener and path rule (issue #352)
+    "AZ-NET-009": 2,  # framework note states what was observed (issue #364)
     "AZ-NET-011": 2,  # subnet exhaustion derived from ipConfigurations
     "AZ-NET-012": 2,  # hedge-free facts and title
     "AZ-NET-014": 2,  # Traffic Analytics read from flow-log rows
+    "AZ-NET-019": 2,  # framework note states what was observed (issue #364)
     "AZ-NET-025": 2,  # WAF mode per gateway, listener and path rule (issue #352)
 }
 
@@ -129,9 +131,11 @@ class TestEveryRuleMeta:
             "AZ-NET-003",
             "AZ-NET-006",
             "AZ-NET-007",
+            "AZ-NET-009",
             "AZ-NET-011",
             "AZ-NET-012",
             "AZ-NET-014",
+            "AZ-NET-019",
             "AZ-NET-025",
         }
 

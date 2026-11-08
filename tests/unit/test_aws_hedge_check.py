@@ -239,3 +239,27 @@ def test_verdicts_do_not_depend_on_hash_order() -> None:
         for seed in range(1, 11)
     }
     assert len(outputs) == 1, outputs
+
+
+def test_aws_framework_notes_and_remediation_are_hedge_free():
+    """The AWS rules' own notes pass the same check as the Azure rules' notes (issue 364).
+
+    Every literal passed as a framework mapping's ``alignment`` or a ``remediation``, or as
+    another reader-facing mapping field, is read from the source and scanned.
+    """
+    import ast
+    from pathlib import Path
+
+    from network_assessment.ai_engine.observed_state_enforcer import ObservedStateEnforcer
+
+    fields = {"alignment", "remediation", "control", "control_name", "description", "title"}
+    tree = ast.parse(Path(analysis_module.__file__).read_text(encoding="utf-8"))
+    enforcer = ObservedStateEnforcer()
+    seen = 0
+    for node in ast.walk(tree):
+        if isinstance(node, ast.keyword) and node.arg in fields:
+            for part in ast.walk(node.value):
+                if isinstance(part, ast.Constant) and isinstance(part.value, str):
+                    seen += 1
+                    assert enforcer.scan_text(part.value) == [], (node.arg, part.value)
+    assert seen > 0

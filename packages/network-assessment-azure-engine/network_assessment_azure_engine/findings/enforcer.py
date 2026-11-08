@@ -18,6 +18,13 @@ whitespace, and every hedge word in it is joined to a letter or digit by ``-``, 
 So no value can excuse a hedge word the engine wrote with a space beside it, and a value that
 is a hedge word alone or with only punctuation (``may``, ``may,``) excuses nothing: the
 finding is then withheld rather than reported.
+
+``customer_values`` is a collection of identifiers (a set, a list, any iterable or container of
+``str``), never one ``str``: a string is a container of its characters, so ``"x" in "hub-x"``
+would turn the identifier lookup into a substring test. ``check_customer_values`` refuses a
+``str`` or ``bytes`` with ``TypeError`` on every call, before the text is read, so a wrong caller
+fails on its first call rather than on the first customer name that holds a hedge word. Wrap a
+single identifier as ``{value}``.
 """
 
 from __future__ import annotations
@@ -98,6 +105,15 @@ def _inside_customer_identifier(text: str, start: int, end: int, values: Contain
     return any(text[i:j] in values and is_maskable(text[i:j]) for i in starts for j in ends)
 
 
+def check_customer_values(customer_values: object) -> None:
+    """Raise ``TypeError`` when ``customer_values`` is one string instead of a collection of them."""
+    if isinstance(customer_values, (str, bytes, bytearray)):
+        raise TypeError(
+            "customer_values must be a collection of identifiers, not a single "
+            f"{type(customer_values).__name__}; wrap one identifier as {{value}}"
+        )
+
+
 class ObservedStateViolation(ValueError):
     """Raised when a finding contains hedge language in observed_state."""
 
@@ -131,8 +147,10 @@ class ObservedStateEnforcer:
 
         With ``customer_values``, a hedge word inside one of the customer's identifiers is
         excused (see the module text) and only the engine's own wording is judged. A one-shot
-        iterable is read once; pass a set (or any container) to reuse it across calls.
+        iterable is read once; pass a set (or any container) to reuse it across calls. A plain
+        ``str`` is refused with ``TypeError`` (``check_customer_values``).
         """
+        check_customer_values(customer_values)
         found = []
         if not self._hits(text):
             return found

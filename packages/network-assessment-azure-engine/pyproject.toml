@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "network-assessment-azure-engine"
-version = "0.1.4"
+version = "0.1.5"
 description = "Azure network assessment engine: topology model, typed rule registry, classifier, Resource Graph normalizer and report renderers. Base install needs pydantic only."
 requires-python = ">=3.14"
 # The base distribution carries no cloud SDK: the downstream lab edition installs it to

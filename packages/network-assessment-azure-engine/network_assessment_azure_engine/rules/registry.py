@@ -37,6 +37,7 @@ from pydantic import BaseModel
 from network_assessment_azure_engine.findings.enforcer import (
     ObservedStateEnforcer,
     ObservedStateViolation,
+    check_customer_values,
     is_maskable,
 )
 from network_assessment_azure_engine.findings.schema import (
@@ -56,7 +57,7 @@ logger = logging.getLogger("network_assessment_azure_engine.rules")
 
 # Calendar version of the registry. Bump it, and re-pin the id:version table in the tests,
 # whenever a rule id is added or a rule's ``version`` moves.
-RULES_VERSION = "2026.11.0"
+RULES_VERSION = "2026.11.1"
 
 # ``export``: evaluable from a Resource Graph export of the network resources.
 # ``live-only``: needs a live collector (Azure Monitor metrics, diagnostic settings, BGP
@@ -161,11 +162,20 @@ def rule(
 ) -> Callable[[RuleFn], RuleFn]:
     """Register a rule function under ``id``.
 
-    Registration enforces the contract: a duplicate id, a hedged title or description, a
-    missing framework mapping, a non-Learn URL or a live-only rule without declared inputs
+    Registration enforces the contract: a duplicate id, a hedged title, description,
+    remediation or framework-mapping note (``alignment``), a missing framework mapping, a non-Learn URL or a live-only rule without declared inputs
     raises at import time, so a bad rule never reaches a run.
     """
-    for field_name, text in (("title", title), ("description", description or "")):
+    texts = [
+        ("title", title),
+        ("description", description or ""),
+        ("remediation", remediation or ""),
+    ]
+    texts += [
+        (f"frameworks[{i}].alignment", mapping.alignment or "")
+        for i, mapping in enumerate(frameworks)
+    ]
+    for field_name, text in texts:
         hedges = _ENFORCER.scan_text(text)
         if hedges:
             raise ObservedStateViolation(
@@ -353,7 +363,12 @@ class _CustomerValues:
 
 
 def _materialize(customer_values: Iterable[str]) -> Container[str]:
-    """A caller's iterable read once into a set, so a generator serves every text, not the first."""
+    """A caller's iterable read once into a set, so a generator serves every text, not the first.
+
+    A plain ``str`` is refused (``check_customer_values``): read into a set it would become its
+    characters.
+    """
+    check_customer_values(customer_values)
     if isinstance(customer_values, (_CustomerValues, frozenset, set)):
         return customer_values
     return frozenset(customer_values)
