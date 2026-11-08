@@ -6,6 +6,7 @@ from network_assessment_azure_engine.rules import (  # noqa: F401 — registrati
     azure_net,
 )
 from network_assessment_azure_engine.rules.registry import (
+    HEDGED_WORDING_REASON,
     NO_PROPERTIES_REASON,
     RULES,
     RULES_VERSION,
@@ -25,6 +26,7 @@ from network_assessment_azure_engine.rules.registry import (
 from network_assessment_azure_engine.rules.taxonomy import classify_traffic_direction
 
 __all__ = [
+    "HEDGED_WORDING_REASON",
     "NO_PROPERTIES_REASON",
     "RULES",
     "RULES_VERSION",
