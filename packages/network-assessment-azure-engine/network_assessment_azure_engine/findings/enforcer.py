@@ -7,19 +7,23 @@ assumption rather than observation.
 Hedge word list is intentionally conservative. If a word is borderline,
 it goes on the list. Engineers can request removal via design doc amendment.
 
-The check judges the engine's own wording, not the customer's. A fact quotes values copied
-from the customer's input (resource names, ids, locations), and a resource called
-``may-promo-listener`` is not hedge language. ``validate`` and ``scan_text`` therefore take
-``customer_values``: each occurrence of one of those values in the text, as a whole word, is
-masked before the scan. A value that is nothing but a hedge word (a resource named ``may``) is
-never masked, so a hedge word the engine wrote can only be hidden by a customer value that
-also contains the engine's surrounding words.
+The check judges the engine's own wording, not the customer's resource names. A fact quotes
+identifiers copied from the customer's input, and a resource called ``may-promo-listener`` is
+not hedge language. ``validate`` and ``scan_text`` therefore take ``customer_values``: the
+caller passes identifiers only (names, ids, resource groups, locations; never tags,
+descriptions, display names or other free text), and a hedge word is excused only when it lies
+inside an occurrence of one of those values that passes ``is_maskable``. Such a value has no
+whitespace, and every hedge word in it is joined to a letter or digit by ``-``, ``_``, ``.``,
+``/`` or ``:`` (it sits inside an identifier such as ``may-promo-listener`` or ``rg/may.x``).
+So no value can excuse a hedge word the engine wrote with a space beside it, and a value that
+is a hedge word alone or with only punctuation (``may``, ``may,``) excuses nothing: the
+finding is then withheld rather than reported.
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Container, Iterable
 
 # Words that indicate assumption, not observation.
 # Protocol: lowercase, word-boundary matched.
@@ -44,32 +48,53 @@ _HEDGE_PATTERNS = [
 
 _COMPILED = [re.compile(p, re.IGNORECASE) for p in _HEDGE_PATTERNS]
 
-# What a masked customer value is replaced with: no word characters, so it cannot form or
-# complete a hedge word, and the words beside it keep their word boundaries.
-_MASK = "<value>"
+# A hedge word inside an identifier: joined to a letter or digit by - _ . / or :
+_JOINED_AFTER = re.compile(r"[-_./:]+[A-Za-z0-9]")
+_JOINED_BEFORE = re.compile(r"[A-Za-z0-9][-_./:]+$")
 
 
-def _is_hedge_word(value: str) -> bool:
-    """True when ``value`` is a hedge word and nothing else (ignoring surrounding spaces)."""
-    stripped = value.strip()
-    return any(pattern.fullmatch(stripped) for pattern in _COMPILED)
+def is_maskable(value: str) -> bool:
+    """True when ``value`` holds a hedge word and can excuse it as a customer identifier.
 
-
-def mask_customer_values(text: str, customer_values: Iterable[str]) -> str:
-    """``text`` with every whole-word occurrence of a customer value replaced by a mask.
-
-    Longest values first, so an id is masked before the name inside it. An occurrence counts
-    only when it is not part of a longer word (a value ``ma`` never cuts into ``may``), and a
-    value that is only a hedge word is left in place for the scan to judge.
+    It must contain a hedge word (any other value changes no verdict), no whitespace,
+    and every hedge word in it must be joined to a letter or digit by ``-``, ``_``, ``.``,
+    ``/`` or ``:`` on at least one side. ``may-promo-listener`` and ``rg/may.x`` qualify;
+    ``may``, ``may,``, ``may-`` and ``may be`` do not.
     """
-    candidates = sorted(
-        {v for v in customer_values if v and v.strip() and v in text and not _is_hedge_word(v)},
-        key=len,
-        reverse=True,
+    if not value or any(ch.isspace() for ch in value):
+        return False
+    matches = [m for pattern in _COMPILED for m in pattern.finditer(value)]
+    if not matches:
+        return False
+    return all(
+        _JOINED_AFTER.match(value, m.end()) or _JOINED_BEFORE.search(value[: m.start()])
+        for m in matches
     )
-    for value in candidates:
-        text = re.sub(rf"(?<!\w){re.escape(value)}(?!\w)", _MASK, text)
-    return text
+
+
+def _is_word_char(ch: str) -> bool:
+    return ch.isalnum() or ch == "_"
+
+
+def _inside_customer_identifier(text: str, start: int, end: int, values: Container[str]) -> bool:
+    """True when ``text[start:end]`` (a hedge word) lies inside a maskable customer identifier.
+
+    A maskable value has no whitespace, so an occurrence covering the hedge word lies within
+    the run of non-space characters around it. Every slice of that run which covers the hedge
+    word and starts and ends on a word boundary (so it is not part of a longer word: a value
+    ``ma`` never cuts into ``may``) is looked up in ``values``; a hit that passes
+    ``is_maskable`` excuses the word. The answer depends on nothing but the text and the set
+    of values, so it is the same in every run.
+    """
+    left = start
+    while left > 0 and not text[left - 1].isspace():
+        left -= 1
+    right = end
+    while right < len(text) and not text[right].isspace():
+        right += 1
+    starts = [i for i in range(left, start + 1) if i == 0 or not _is_word_char(text[i - 1])]
+    ends = [j for j in range(end, right + 1) if j == len(text) or not _is_word_char(text[j])]
+    return any(text[i:j] in values and is_maskable(text[i:j]) for i in starts for j in ends)
 
 
 class ObservedStateViolation(ValueError):
@@ -103,17 +128,23 @@ class ObservedStateEnforcer:
     def scan_text(self, text: str, customer_values: Iterable[str] = ()) -> list[str]:
         """Return list of hedge words found in text. Empty = clean.
 
-        With ``customer_values``, the customer's values are masked first and only the rest of
-        the text, the engine's own wording, is judged.
+        With ``customer_values``, a hedge word inside one of the customer's identifiers is
+        excused (see the module text) and only the engine's own wording is judged. A one-shot
+        iterable is read once; pass a set (or any container) to reuse it across calls.
         """
         found = []
         if not self._hits(text):
             return found
-        text = mask_customer_values(text, customer_values)
+        values = (
+            customer_values
+            if isinstance(customer_values, Container)
+            else frozenset(customer_values)
+        )
         for pattern in _COMPILED:
-            match = pattern.search(text)
-            if match:
-                found.append(match.group(0))
+            for match in pattern.finditer(text):
+                if not _inside_customer_identifier(text, match.start(), match.end(), values):
+                    found.append(match.group(0))
+                    break
         return found
 
     @staticmethod

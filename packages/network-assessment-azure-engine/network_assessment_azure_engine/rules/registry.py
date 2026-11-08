@@ -7,9 +7,10 @@ Microsoft Learn URL, at least one framework mapping, an ``applies_to`` of ``expo
 
 ``evaluate(topology)`` runs every rule over every unblocked subscription, enforces the
 observed-state discipline on every finding (DD-002: ``fact``, ``title`` and ``description``
-carry no hedge language in the engine's own wording; values copied from the customer's input,
-such as resource names, are masked before the check), stamps the rule's metadata (``rule_version``, ``learn_url``,
-``remediation``, frameworks, traffic plane), deduplicates on ``"{rule_id}:{resource_id}"``
+carry no hedge language in the engine's own wording; customer identifiers such as
+``may-promo-listener`` excuse the hedge word inside them, free text never does), stamps the
+rule's metadata (``rule_version``, ``learn_url``, ``remediation``, frameworks, traffic plane),
+deduplicates on ``"{rule_id}:{resource_id}"``
 (first occurrence wins) and returns a ``FindingsReport`` whose ``unknowns`` list names every
 rule it could not answer: a live-only rule whose collector inputs are absent from every
 subscription, a rule that needs resource properties when the export has none, or a rule
@@ -26,7 +27,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Container, Iterable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
@@ -36,6 +37,7 @@ from pydantic import BaseModel
 from network_assessment_azure_engine.findings.enforcer import (
     ObservedStateEnforcer,
     ObservedStateViolation,
+    is_maskable,
 )
 from network_assessment_azure_engine.findings.schema import (
     FINDINGS_SCHEMA_VERSION,
@@ -283,49 +285,87 @@ def _complete_finding(meta: RuleMeta, finding: Finding) -> Finding:
     return finding.model_copy(update=updates)
 
 
-def _strings(value: object) -> Iterator[str]:
-    """Every string inside a topology model, list or dict (keys included)."""
-    if isinstance(value, str):
-        yield value
-    elif isinstance(value, BaseModel):
-        for name in type(value).model_fields:
-            yield from _strings(getattr(value, name))
-    elif isinstance(value, dict):
-        for key, item in value.items():
-            yield from _strings(key)
-            yield from _strings(item)
-    elif isinstance(value, (list, tuple, set, frozenset)):
+# Fields whose values are Azure identifiers the customer chose or Azure assigned: resource
+# names, ids and ARM paths, resource groups, locations and subscription/tenant ids. Only these
+# can excuse a hedge word inside them in the hedge check. Free text is never a candidate: tags (keys
+# and values), descriptions, display names, subscription display names, collection errors, block
+# reasons, warnings and every dict, because a free-text value could hold the engine's own
+# neighbouring words ("may be") and hide a hedge the engine wrote.
+_IDENTIFIER_FIELDS = frozenset(
+    {"id", "name", "resource_group", "location", "subscription_id", "tenant_id", "engagement_id"}
+)
+_IDENTIFIER_SUFFIXES = ("_id", "_ids", "_name", "_names")
+_FREE_TEXT_FIELDS = frozenset({"display_name", "subscription_name"})
+
+
+def _is_identifier_field(field: str) -> bool:
+    if field in _FREE_TEXT_FIELDS:
+        return False
+    return field in _IDENTIFIER_FIELDS or field.endswith(_IDENTIFIER_SUFFIXES)
+
+
+def _identifier_strings(value: object) -> Iterator[str]:
+    """Every string held in an identifier field of a topology model, at any depth.
+
+    Walks models and lists; a dict (tags, metric maps) is never read. A string or list of
+    strings is collected only when its field passes ``_is_identifier_field``.
+    """
+    if isinstance(value, BaseModel):
+        for field in type(value).model_fields:
+            item = getattr(value, field)
+            if isinstance(item, str):
+                if _is_identifier_field(field):
+                    yield item
+            elif isinstance(item, (list, tuple)) and all(isinstance(x, str) for x in item):
+                if _is_identifier_field(field):
+                    yield from item
+            else:
+                yield from _identifier_strings(item)
+    elif isinstance(value, (list, tuple)):
         for item in value:
-            yield from _strings(item)
+            yield from _identifier_strings(item)
 
 
 class _CustomerValues:
-    """The strings the customer's input put into the topology, collected on first use.
+    """The customer's identifiers that can excuse a hedge word, found on first use.
 
-    Resource names, ids, locations and the like: a fact quotes them, and the hedge check masks
-    them so it judges only the engine's wording. Collection walks the whole topology, so it
-    runs only when a text has a hedge-word hit, and once per ``evaluate``.
+    Collected from the identifier fields only (``_identifier_strings``) and kept only when
+    ``is_maskable`` accepts them, so the set is small. Collection walks the whole topology, so
+    it runs only when a text has a hedge-word hit, and once per ``evaluate``; after that each
+    lookup is a set lookup, and the values can be read any number of times.
     """
 
     def __init__(self, topology: AzureTopology) -> None:
         self._topology = topology
         self._values: frozenset[str] | None = None
 
-    def __iter__(self) -> Iterator[str]:
+    def _get(self) -> frozenset[str]:
         if self._values is None:
-            t = self._topology
-            self._values = frozenset(
-                _strings([t.engagement_id, t.tenant_id, t.management_groups, t.subscriptions])
-            )
-        return iter(self._values)
+            found = _identifier_strings(self._topology)
+            self._values = frozenset(v for v in found if is_maskable(v))
+        return self._values
+
+    def __contains__(self, value: object) -> bool:
+        return value in self._get()
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(sorted(self._get()))
+
+
+def _materialize(customer_values: Iterable[str]) -> Container[str]:
+    """A caller's iterable read once into a set, so a generator serves every text, not the first."""
+    if isinstance(customer_values, (_CustomerValues, frozenset, set)):
+        return customer_values
+    return frozenset(customer_values)
 
 
 def _validate(finding: Finding, customer_values: Iterable[str] = ()) -> None:
     """DD-002 on every field a reader treats as a statement of fact.
 
-    ``customer_values`` are masked first, so a resource named ``may-promo-listener`` is not
-    read as hedge language; the engine's own words around it still are.
+    ``customer_values`` excuse the hedge word inside an identifier, so a resource named
+    ``may-promo-listener`` is not read as hedge language; the engine's own words around it still are.
     """
+    customer_values = _materialize(customer_values)
     _ENFORCER.validate(finding, customer_values)  # observed_state.fact → ObservedStateViolation
     for field_name in ("title", "description"):
         text = getattr(finding, field_name) or ""
@@ -372,14 +412,15 @@ def evaluate_subscription(
     ``seen`` carries the deduplication register across subscriptions when the caller is
     ``evaluate``, so a tenant-wide rule that fires from each subscription lands once;
     ``unknowns`` collects the rules that answered ``NotEvaluable`` and the rules with a
-    finding withheld by the hedge check. ``customer_values`` are the input's own strings
-    (collected from ``topology`` when not given), masked before that check.
+    finding withheld by the hedge check. ``customer_values`` are the customer identifiers that
+    can excuse a hedge word in that check (collected from ``topology`` when not given; a
+    caller's iterable is read once into a set).
     """
     if sub.discovery_blocked:
         return []
     register = seen if seen is not None else set()
     not_evaluable = unknowns if unknowns is not None else {}
-    values = customer_values if customer_values is not None else _CustomerValues(topology)
+    values = _CustomerValues(topology) if customer_values is None else _materialize(customer_values)
     findings: list[Finding] = []
     for rule_id, (meta, fn) in sorted(RULES.items()):
         if _skip_reason(meta, topology):
