@@ -13,7 +13,7 @@ not hedge language. ``validate`` and ``scan_text`` therefore take ``customer_val
 caller passes identifiers only (names, ids, resource groups, locations; never tags,
 descriptions, display names or other free text), and a hedge word is excused only when it lies
 inside an occurrence of one of those values that passes ``is_maskable``. Such a value has no
-whitespace, and every hedge word in it is joined to a letter or digit by ``-``, ``_``, ``.``,
+whitespace, and every hedge word in it is joined to a letter or digit by ``-``, ``.``,
 ``/`` or ``:`` (it sits inside an identifier such as ``may-promo-listener`` or ``rg/may.x``).
 So no value can excuse a hedge word the engine wrote with a space beside it, and a value that
 is a hedge word alone or with only punctuation (``may``, ``may,``) excuses nothing: the
@@ -48,16 +48,17 @@ _HEDGE_PATTERNS = [
 
 _COMPILED = [re.compile(p, re.IGNORECASE) for p in _HEDGE_PATTERNS]
 
-# A hedge word inside an identifier: joined to a letter or digit by - _ . / or :
-_JOINED_AFTER = re.compile(r"[-_./:]+[A-Za-z0-9]")
-_JOINED_BEFORE = re.compile(r"[A-Za-z0-9][-_./:]+$")
+# A hedge word inside an identifier: joined to a letter or digit by - . / or :. Not by _: the hedge patterns
+# use \b, and _ is a word character, so `may_promo` holds no hedge word to excuse in the first place.
+_JOINED_AFTER = re.compile(r"[-./:]+[A-Za-z0-9]")
+_JOINED_BEFORE = re.compile(r"[A-Za-z0-9][-./:]+$")
 
 
 def is_maskable(value: str) -> bool:
     """True when ``value`` holds a hedge word and can excuse it as a customer identifier.
 
     It must contain a hedge word (any other value changes no verdict), no whitespace,
-    and every hedge word in it must be joined to a letter or digit by ``-``, ``_``, ``.``,
+    and every hedge word in it must be joined to a letter or digit by ``-``, ``.``,
     ``/`` or ``:`` on at least one side. ``may-promo-listener`` and ``rg/may.x`` qualify;
     ``may``, ``may,``, ``may-`` and ``may be`` do not.
     """

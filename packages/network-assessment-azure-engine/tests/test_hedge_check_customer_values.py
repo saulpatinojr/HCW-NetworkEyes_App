@@ -255,3 +255,20 @@ def test_a_generator_of_values_serves_every_finding(scratch_registry) -> None:
         customer_values=(v.name for v in vnets),
     )
     assert len(findings) == 2 and unknowns == {}
+
+
+def test_an_underscore_joined_hedge_is_not_a_hedge_word_at_all():
+    """`_` is a word character for the hedge patterns, so `may_promo` contains no whole-word hedge: it is never
+    flagged, needs no excuse, and is_maskable does not count it."""
+    from network_assessment_azure_engine.findings import ObservedStateEnforcer, is_maskable
+
+    assert ObservedStateEnforcer().scan_text("Listener may_promo_listener is open.") == []
+    assert not is_maskable("may_promo")
+    assert is_maskable("may-promo")
+
+
+def test_is_maskable_is_part_of_the_findings_package_surface():
+    import network_assessment_azure_engine.findings as findings
+
+    assert "is_maskable" in findings.__all__
+    assert callable(findings.is_maskable)
