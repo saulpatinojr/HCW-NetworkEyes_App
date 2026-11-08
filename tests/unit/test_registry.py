@@ -20,6 +20,7 @@ from network_assessment.ai_engine.observed_state_enforcer import (
 from network_assessment.core.findings_schema import FindingSeverity, FrameworkMapping
 from network_assessment.core.topology.azure import AzureSubscriptionTopology, AzureTopology, VNet
 from network_assessment_azure_engine.rules import (
+    HEDGED_WORDING_REASON,
     RULES,
     RULES_VERSION,
     DuplicateRuleError,
@@ -245,8 +246,12 @@ class TestEvaluate:
             )
 
         sub = AzureSubscriptionTopology(subscription_id=SUB, tenant_id="t")
-        with pytest.raises(ObservedStateViolation):
-            evaluate(self._topology(sub))
+        report = evaluate(self._topology(sub))
+        # Withheld, never reported; the rule is listed in unknowns and the report still renders.
+        assert report.findings == [] and report.total_count == 0
+        assert [(u.rule_id, u.reason) for u in report.unknowns] == [
+            ("AZ-TEST-001", HEDGED_WORDING_REASON)
+        ]
 
     def test_rule_emitting_a_foreign_rule_id_is_rejected(self, scratch_registry):
         from network_assessment.core.findings_schema import Finding, ObservedState
