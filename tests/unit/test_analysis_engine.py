@@ -5,7 +5,7 @@ Tests cover:
   - AWS finding rule coverage (NET-001 through NET-008)
   - Azure finding rule coverage (AZ-NET-001 through AZ-NET-007)
   - Deduplication (same finding on same resource emitted once)
-  - observed_state enforcement blocks hedge language
+  - observed_state enforcement withholds a finding with hedge language
   - framework_mappings required — missing raises ValueError
   - Severity classification (CRITICAL/HIGH/MEDIUM)
   - Blocked regions/subscriptions produce zero findings
@@ -22,8 +22,8 @@ import pytest
 
 from network_assessment.ai_engine.analysis_engine import AnalysisEngine, AnalysisOptions
 from network_assessment.ai_engine.observed_state_enforcer import (
+    HEDGED_WORDING_REASON,
     ObservedStateEnforcer,
-    ObservedStateViolation,
 )
 from network_assessment.core.findings_schema import (
     Finding,
@@ -433,7 +433,7 @@ class TestObservedStateEnforcer:
         result = enforcer.scan_text(f"This {hedge_word} be a problem.")
         assert len(result) > 0
 
-    def test_violation_raised_on_finding(self, store):
+    def test_hedged_finding_is_withheld_not_reported(self, store):
         engine = AnalysisEngine(store=store, options=AnalysisOptions(dry_run=True))
         bad_finding = Finding(
             rule_id="TEST-001",
@@ -452,8 +452,11 @@ class TestObservedStateEnforcer:
             ],
             status=FindingStatus.OPEN,
         )
-        with pytest.raises(ObservedStateViolation):
-            engine._emit(bad_finding)
+        engine._emit(bad_finding)  # withheld (issue 362), not raised: the rest still runs
+        assert engine._findings == []
+        assert [(u.rule_id, u.reason) for u in engine._unknowns] == [
+            ("TEST-001", HEDGED_WORDING_REASON)
+        ]
 
     def test_missing_framework_mappings_raises(self, store):
         engine = AnalysisEngine(store=store, options=AnalysisOptions(dry_run=True))
