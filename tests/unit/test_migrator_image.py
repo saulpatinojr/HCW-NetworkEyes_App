@@ -11,9 +11,12 @@ What is pinned here:
 * the Dockerfile text: the migrator copies nothing from the builder and takes `node_modules` from its own
   `migrator-deps` stage, which installs from a lockfile with `npm ci --omit=dev --ignore-scripts`; the runner still
   takes only the generated Prisma client from the builder (so `prisma` moving to `dependencies` cannot enlarge it);
-  the numeric user, the exec-form `CMD`/`HEALTHCHECK` and the file ownership stay as they were;
+  the numeric user and the exec-form `CMD`/`HEALTHCHECK` stay as they were, and the migrator's file ownership too;
+* the runner's files stay owned by root (no `--chown`), and the only directory its user owns is `app/.next/cache`
+  (issue 358);
 * `package.json`: `prisma` is a production dependency (the migrator runs it) at the same range as `@prisma/client`;
-* the lockfile: no `brace-expansion` below the versions that fix GHSA-qhr7-859c-m2p7 and GHSA-6j4f-fj2g-mc7p;
+* the lockfile: every x64/arm64 musl native package carries `libc: ["musl"]` (issue 358), and no
+  `brace-expansion` below the versions that fix GHSA-qhr7-859c-m2p7 and GHSA-6j4f-fj2g-mc7p;
 * `scripts/migrator-lockfile.mjs`, run against the real lockfile: the migrator tree contains Prisma and none of the
   build tooling, copies lockfile entries as they are, and is accepted by `npm ci` (an offline dry run).
 """
@@ -188,6 +191,45 @@ def test_runner_takes_only_the_generated_prisma_client_from_the_builder() -> Non
     assert any(k == "HEALTHCHECK" and "/api/health" in a for _, k, a in runner)
 
 
+def test_runner_files_stay_owned_by_root_and_only_the_cache_is_writable() -> None:
+    """Issue 358: an owner can always chmod its own files, so the runner's user must own none of the app's files.
+
+    Every COPY into the runner leaves the files owned by root (no --chown, no chown afterwards). The one directory
+    the server writes at run time, app/.next/cache, is created empty and handed to the app's user. The Image Scan
+    job of 300-test-codebase.yml checks the same thing in the built image.
+    """
+    for number, arguments in copies("runner"):
+        assert "--chown" not in arguments, (
+            f"Dockerfile:{number} the runner copies with --chown: {arguments}"
+        )
+    commands = runs("runner")
+    chowns = [c for c in commands if "chown" in c]
+    assert len(chowns) == 1, chowns
+    assert re.search(r"chown -R nextjs:nodejs app/\.next/cache(?:\s|$)", chowns[0]), chowns[0]
+    assert "mkdir -p app/.next/cache" in chowns[0]
+    chowned = re.findall(r"chown\s+(?:-R\s+)?\S+\s+([^&]+)", chowns[0])
+    assert [paths.split() for paths in chowned] == [["app/.next/cache"]], chowned
+    assert not [c for c in commands if re.search(r"chmod\s+[^&]*(?:777|666|o\+w|a\+w)", c)], (
+        commands
+    )
+
+
+def test_the_builder_drops_group_and_world_write_from_everything_the_runner_copies() -> None:
+    """The build writes some output group- and world-writable (.next/server, found by the Image Scan job on the
+    first run of the root-owned runner). Root ownership alone would leave those files writable by the app's user,
+    so the builder removes the bits in the layer that creates them, for every path the runner takes from it."""
+    builds = [c for c in runs("builder") if "npm run build" in c]
+    assert len(builds) == 1, builds
+    stripped = re.search(r"chmod -R go-w ([^&]+)", builds[0])
+    assert stripped, builds[0]
+    taken = {
+        a.split()[-2].removeprefix("/app/")
+        for _, a in copies("runner")
+        if a.startswith("--from=builder")
+    }
+    assert taken <= set(stripped.group(1).split()), (taken, stripped.group(1))
+
+
 # --- package.json and the lockfile ---
 
 
@@ -229,6 +271,34 @@ def test_the_lockfile_has_no_vulnerable_brace_expansion() -> None:
             f"{path} is {version}: below {'.'.join(map(str, BRACE_EXPANSION_FIXED[major]))}, "
             "which fixes GHSA-qhr7-859c-m2p7 and GHSA-6j4f-fj2g-mc7p"
         )
+
+
+def test_the_lockfile_marks_musl_native_packages_so_debian_skips_them() -> None:
+    """Issue 358: without a `libc` field npm installs the musl (Alpine) build of a native package next to the glibc one.
+
+    The images are Debian (glibc). npm 10 dropped the `libc` fields when it rewrote the lockfile, so `npm ci` put
+    `@img/sharp-linuxmusl-x64` and `@next/swc-linux-x64-musl` in node_modules, from where Next.js could trace them
+    into the runner. Regenerate the lockfile with npm 11 or later (TODO.md, the lockfile notes) to keep the fields.
+    """
+    packages = package_lock()["packages"]
+    musl = {
+        path: entry
+        for path, entry in packages.items()
+        if "musl" in path.rsplit("node_modules/", 1)[-1]
+        and entry.get("os") == ["linux"]
+        and entry.get("cpu") in (["x64"], ["arm64"])
+    }
+    for required in (
+        "node_modules/@img/sharp-linuxmusl-x64",
+        "node_modules/@next/swc-linux-x64-musl",
+    ):
+        assert required in musl, f"{required} is no longer in the lockfile; update this test"
+    missing = sorted(path for path, entry in musl.items() if entry.get("libc") != ["musl"])
+    assert not missing, (
+        f"these musl packages have no libc: [musl] and would install on Debian: {missing}"
+    )
+    for glibc in ("node_modules/@img/sharp-linux-x64", "node_modules/@next/swc-linux-x64-gnu"):
+        assert packages[glibc].get("libc") == ["glibc"], glibc
 
 
 # --- scripts/migrator-lockfile.mjs, against the real lockfile ---

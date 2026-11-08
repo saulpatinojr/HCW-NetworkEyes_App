@@ -48,7 +48,11 @@ RUN npx prisma generate \
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN npm run build
+# The build writes some of its output group- and world-writable (seen in .next/server). The runner copies these
+# files owned by root, and the Image Scan check in 300-test-codebase.yml refuses any file under /app that a user
+# other than root can write, so the write bits come off here, in the same layer, for everything the runner copies.
+RUN npm run build \
+ && chmod -R go-w .next/standalone .next/static public node_modules/.prisma node_modules/@prisma
 
 # ── Stage 3: migrator-deps ───────────────────────────────────────────────────
 # The migrator's own dependency tree: the Prisma CLI, @prisma/client and what they
@@ -201,7 +205,8 @@ RUN rm -rf WEB-INF META-INF templates connect math4 \
 # Apache-2.0 asks that the licence travels with the files (the war carries none of its own at the top level).
 COPY third-party/drawio/LICENSE /out/LICENSE
 
-# Read-only for everyone: the runner's user (uid 1001) owns the files after the COPY below but cannot change them.
+# Read-only for everyone. The runner copies these files without --chown, so they stay owned by root: the app's user
+# (uid 1001) can read them but cannot change them, rename them or chmod them back (an owner could always chmod).
 RUN find /out -type d -exec chmod 555 {} + \
  && find /out -type f -exec chmod 444 {} +
 
@@ -239,13 +244,21 @@ RUN printf 'upgrade run: %s\n' "${PUBLISH_CACHE_BUST}" \
 # app dir), Next.js mirrors the /app path inside .next/standalone — so the
 # server entry point lands at .next/standalone/app/server.js, not
 # .next/standalone/server.js.  All assets must be placed relative to server.js.
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/public          ./app/public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static    ./app/.next/static
+#
+# None of the app's files is copied with --chown: they stay owned by root and readable by everyone, so the app's
+# user (uid 1001) can run them but cannot change, rename, replace or chmod them (an owner always can chmod its own
+# files, so owning them read-only would not be enough). The one place the server writes at run time is
+# app/.next/cache (the image optimizer and the fetch cache); it is created below, empty and owned by uid 1001.
+# There are no ISR pages, so nothing is regenerated into app/.next/server; if one is ever added, Next.js only logs
+# a warning when it cannot write the refreshed page there.
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/public          ./app/public
+COPY --from=builder /app/.next/static    ./app/.next/static
 
 # The self-hosted diagram editor (stage drawio-webapp). Served by Next.js as static files under /drawio/; its
-# Content-Security-Policy and framing headers come from next.config.ts.
-COPY --from=drawio-webapp --chown=nextjs:nodejs /out ./app/public/drawio
+# Content-Security-Policy and framing headers come from next.config.ts. No --chown, as above: the files stay owned
+# by root and read-only (chmod 444/555 in that stage), so the app's user cannot alter the editor it serves.
+COPY --from=drawio-webapp /out ./app/public/drawio
 
 # The version of the editor in this image, readable with `docker inspect` (the pin is declared at the top of this file).
 ARG DRAWIO_WEBAPP_VERSION
@@ -257,10 +270,16 @@ LABEL io.github.saulpatinojr.drawio-webapp.version="${DRAWIO_WEBAPP_VERSION}" \
 # migrator stage in workflow 210 before this container is deployed.
 # Node.js walks the directory tree, so modules at /app/node_modules are
 # found by the server running from /app/app/server.js.
+# No --chown and no chown -R: the client and its query engine stay owned by root, so the app's user can load them
+# but cannot rewrite them. Nothing writes here at run time (the client is generated in the builder).
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
-RUN chown -R nextjs:nodejs ./node_modules/.prisma ./node_modules/@prisma
+# The one writable directory (see above). 300-test-codebase.yml (Image Scan) checks the built runner: uid 1001 owns
+# nothing under /app but this directory, and can write nowhere else under /app.
+RUN mkdir -p app/.next/cache \
+ && chown -R nextjs:nodejs app/.next/cache \
+ && chmod 700 app/.next/cache
 
 # Commit the image was built from (200-build-images passes github.sha). The web
 # tier compares it with the newest published build (Admin → Updates); empty

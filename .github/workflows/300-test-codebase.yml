@@ -684,6 +684,28 @@ jobs:
             -c 'node -e "require(\"./node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node\")"' \
             || { echo "::error::the Prisma query engine does not load in the web runner"; failed=1; }
           exit "$failed"
+      # The web runner's files belong to root (apps/network-assessment-web/Dockerfile, runner stage), so the app's user
+      # can read and run them but not change, replace or chmod them. Run as the image's own user (1001), without
+      # --read-only so a writable path would show: uid 1001 must own nothing under /app but app/.next/cache, nothing
+      # under /app may be writable by its group or by everyone (symbolic links aside, they carry no mode of their own),
+      # and the files it serves must still be readable.
+      - name: The web runner's files belong to root and its user writes only to its cache
+        run: |
+          set -euo pipefail
+          sandbox=(--rm --network none --cap-drop ALL --security-opt no-new-privileges --entrypoint sh)
+          failed=0
+          found="$(docker run "${sandbox[@]}" network-assessment-scan-runner:ci -c \
+            'find /app -xdev ! -path "/app/app/.next/cache" ! -path "/app/app/.next/cache/*" \( -user 1001 -o -group 1001 -o \( ! -type l -perm /022 \) \) -print 2>&1')" \
+            || { echo "::error::could not list the web runner's files"; failed=1; }
+          if [ -n "$found" ]; then
+            echo "::error::the web runner holds files its user owns or that are group- or world-writable:"
+            head -n 50 <<<"$found"
+            failed=1
+          fi
+          docker run "${sandbox[@]}" network-assessment-scan-runner:ci -c \
+            'test "$(stat -c %u app/.next/cache)" = 1001 && test -w app/.next/cache && test ! -w app/server.js && test ! -w node_modules/.prisma/client && test -r app/public/drawio/index.html && test -r app/server.js' \
+            || { echo "::error::the web runner's cache must be the only place its user can write, and its files must stay readable"; failed=1; }
+          exit "$failed"
       - name: Export the images and download the Trivy database
         run: |
           set -euo pipefail

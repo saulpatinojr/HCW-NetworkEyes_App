@@ -285,7 +285,8 @@ Each one actively misleads an engineer or a workflow run.
   `package.json` is **CRLF**, and npm rewrites the lockfile as CRLF on this platform — convert back
   or the diff becomes the whole file; (2) regenerate with **npm 11+**, matching the web image's Node 24 (`node:24-trixie-slim` since
   2026-11-07; `node:24-alpine` before), because npm 10 silently strips the `libc` fields that select the musl vs glibc native
-  binaries for `@next/swc` and `@tailwindcss/oxide`. Also note `npm update` floats the entire tree —
+  binaries for `@next/swc` and `@tailwindcss/oxide` (restored 2026-11-08, T-742: a plain `--package-lock-only` run keeps
+  existing entries as they are, so remove the entries that carry `os`/`cpu` first and let npm 11 fetch them again). Also note `npm update` floats the entire tree —
   it pulled in 119 package changes including major transitive jumps (`immer` 10 → 11) — so prefer
   targeted `overrides` plus `npm install --package-lock-only` for security-only work.
   CI already runs a `pip-audit` job in `300-test-codebase.yml`,
@@ -2566,3 +2567,49 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   `apk` in a `RUN`. **Not checked here:** no image was built and hadolint was not run in the session that made the
   change (no Docker daemon, and downloading linters was refused); the pull request's `Dockerfile Lint (hadolint)`
   and `Image Scan (Trivy)` jobs and the next `200` run on `main` are the proof.
+
+### T-742 — Web image hardening follow-ups from the Debian trixie review (issue #358)
+- **Status:** Done 2026-11-08 (issue #358). Three small things found by the container review of the move to Debian
+  trixie (#357); none was new in #357.
+- **(1) The web runner's files belong to root.** They were copied with `--chown=nextjs:nodejs`, and the Prisma
+  folders were handed over with `chown -R`, so the app's user (uid 1001) owned them. An owner can always `chmod` its
+  own files, so the `chmod 444/555` on the draw.io editor did not stop it, and it could rewrite the Prisma query
+  engine or the server code. Now every `COPY` into the `runner` stage of `apps/network-assessment-web/Dockerfile`
+  has no `--chown`, so the files stay owned by root and readable by everyone. The one place the server writes at run
+  time, `app/.next/cache` (the image optimizer, `next/image` on the report page, and the fetch cache), is created
+  empty and owned by uid 1001. There are no ISR pages, so nothing is regenerated into `app/.next/server`; if one is
+  ever added, Next.js 16 logs `Failed to update prerender cache` and keeps serving (read in
+  `next/dist/server/lib/incremental-cache/index.js`). `tests/unit/test_migrator_image.py` fails on a `--chown` in
+  the runner or any `chown` but that cache; the `Image Scan (Trivy)` job gains a step that runs the built runner as
+  uid 1001 and fails if uid 1001 owns anything under `/app` but the cache, if anything there is group- or
+  world-writable, or if the cache is not writable or the served files not readable.
+- **(2) The lockfile marks the musl builds again.** `package-lock.json` had lost the `libc` fields (npm 10 drops
+  them on rewrite), so `npm ci` on Debian installed `@img/sharp-linuxmusl-x64`, `@img/sharp-libvips-linuxmusl-x64`
+  and `@next/swc-linux-x64-musl` beside the glibc builds. Regenerated with npm 11.21.2: the 125 entries that carry
+  `os`/`cpu` were removed and `npm install --package-lock-only --ignore-scripts --legacy-peer-deps` fetched them
+  again at the versions their parents pin. No package was added or removed and no version or integrity hash
+  changed; 48 entries gained `libc` (`["musl"]` or `["glibc"]`) and npm 11 changed five dev flags (`@types/react`,
+  `csstype`, `react-is`, `typescript`, `undici`). `react-is` is a required peer of `recharts`, which the charts use
+  at run time, so marking it dev would have dropped it from `npm audit --omit=dev` while the image still ships it;
+  it is now declared in `dependencies` (`^16.13.1`, the version already locked). `undici` is only an optional peer
+  of `openai` and nothing in the app imports it. A fresh `npm ci` on a glibc
+  host went from 703 to 695 packages, and `node_modules/@img` and `node_modules/@next` no longer hold a musl
+  build. `tests/unit/test_migrator_image.py` fails if an x64/arm64 musl entry loses `libc: ["musl"]`. Same method
+  next time (a plain `npm install --package-lock-only` keeps existing entries and adds nothing).
+- **(1b) The build's own output is not writable by others.** The first CI run of the new Image Scan step found
+  files under `.next/server` that `npm run build` wrote group- and world-writable; owned by root they were still
+  writable by uid 1001. The builder now runs `chmod -R go-w` on every path the runner copies from it, in the build
+  layer, and `tests/unit/test_migrator_image.py` checks that every such path is covered.
+- **(3) Dependabot does not offer Python 3.15 for the CLI and API images.** The docker entry of
+  `.github/dependabot.yml` ignores semver-minor and -major updates of `python`: CI tests 3.14 only (the required
+  check is `Unit Tests (Python 3.14)`, `requires-python >= 3.14`, ruff `py314`), so a 3.15 base would ship code no
+  check has run. Patch updates (3.14.x) and digest bumps still come. To move to 3.15: add it to CI, move the `FROM`
+  lines by hand, then delete the rule.
+- **Checked without Docker:** `next build` on the new lockfile, its standalone output (whose `@img` holds only the
+  glibc `sharp-linux-x64` and `sharp-libvips-linux-x64`) laid out as the runner does, owned by root, with an empty
+  `.next/cache` owned by an unprivileged user, and the server run as that user: `/auth/signin` answered 200, the image
+  optimizer answered 200 and wrote under `.next/cache/images`, `/api/health` answered 503 (no database, as expected),
+  and the user's `touch` and `chmod` on `server.js` and `node_modules` were refused.
+- **Not checked here:** no Docker daemon in the session, so no image was built; hadolint and actionlint could not
+  be downloaded. The pull request's `Dockerfile Lint (hadolint)`, `Workflow Lint (actionlint)` and
+  `Image Scan (Trivy)` jobs are the proof, and the web tier was not started against the built image.
