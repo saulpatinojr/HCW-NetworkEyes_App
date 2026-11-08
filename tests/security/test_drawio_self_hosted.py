@@ -196,7 +196,9 @@ class TestTheEditorIsPinned:
 
     def test_the_runner_serves_the_editor_from_its_own_files_and_labels_the_version(self):
         runner = _stage(_dockerfile(), "runner")
-        assert "COPY --from=drawio-webapp --chown=nextjs:nodejs /out ./app/public/drawio" in runner
+        # No --chown: the files stay owned by root, so the app's user cannot chmod them back to writable (issue 358).
+        assert "COPY --from=drawio-webapp /out ./app/public/drawio" in runner
+        assert not re.search(r"COPY --from=drawio-webapp[^\n]*--chown", runner)
         assert 'io.github.saulpatinojr.drawio-webapp.version="${DRAWIO_WEBAPP_VERSION}"' in runner
 
     def test_the_downloaded_files_are_not_committed(self):
