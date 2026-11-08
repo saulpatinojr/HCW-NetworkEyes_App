@@ -10,6 +10,11 @@ the downstream lab edition produce the same Azure findings from the same rule se
 
 Design contracts (all enforced in code, not just docs):
   DD-002: Every finding MUST have observed_state. Hedge language blocks publication.
+          Only our wording is judged: a hedge word inside one of the customer's AWS
+          identifiers (``may-promo-vpc``) is excused, by the same rule as the Azure engine
+          (``is_maskable``); tags, descriptions and other free text never excuse one. A
+          finding that still hedges is withheld, its rule is listed in ``unknowns`` with
+          the content-free ``HEDGED_WORDING_REASON``, and the rest of the analysis runs.
   DD-003: Finding generation and recommendation injection are STRICTLY separate.
           This module generates findings only. Recommendations are injected by
           recommendation_engine.py AFTER this module completes.
@@ -25,11 +30,18 @@ Any finding with the same key is deduplicated — the first occurrence wins.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from network_assessment.ai_engine.observed_state_enforcer import ObservedStateEnforcer
+from pydantic import BaseModel
+
+from network_assessment.ai_engine.observed_state_enforcer import (
+    HEDGED_WORDING_REASON,
+    ObservedStateEnforcer,
+    ObservedStateViolation,
+    is_maskable,
+)
 from network_assessment.core.escalation_engine import CriticalFindingEscalationEngine
 from network_assessment.core.findings_schema import (
     FINDINGS_SCHEMA_VERSION,
@@ -97,6 +109,59 @@ def _severity(rule_id: str) -> FindingSeverity:
     return FindingSeverity.LOW
 
 
+# Fields of the AWS topology that hold identifiers AWS assigned or the customer chose: resource
+# ids, ARNs, names, account ids, regions, availability zones and the Direct Connect location
+# code. Only these can excuse a hedge word in a fact. Free text never can: tags (and every other
+# dict), descriptions, display names (account and OU names), Security Hub titles, remediation
+# text and block reasons, because free text could hold our own neighbouring words ("may be")
+# and hide a hedge we wrote.
+_AWS_IDENTIFIER_FIELDS = frozenset({"id", "name", "arn", "region", "az", "location"})
+_AWS_IDENTIFIER_SUFFIXES = ("_id", "_ids", "_arn", "_arns", "_name", "_names", "_region")
+_AWS_FREE_TEXT_FIELDS = frozenset({"account_name", "ou_name", "display_name"})
+
+
+def _is_aws_identifier_field(field: str) -> bool:
+    if field in _AWS_FREE_TEXT_FIELDS:
+        return False
+    return field in _AWS_IDENTIFIER_FIELDS or field.endswith(_AWS_IDENTIFIER_SUFFIXES)
+
+
+def _aws_identifier_strings(value: object) -> Iterator[str]:
+    """Every string in an identifier field of an AWS topology model, at any depth (dicts skipped)."""
+    if isinstance(value, BaseModel):
+        for field in type(value).model_fields:
+            item = getattr(value, field)
+            if isinstance(item, str):
+                if _is_aws_identifier_field(field):
+                    yield item
+            elif isinstance(item, (list, tuple)) and all(isinstance(x, str) for x in item):
+                if _is_aws_identifier_field(field):
+                    yield from item
+            else:
+                yield from _aws_identifier_strings(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            yield from _aws_identifier_strings(item)
+
+
+class _AwsIdentifiers:
+    """The customer's AWS identifiers that can excuse a hedge word, collected on first lookup.
+
+    Kept only when ``is_maskable`` accepts them, so the set is small; the walk runs only when a
+    fact has a hedge-word hit, and once per run.
+    """
+
+    def __init__(self, topology: AWSTopology | None) -> None:
+        self._topology = topology
+        self._values: frozenset[str] | None = None
+
+    def __contains__(self, value: object) -> bool:
+        if self._values is None:
+            found = _aws_identifier_strings(self._topology) if self._topology else ()
+            self._values = frozenset(v for v in found if is_maskable(v))
+        return value in self._values
+
+
 @dataclass
 class AnalysisOptions:
     load_aws: bool = True
@@ -119,17 +184,33 @@ class AnalysisEngine:
         self._escalation = CriticalFindingEscalationEngine()
         self._seen: set[str] = set()  # deduplication register
         self._findings: list[Finding] = []
-        self._unknowns: list[Unknown] = []  # Azure rules the topology could not answer
+        # Rules the topology could not answer (Azure) and rules with a withheld finding (AWS)
+        self._unknowns: list[Unknown] = []
+        self._aws_identifiers = _AwsIdentifiers(None)
 
     # ---------------------------------------------------------------- dedup
 
     def _dedup_key(self, rule_id: str | None, resource_id: str | None) -> str:
         return f"{rule_id}:{resource_id}"
 
+    def _withhold(self, rule_id: str | None) -> None:
+        """Record a rule whose finding failed the hedge check; the finding is not reported."""
+        rule = rule_id or "unknown-rule"
+        # The log line and the reason name the rule only: the violation quotes the finding.
+        logger.warning("Withheld a finding of %s: hedge check failed", rule)
+        if all(u.rule_id != rule for u in self._unknowns):
+            self._unknowns.append(Unknown(rule_id=rule, reason=HEDGED_WORDING_REASON))
+
     def _emit(self, finding: Finding) -> None:
         """Validate, deduplicate, and register a finding."""
-        # 1. Enforce observed_state — blocks hedge language (DD-002)
-        self._enforcer.validate(finding)  # raises ObservedStateViolation on failure
+        # 1. Enforce observed_state — blocks hedge language (DD-002). A hedge inside one of
+        #    the customer's identifiers is excused; any other hedge withholds this finding
+        #    only, so the rest of the analysis still runs.
+        try:
+            self._enforcer.validate(finding, self._aws_identifiers)
+        except ObservedStateViolation:
+            self._withhold(finding.rule_id)
+            return
 
         # 2. Enforce framework_mappings (DD-002)
         if not finding.framework_mappings:
@@ -604,7 +685,7 @@ class AnalysisEngine:
                 progress("azure", index, total, sub_topo.subscription_id)
 
         evaluation = evaluate_azure(azure_topology, progress=_report)
-        self._unknowns = list(evaluation.unknowns)
+        self._unknowns.extend(evaluation.unknowns)
         for finding in evaluation.findings:
             key = self._dedup_key(finding.rule_id, finding.resource_id)
             if key in self._seen:
@@ -639,6 +720,7 @@ class AnalysisEngine:
         self._findings = []
         self._seen = set()
         self._unknowns = []
+        self._aws_identifiers = _AwsIdentifiers(aws_topology)
 
         progress = self.opts.progress_callback
 
