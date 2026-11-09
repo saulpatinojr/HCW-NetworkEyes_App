@@ -250,7 +250,7 @@ jobs:
       # daemon, so docker/scout-action could otherwise silently fall back to a
       # stale locally-cached image and scan the wrong content entirely.
       - name: Docker Scout — fail on fixable critical/high CVEs
-        uses: docker/scout-action@a4119c5a8c5076236a54e4ce99531f7e4dd2ef84  # v1.27.0
+        uses: docker/scout-action@e7e2a72bf1485d10a58f30696b6c513b261ce4fa  # v1.29.0
         with:
           command: cves
           image: docker.io/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}@${{ steps.build.outputs.digest }}
@@ -394,7 +394,7 @@ jobs:
       # above: no tag exists yet, and a floating-tag reference could resolve
       # against a stale locally-cached image instead of the one just pushed.
       - name: Docker Scout — fail on fixable critical/high CVEs (Web)
-        uses: docker/scout-action@a4119c5a8c5076236a54e4ce99531f7e4dd2ef84  # v1.27.0
+        uses: docker/scout-action@e7e2a72bf1485d10a58f30696b6c513b261ce4fa  # v1.29.0
         with:
           command: cves
           image: docker.io/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}@${{ steps.build_web.outputs.digest }}
@@ -419,7 +419,7 @@ jobs:
           cache-from: type=gha
 
       - name: Docker Scout — fail on fixable critical/high CVEs (Migrator)
-        uses: docker/scout-action@a4119c5a8c5076236a54e4ce99531f7e4dd2ef84  # v1.27.0
+        uses: docker/scout-action@e7e2a72bf1485d10a58f30696b6c513b261ce4fa  # v1.29.0
         with:
           command: cves
           image: docker.io/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}@${{ steps.build_migrator.outputs.digest }}
@@ -845,7 +845,7 @@ jobs:
       # The same action, version and arguments as the real build jobs use on every digest they push.
       - name: Docker Scout analyses the rehearsal digest
         id: scout
-        uses: docker/scout-action@a4119c5a8c5076236a54e4ce99531f7e4dd2ef84  # v1.27.0
+        uses: docker/scout-action@e7e2a72bf1485d10a58f30696b6c513b261ce4fa  # v1.29.0
         with:
           command: cves
           image: docker.io/${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}@${{ steps.push.outputs.digest }}
