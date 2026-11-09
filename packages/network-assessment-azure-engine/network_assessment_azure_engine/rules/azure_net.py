@@ -14,7 +14,10 @@ exhaustion derived from ``ipConfigurations``; hedge-free facts and titles). ``AZ
 version 2 is "WAF state read through the linked WAF policy" and ``AZ-NET-025`` read the linked
 policy from its first version in the lab edition's port, so the policy read here (issue 350)
 is the behaviour those versions already declare, not a new version: the id:version table and
-``rules_digest()`` are what the lab edition pins, and they do not move.
+``rules_digest()`` are what the lab edition pins, and they did not move for it. Issue 352 later
+moved ``AZ-NET-007`` to version 3 and ``AZ-NET-025`` to version 2 (WAF read per listener and path
+rule). Issue 364 moved ``AZ-NET-009`` and ``AZ-NET-019`` to version 2: their framework notes said
+"suggests" and "indicates" and now state what was observed.
 
 Every ``learn_url`` is a Microsoft Learn path recorded without a retrieval check and stays
 ``[VERIFY]`` until the owner confirms it; every framework control reference is a claim shown
@@ -709,20 +712,24 @@ def gateway_saturation(
 
 @rule(
     id=R_AZ_FW_NO_HITS,
-    title="Azure Firewall present but processes 0 traffic",
+    title="Azure Firewall with no rule hits or no processed data",
     severity=FindingSeverity.HIGH,
     category="Network Security",
-    version=1,
+    version=2,  # framework note states what was observed (issue 364)
     learn_url=_LEARN_FIREWALL_LOGS,
     frameworks=(
         fw.WAF_NS4,
-        fw.cisa("3.2", fw.CISA_TRAFFIC, "Zero rule hits suggests traffic bypasses the firewall"),
+        fw.cisa(
+            "3.2",
+            fw.CISA_TRAFFIC,
+            "Zero rule hits or zero data processed in 24 hours was observed on the firewall",
+        ),
     ),
     applies_to="live-only",
     inputs=("network_metrics",),
     evidence="network_metrics.firewall_metrics[]",
-    description="The firewall recorded no rule hits and no processed data in the 24-hour metric "
-    "window, so no traffic is routed through it.",
+    description="Azure Monitor reports zero rule hits, or zero data processed, for the firewall in "
+    "the 24-hour metric window.",
     remediation="Add 0.0.0.0/0 routes with the firewall's private IP as the next hop on the spoke "
     "subnets and confirm the hub peering forwards traffic; if the firewall is no longer "
     "needed, decommission it.",
@@ -747,8 +754,8 @@ def firewall_without_traffic(
                 fact=f"Firewall {fm.firewall_name} recorded 0 rule hits or 0 data processed "
                 f"in 24 hours.",
                 evidence_ref=evidence_ref_for(topology, sub, "network_metrics"),
-                description="No traffic reached the firewall's rules in the metric window: "
-                "the routing in place does not send flows through it.",
+                description="Azure Monitor reported zero rule hits or zero data processed for "
+                "this firewall in the 24-hour metric window.",
             )
 
 
@@ -1206,12 +1213,14 @@ def front_door_waf_detection_mode(
     title="Application Gateway reports high backend latency or elevated failure rate",
     severity=FindingSeverity.HIGH,
     category="Performance",
-    version=1,
+    version=2,  # framework note states what was observed (issue 364)
     learn_url=_LEARN_APPGW_METRICS,
     frameworks=(
         fw.WAF_RE4_CAPACITY,
         fw.cisa(
-            "3.4", fw.CISA_RESILIENCE, "App Gateway capacity degradation indicates resilience gap"
+            "3.4",
+            fw.CISA_RESILIENCE,
+            "App Gateway backend latency or failure rate above the threshold is a resilience gap",
         ),
     ),
     applies_to="live-only",
