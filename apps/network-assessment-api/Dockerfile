@@ -1,11 +1,12 @@
-# python:3.14.10-slim-trixie digest pinned 2026-11-07 (Python 3.14.10 on Debian 13 "trixie", built 2026-11-05) — see
-# the root Dockerfile for why the tag names the Debian release.
+# python:3.15.2-slim-trixie digest pinned 2026-11-12 (Python 3.15.2 on Debian 13 "trixie", built 2026-11-05; moved
+# from 3.14.10 for saulpatinojr/HCW-HybridCloudWorks#1707) — see the root Dockerfile for why the tag names the Debian
+# release.
 # uv, as a stage rather than an inline `COPY --from=<image>`: Dependabot's docker
 # updater only reads `FROM` lines, so this is the line its weekly bump moves.
 # Keep the version in step with the `uv==` pins in 300-test-codebase.yml.
 FROM ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 AS uv
 
-FROM python:3.14.10-slim-trixie@sha256:af8a5aa14780025dbfbcfbc81bd8a91ebd87711dd5b0f48ed71090949dd7cb1d AS builder
+FROM python:3.15.2-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS builder
 
 WORKDIR /build
 
@@ -19,17 +20,22 @@ WORKDIR /build
 # Installed from uv.lock (TODO.md T-702) — see the root Dockerfile for the
 # pattern: `uv export --locked` fails on lock drift, `--require-hashes` pins
 # every wheel, the `build` group is the hash-checked build backend, and uv
-# never leaves the builder stage. Every wheel is a prebuilt cp314 manylinux
-# wheel (psycopg2-binary included), so no compiler or libpq-dev is needed.
+# never leaves the builder stage. Every wheel is a prebuilt cp315 (or abi3) manylinux
+# wheel (psycopg2-binary included), so no compiler or libpq-dev is needed, with one
+# exception: PyYAML 6.0.3 has no cp315 wheel yet (yaml/pyyaml#951, checked 2026-11-12)
+# and is built from its hash-checked source archive as plain Python, with the
+# hash-checked build group installed first; the root Dockerfile says why. Drop the
+# PyYAML flags once a PyYAML release ships cp315 wheels.
 COPY --from=uv /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
 # The engine package is a uv workspace member: its pyproject.toml must be present for
 # `uv export --locked` to resolve the workspace, before the source tree is copied.
 COPY packages/network-assessment-azure-engine/pyproject.toml packages/network-assessment-azure-engine/
-RUN uv export --locked --no-default-groups --no-emit-project --no-emit-workspace --extra api --extra aws -o /tmp/requirements.txt \
- && uv pip install --system --no-cache --require-hashes --no-deps --prefix=/install -r /tmp/requirements.txt \
- && uv export --locked --only-group build -o /tmp/build-requirements.txt \
- && uv pip install --system --no-cache --require-hashes --no-deps -r /tmp/build-requirements.txt
+RUN uv export --locked --only-group build -o /tmp/build-requirements.txt \
+ && uv pip install --system --no-cache --require-hashes --no-deps -r /tmp/build-requirements.txt \
+ && uv export --locked --no-default-groups --no-emit-project --no-emit-workspace --extra api --extra aws -o /tmp/requirements.txt \
+ && PYYAML_FORCE_LIBYAML=0 uv pip install --system --no-cache --require-hashes --no-deps --no-build-isolation-package pyyaml \
+      --prefix=/install -r /tmp/requirements.txt
 COPY packages/network-assessment-azure-engine/ packages/network-assessment-azure-engine/
 COPY network_assessment/ network_assessment/
 COPY apps/network-assessment-api/ apps/network-assessment-api/
@@ -43,7 +49,7 @@ RUN uv pip install --system --no-cache --no-deps --no-build-isolation --prefix=/
 # Pinned draw.io desktop release, verified by checksum before it can reach
 # the final image. Used headlessly (see scripts/drawio-headless.sh) so the
 # encyclopedia report's diagram SVGs render instead of silently degrading.
-FROM python:3.14.10-slim-trixie@sha256:af8a5aa14780025dbfbcfbc81bd8a91ebd87711dd5b0f48ed71090949dd7cb1d AS drawio-fetch
+FROM python:3.15.2-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS drawio-fetch
 
 # bash with pipefail, see the root Dockerfile (hadolint DL4006).
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -59,7 +65,7 @@ RUN apt-get -o Acquire::Retries=0 update --error-on=any && apt-get -o Acquire::R
 
 # ---- final stage ----
 # Named so tests/unit/test_ci_hygiene.py can find the shipped stage; the build target is unchanged (it is the last stage).
-FROM python:3.14.10-slim-trixie@sha256:af8a5aa14780025dbfbcfbc81bd8a91ebd87711dd5b0f48ed71090949dd7cb1d AS final
+FROM python:3.15.2-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS final
 
 # Non-root user — uid/gid 1001 (matches root Dockerfile's network-assessment user).
 RUN groupadd --gid 1001 network-assessment \

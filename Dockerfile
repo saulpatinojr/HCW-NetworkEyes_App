@@ -19,12 +19,13 @@
 #   6. HEALTHCHECK added (required for ECS/AKS task definitions)
 #   7. .dockerignore referenced — see .dockerignore in repo root
 
-# python:3.14.10-slim-trixie digest pinned 2026-11-07 (Python 3.14.10 on Debian 13 "trixie", built 2026-11-05; the
-# same digest python:3.14-slim pointed to that day). The tag names the Debian release on purpose: every image in this
-# repository is Debian trixie (the web image's node:24-trixie-slim included), so a future Debian release under the
-# floating tag cannot move one image to another distribution unnoticed. Dependabot's docker ecosystem watches every
-# Dockerfile and bumps the digest on each FROM line; the `apt-get upgrade` in the final stage keeps the debs current
-# between bumps (TODO.md T-741).
+# python:3.15.2-slim-trixie digest pinned 2026-11-12 (Python 3.15.2 on Debian 13 "trixie", built 2026-11-05; the
+# digest the tag pointed to that day, and the one the HCW website's lab image uses). Moved from 3.14.10 to reach the
+# HCW runtime floor, the newest Python line (saulpatinojr/HCW-HybridCloudWorks#1707). The tag names the Debian release
+# on purpose: every image in this repository is Debian trixie (the web image's node:26-trixie-slim included), so a
+# future Debian release under the floating tag cannot move one image to another distribution unnoticed. Dependabot's
+# docker ecosystem watches every Dockerfile and bumps the digest on each FROM line; the `apt-get upgrade` in the final
+# stage keeps the debs current between bumps (TODO.md T-741).
 # uv, as a stage rather than an inline `COPY --from=<image>`: Dependabot's docker
 # updater only reads `FROM` lines, so this is the line its weekly bump moves.
 # Keep the version in step with the `uv==` pins in 300-test-codebase.yml.
@@ -32,7 +33,7 @@ ARG EDITION=appliance
 
 FROM ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 AS uv
 
-FROM python:3.14.10-slim-trixie@sha256:af8a5aa14780025dbfbcfbc81bd8a91ebd87711dd5b0f48ed71090949dd7cb1d AS builder
+FROM python:3.15.2-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS builder
 
 ARG NETWORK_ASSESSMENT_VERSION=dev
 WORKDIR /build
@@ -56,10 +57,16 @@ COPY pyproject.toml uv.lock ./
 COPY packages/network-assessment-azure-engine/pyproject.toml packages/network-assessment-azure-engine/
 # The appliance build serves both clouds, so the [aws] extra rides along here; the
 # package itself declares boto3 only under that extra (change set K).
-RUN uv export --locked --no-default-groups --no-emit-project --no-emit-workspace --extra aws -o /tmp/requirements.txt \
- && uv pip install --system --no-cache --require-hashes --no-deps --prefix=/install -r /tmp/requirements.txt \
- && uv export --locked --only-group build -o /tmp/build-requirements.txt \
- && uv pip install --system --no-cache --require-hashes --no-deps -r /tmp/build-requirements.txt
+# PyYAML 6.0.3, the newest release, has no wheel for Python 3.15 yet (yaml/pyyaml#951, checked 2026-11-12), so it is
+# built here from its hash-checked source archive. The build group goes in first so PyYAML is built with it
+# (`--no-build-isolation-package`) rather than with a build backend fetched unpinned, and PYYAML_FORCE_LIBYAML=0
+# builds the plain-Python version: this stage has no C compiler, and nothing here imports yaml.CLoader. Drop both
+# once a PyYAML release ships cp315 wheels. The lockfile job in 300-test-codebase.yml runs the same commands.
+RUN uv export --locked --only-group build -o /tmp/build-requirements.txt \
+ && uv pip install --system --no-cache --require-hashes --no-deps -r /tmp/build-requirements.txt \
+ && uv export --locked --no-default-groups --no-emit-project --no-emit-workspace --extra aws -o /tmp/requirements.txt \
+ && PYYAML_FORCE_LIBYAML=0 uv pip install --system --no-cache --require-hashes --no-deps --no-build-isolation-package pyyaml \
+      --prefix=/install -r /tmp/requirements.txt
 COPY packages/network-assessment-azure-engine/ packages/network-assessment-azure-engine/
 COPY network_assessment/ network_assessment/
 # The engine package first (a workspace member, excluded from the hash-checked export
@@ -72,7 +79,7 @@ RUN uv pip install --system --no-cache --no-deps --no-build-isolation --prefix=/
 # The engine package alone, without the [azure] extra, into its own prefix. The
 # boundary is proved before the final stage exists: a resolvable azure, msal or
 # boto3 fails the build here, the same check the AddOn's image runs.
-FROM python:3.14.10-slim-trixie@sha256:af8a5aa14780025dbfbcfbc81bd8a91ebd87711dd5b0f48ed71090949dd7cb1d AS builder-lab
+FROM python:3.15.2-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS builder-lab
 
 ARG EDITION
 RUN test "$EDITION" = "lab" || { echo "builder-lab is only built for EDITION=lab (got '$EDITION')" >&2; exit 1; }
@@ -89,14 +96,14 @@ RUN uv export --locked --no-default-groups --no-emit-project --no-emit-workspace
  && uv pip install --system --no-cache --require-hashes --no-deps -r /tmp/build-requirements.txt \
  && uv pip install --system --no-cache --no-deps --no-build-isolation --prefix=/install-lab ./packages/network-assessment-azure-engine \
  && rm -f /tmp/lab-requirements.txt /tmp/build-requirements.txt \
- && PYTHONPATH=/install-lab/lib/python3.14/site-packages python -m network_assessment_azure_engine.edition
+ && PYTHONPATH=/install-lab/lib/python3.15/site-packages python -m network_assessment_azure_engine.edition
 
 # ---- drawio fetch stage ----
 # Pinned draw.io desktop release, verified by checksum before it can reach
 # the final image. The export pipeline (network_assessment/diagram_engine/export_pipeline.py)
 # degrades to XML-only output without it — its own warning promises the CLI
 # is available "inside the Docker container", which is made true here.
-FROM python:3.14.10-slim-trixie@sha256:af8a5aa14780025dbfbcfbc81bd8a91ebd87711dd5b0f48ed71090949dd7cb1d AS drawio-fetch
+FROM python:3.15.2-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS drawio-fetch
 
 # bash with pipefail: the checksum step below is a pipe (`echo | sha256sum -c -`), and a failure on the left
 # of a pipe must fail the build (hadolint DL4006). The default /bin/sh would hide it.
@@ -113,7 +120,7 @@ RUN apt-get -o Acquire::Retries=0 update --error-on=any && apt-get -o Acquire::R
 
 # ---- final stage: lab (build-only) ----
 # No apps/, no server, no EXPOSE, no HEALTHCHECK: the image's only job is the proof.
-FROM python:3.14.10-slim-trixie@sha256:af8a5aa14780025dbfbcfbc81bd8a91ebd87711dd5b0f48ed71090949dd7cb1d AS final-lab
+FROM python:3.15.2-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS final-lab
 
 COPY --from=builder-lab /install-lab /usr/local
 RUN python -m pip uninstall -y pip \
@@ -127,7 +134,7 @@ ENV NETWORK_ASSESSMENT_EDITION=lab
 CMD ["python", "-m", "network_assessment_azure_engine.edition"]
 
 # ---- final stage: appliance ----
-FROM python:3.14.10-slim-trixie@sha256:af8a5aa14780025dbfbcfbc81bd8a91ebd87711dd5b0f48ed71090949dd7cb1d AS final-appliance
+FROM python:3.15.2-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS final-appliance
 
 ARG NETWORK_ASSESSMENT_VERSION=dev
 LABEL org.opencontainers.image.title="NetworkEyes" \

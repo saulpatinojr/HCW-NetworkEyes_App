@@ -6,6 +6,10 @@ build-backend = "setuptools.build_meta"
 name = "network-assessment"
 version = "0.8.0b0"
 description = "NetworkEyes Cloud Network Assessment CLI"
+# Still >=3.14 on purpose (2026-11-12). The images and CI run Python 3.15 (the HCW runtime floor,
+# saulpatinojr/HCW-HybridCloudWorks#1707), but `Unit Tests (Python 3.14)` is still a required check, so
+# 3.14 must keep installing. Raise this, ruff's target-version and ty's python-version to 3.15 in the
+# change that drops that check (TODO.md T-743).
 requires-python = ">=3.14"
 dependencies = [
     # The Azure assessment engine (model, typed rules, classifier, normalizer, renderers):

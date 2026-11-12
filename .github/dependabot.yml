@@ -119,10 +119,12 @@ updates:
       # Odd Node majors never reach LTS; the web image moves to the next even major by hand (#185).
       - dependency-name: "node"
         update-types: ["version-update:semver-major"]
-      # The CLI and API images stay on Python 3.14 (python:3.14.<patch>-slim-trixie): requires-python, ruff's py314
-      # target and every Python job in 300-test-codebase.yml (the required check is `Unit Tests (Python 3.14)`) test
-      # 3.14 only, so a 3.15 base would ship code no check has run. Patch updates (3.14.x) and digest bumps still
-      # come. To move to 3.15: test on it in CI first, move the FROM lines by hand, then delete this rule (#358).
+      # Python minors are moved by hand, as Node majors are above. The move to 3.15 was done that way on 2026-11-12
+      # (#358, TODO.md T-742 item 3 and T-743; saulpatinojr/HCW-HybridCloudWorks#1707): CI first, then the FROM lines.
+      # Move 3.16 the same way: add it to the test matrix in 300-test-codebase.yml, check every locked package has a
+      # 3.16 wheel (PyYAML had none for 3.15), then move the FROM lines and the python3.15 site-packages path of the
+      # lab stage in the root Dockerfile. A major line (Python 4) is moved by hand too. Patch updates (3.15.x) and
+      # digest bumps still come.
       - dependency-name: "python"
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
     groups:

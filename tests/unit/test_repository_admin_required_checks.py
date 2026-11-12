@@ -11,8 +11,9 @@ that from happening again, and both are pinned here:
   read from a test, so the list in the test is the record of what the ruleset is supposed to say.
 * **The payloads are the live policy, and the task reads before it writes.** The payloads of ``protect-main``
   and ``protect-release-tags`` equal ``EXPECTED_MAIN`` and ``EXPECTED_TAGS`` below (the live rulesets, read
-  2026-10-25 10:10 local), so an apply is a no-op today. Both tasks read the live ruleset, print what the update
-  would remove, weaken, add or change, and in apply mode refuse (exit non-zero, no write) to remove a rule, a
+  2026-10-25 10:10 local), so an apply changes nothing but the checks added to the list since (see its
+  comments). Both tasks read the live ruleset, print what the update would remove, weaken, add or change,
+  and in apply mode refuse (exit non-zero, no write) to remove a rule, a
   required check, a bypass actor or a ref pattern, to lower an approval count, or to switch off a protection,
   unless the input ``allow_weakening`` is ticked. The behaviour tests run the real step body with a stub ``gh``
   that answers from canned rulesets and records every call, and mutate the payload builder one setting at a time
@@ -41,8 +42,10 @@ ADMIN_WORKFLOW = WORKFLOWS / "390-repository-admin.yml"
 TEST_WORKFLOW = WORKFLOWS / "300-test-codebase.yml"
 STEP_NAME = "Run the chosen task"
 
-# The required status checks of the live "Protect main" ruleset (read 2026-10-25, ruleset 25778319), in the
-# order the ruleset lists them. CHANGING THE LIVE RULESET AND THIS LIST MUST HAPPEN TOGETHER: add or remove a
+# The required status checks `protect-main` applies to the "Protect main" ruleset (ruleset 25778319). The first
+# eleven are the live ruleset as read 2026-10-25, in its order; `Unit Tests (Python 3.15)` was added 2026-11-12
+# (saulpatinojr/HCW-HybridCloudWorks#1707), and until the owner runs `protect-main` with apply after that change
+# merges, the live ruleset lacks it. CHANGING THE LIVE RULESET AND THIS LIST MUST HAPPEN TOGETHER: add or remove a
 # check in the ruleset, in `REQUIRED_CHECKS` of 390-repository-admin.yml and here, in one pull request.
 # Otherwise the next `protect-main` run undoes (or never applies) the change.
 EXPECTED_REQUIRED_CHECKS = [
@@ -57,6 +60,8 @@ EXPECTED_REQUIRED_CHECKS = [
     "Workflow Lint (actionlint)",
     "Dependency Review",
     "Image Scan (Trivy)",
+    # Last, so the slices below keep their meaning. Adding a check needs no allow_weakening.
+    "Unit Tests (Python 3.15)",
 ]
 
 # The live rulesets (read 2026-10-25, ids 25778319 and 25778333, updated 10:09 and 10:10 local) as the payload

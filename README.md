@@ -4,7 +4,7 @@
 [![Release](https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/workflows/310-release-version.yml/badge.svg)](https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/workflows/310-release-version.yml)
 [![Images](https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/workflows/200-build-images.yml/badge.svg)](https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/workflows/200-build-images.yml)
 [![Engine release](https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/workflows/320-release-engine.yml/badge.svg)](https://github.com/saulpatinojr/HCW-NetworkEyes_App/actions/workflows/320-release-engine.yml)
-[![python](https://img.shields.io/badge/python-3.14-3776AB?logo=python&logoColor=white)](pyproject.toml)
+[![python](https://img.shields.io/badge/python-3.15-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![license](https://img.shields.io/github/license/saulpatinojr/HCW-NetworkEyes_App)](LICENSE)
 [![lab build](https://img.shields.io/badge/lab%20build-HCW--NetworkEyes__AddOn-6f42c1?logo=github)](https://github.com/saulpatinojr/HCW-NetworkEyes_AddOn)
 

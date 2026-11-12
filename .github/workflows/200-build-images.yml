@@ -307,6 +307,10 @@ jobs:
         with:
           persist-credentials: false  # the images build from the checked-out files; no step uses git with the token
 
+      # The npm audit below runs on the runner's own node on purpose (saulpatinojr/HCW-HybridCloudWorks#1707): it only
+      # reads package-lock.json against the advisory database, which does not depend on the Node.js version, and this
+      # job holds an OIDC token (id-token: write) to push and sign images, so it installs nothing on the runner, not
+      # even an interpreter.
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
@@ -529,6 +533,10 @@ jobs:
         with:
           persist-credentials: false
 
+      # The tagging step runs on the runner's own python3 on purpose (saulpatinojr/HCW-HybridCloudWorks#1707):
+      # scripts/ci/paths_touch_build.py is standard library only (re, sys, pathlib), and this job holds an OIDC token
+      # (id-token: write) to push tags and sign with cosign, so it installs nothing on the runner, not even an
+      # interpreter.
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
