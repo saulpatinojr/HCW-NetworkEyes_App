@@ -48,6 +48,13 @@ jobs:
     environment: admin-ops
     timeout-minutes: 10
     steps:
+      # The board-fill task runs python3 on the runner: Python 3.15 (the HCW runtime floor), not the runner's own.
+      # First, before any token exists, and with no cache: setup-python caches nothing unless asked.
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.15"
+
       - name: Get a short-lived token for this repository only
         id: app
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
@@ -68,7 +75,7 @@ jobs:
           ALLOW_WEAKENING: ${{ inputs.allow_weakening }}
           # Must equal the required checks of the live "Protect main" ruleset, and every name must be a job name in 300-test-codebase.yml.
           # tests/unit/test_repository_admin_required_checks.py pins both. Change the live ruleset and this list together.
-          REQUIRED_CHECKS: '["Lint & Format","Unit Tests (Python 3.14)","Web lint, typecheck & tests","Python Lockfile Consistency","Python Dependency Audit (pip-audit)","Secret Scanning (detect-secrets, gating)","Repository Guardrails","Dockerfile Lint (hadolint)","Workflow Lint (actionlint)","Dependency Review","Image Scan (Trivy)"]'
+          REQUIRED_CHECKS: '["Lint & Format","Unit Tests (Python 3.14)","Web lint, typecheck & tests","Python Lockfile Consistency","Python Dependency Audit (pip-audit)","Secret Scanning (detect-secrets, gating)","Repository Guardrails","Dockerfile Lint (hadolint)","Workflow Lint (actionlint)","Dependency Review","Image Scan (Trivy)","Unit Tests (Python 3.15)"]'
           KEEP_REGEX: '^(main|master|develop|gh-pages|release/.*)$'
         run: |
           set -euo pipefail

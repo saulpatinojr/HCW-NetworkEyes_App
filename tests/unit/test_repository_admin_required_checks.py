@@ -11,8 +11,9 @@ that from happening again, and both are pinned here:
   read from a test, so the list in the test is the record of what the ruleset is supposed to say.
 * **The payloads are the live policy, and the task reads before it writes.** The payloads of ``protect-main``
   and ``protect-release-tags`` equal ``EXPECTED_MAIN`` and ``EXPECTED_TAGS`` below (the live rulesets, read
-  2026-10-25 10:10 local), so an apply is a no-op today. Both tasks read the live ruleset, print what the update
-  would remove, weaken, add or change, and in apply mode refuse (exit non-zero, no write) to remove a rule, a
+  2026-10-25 10:10 local), so an apply changes nothing but the checks added to the list since (see its
+  comments). Both tasks read the live ruleset, print what the update would remove, weaken, add or change,
+  and in apply mode refuse (exit non-zero, no write) to remove a rule, a
   required check, a bypass actor or a ref pattern, to lower an approval count, or to switch off a protection,
   unless the input ``allow_weakening`` is ticked. The behaviour tests run the real step body with a stub ``gh``
   that answers from canned rulesets and records every call, and mutate the payload builder one setting at a time
@@ -57,6 +58,10 @@ EXPECTED_REQUIRED_CHECKS = [
     "Workflow Lint (actionlint)",
     "Dependency Review",
     "Image Scan (Trivy)",
+    # Added 2026-11-12 with the move to Python 3.15 (saulpatinojr/HCW-HybridCloudWorks#1707), last so the slices
+    # below keep their meaning. The live ruleset gains it when the owner runs 390 `protect-main` with apply after the
+    # merge; adding a check needs no allow_weakening.
+    "Unit Tests (Python 3.15)",
 ]
 
 # The live rulesets (read 2026-10-25, ids 25778319 and 25778333, updated 10:09 and 10:10 local) as the payload

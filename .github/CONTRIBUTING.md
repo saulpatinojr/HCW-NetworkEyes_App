@@ -31,7 +31,8 @@ overview, and `TODO.md` is the work queue.
 
 ## Set up and check your change
 
-Python 3.14 and [uv](https://docs.astral.sh/uv/) are needed. From the repository root:
+Python 3.15 (the version the images run; 3.14 still works) and [uv](https://docs.astral.sh/uv/) are needed. From the
+repository root:
 
 ```bash
 uv sync --frozen --all-packages
@@ -41,7 +42,7 @@ uv run --frozen --extra dev pytest tests/unit tests/security tests/packaging pac
 python scripts/validate_documentation_model.py
 ```
 
-For the web app (`apps/network-assessment-web`, Node 24):
+For the web app (`apps/network-assessment-web`, Node.js 26, the version its image runs):
 
 ```bash
 cd apps/network-assessment-web

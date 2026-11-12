@@ -141,8 +141,9 @@ change under `Changed` in `CHANGELOG.md` (and in the release notes) where a cons
   dependency, extra or dependency group in `pyproject.toml`, run `uv lock` and
   commit both files — `300-test-codebase` fails on drift. Never edit `uv.lock`
   by hand, and never add a package to a Dockerfile with a bare `pip install`.
-  Every image is Debian 13 "trixie" (`python:3.14.10-slim-trixie` and
-  `node:24-trixie-slim`, owner decision 2026-11-07: no Alpine and no second
+  Every image is Debian 13 "trixie" (`python:3.15.2-slim-trixie` and
+  `node:26-trixie-slim` since 2026-11-12, the HCW runtime floors of
+  saulpatinojr/HCW-HybridCloudWorks#1707; owner decision 2026-11-07: no Alpine and no second
   distribution; `tests/unit/test_ci_hygiene.py` fails on a base that is not).
   Every shipped final stage runs Debian's security upgrade
   (`apt-get upgrade`) on top of the digest-pinned base, and keeps

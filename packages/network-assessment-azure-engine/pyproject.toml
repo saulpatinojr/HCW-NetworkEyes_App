@@ -6,6 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "network-assessment-azure-engine"
 version = "0.1.5"
 description = "Azure network assessment engine: topology model, typed rule registry, classifier, Resource Graph normalizer and report renderers. Base install needs pydantic only."
+# Still >=3.14 on purpose (2026-11-12): released wheels are tested on Python 3.15 (320-release-engine.yml),
+# and the root package keeps 3.14 while `Unit Tests (Python 3.14)` is a required check (see its pyproject.toml).
 requires-python = ">=3.14"
 # The base distribution carries no cloud SDK: the downstream lab edition installs it to
 # prove it cannot reach Azure (tests/security/test_edition_boundary.py there). Discovery
