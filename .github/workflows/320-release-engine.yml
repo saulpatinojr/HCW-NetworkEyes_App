@@ -59,7 +59,7 @@ jobs:
 
       - name: Install uv
         # Keep in step with the `uv==` pins in 300-test-codebase.yml and the Dockerfiles' uv stage.
-        run: pip install uv==0.12.21
+        run: pip install uv==0.13.7
 
       - name: Build the wheel and sdist
         run: uv build "$PACKAGE_DIR" --out-dir dist
@@ -103,7 +103,7 @@ jobs:
         with:
           python-version: "3.15"
       - name: Install uv
-        run: pip install uv==0.12.21
+        run: pip install uv==0.13.7
       # OIDC to PyPI through uv itself: no third-party publishing action, no token.
       - name: Publish
         run: uv publish --trusted-publishing always dist/*

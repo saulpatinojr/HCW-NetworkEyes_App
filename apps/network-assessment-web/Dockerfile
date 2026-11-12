@@ -6,8 +6,10 @@ ARG DRAWIO_WEBAPP_VERSION=32.6.9
 ARG DRAWIO_WEBAPP_SHA256=31afc82b7920c409d0591f6126ccb6c377d7800e7f11ab324f88bdf1e4249ce7
 
 # Every stage is node:26-trixie-slim (Debian 13, glibc), the same Debian release as the Python images, digest pinned
-# 2026-11-12 (Node 26.13.0, built 2026-11-05: the digest the HCW MigrateOrchestrator images pin). Moved from Node 24
-# (node:24-trixie-slim, Node 24.22.2) to reach the HCW runtime floor, the newest Node.js LTS line
+# 2026-11-12 (Node 26.13.1, built 2026-11-11; the digest the tag pointed to that day). 26.13.1 is Node's security
+# release of 2026-11-11 (nodejs.org/en/blog/vulnerability/november-2026-security-releases: HTTP/2 and TLS fixes that
+# include several of high severity), so the 26.13.0 digest the HCW MigrateOrchestrator images pinned was not used.
+# Moved from Node 24 (node:24-trixie-slim, Node 24.22.2) to reach the HCW runtime floor, the newest Node.js LTS line
 # (saulpatinojr/HCW-HybridCloudWorks#1707). Dependabot's docker ecosystem bumps all six FROM lines together; it does
 # not offer the next major, which is moved by hand (see .github/dependabot.yml).
 # Until 2026-11-07 the stages were node:24-alpine: the Scout gate in 200-build-images.yml refused every web build
@@ -19,7 +21,7 @@ ARG DRAWIO_WEBAPP_SHA256=31afc82b7920c409d0591f6126ccb6c377d7800e7f11ab324f88bdf
 # and the checks would need that name.
 
 # ── Stage 1: deps ────────────────────────────────────────────────────────────
-FROM node:26-trixie-slim@sha256:5adad64f9a1fca2d51972caa65983634c8a774eb300d72b20f7f2a0f60368072 AS deps
+FROM node:26-trixie-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc AS deps
 WORKDIR /app
 
 # No extra packages: Alpine needed libc6-compat for glibc-built binaries, and Debian is glibc already. npm picks
@@ -30,7 +32,7 @@ RUN npm ci --legacy-peer-deps \
  && test -f node_modules/@prisma/engines/libquery_engine-debian-openssl-3.0.x.so.node
 
 # ── Stage 2: builder ─────────────────────────────────────────────────────────
-FROM node:26-trixie-slim@sha256:5adad64f9a1fca2d51972caa65983634c8a774eb300d72b20f7f2a0f60368072 AS builder
+FROM node:26-trixie-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc AS builder
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
@@ -76,7 +78,7 @@ RUN npm run build \
 # (its own postinstall script, the same download the deps stage makes), and the
 # client is generated from the schema. The generated client is what seed-local-admin.js
 # loads, so this stage does not depend on the builder (no Next.js build).
-FROM node:26-trixie-slim@sha256:5adad64f9a1fca2d51972caa65983634c8a774eb300d72b20f7f2a0f60368072 AS migrator-deps
+FROM node:26-trixie-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc AS migrator-deps
 WORKDIR /src
 
 # Prisma checkpoint telemetry would try to reach the network and write under $HOME.
@@ -100,7 +102,7 @@ RUN node_modules/.bin/prisma generate \
 # Standalone image used exclusively to run `prisma migrate deploy` once per
 # deployment (via workflow 210). Keeping CLI deps out of the runtime image avoids
 # chasing Prisma's transitive dep tree (effect, fast-check, etc.) across upgrades.
-FROM node:26-trixie-slim@sha256:5adad64f9a1fca2d51972caa65983634c8a774eb300d72b20f7f2a0f60368072 AS migrator
+FROM node:26-trixie-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc AS migrator
 WORKDIR /app
 
 # Debian's security updates first (`apt-get upgrade`, deliberate, TODO.md T-741): the base is pinned by digest, but
@@ -170,7 +172,7 @@ CMD ["./prisma/migrate.sh"]
 # The build fails if the checksum differs. Everything the embedded editor does not use is deleted before the files
 # can reach the runner: the Java and OAuth server side (WEB-INF), the viewer and integration bundles, the template
 # gallery, the math renderer, source maps and every language file but English. What remains is about 65 MB.
-FROM node:26-trixie-slim@sha256:5adad64f9a1fca2d51972caa65983634c8a774eb300d72b20f7f2a0f60368072 AS drawio-webapp
+FROM node:26-trixie-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc AS drawio-webapp
 
 # bash with pipefail: the checksum step is a pipe (`echo | sha256sum -c -`) and a failure on its left must fail the
 # build (hadolint DL4006). Debian's default /bin/sh (dash) has no pipefail.
@@ -214,7 +216,7 @@ RUN find /out -type d -exec chmod 555 {} + \
  && find /out -type f -exec chmod 444 {} +
 
 # ── Stage 5: runner ──────────────────────────────────────────────────────────
-FROM node:26-trixie-slim@sha256:5adad64f9a1fca2d51972caa65983634c8a774eb300d72b20f7f2a0f60368072 AS runner
+FROM node:26-trixie-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production

@@ -2605,7 +2605,7 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   check is `Unit Tests (Python 3.14)`, `requires-python >= 3.14`, ruff `py314`), so a 3.15 base would ship code no
   check has run. Patch updates (3.14.x) and digest bumps still come. To move to 3.15: add it to CI, move the `FROM`
   lines by hand, then delete the rule. **Done 2026-11-12 (T-743):** CI tests 3.15, the `FROM` lines are
-  `python:3.15.2-slim-trixie`, and the rule is deleted.
+  `python:3.15.2-slim-trixie`, and the rule now holds the images on 3.15 for the next minor to be moved the same way.
 - **Checked without Docker:** `next build` on the new lockfile, its standalone output (whose `@img` holds only the
   glibc `sharp-linux-x64` and `sharp-libvips-linux-x64`) laid out as the runner does, owned by root, with an empty
   `.next/cache` owned by an unprivileged user, and the server run as that user: `/auth/signin` answered 200, the image
@@ -2616,21 +2616,26 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   `Image Scan (Trivy)` jobs are the proof, and the web tier was not started against the built image.
 
 ### T-743 — Node.js 26 and Python 3.15, the HCW runtime floors (HCW-HybridCloudWorks#1707)
-- **Status:** Done 2026-11-12, except item (4), which is open. The HCW website's version floors
+- **Status:** Done 2026-11-12, except items (4) and (5), which are open. The HCW website's version floors
   (`scripts/version-floors.json` in saulpatinojr/HCW-HybridCloudWorks, issue 1707 there) ask for the newest Node.js LTS
   line (26, floor 26.11.0) and the newest Python line (3.15, floor 3.15.0). This repository ran Node.js 24 in the web
   image and Python 3.14 everywhere.
 - **(1) Node.js 26.** The six `FROM` lines of `apps/network-assessment-web/Dockerfile` are
-  `node:26-trixie-slim@sha256:5adad64f…` (Node 26.13.0, built 2026-11-05; the digest the HCW MigrateOrchestrator
-  images pin). The jobs that run `node`, `npm` or `npx` on the runner (`web` and `typescript-canary` in
-  `300-test-codebase.yml`, `build-web` in `200-build-images.yml`) now choose Node.js 26 with `actions/setup-node`
-  (pinned to the commit of its v7.1.0 tag, the pin the website uses) instead of taking the runner's own 24.22.2.
-  setup-node's own cache is off everywhere: the two test jobs already cache `~/.npm`, and `build-web` publishes.
+  `node:26-trixie-slim@sha256:e6bedef2…` (Node 26.13.1, built 2026-11-11, Node's security release of that day; the
+  26.13.0 digest the HCW MigrateOrchestrator images pinned predates it). The two test jobs that run `npm` and `npx`
+  on the runner (`web` and `typescript-canary` in `300-test-codebase.yml`) now choose Node.js 26 with
+  `actions/setup-node` (pinned to the commit of its v7.1.0 tag, the pin the website uses) instead of taking the
+  runner's own 24.22.2; setup-node's own cache is off, because both jobs already cache `~/.npm`. `build-web` in
+  `200-build-images.yml` keeps the runner's own node on purpose, with a comment: its `npm audit` only reads the
+  lockfile, and the job holds an OIDC token, so it installs nothing on the runner.
 - **(2) Python 3.15.** The `FROM` lines of the root and API Dockerfiles are
   `python:3.15.2-slim-trixie@sha256:65a65fc7…` (built 2026-11-05; the digest the website's lab image uses). Every
-  single-version Python job in `300` and `320` uses 3.15, and the jobs that ran `python3` on the runner without
-  choosing a version (`secret-scan` and `image-scan` in `300`, `tag-images` in `200`, `admin` in `390`) now choose
-  3.15 with `actions/setup-python`. The Dependabot rule that held the images on 3.14 is deleted (T-742 (3)).
+  single-version Python job in `300` and `320` uses 3.15, and the two read-only jobs that ran `python3` on the runner
+  without choosing a version (`secret-scan` and `image-scan` in `300`) now choose 3.15 with `actions/setup-python`.
+  `tag-images` in `200` and `admin` in `390` keep the runner's own python3 on purpose, with a comment: their scripts
+  are standard library only, and they hold an OIDC token or the App key, so they install nothing on the runner. The
+  Dependabot rule that held the images on 3.14 now holds them on 3.15 instead (T-742 (3)): the next minor, 3.16, is
+  moved by hand the same way, as Node majors are.
 - **(3) The lock.** Three locked packages had no wheel for 3.15 and newer releases do: `httptools` 0.8.0 → 0.9.0,
   `markupsafe` 3.0.3 → 3.0.4 and `uvloop` 0.22.1 → 0.23.0 (`uv lock --upgrade-package`, nothing else moved).
   **PyYAML 6.0.3 has no 3.15 wheel and no newer release** (yaml/pyyaml#951 and #981, read 2026-11-12). The two
@@ -2645,6 +2650,13 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   task `protect-main`, with apply, so the ruleset requires the 3.15 check; then one pull request removes 3.14 from the
   matrix, from `REQUIRED_CHECKS` and its test, and raises `requires-python` (both `pyproject.toml` files), ruff's
   target and ty's version to 3.15, followed by a `protect-main` run with apply and `allow_weakening` ticked.
+- **(5) Open: two small follow-ups.** (a) The lab stage of the root `Dockerfile` hard-codes
+  `PYTHONPATH=/install-lab/lib/python3.15/site-packages`, so the next Python minor must change it by hand; derive it
+  at build time instead (for example with Python's `sysconfig.get_path("purelib", vars={"base": "/install-lab"})`).
+  (b) npm 11, which Node.js 26 bundles, warns on `npm ci` that four packages have install scripts not yet covered by
+  `allowScripts`: `@prisma/client` 6.19.3, `@prisma/engines` 6.19.3, `prisma` 6.19.3 and `unrs-resolver` 1.12.2. They
+  still run today; decide which to allow (`npm install-scripts approve <pkg>`) before a later npm stops running them,
+  and check that the Dockerfile's Prisma engine checks still pass.
 - **Not checked here:** no image was built (no Docker daemon in the session that made the change). The Python tests and
   the install of each image's dependency set ran on CPython 3.15.2; the web checks ran on Node.js 26. The pull
   request's `Docker Build Smoke Test`, `Lab Boundary Image` and `Image Scan (Trivy)` jobs and the next `200` run on

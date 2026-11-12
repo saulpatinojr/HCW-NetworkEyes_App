@@ -119,10 +119,13 @@ updates:
       # Odd Node majors never reach LTS; the web image moves to the next even major by hand (#185).
       - dependency-name: "node"
         update-types: ["version-update:semver-major"]
-      # The rule that held the CLI and API images on Python 3.14 is gone (2026-11-12): CI tests 3.15, the FROM lines
-      # were moved to python:3.15.2-slim-trixie by hand, and the rule was deleted, as #358 planned
-      # (saulpatinojr/HCW-HybridCloudWorks#1707). A Python 3.16 proposal therefore arrives once it is released; add
-      # it to the test matrix in 300-test-codebase.yml in the same pull request.
+      # Python minors are moved by hand, as Node majors are above. The move to 3.15 was done that way on 2026-11-12
+      # (#358, TODO.md T-742 item 3 and T-743; saulpatinojr/HCW-HybridCloudWorks#1707): CI first, then the FROM lines.
+      # Move 3.16 the same way: add it to the test matrix in 300-test-codebase.yml, check every locked package has a
+      # 3.16 wheel (PyYAML had none for 3.15), then move the FROM lines and the python3.15 site-packages path of the
+      # lab stage in the root Dockerfile. Patch updates (3.15.x) and digest bumps still come.
+      - dependency-name: "python"
+        update-types: ["version-update:semver-minor"]
     groups:
       docker-minor-patch:
         update-types:

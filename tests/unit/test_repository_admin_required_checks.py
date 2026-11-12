@@ -42,8 +42,10 @@ ADMIN_WORKFLOW = WORKFLOWS / "390-repository-admin.yml"
 TEST_WORKFLOW = WORKFLOWS / "300-test-codebase.yml"
 STEP_NAME = "Run the chosen task"
 
-# The required status checks of the live "Protect main" ruleset (read 2026-10-25, ruleset 25778319), in the
-# order the ruleset lists them. CHANGING THE LIVE RULESET AND THIS LIST MUST HAPPEN TOGETHER: add or remove a
+# The required status checks `protect-main` applies to the "Protect main" ruleset (ruleset 25778319). The first
+# eleven are the live ruleset as read 2026-10-25, in its order; `Unit Tests (Python 3.15)` was added 2026-11-12
+# (saulpatinojr/HCW-HybridCloudWorks#1707), and until the owner runs `protect-main` with apply after that change
+# merges, the live ruleset lacks it. CHANGING THE LIVE RULESET AND THIS LIST MUST HAPPEN TOGETHER: add or remove a
 # check in the ruleset, in `REQUIRED_CHECKS` of 390-repository-admin.yml and here, in one pull request.
 # Otherwise the next `protect-main` run undoes (or never applies) the change.
 EXPECTED_REQUIRED_CHECKS = [
@@ -58,9 +60,7 @@ EXPECTED_REQUIRED_CHECKS = [
     "Workflow Lint (actionlint)",
     "Dependency Review",
     "Image Scan (Trivy)",
-    # Added 2026-11-12 with the move to Python 3.15 (saulpatinojr/HCW-HybridCloudWorks#1707), last so the slices
-    # below keep their meaning. The live ruleset gains it when the owner runs 390 `protect-main` with apply after the
-    # merge; adding a check needs no allow_weakening.
+    # Last, so the slices below keep their meaning. Adding a check needs no allow_weakening.
     "Unit Tests (Python 3.15)",
 ]
 
