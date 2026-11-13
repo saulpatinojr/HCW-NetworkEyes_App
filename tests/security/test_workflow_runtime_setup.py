@@ -19,13 +19,17 @@ listed, with its reason, in PIPX_ALLOWED. An `export PIPX_DEFAULT_PYTHON=...` ea
 `env:` instead.
 
 What pipx is given must also be the set-up Python. The runner's own Python named by its path (`--python
-/usr/bin/python3`, `/usr/bin/python3.12` or `/bin/python3`, the same as `PIPX_DEFAULT_PYTHON`) chooses nothing. A
-`${{ steps.<id>.outputs.* }}` value counts only when `<id>` is an earlier actions/setup-python step of the same job that
+/usr/bin/python3`, `/usr/bin/python3.12`, `/bin/python3` or the Azure CLI's `/opt/az/bin/python3`, the same as
+`PIPX_DEFAULT_PYTHON`) chooses nothing, nor does a command substitution this test cannot run (`"$(command -v
+python3)"`) or a `$` the shell passes on as text (`'$P'`, `\\$P`). A `${{ steps.<id>.outputs.python-path }}` value
+(only that output: `cache-hit` and `python-version` are not a path) counts only when `<id>` is an earlier
+actions/setup-python step of the same job that
 is sure to have run first, by the same rules as a set-up step with an `if:` (below); a missing id, a later step, a step
 that is not actions/setup-python or one that may be skipped chooses nothing, and so does a `steps` reference written
 another way (`steps['py'].outputs`), which names no id this test can read. A shell variable in the value (`--python
 "$PYTHON_PATH"`) is read from the step's, job's or workflow's `env:`; one the script sets itself (`P=...`, `for P in`,
-`read P`) counts, as does `$pythonLocation` (setup-python sets it), and any other one chooses nothing. A bare
+`read P`, but not `echo P=...` or `P=/x pipx ...`) counts for the commands after it, as does `$pythonLocation`
+(setup-python sets it), and any other one chooses nothing. A bare
 `python3.15` and a path under `${{ env.pythonLocation }}` still count. Settings travel the way the shell passes them: `PIPX_DEFAULT_PYTHON=/p bash -c
 'pipx run x'` and `env PIPX_DEFAULT_PYTHON=/p env -S 'pipx run x'` give the inner script the setting, and `sudo` drops
 every inherited setting (its default `env_reset`) unless it is given `-E` or `--preserve-env` (bare, or with a list
@@ -126,7 +130,9 @@ relies on the layout every workflow in this repository has (a `jobs:` key at the
 way fails the test rather than being skipped. A `steps:` written on one line (`steps: [{run: ...}]`) or a step written
 as one (`- {run: ...}`) is such a file: the reader stops with an error rather than read the job as having no steps. A
 value YAML reads its own way is read that way: null (`~`, `null`, nothing) is empty, a block scalar (`|`, `>-`,
-`|2-`, `>-2`) is its text, and a heredoc's delimiter is its whole word (`<<EOF-1`, `<<E"OF"`).
+`|2-`, `>-2`) is its text, a folded one (`run: >-`) folded as YAML folds it, and a heredoc's delimiter is its whole
+word (`<<EOF-1`, `<<E"OF"`), its body ending only at a line that is exactly that word (after leading tabs for
+`<<-`).
 """
 
 from __future__ import annotations
@@ -190,8 +196,9 @@ BELOW_FLOOR_ALLOWED: dict[str, str] = {
 # (the value plain text, a quoted string, a whole `$(...)`, `$((...))` or backtick pair with no parentheses inside, or
 # those run together: `FOO="a b"`, `FOO=$(date) node`) and words that run the next word (`env FOO=1 node`, `sudo node`,
 # `if node ...; then`). A plain value holds no `(`, `)` or backtick, so `x=$(sudo pipx run y)` is read from the `$(`,
-# not as an assignment whose value runs into the substitution.
-ASSIGNMENT = r"""[A-Za-z_][A-Za-z0-9_]*=(?:"(?:[^"\\]|\\.)*"|'[^']*'|\$\(\([^()`]*\)\)|\$\([^()`]*\)|`[^`]*`|[^\s"'()`])*\s+"""
+# not as an assignment whose value runs into the substitution, and no `;`, `&`, `|`, `<` or `>`, which end it
+# (`P=/x; pipx ...` is two commands).
+ASSIGNMENT = r"""[A-Za-z_][A-Za-z0-9_]*=(?:"(?:[^"\\]|\\.)*"|'[^']*'|\$\(\([^()`]*\)\)|\$\([^()`]*\)|`[^`]*`|[^\s"'()`;&|<>])*\s+"""
 # Words that run the next word, each with the options it may take first: the letters of the options that take an
 # argument (`sudo -u nobody`, `nice -n 10`, `stdbuf -oL`), any other `-x`/`--long` flag, and the `--` that ends the
 # options (`env -- node`). `timeout` also takes its duration (`timeout 60 node`, `timeout -k 5 1m python3`).
@@ -459,30 +466,56 @@ ANSI_C_ESCAPE = re.compile(
 PLAIN_WORD = re.compile(r"[A-Za-z0-9_./+:@%,-]+")
 # The characters a quoted value keeps when `_shell_text` is asked for values (the pipx check); any other becomes `_`, so
 # the value stays one word and opens nothing. A `${NAME}` in it is first written `$NAME` (see VARIABLE).
-VALUE_UNSAFE = re.compile(r"[^A-Za-z0-9_./:@%+,=$-]")
+VALUE_UNSAFE = re.compile(r"[^A-Za-z0-9_./:@%+,=$\x03-]")
+# A `$` the shell passes on as text (inside single quotes or `$'...'`, or after a `\\`), written so for the pipx check:
+# no variable is read from it, and a value holding one chooses nothing (Copilot on HCW-NetworkEyes_App#395).
+LITERAL_DOLLAR = "\x03"
 # A shell variable in a value (`"$PYTHON_PATH"`, `${PYTHON_PATH}`), read from the step's, job's or workflow's `env:`.
 VARIABLE = re.compile(r"\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))")
 # A GitHub expression (`${{ steps.py.outputs.python-path }}`), which GitHub replaces before the shell starts. For the
 # pipx check it is written as one word, `__gha__` and the expression with every other character made `_`.
 GHA_EXPRESSION = re.compile(r"\$\{\{(.*?)\}\}", re.DOTALL)
-# The id of each step whose outputs a value reads (`steps.py.outputs.python-path`), and every mention of `steps` at
-# all: one written another way (`steps['py'].outputs`) names no id this check can read, so it chooses nothing.
+# The id of each step whose `python-path` output a value reads (`steps.py.outputs.python-path`, or
+# `steps.py.outputs['python-path']`, which `_gha_tokens` writes `steps.py.outputs__python-path__`), and every mention
+# of `steps` at all: one written another way (`steps['py'].outputs`) or naming another output (`cache-hit`, or
+# `python-version`, which is a version, not a path) chooses nothing (Copilot on HCW-NetworkEyes_App#395).
 STEP_OUTPUT = re.compile(
-    r"(?<![A-Za-z0-9.-])steps\.([A-Za-z0-9_-]+)\.outputs(?![A-Za-z0-9-])", re.I
+    r"(?<![A-Za-z0-9.-])steps\.([A-Za-z0-9_-]+)\.outputs(?:\.|__)python-path(?![A-Za-z0-9-])", re.I
 )
 STEPS = re.compile(r"(?<![A-Za-z0-9.-])steps(?![A-Za-z0-9-])", re.I)
 # The variables a value may name without the step's `env:` setting them: actions/setup-python sets `pythonLocation`.
 SET_UP_VARIABLES = {"pythonLocation"}
 # Stands for a value the script sets itself, in the names `_chooses` reads.
 SCRIPT_SET = object()
-# The names a script itself sets (`P=...`, `export P=...`, `for P in`, `read P`), whose values this check does not
-# follow, so a value naming one still counts.
-SCRIPT_ASSIGNMENT = re.compile(r"(?:^|(?<=[\s;&|({`]))([A-Za-z_][A-Za-z0-9_]*)\+?=")
-SCRIPT_LOOP = re.compile(r"(?:^|(?<=[\s;&|({`]))(?:for|select)\s+([A-Za-z_][A-Za-z0-9_]*)\s")
-SCRIPT_READ = re.compile(r"(?:^|(?<=[\s;&|({`]))read((?:[ \t]+[^\s;&|)]+)*)")
-# The runner's own Python named by its path, which pipx would use instead of the set-up one (a doubled `/` is read
-# as one).
-SYSTEM_PYTHON = re.compile(r"(?:/+usr)?/+bin/+python(?:3(?:\.\d+)*)?")
+# The names a script itself sets, whose values this check does not follow, so a value naming one still counts. They are
+# read only where the shell sets a variable (Copilot on HCW-NetworkEyes_App#395), at the start of a command: a command
+# made only of assignments (`P=/x;`; `P=/x pipx ...` sets P for pipx alone, after `$P` was read), `export`, `declare`,
+# `local`, `readonly` or `typeset` with assignments, `for P in` or `select P in`, and `read P` (`read -a P`); never an
+# argument (`echo P=/x`), quoted text, a comment or a heredoc's body, which `_shell_text` has already set apart.
+ASSIGNED_WORD = (
+    r"""([A-Za-z_][A-Za-z0-9_]*)\+?=(?:"(?:[^"\\]|\\.)*"|'[^']*'|\$\(\([^()`]*\)\)|\$\([^()`]*\)|`[^`]*`"""
+    r"""|[^\s"'()`;&|<>])*"""
+)
+ONE_ASSIGNMENT = re.compile(ASSIGNED_WORD + r"\s*")
+NAMES_SET = re.compile(
+    r"(?:^|[$<]\(|[`({|;&]|(?<![^\s])(?:then|do|else|elif|if|while|until|!))\s*"
+    r"(?:(?:export|declare|local|readonly|typeset)(?![A-Za-z0-9_=])(?:\s+[-+][A-Za-z]+)*"
+    r"(?P<declared>(?:\s+[^\s;&|)]+)*)"
+    r"|(?:for|select)\s+(?P<loop>[A-Za-z_][A-Za-z0-9_]*)"
+    r"|read(?![A-Za-z0-9_=])(?P<read>(?:[ \t]+[^\s;&|)]+)*)"
+    r"|(?P<assigned>(?:" + ASSIGNED_WORD.replace("(", "(?:", 1) + r"\s*)+)(?=$|[;&|)}]))"
+)
+# `read`'s options that take a value; `-a` names the array it sets.
+READ_VALUE_OPTIONS = "adinNptu"
+# The folders that hold a Python the runner image ships (its own, and the Azure CLI's at /opt/az/bin), and a path to
+# one of them, which pipx would use instead of the set-up one (a doubled `/` is read as one; Copilot on
+# HCW-HybridCloudWorks#1719).
+RUNNER_PYTHON_FOLDERS = ("/usr/bin", "/bin", "/opt/az/bin")
+SYSTEM_PYTHON = re.compile(
+    "(?:"
+    + "|".join(folder.replace("/", "/+") for folder in RUNNER_PYTHON_FOLDERS)
+    + r")/+python(?:3(?:\.\d+)*)?"
+)
 SETUP = {
     "node": re.compile(r"^actions/setup-node@"),
     "python": re.compile(r"^actions/setup-python@"),
@@ -511,10 +544,10 @@ HEREDOC_WORD = re.compile(
 )
 
 
-def _heredoc_word(run: str, at: int) -> tuple[str, bool, int] | None:
+def _heredoc_word(run: str, at: int) -> tuple[str, bool, int, bool] | None:
     """The heredoc that `<<` at `at` starts: its delimiter with the quotes and backslashes taken out, whether any part
-    of it was quoted or escaped (then the body is text the shell does not expand), and where the word ends; None when
-    no word follows."""
+    of it was quoted or escaped (then the body is text the shell does not expand), where the word ends, and whether it
+    is `<<-` (then leading tabs are dropped from the body's lines); None when no word follows."""
     found = HEREDOC_WORD.match(run, at)
     if not found:
         return None
@@ -531,19 +564,25 @@ def _heredoc_word(run: str, at: int) -> tuple[str, bool, int] | None:
         word,
         flags=re.DOTALL,
     )
-    return delimiter, bool(re.search(r"['\"\\]", word)), found.end()
+    return delimiter, bool(re.search(r"['\"\\]", word)), found.end(), found[0].startswith("<<-")
 
 
-def _skip_heredoc_bodies(run: str, at: int, delimiters: list[str]) -> int:
-    """Where the text continues after the bodies of these heredocs, which start at `at` (just after a new line): each
-    body ends at a line that is its delimiter."""
+def _ends_heredoc(line: str, delimiter: str, tabs: bool) -> bool:
+    """True when a body line ends its heredoc: the line is exactly the delimiter, after its leading tabs for `<<-`
+    (bash does not end one at ` EOF` or `EOF `; Copilot on HCW-NetworkEyes_App#395)."""
+    return (line.lstrip("\t") if tabs else line) == delimiter
+
+
+def _skip_heredoc_bodies(run: str, at: int, heredocs: list[tuple[str, bool]]) -> int:
+    """Where the text continues after the bodies of these heredocs (delimiter, `<<-`), which start at `at` (just after
+    a new line): each body ends at a line that ends it (see `_ends_heredoc`)."""
     k, n = at, len(run)
-    for delimiter in delimiters:
+    for delimiter, tabs in heredocs:
         while k < n:
             end = run.find("\n", k)
             end = n if end == -1 else end
             text, k = run[k:end], end + 1
-            if text.strip() == delimiter:
+            if _ends_heredoc(text, delimiter, tabs):
                 break
     return k
 
@@ -553,7 +592,7 @@ def _substitution_close(run: str, at: int) -> int:
     bodies and the substitutions inside them are skipped, so their quotes and parentheses do not count (`$(cat <<EOF`
     with `it's` in the body). Inside `((...))` a `<<` is a shift."""
     depth, k, n = 0, at + 1, len(run)
-    pending: list[str] = []  # the delimiters of heredocs whose bodies start at the next new line
+    pending: list[tuple[str, bool]] = []  # the heredocs whose bodies start at the next new line
     arithmetic: int | None = None  # the depth an open `((` started at
     while k < n:
         char = run[k]
@@ -565,7 +604,7 @@ def _substitution_close(run: str, at: int) -> int:
         elif char == "<" and run.startswith("<<", k) and arithmetic is None:
             word = _heredoc_word(run, k)
             if word:
-                pending.append(word[0])
+                pending.append((word[0], word[3]))
             k = word[2] if word else k + 2
         elif char == "\\":
             k += 2
@@ -625,11 +664,14 @@ def _ansi_c(body: str) -> str:
 
 def _quoted_text(content: str, mark: str, values: bool) -> str:
     """How `_shell_text` writes a quoted string that runs nothing: `''` (or `""`) when empty, else `'_'` (or `"_"`),
-    or, when asked for values, the quotes around the content with every character VALUE_UNSAFE names made `_`."""
+    or, when asked for values, the quotes around the content with every character VALUE_UNSAFE names made `_` (and,
+    in single quotes, every `$` written LITERAL_DOLLAR, since the shell reads no variable there)."""
     if not content:
         return mark * 2
     if not values:
         return mark + "_" + mark
+    if mark == "'":
+        return mark + VALUE_UNSAFE.sub("_", content).replace("$", LITERAL_DOLLAR) + mark
     return (
         mark + VALUE_UNSAFE.sub("_", VARIABLE.sub(lambda m: "$" + (m[1] or m[2]), content)) + mark
     )
@@ -678,7 +720,7 @@ def _shell_text(run: str, values: bool = False) -> str:
     out: list[str] = []
     # Each heredoc whose body starts at the next new line: its delimiter, whether the shell expands its body, and, when
     # it is given to a shell that reads its script from its input, the words in front of that shell.
-    heredocs: list[tuple[str, bool, str | None]] = []
+    heredocs: list[tuple[str, bool, str | None, bool]] = []
     # Open parentheses inside `$((...))` or `((...))`, where `<<` is a shift; 0 outside.
     arithmetic = 0
     i, n = 0, len(run)
@@ -713,7 +755,16 @@ def _shell_text(run: str, values: bool = False) -> str:
     while i < n:
         char = run[i]
         if char == "\\" and i + 1 < n:
-            out.append(" " if run[i + 1] == "\n" else "" if run[i + 1] == "`" else run[i : i + 2])
+            escaped = run[i + 1]
+            out.append(
+                " "
+                if escaped == "\n"
+                else ""
+                if escaped == "`"
+                else LITERAL_DOLLAR
+                if values and escaped == "$"
+                else run[i : i + 2]
+            )
             i += 2
         elif char == "$" and run.startswith("'", i + 1):
             # `$'...'` may hold `\'`, which does not end it.
@@ -734,7 +785,9 @@ def _shell_text(run: str, values: bool = False) -> str:
             j, parts = i + 1, []
             while j < n and run[j] != '"':
                 if run[j] == "\\":
-                    parts.append("" if run[j : j + 2] == "\\`" else run[j : j + 2])
+                    escape = run[j : j + 2]
+                    literal = values and escape == "\\$"
+                    parts.append("" if escape == "\\`" else LITERAL_DOLLAR if literal else escape)
                     j += 2
                 elif run.startswith("$(", j) and not run.startswith("$((", j):
                     close = _substitution_close(run, j)
@@ -776,19 +829,19 @@ def _shell_text(run: str, values: bool = False) -> str:
             if word:
                 # The body is expanded only when no part of the delimiter is quoted or escaped.
                 shell = HEREDOC_SCRIPT.search(line().lstrip())
-                heredocs.append((word[0], not word[1], shell.group(0) if shell else None))
+                heredocs.append((word[0], not word[1], shell.group(0) if shell else None, word[3]))
             out.append("<<")
             i = word[2] if word else i + 2
         elif char == "\n" and heredocs:
             out.append("\n")
             i += 1
-            for delimiter, expands, shell in heredocs:
+            for delimiter, expands, shell, tabs in heredocs:
                 body: list[str] = []
                 while i < n:
                     end = run.find("\n", i)
                     end = n if end == -1 else end
                     text, i = run[i:end], end + 1
-                    if text.strip() == delimiter:
+                    if _ends_heredoc(text, delimiter, tabs):
                         break
                     body.append(text)
                 script = "\n".join(body)
@@ -828,7 +881,7 @@ def _unquote(value: str) -> str:
 
 # A block scalar's indicator (`|`, `>-`, `|2-`, `|-2`), and the plain values YAML reads as null, which GitHub reads as
 # an empty string.
-BLOCK_SCALAR = re.compile(r"([|>])(?:([+-]?)\d?|\d([+-]))\s*(?:#.*)?")
+BLOCK_SCALAR = re.compile(r"([|>])(?:([+-]?)(\d?)|(\d)([+-]))\s*(?:#.*)?")
 NULL = {"", "~", "null", "Null", "NULL"}
 
 
@@ -838,14 +891,41 @@ def _scalar(value: str) -> str:
     return "" if text in NULL else _unquote(text)
 
 
-def _block_scalar(lines: list[str], indicator: re.Match[str]) -> str:
-    """The text of a block scalar from its indented lines: `|` keeps the line breaks, `>` joins the lines of each
-    paragraph with a space; `-` drops the final line break, and without it one is kept."""
-    text = textwrap.dedent("\n".join(lines)).strip("\n")
-    if indicator[1] == ">":
-        paragraphs = re.split(r"\n[ \t]*\n", text)
-        text = "\n".join(" ".join(part.split("\n")) for part in paragraphs)
-    chomp = indicator[2] or indicator[3] or ""
+def _folded(text: str) -> str:
+    """A `>` block scalar's text as YAML folds it: a line break between two lines at the base indent becomes a space;
+    blank lines between them stay line breaks (one fewer); a line indented further keeps the line breaks around it
+    (GitHub folds `run: >-` this way, so `echo` and `node x.js` on two lines run `echo node x.js`; Copilot on
+    HCW-NetworkEyes_App#395)."""
+    lines = text.split("\n")
+    out, blanks, more = lines[0], 0, lines[0][:1] in (" ", "\t")
+    for line in lines[1:]:
+        if line == "":
+            blanks += 1
+            continue
+        indented = line[:1] in (" ", "\t")
+        joined = more or indented
+        out += ("\n" * (blanks + joined) if blanks else "\n" if joined else " ") + line
+        blanks, more = 0, indented
+    return out
+
+
+def _block_text(lines: list[str], indicator: re.Match[str], parent: int) -> str:
+    """A block scalar's lines without their indentation: the indentation indicator's (`|2-` is the parent's indent
+    plus two) when it has one, so a line indented further keeps the rest, or else the lines' common indentation."""
+    digit = indicator[3] or indicator[4]
+    if not digit:
+        return textwrap.dedent("\n".join(lines)).strip("\n")
+    base = parent + int(digit)
+    return "\n".join(line[base:] if line.strip() else "" for line in lines).strip("\n")
+
+
+def _block_scalar(lines: list[str], indicator: re.Match[str], parent: int) -> str:
+    """The text of a block scalar from its indented lines (the key at `parent` spaces): `|` keeps the line breaks, `>`
+    folds them (see `_folded`); `-` drops the final line break, and without it one is kept."""
+    text = _block_text(lines, indicator, parent)
+    if indicator[1] == ">" and text:
+        text = _folded(text)
+    chomp = indicator[2] or indicator[5] or ""
     return text if chomp == "-" or not text else text + "\n"
 
 
@@ -897,7 +977,7 @@ def _mapping(lines: list[str], at: int, indent: int) -> dict[str, str]:
             continue
         indicator = BLOCK_SCALAR.fullmatch(pair.group(2).strip())
         found[pair.group(1)] = (
-            _block_scalar(_block(block, index, inner), indicator)
+            _block_scalar(_block(block, index, inner), indicator, inner)
             if indicator
             else _scalar(pair.group(2))
         )
@@ -949,14 +1029,15 @@ def _step_keys(lines: list[str], key_indent: int) -> dict:
         if key in ("with", "env"):
             keys[key] = _mapping(lines, index - 1, key_indent)
             index += len(_block(lines, index - 1, key_indent))
-        elif BLOCK_SCALAR.fullmatch(rest):
+        elif indicator := BLOCK_SCALAR.fullmatch(rest):
             block = []
             while index < len(lines) and (
                 not lines[index].strip() or _indent(lines[index]) > key_indent
             ):
                 block.append(lines[index])
                 index += 1
-            keys[key] = textwrap.dedent("\n".join(block)).strip("\n")
+            text = _block_text(block, indicator, key_indent)
+            keys[key] = _folded(text) if indicator[1] == ">" and text else text
         elif key == "uses":
             keys[key] = rest.split()[0] if rest.split() else ""
         else:
@@ -1301,7 +1382,8 @@ def _chooses(
     steps.python.outputs.python-path }}`); one the script sets counts, as does `$pythonLocation`, which
     actions/setup-python sets; any other one is unknown, so the value chooses nothing. Without `env` (an inherited
     value, which GitHub does not expand) the value is read as written. `python3.15` or a path under
-    `${{ env.pythonLocation }}` counts."""
+    `${{ env.pythonLocation }}` counts. A command substitution (`$(...)`, a backtick) or a `$` the shell passes on as
+    text (`'$P'`, `\\$P`) chooses nothing."""
     unknown = False
 
     def variable(match: re.Match[str]) -> str:
@@ -1319,18 +1401,54 @@ def _chooses(
 
     text = value.replace("'", "").replace('"', "")
     text = (text if env is None else VARIABLE.sub(variable, text)).strip()
-    if not text or unknown or SYSTEM_PYTHON.fullmatch(text):
+    # A `$` passed on as text, or a command substitution this check cannot run (`"$(printf /usr/bin/python3)"`), is
+    # not a Python it can vouch for (Copilot on HCW-NetworkEyes_App#395).
+    unreadable = LITERAL_DOLLAR in text or "$(" in text or "`" in text
+    if not text or unknown or unreadable or SYSTEM_PYTHON.fullmatch(text):
         return False
     ids = STEP_OUTPUT.findall(text)
     return len(ids) == len(STEPS.findall(text)) and all(found in setup_ids for found in ids)
 
 
-def _script_names(run: str) -> set[str]:
-    """The names a script sets itself (see SCRIPT_ASSIGNMENT), whose values this check does not follow."""
-    names = set(SCRIPT_ASSIGNMENT.findall(run)) | set(SCRIPT_LOOP.findall(run))
-    for words in SCRIPT_READ.findall(run):
-        names |= {word for word in words.split() if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", word)}
+def _names_set(found: re.Match[str]) -> set[str]:
+    """The names one NAMES_SET match sets (see NAMES_SET), read from a line of `_shell_text` with values."""
+    names: set[str] = set()
+    if found["loop"]:
+        names.add(found["loop"])
+    for word in (found["declared"] or "").split():
+        named = re.match(r"([A-Za-z_][A-Za-z0-9_]*)\+?=", word)
+        names |= {named[1]} if named else set()
+    at, assigned = 0, found["assigned"] or ""
+    while (one := ONE_ASSIGNMENT.match(assigned, at)) and one.end() > at:
+        names.add(one[1])
+        at = one.end()
+    pending = ""
+    for word in (found["read"] or "").split():
+        if pending:
+            names |= {word} if pending == "a" else set()
+            pending = ""
+        elif word.startswith("-") and len(word) > 1:
+            for k in range(1, len(word)):
+                if word[k] in READ_VALUE_OPTIONS:
+                    if word[k + 1 :] and word[k] == "a":
+                        names.add(word[k + 1 :])
+                    pending = "" if word[k + 1 :] else word[k]
+                    break
+        elif re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", word):
+            names.add(word)
     return names
+
+
+def _pipx_commands(line: str) -> list[re.Match[str]]:
+    """Every `pipx` in command position on a line, each read from where it starts: the search goes on from the start
+    of each match, not its end, so a `pipx` inside an assignment's `$(...)` is read even when a later command on the
+    line took the assignment into its own match (`x=$(sudo pipx run y) PIPX_DEFAULT_PYTHON=/p pipx run z`; Copilot on
+    HCW-HybridCloudWorks#1719)."""
+    found, at = [], 0
+    while (one := PIPX.search(line, at)) is not None:
+        found.append(one)
+        at = one.start() + 1
+    return found
 
 
 def _pipx_option_chooses_python(
@@ -1379,8 +1497,11 @@ def _local_default_python(
     following = ""  # the next word is the value of `env -u` ("unset") or of another option ("skip")
     preserve = False  # `sudo` was told to keep PIPX_DEFAULT_PYTHON
     for word in (OPENING.sub("", w) for w in WORD.findall(before)):
+        # The word as the command receives it: quotes removed (`-u 'PIPX_DEFAULT_PYTHON'`, `--unset="..."`); a `$'...'`
+        # string is already decoded by `_shell_text` (Copilot on HCW-NetworkEyes_App#395).
+        bare = word.replace("'", "").replace('"', "")
         if following:
-            if following == "unset" and word == "PIPX_DEFAULT_PYTHON":
+            if following == "unset" and bare == "PIPX_DEFAULT_PYTHON":
                 chosen = False
             following = ""
             continue
@@ -1400,26 +1521,26 @@ def _local_default_python(
             wrapper = "env"
         elif re.fullmatch(r"(?:\S*/)?sudo", word):
             wrapper, preserve = "sudo", False
-        elif wrapper == "sudo" and word.startswith("--"):
-            name, given, value = word[2:].partition("=")
+        elif wrapper == "sudo" and bare.startswith("--"):
+            name, given, value = bare[2:].partition("=")
             option = _long_option(name, "sudo")
             if option == "preserve-env":
                 preserve = preserve or not given or "PIPX_DEFAULT_PYTHON" in value.split(",")
             elif option in WRAPPER_LONG_OPTIONS["sudo"] and not given:
                 following = "skip"
         elif wrapper == "sudo":
-            for k in range(1, len(word)):
-                if word[k] == "E":
+            for k in range(1, len(bare)):
+                if bare[k] == "E":
                     preserve = True
-                elif word[k] in WRAPPER_OPTIONS["sudo"]:
-                    following = "" if word[k + 1 :] else "skip"
+                elif bare[k] in WRAPPER_OPTIONS["sudo"]:
+                    following = "" if bare[k + 1 :] else "skip"
                     break
         elif wrapper != "env" or word == "--":
             wrapper = ""
-        elif word == "-":
+        elif bare == "-":
             chosen = False
-        elif word.startswith("--"):
-            name, given, value = word[2:].partition("=")
+        elif bare.startswith("--"):
+            name, given, value = bare[2:].partition("=")
             option = _long_option(name, "env")
             if option == "ignore-environment":
                 chosen = False
@@ -1427,15 +1548,15 @@ def _local_default_python(
                 chosen = False if value == "PIPX_DEFAULT_PYTHON" else chosen
             elif option in ("unset", "chdir") and not given:
                 following = "unset" if option == "unset" else "skip"
-        elif word.startswith("-"):
-            for k in range(1, len(word)):
-                if word[k] == "i":
+        elif bare.startswith("-"):
+            for k in range(1, len(bare)):
+                if bare[k] == "i":
                     chosen = False
-                elif word[k] in "uCS":
-                    value = word[k + 1 :]
-                    if word[k] != "S" and not value:
-                        following = "unset" if word[k] == "u" else "skip"
-                    elif word[k] == "u" and value == "PIPX_DEFAULT_PYTHON":
+                elif bare[k] in "uCS":
+                    value = bare[k + 1 :]
+                    if bare[k] != "S" and not value:
+                        following = "unset" if bare[k] == "u" else "skip"
+                    elif bare[k] == "u" and value == "PIPX_DEFAULT_PYTHON":
                         chosen = False
                     break
         else:
@@ -1468,9 +1589,9 @@ def pipx_without_python(
     `env:` nor the script sets chooses nothing. An inherited value is used as written, since GitHub does not expand a
     variable in `env:`."""
     stack = [_chooses(_gha_tokens(str(env.get("PIPX_DEFAULT_PYTHON") or "")), setup_ids)]
-    script = _gha_tokens(run or "")
-    env = {**dict.fromkeys(_script_names(script), SCRIPT_SET), **env}
-    for line in _shell_text(script, values=True).split("\n"):
+    text = _shell_text(_gha_tokens(run or ""), values=True)
+    env = dict(env)
+    for line in text.split("\n"):
         line = line.strip()
         if line.startswith("\x01"):
             # A `-c` script (or `env -S` value) starts: it inherits what the words in front of its shell make.
@@ -1480,7 +1601,18 @@ def pipx_without_python(
         if line.startswith("\x02"):
             stack = stack[:-1] if len(stack) > 1 else stack
             continue
-        for found in PIPX.finditer(line):
+        # In the order the shell meets them: a name the script sets counts from the end of the command that sets it
+        # on (Copilot on HCW-HybridCloudWorks#1719); the step's `env:` stays first.
+        events = sorted(
+            [(found.end(), 0, found) for found in NAMES_SET.finditer(line)]
+            + [(found.start(), 1, found) for found in _pipx_commands(line)],
+            key=lambda event: (event[0], event[1]),
+        )
+        for _, kind, found in events:
+            if kind == 0:
+                for name in _names_set(found):
+                    env.setdefault(name, SCRIPT_SET)
+                continue
             local = _local_default_python(found["before"], setup_ids, env)
             if not (
                 _pipx_option_chooses_python(found["words"], setup_ids, env)
@@ -1569,9 +1701,9 @@ def requested_versions(step: dict, job: dict, root: Path, kind: str) -> list[str
 def _below_floor(version: str, kind: str) -> bool | None:
     """True when the version is under the floor, False when at or above it, None when it is not one of the forms this
     test reads: `N`, `N.x` and `N.M` name a line and mean its newest release, so only their numbers are compared with
-    the floor's (`26` with 26, `3.15` with 3.15); `N.M.P` is exact and compared in full. Anything else, trailing text
+    the floor's (`26` with 26, `3.15` and `3.15.x` with 3.15; Copilot on HCW-HybridCloudWorks#1719); `N.M.P` is exact and compared in full. Anything else, trailing text
     included (`26.11.0-rc.1`, `26.11.0.0`, `lts/*`), is None, so the floor test names the step."""
-    found = re.fullmatch(r"v?(\d+)(?:\.x|\.(\d+)(?:\.(\d+))?)?", version.strip())
+    found = re.fullmatch(r"v?(\d+)(?:\.x|\.(\d+)(?:\.x|\.(\d+))?)?", version.strip())
     if not found:
         return None
     numbers = tuple(int(number) for number in found.groups() if number is not None)
@@ -3094,6 +3226,184 @@ def test_a_long_script_reads_quickly():
     assert runs_runtime(script, "node")
     assert not pipx_without_python(script, {})
     assert time.perf_counter() - started < 1
+
+
+@pytest.mark.parametrize(
+    ("line", "kind", "found"),
+    [
+        # A heredoc ends only at a line that is exactly its delimiter, after leading tabs for `<<-` (Copilot on
+        # HCW-NetworkEyes_App#395 and HCW-HybridCloudWorks#1719).
+        ("cat <<EOF\n EOF \nnode x\nEOF", "node", False),
+        ("cat <<EOF\nbody\n  EOF\nnode x\nEOF", "node", False),
+        ("cat <<-EOF\n\tbody\n\tEOF\nnode x", "node", True),
+        ("cat <<-EOF\n\tbody\n  EOF\nnode x\nEOF", "node", False),
+        ("cat <<EOF\nbody\nEOF\nnode x", "node", True),
+        # A substitution in an assignment's value runs before the command after it (Copilot on
+        # HCW-HybridCloudWorks#1719), and `;` ends an assignment.
+        ("x=$(node v.js) true", "node", True),
+        ("x=`python3 v.py` true", "python", True),
+        ("FOO=1;node x", "node", True),
+        ("x=$(echo node) true", "node", False),
+    ],
+)
+def test_copilot_round_one_forms_are_read_as_the_shell_reads_them(line, kind, found):
+    assert runs_runtime(line, kind) is found
+
+
+@pytest.mark.parametrize(
+    ("run", "env", "ids", "flagged"),
+    [
+        # Only a setup-python step's `python-path` output is its Python; `cache-hit` or `python-version` is not.
+        ("pipx run --python ${{ steps.py.outputs.cache-hit }} x", {}, ["py"], True),
+        ("pipx run --python ${{ steps.py.outputs.python-version }} x", {}, ["py"], True),
+        ("pipx run x", {"PIPX_DEFAULT_PYTHON": "${{ steps.py.outputs.cache-hit }}"}, ["py"], True),
+        ("pipx run --python ${{ steps.py.outputs.python-path }} x", {}, ["py"], False),
+        # No variable is read inside single quotes or after `\`: the shell passes `$P` on as text.
+        ("pipx run --python '$P' x", {"P": "/opt/py/bin/python3"}, [], True),
+        ('pipx run --python "\\$P" x', {"P": "/opt/py/bin/python3"}, [], True),
+        ("pipx run --python \\$P x", {"P": "/opt/py/bin/python3"}, [], True),
+        ("PIPX_DEFAULT_PYTHON='$P' pipx run x", {"P": "/opt/py/bin/python3"}, [], True),
+        ("pipx run --python $'$P' x", {"P": "/opt/py/bin/python3"}, [], True),
+        ('pipx run --python "$P" x', {"P": "/opt/py/bin/python3"}, [], False),
+        # A command substitution this check cannot run chooses nothing.
+        ('pipx run --python "$(printf /usr/bin/python3)" x', {}, [], True),
+        ("pipx run --python `printf /usr/bin/python3` x", {}, [], True),
+        ("PIPX_DEFAULT_PYTHON=$(command -v python3) pipx run x", {}, [], True),
+        ('pipx run --python "$(command -v python3)" x', {}, [], True),
+        # A wrapper's option values are read without their quotes.
+        (
+            "env --unset='PIPX_DEFAULT_PYTHON' pipx run x",
+            {"PIPX_DEFAULT_PYTHON": "/opt/py"},
+            [],
+            True,
+        ),
+        ("env -u 'PIPX_DEFAULT_PYTHON' pipx run x", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, [], True),
+        ('env -u "PIPX_DEFAULT_PYTHON" pipx run x', {"PIPX_DEFAULT_PYTHON": "/opt/py"}, [], True),
+        ("env -u'PIPX_DEFAULT_PYTHON' pipx run x", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, [], True),
+        ("env -u $'PIPX_DEFAULT_PYTHON' pipx run x", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, [], True),
+        (
+            "sudo --preserve-env='PIPX_DEFAULT_PYTHON' pipx run x",
+            {"PIPX_DEFAULT_PYTHON": "/opt/py"},
+            [],
+            False,
+        ),
+        (
+            'sudo --preserve-env="PATH,PIPX_DEFAULT_PYTHON" pipx run x',
+            {"PIPX_DEFAULT_PYTHON": "/opt/py"},
+            [],
+            False,
+        ),
+        # A name the script sets counts only where the shell sets it, and only for the commands after it.
+        ('echo P=/opt/py/bin/python3; pipx run --python "$P" x', {}, [], True),
+        ("echo 'P=x'; pipx run --python \"$P\" x", {}, [], True),
+        ('# P=/x\npipx run --python "$P" x', {}, [], True),
+        ("cat <<'EOF'\nP=/opt/py/bin/python3\nEOF\npipx run --python \"$P\" x", {}, [], True),
+        ('P=/opt/py/bin/python3 pipx run --python "$P" x', {}, [], True),
+        ('pipx run --python "$P" x; P=/opt/py/bin/python3', {}, [], True),
+        ('pipx run --python "$P" x\nP=/opt/py/bin/python3', {}, [], True),
+        ('P=/opt/py/bin/python3; pipx run --python "$P" x', {}, [], False),
+        ('if true; then P=/opt/py/bin/python3; fi\npipx run --python "$P" x', {}, [], False),
+        ('declare -x P=/opt/py/bin/python3\npipx run --python "$P" x', {}, [], False),
+        # A `pipx` inside an assignment's `$(...)` is read even when a later command shares the line.
+        ("x=$(sudo pipx run y) true", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, [], True),
+        (
+            "x=$(sudo pipx run y) PIPX_DEFAULT_PYTHON=/p pipx run z",
+            {"PIPX_DEFAULT_PYTHON": "/opt/py"},
+            [],
+            True,
+        ),
+        ("x=$(PIPX_DEFAULT_PYTHON=/p pipx run y) PIPX_DEFAULT_PYTHON=/p pipx run z", {}, [], False),
+        # The Azure CLI's Python on the runner is the runner's own too.
+        ("pipx run --python /opt/az/bin/python3 x", {}, [], True),
+        ("pipx run --python /opt/az/bin/python3.13 x", {}, [], True),
+        ("PIPX_DEFAULT_PYTHON=/opt/az/bin/python3 pipx run x", {}, [], True),
+    ],
+)
+def test_copilot_round_one_pipx_forms(run, env, ids, flagged):
+    assert pipx_without_python(run, env, set(ids)) is flagged
+
+
+@pytest.mark.parametrize(
+    ("version", "kind", "below"),
+    [
+        # `N.M.x` names a line, like `N.M` (Copilot on HCW-HybridCloudWorks#1719).
+        ("3.15.x", "python", False),
+        ("3.14.x", "python", True),
+        ("26.11.x", "node", False),
+        ("26.10.x", "node", True),
+        ("3.15.x.1", "python", None),
+    ],
+)
+def test_a_minor_line_written_with_x_is_read_as_its_line(version, kind, below):
+    assert _below_floor(version, kind) is below
+
+
+# A `run: >` script is folded as YAML folds it: lines at the base indent join with a space; a blank line or a line
+# indented further keeps its line break, and the base indent is the indentation indicator's when there is one (`>2-`:
+# the key's indent plus two; Copilot on HCW-NetworkEyes_App#395).
+FOLDED_YAML = """\
+on: push
+jobs:
+  folded:
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Joined
+        run: >-
+          echo
+          node x.js
+      - name: Blank line
+        run: >
+          echo start
+
+          node x.js
+      - name: Indented
+        run: >
+          echo start
+            python3 y.py
+      - name: Indicator
+        run: >2-
+            echo
+            pytest
+"""
+
+
+def test_a_folded_run_script_is_read_as_github_reads_it():
+    assert unset_steps("x.yml", read_jobs(FOLDED_YAML), {}) == [
+        "x.yml > folded > Blank line > node",
+        "x.yml > folded > Indented > python",
+        "x.yml > folded > Indicator > python",
+    ]
+
+
+# A composite action whose set-up step's version comes from its inputs, or is not given, cannot be read, so the floor
+# test reports it (Copilot on HCW-HybridCloudWorks#1719).
+INPUTS_ACTION = """\
+name: sample
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@abc
+      with:
+        python-version: ${{ inputs.python }}
+    - uses: actions/setup-node@abc
+    - uses: astral-sh/setup-uv@abc
+      with:
+        python-version: ${{ inputs.python }}
+    - name: Script
+      shell: bash
+      run: python3 x.py
+"""
+
+
+def test_a_composite_set_up_step_whose_version_cannot_be_read_is_reported():
+    label = ".github/actions/a/action.yml"
+    jobs = read_action(INPUTS_ACTION)
+    assert unset_steps(label, jobs, {}) == []
+    assert floor_problems(label, jobs) == [
+        f"{label} > composite > step 1 > python: cannot work out the version it asks for",
+        f"{label} > composite > step 2 > node: cannot work out the version it asks for",
+        f"{label} > composite > step 3 > python: cannot work out the version it asks for",
+    ]
 
 
 FILES = sorted(p for p in WORKFLOWS.iterdir() if p.suffix in (".yml", ".yaml"))
