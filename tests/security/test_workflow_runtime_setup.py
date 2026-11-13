@@ -180,7 +180,7 @@ WRAPPER_LONG_OPTIONS = {
         "type",
         "other-user",
     ),
-    "xargs": ("max-args", "max-procs", "delimiter", "arg-file", "max-chars"),
+    "xargs": ("max-args", "max-procs", "delimiter", "arg-file", "max-chars", "process-slot-var"),
     "time": ("output", "format"),
     "nice": ("adjustment",),
     "stdbuf": ("input", "output", "error"),
@@ -746,11 +746,9 @@ def _without_status(expression: str) -> str:
 
 
 # A name in a condition whose value is not fixed for the whole job: `env` (a step can write `$GITHUB_ENV`), `steps`,
-# `job`, `jobs`, `runner`, `strategy` and `hashFiles()`. Outside quoted strings and not after a `.`, so
+# `job`, `jobs` and `hashFiles()`. `runner` and `strategy` are fixed for the whole job, like `matrix`. Outside quoted strings and not after a `.`, so
 # `needs.build.outputs.env` and `'env.x'` are not one.
-CHANGING = re.compile(
-    r"(?<![\w.-])(?:env|steps|job|jobs|runner|strategy|hashfiles)(?![\w-])", re.IGNORECASE
-)
+CHANGING = re.compile(r"(?<![\w.-])(?:env|steps|job|jobs|hashfiles)(?![\w-])", re.IGNORECASE)
 
 
 def _fixed_term(term: str, ran: frozenset[str] | set[str] = frozenset()) -> bool:
@@ -1109,6 +1107,8 @@ def test_words_that_are_not_commands_are_not_found(line, kind):
         ("env --chdir=/tmp python3 x.py", "python"),
         ("nice --adjustment 5 node x", "node"),
         ("xargs --max-args 1 node", "node"),
+        ("xargs --process-slot-var SLOT node x", "node"),
+        ("xargs --process-slot-var=SLOT node x", "node"),
         ("stdbuf --output L node x", "node"),
         ("time --output t.txt python3 x.py", "python"),
     ],
@@ -1520,6 +1520,9 @@ def test_a_set_up_step_with_its_own_condition_covers_only_steps_it_always_runs_b
         # A term that reads something a step can change is never matched by its text (Copilot on
         # HCW-MigrateOrchestrator_AddOn#74): an earlier step can write `RUN=true` to `$GITHUB_ENV` after the set-up
         # was skipped.
+        ("runner.os == 'Linux'", "runner.os == 'Linux'", True),
+        ("strategy.job-index == 0", "strategy.job-index == 0", True),
+        ("job.status == 'success'", "job.status == 'success'", False),
         ("env.RUN == 'true'", "env.RUN == 'true'", False),
         ("steps.changes.outputs.py == 'true'", "steps.changes.outputs.py == 'true'", False),
         ("github.event_name == 'push' && env.RUN", "github.event_name == 'push' && env.RUN", False),
