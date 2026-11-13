@@ -2671,9 +2671,12 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   `timeout <duration>` and a `--` after a wrapper's options (the website copy's list), the script of `bash -c` /
   `sh -c` run on the runner (not one handed to a container), `yarn`, `pnpm`, `pytest` and `pipx`, and it no longer
   mistakes `$((1<<k))` for a heredoc, misses a `<<\EOF` heredoc, or loses its place after a `$'...'` string holding
-  `\'`. Nothing new was found in this repository's workflows. This file is the Python copy the other HCW Python
-  repositories copy from. Not checked by it: that a `pipx` step passes `--python` (pipx picks its own Python
-  otherwise, which may be the runner's even after actions/setup-python).
+  `\'`. After review it also reads a `-c` script's last word and options after `-c`, reads a double-quoted `-c`
+  script both ways, lets a set-up step under `a` cover a step under `a && b`, and reads a long run of wrapper options
+  in one way only (a long `stdbuf -oL ...` or `sudo -uuu ...` line used to take seconds or hang). Nothing new was
+  found in this repository's workflows. This file is the Python copy the other HCW Python repositories copy from,
+  and its logic matches the website's JavaScript copy. Not checked by it: that a `pipx` step passes `--python`
+  (pipx otherwise uses the Python it was installed with, the runner image's own even after actions/setup-python).
 - **Not checked here:** no image was built (no Docker daemon in the session that made the change). The Python tests and
   the install of each image's dependency set ran on CPython 3.15.2; the web checks ran on Node.js 26. The pull
   request's `Docker Build Smoke Test`, `Lab Boundary Image` and `Image Scan (Trivy)` jobs and the next `200` run on

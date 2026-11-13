@@ -3,13 +3,15 @@
 A job that runs `node`, `npm`, `npx`, `yarn`, `pnpm`, `python3`, `pip`, `pipx`, `pytest`, `uv` or `uvx` without
 actions/setup-node or actions/setup-python gets whatever the runner image ships: on ubuntu-26.04 that was Node.js 24
 and Python 3.14 in November 2026, both below the program's floors (Node.js 26, Python 3.15). Nothing else notices,
-because a job that names no version has nothing to read. This is a port of the website's check
-(scripts/workflow-runtime-setup.test.mjs in HCW-HybridCloudWorks). `uv` and `uvx` count as Python, because uv runs the
+because a job that names no version has nothing to read. `uv` and `uvx` count as Python, because uv runs the
 interpreter it finds, the runner's own unless one was set up; so astral-sh/setup-uv counts as setting Python up only
-when it is given a `python-version` at or above the floor. `pipx` counts as Python too, because it is a Python program
-that runs what it installs on a Python it picks; that Python is `PIPX_DEFAULT_PYTHON` or, unset, the one pipx was
-installed with, which on a runner may be the image's own even after actions/setup-python, so a `pipx` step should
-also say `--python`. This test does not read that.
+when it is given a `python-version` at or above the floor. `yarn` and `pnpm` are Node.js programs and count as Node.js;
+`pytest` and `pipx` are Python programs and count as Python. pipx builds each tool's virtual environment from
+`PIPX_DEFAULT_PYTHON` or, when that is unset, from the interpreter pipx itself runs on
+(https://github.com/pypa/pipx/blob/main/src/pipx/interpreter.py, `get_default_python`). GitHub's Ubuntu runner images
+install pipx with the image's own python3 (`python3 -m pip install pipx`, actions/runner-images#14654), so after
+actions/setup-python a `pipx` step still uses the image's Python unless it is given `--python` (actions/setup-python's
+`python-path` output) or `PIPX_DEFAULT_PYTHON`. This test does not read that part.
 
 A command counts when it is in command position on a line of a `run:` step: at the start, after `$(`, `<(`, a backtick,
 `(`, `{`, `|`, `&` or `;`, after a `case` pattern at the start of a line (`check)`), after leading `NAME=value`
@@ -17,23 +19,30 @@ assignments (the value plain text, a quoted string, or both run together), or af
 (`env`, `sudo`, `xargs`, `exec`, `time`, `nice`, `nohup`, `stdbuf`, `timeout` with its duration, `command -p`, `!`,
 `if`, `then`, `do` and the like) and that word's options (`sudo -u nobody`, `env -i`, `stdbuf -oL`, a `--` that ends
 them). It counts with a path in front too (`/usr/bin/python3`, `./venv/bin/python`), because a path to the runner's
-interpreter is still the runner's, and `python3.15.2` counts like `python3`. It counts inside the quoted script of a
-shell run on the runner (`bash -c 'node x'`, `sh -c "python3 x"`, `bash -euo pipefail -c '...'`). It does not count in
-a comment, a heredoc's body, a quoted string (unless a double-quoted string runs a command with `$(`, `<(` or a
-backtick; a single-quoted one may run over several lines, as a `docker run image bash -c '...'` script does, which is
-the container's) or as an argument (`docker run image python ...`, `command -v node`, or the first word of a line that
-continues the one before it). The set-up step must come before the first such step. Limits, on purpose: a job that runs
-in a `container:` uses that image's runtime and is not checked; and a script a step calls (`bash scripts/ci/x.sh`) is
-not read, so a step whose script starts a runtime is listed in INDIRECT_RUNTIME (as HCW-CloudAssessor_App's and
-HCW-CloudCrawler_App's copies do).
+interpreter is still the runner's, and `python3.15.2` counts like `python3`. It does not count in a comment, a
+heredoc's body, a quoted string (unless a double-quoted string runs a command with `$(`, `<(` or a backtick; a
+single-quoted one may run over several lines, as a `docker run image bash -c '...'` script does) or as an argument
+(`docker run image python ...`, `command -v node`, `sudo -u node whoami`, or the first word of a line that continues
+the one before it). One more quoted string is read: the script of a shell that is itself in command position and
+given `-c` (`bash -c 'node x'`, `sh -euo pipefail -c "..."`, `sudo bash -lc '...'`, `bash -c -- '...'`). That script
+runs on the runner, so its commands count, while the same words after `docker run image` stay a container's. A
+double-quoted `-c` script is read both ways: as the outer shell reads it (its `$(...)` and backticks run first) and as
+the inner shell does. The set-up step must come before the first such step. Limits, on purpose: a job that runs in a
+`container:` uses that image's runtime and is not checked; a script a step calls (`bash scripts/ci/x.sh`) is not read,
+so a step whose script starts a runtime is listed in INDIRECT_RUNTIME (as HCW-CloudAssessor_App's and
+HCW-CloudCrawler_App's copies do); and a `-c` script inside a double-quoted substitution (`echo "$(bash -c 'node
+x')"`) is not read, because a double-quoted string is kept as text.
 
 A set-up step with its own `if:` may be skipped while a later command still runs on the runner's own interpreter
-(Copilot on HCW-NetworkEyes_AddOn#100), so it covers a later step only when that step's `if:` is the same condition,
-or is one of the terms the set-up's condition joins with a top-level `||` (whenever that step runs, so did the
-set-up). Conditions are compared without a surrounding `${{ }}`, with runs of spaces made one, and a term without
-one pair of parentheses around the whole of it. A set-up step with no `if:` covers every later step whose condition
-does not test the job's status. A job's own `if:` does not matter here, because it decides whether every step of the
-job runs, alike.
+(Copilot on HCW-NetworkEyes_AddOn#100), so it covers a later step only when that step's `if:` makes the set-up's true:
+the same condition, one of the terms the set-up's condition joins with a top-level `||`, or a condition that joins one
+of those with a top-level `&&` (a step under `a && b` runs only when `a` holds, so a set-up step under `a || c` has
+run; Copilot on HCW-HybridCloudWorks#1716). Conditions are compared without a surrounding `${{ }}`, with runs of
+spaces made one, and a term without one pair of parentheses around the whole of it. Equal text means equal value only
+for values that stay fixed during a job (`matrix`, `github`, `inputs`, `needs`, `vars`); a condition on `steps.*` or
+`env.*` set between the two steps could differ, so prefer those fixed values in such conditions. A set-up step with no
+`if:` covers every later step whose condition does not test the job's status. A job's own `if:` does not matter here,
+because it decides whether every step of the job runs, alike.
 
 The job's status is compared on its own. Without `always()`, `failure()`, `cancelled()` or `success()` in it, a step's
 condition includes an unwritten `success()`, so a set-up step with no `if:` is skipped once an earlier step has
@@ -52,11 +61,11 @@ floor's; an exact version (`26.10.0`) must be at or above the floor itself; anyt
 the step, rather than passing unchecked. A set-up step kept below the floor on purpose is listed, with its reason, in
 BELOW_FLOOR_ALLOWED.
 
-Ported from tests/security/test_workflow_runtime_setup.py in HCW-NetworkEyes_AddOn, itself a port of the website's
-scripts/workflow-runtime-setup.test.mjs. The checking logic is kept the same so the copies stay in step; only the lists
-below, which name this repository's workflows, are its own. Since the command forms above were added (nohup, stdbuf,
-timeout, `--`, `bash -c`, yarn, pnpm, pytest, pipx, arithmetic, `<<\\EOF`, `$'...'`), this file is the Python copy the
-other HCW Python repositories take their logic from.
+This is the Python copy of the check; its JavaScript twin is the website's scripts/workflow-runtime-setup.test.mjs in
+HCW-HybridCloudWorks, and the other HCW Python repositories copy this file. The command reading (`_shell_text`,
+`runs_runtime`, the patterns above it) and the condition rules (`covers`) behave the same as the JavaScript twin; only
+the lists below, which name this repository's workflows, are this repository's own. Keep the logic the same in each
+copy and change it in all of them together.
 
 The workflows are read with a small line reader rather than a YAML library, because none is a dependency here. It
 relies on the layout every workflow in this repository has (a `jobs:` key at the top level, a `steps:` list, block
@@ -68,6 +77,7 @@ from __future__ import annotations
 
 import re
 import textwrap
+import time
 from pathlib import Path
 
 import pytest
@@ -139,9 +149,17 @@ WRAPPER_OPTIONS = {
 
 
 def _options_of(takes: str) -> str:
-    """The options a wrapper may take before the word it runs (see WRAPPER_OPTIONS)."""
-    with_argument = rf"-[A-Za-z]*[{takes}]\s*[^\s-]\S*|" if takes else ""
-    return rf"(?:\s+(?:{with_argument}--?\w[\w-]*(?:=\S+)?|--(?=\s)))*"
+    """The options a wrapper may take before the word it runs (see WRAPPER_OPTIONS). Each option can be read only
+    one way, so a long run of them cannot make the match try every split (`stdbuf -oL -oL ...` once took seconds): an
+    option that takes an argument is the letters up to the first one in `takes`, then its value, joined to it (`-oL`)
+    or as the next word, which never starts with `-` (`-o L`); a plain flag has no letter in `takes` (`-i`); then
+    `--long[=value]` and the bare `--`."""
+    if not takes:
+        return r"(?:\s+(?:--\w[\w-]*(?:=\S+)?|-\w+|--(?=\s)))*"
+    return (
+        rf"(?:\s+(?:-(?:(?![{takes}])[A-Za-z])*[{takes}](?:\s+[^\s-]\S*|\S+)"
+        rf"|--\w[\w-]*(?:=\S+)?|-(?:(?![{takes}])\w)+|--(?=\s)))*"
+    )
 
 
 WRAPPERS = "|".join(
@@ -167,24 +185,34 @@ START = (
 # A runtime may be named with a path in front (`/usr/bin/python3`, `./venv/bin/python`): a path to the runner's own
 # interpreter is still the runner's. The path holds no `=`, so an assignment (`NODE=/x/node`) is not a command.
 PATH = r"(?:[^\s=]*/)?"
-# `yarn` and `pnpm` run on Node.js like `npm`. `pytest` is a Python program, and so is `pipx`, which also makes the
-# virtual environment of what it installs or runs with the Python it finds (PIPX_DEFAULT_PYTHON, else the one pipx
-# itself was installed with); either way a Python starts on the runner, so it must be chosen first.
+# yarn and pnpm are Node.js programs; pytest and pipx are Python programs, so they run on the interpreter they were
+# installed with, which is the runner's own unless a set-up step came first (pipx also builds each tool's virtual
+# environment from that interpreter unless it is given `--python`).
 COMMAND = {
     "node": re.compile(START + PATH + r"(?:node|npm|npx|yarn|pnpm)(?=\s|$)"),
     "python": re.compile(
         START + PATH + r"(?:python(?:3(?:\.\d+){0,2})?|pip3?|pipx|pytest|uvx?)(?=\s|$)"
     ),
 }
-# A shell given a script to run (`bash -c '...'`, `sh -c "..."`, `bash -lc`, `bash -euo pipefail -c`) in command
-# position, at the end of the text before that script: the script then runs on the runner, so its commands count.
-# Options that take an argument (`-o pipefail`, `-O extglob`) are read as such; the last option holds the `c`.
-SHELL_C = re.compile(
+# A shell in command position given a script with `-c` (`bash -c '...'`, `sh -euo pipefail -c "..."`, `sudo bash -lc
+# '...'`, `bash -c -- '...'`): the script runs on the runner too, so its commands count. The same words after
+# `docker run image` are not in command position, so a container's script stays unread. An option is `-e`,
+# `-o pipefail`, `-O extglob`, `--rcfile /tmp/rc`, `--login` or the `--` that ends them; the options that take an
+# argument (`-o`, `-O`, `--rcfile`, `--init-file`) never take one starting with `-`, so an option can be read only one
+# way (otherwise `-o -o -o ...` makes the match try every split).
+SHELL_OPTION = (
+    r"(?:[-+][A-Za-z]*[oO]\s+[^\s-][\w-]*|--(?:rcfile|init-file)\s+[^\s-]\S*"
+    r"|[-+][A-Za-z]+|--[\w-]+|--(?=\s))"
+)
+SHELL_SCRIPT = re.compile(
     START
     + PATH
-    + r"(?:ba|da|k|z)?sh(?:\s+(?:[-+][A-Za-z]*[oO]\s+[^\s-]\S*|[-+][A-Za-z]+|--[\w-]+))*"
-    + r"\s+-[A-Za-z]*c[A-Za-z]*\s+$"
+    + rf"(?:ba|da|k|z)?sh(?:\s+{SHELL_OPTION})*?\s+-[A-Za-z]*c[A-Za-z]*(?:\s+{SHELL_OPTION})*\s+$"
 )
+# Where `((` opens an arithmetic command rather than two subshells: at the start of a command.
+ARITHMETIC_COMMAND = re.compile(r"(?:^|[;&|({]|\b(?:then|else|do|if|elif|while|until|for))\s*$")
+# The escapes `$'...'` turns into other characters; any other `\x` is left as it is.
+ANSI_C = {"n": "\n", "t": "\t", "'": "'", '"': '"', "\\": "\\"}
 SETUP = {
     "node": re.compile(r"^actions/setup-node@"),
     "python": re.compile(r"^actions/setup-python@"),
@@ -207,84 +235,86 @@ VERSION_INPUTS = {
 }
 
 
-def _script(before: list[str], script: str) -> str | None:
-    """The shell text of a quoted script, in parentheses so its first command is in command position and the words
-    after it are not, when the text before it on its line ends in a shell given a script (SHELL_C); otherwise None."""
-    line = "".join(before).rsplit("\n", 1)[-1]
-    return f"({_shell_text(script)})" if SHELL_C.search(line.lstrip()) else None
-
-
-def _ansi_c(body: str) -> str:
-    """The text of a `$'...'` string: `\\n` and `\\t` as a new line and a tab, any other escaped character as itself."""
-    return re.sub(r"\\(.)", lambda m: {"n": "\n", "t": "\t"}.get(m[1], m[1]), body, flags=re.S)
-
-
-def _double_quoted(body: str) -> str:
-    """The text of a `"..."` string: `\\"`, `\\\\`, `\\$` and `\\`` as the character, and `\\` at a line's end dropped."""
-    return re.sub(r"\\([\\\"$`\n])", lambda m: "" if m[1] == "\n" else m[1], body)
-
-
-def _closing(run: str, at: int) -> int:
-    """The index just after the parenthesis that closes the one at `at`, or -1 when none does."""
-    depth = 0
-    for index in range(at, len(run)):
-        depth += {"(": 1, ")": -1}.get(run[index], 0)
-        if depth == 0:
-            return index + 1
-    return -1
-
-
 def _shell_text(run: str) -> str:
-    """The script as the shell reads it, for finding commands: comments and heredoc bodies dropped, a line that ends
-    in `\\` joined to the next (so the next line's first word is still an argument), single-quoted text (`'...'`, and
-    `$'...'`, in which `\\'` does not end it) emptied, and double-quoted text emptied unless it runs a command
-    (`"$(node x)"`, or the older "`node x`"). An escaped backtick (`\\``, as in Markdown written to the step summary)
-    is a plain character. A quoted string may run over several lines, as the script of `docker run image bash -c
-    '...'` does; what it runs is the container's, not the runner's. A quoted script given to a shell in command
-    position (`bash -c 'node x'`, see SHELL_C) runs on the runner, so it is read the same way in its place. Arithmetic
-    (`$((1<<k))`, `(( n <<= 1 ))`) is kept as it is, so its `<<` is not taken for a heredoc; a heredoc's delimiter
-    may be quoted (`<<'EOF'`, `<<"EOF"`) or escaped (`<<\\EOF`)."""
+    """The script as the shell reads it, for finding commands: comments and heredoc bodies dropped (`<<EOF`,
+    `<<'EOF'`, `<<"EOF"`, `<<\\EOF`, `<<-EOF`, but not the shift `<<` inside `$((...))` or `((...))`), a line that ends
+    in `\\` joined to the next (so the next line's first word is still an argument), single-quoted text and `$'...'`
+    text emptied, and double-quoted text emptied unless it runs a command (`"$(node x)"`, or the older "`node x`"). An
+    escaped backtick (`\\``, as in Markdown written to the step summary) is a plain character. A quoted string may run
+    over several lines, as the script of `docker run image bash -c '...'` does; what it runs is the container's, not
+    the runner's. The one quoted string that is read is the script of a shell in command position given `-c`
+    (`bash -c 'node x'`, see SHELL_SCRIPT): it is read the same way, on lines of its own, and the line after it starts
+    with `:` so that the words after the script (the inner shell's `$0` and arguments) are still arguments."""
     out: list[str] = []
     heredocs: list[str] = []
+    # Open parentheses inside `$((...))` or `((...))`, where `<<` is a shift; 0 outside.
+    arithmetic = 0
     i, n = 0, len(run)
+
+    def line() -> str:
+        """The text so far on the current line, read back only to the last new line."""
+        tail: list[str] = []
+        for part in reversed(out):
+            if "\n" in part:
+                tail.append(part.rsplit("\n", 1)[1])
+                break
+            tail.append(part)
+        return "".join(reversed(tail))
+
+    def quoted(script: str, text: str) -> None:
+        """Add a quoted string as `text`; a `-c` script also as the inner shell reads it. The outer reading stays,
+        because the outer shell runs a `$(...)` or backtick in a double-quoted script before the inner shell starts
+        (`bash -c "echo '$(node x)'"`)."""
+        is_script = SHELL_SCRIPT.search(line().lstrip())
+        out.append(f"{text}\n{_shell_text(script)}\n:" if is_script else text)
+
     while i < n:
         char = run[i]
         if char == "\\" and i + 1 < n:
             out.append(" " if run[i + 1] == "\n" else "" if run[i + 1] == "`" else run[i : i + 2])
             i += 2
-        elif run.startswith("$'", i):
+        elif char == "$" and run.startswith("'", i + 1):
+            # `$'...'` may hold `\'`, which does not end it.
             j = i + 2
             while j < n and run[j] != "'":
                 j += 2 if run[j] == "\\" else 1
-            out.append(_script(out, _ansi_c(run[i + 2 : j])) or "''")
+            body = re.sub(r"\\(.)", lambda m: ANSI_C.get(m[1], m[0]), run[i + 2 : j], flags=re.S)
+            quoted(body, "''")
             i = j + 1
         elif char == "'":
             end = run.find("'", i + 1)
             end = n if end == -1 else end
-            out.append(_script(out, run[i + 1 : end]) or "''")
+            quoted(run[i + 1 : end], "''")
             i = end + 1
         elif char == '"':
-            j, body = i + 1, []
+            j = i + 1
             while j < n and run[j] != '"':
-                step = 2 if run[j] == "\\" and j + 1 < n else 1
-                body.append("" if run[j : j + 2] == "\\`" else run[j : j + step])
-                j += step
-            text = "".join(body)
-            script = _double_quoted(run[i + 1 : j])
-            out.append(
-                _script(out, script) or (f'"{text}"' if re.search(r"[$<]\(|`", text) else '""')
-            )
+                j += 2 if run[j] == "\\" else 1
+            raw = run[i + 1 : j]
+            # Read as text, an escaped backtick prints; given to `-c`, the inner shell runs it.
+            text = re.sub(r"\\.", lambda m: "" if m[0] == "\\`" else m[0], raw, flags=re.S)
+            script = re.sub(r"\\([\\\"$`\n])", lambda m: "" if m[1] == "\n" else m[1], raw)
+            quoted(script, f'"{text}"' if re.search(r"[$<]\(|`", text) else '""')
             i = j + 1
         elif char == "#" and (i == 0 or run[i - 1] in " \t\n;"):
             end = run.find("\n", i)
             i = n if end == -1 else end
-        elif run.startswith("((", i) and (end := _closing(run, i)) != -1:
-            out.append(run[i:end])
-            i = end
-        elif run.startswith("<<", i) and not run.startswith("<<<", i):
-            found = re.match(r"<<-?\s*(?:\\|(['\"]))?([A-Za-z_][A-Za-z0-9_]*)(?(1)\1)", run[i:])
+        elif not arithmetic and (
+            run.startswith("$((", i)
+            or (run.startswith("((", i) and ARITHMETIC_COMMAND.search(line()))
+        ):
+            opening = "$((" if char == "$" else "(("
+            out.append(opening)
+            i += len(opening)
+            arithmetic = 2
+        elif arithmetic and char in "()":
+            arithmetic += 1 if char == "(" else -1
+            out.append(char)
+            i += 1
+        elif not arithmetic and run.startswith("<<", i) and not run.startswith("<<<", i):
+            found = re.match(r"<<-?\s*(\\?)(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\2", run[i:])
             if found:
-                heredocs.append(found.group(2))
+                heredocs.append(found.group(3))
             out.append("<<")
             i += len(found.group(0)) if found else 2
         elif char == "\n" and heredocs:
@@ -294,8 +324,8 @@ def _shell_text(run: str) -> str:
                 while i < n:
                     end = run.find("\n", i)
                     end = n if end == -1 else end
-                    line, i = run[i:end], end + 1
-                    if line.strip() == delimiter:
+                    text, i = run[i:end], end + 1
+                    if text.strip() == delimiter:
                         break
             heredocs = []
         else:
@@ -580,8 +610,10 @@ def _without_status(expression: str) -> str:
 
 def _conditions_cover(given: str, wanted: str) -> bool:
     """True when a set-up step with condition `given` runs whenever a later step with condition `wanted` does: after
-    every job status the later step may run after, the set-up step surely runs, or its condition depends on the same
-    thing (status terms aside: the same condition, or one of the terms it joins with a top-level `||`)."""
+    every job status the later step may run after, the set-up step surely runs, or, status terms aside, the later
+    condition is the same, is one of the set-up condition's top-level `||` terms, or is joined by a top-level `&&`
+    with one of them (a step that runs only when `a && b` holds runs only when `a` holds, so a set-up step under
+    `a || c` has run)."""
     for status in sorted(STATUSES):
         if _runs_after(wanted, status) is False:
             continue
@@ -590,7 +622,13 @@ def _conditions_cover(given: str, wanted: str) -> bool:
             return False
         if runs is None:
             rest, need = _without_status(given), _without_status(wanted)
-            if not (rest in ("", need) or need in _top_level_terms(rest, "||")):
+            setup_terms = {
+                _without_outer_parentheses(term) for term in [rest, *_top_level_terms(rest, "||")]
+            }
+            step_terms = [
+                _without_outer_parentheses(term) for term in [need, *_top_level_terms(need, "&&")]
+            ]
+            if not (rest == "" or any(term in setup_terms for term in step_terms)):
                 return False
     return True
 
@@ -598,7 +636,7 @@ def _conditions_cover(given: str, wanted: str) -> bool:
 def covers(setup: dict, step: dict) -> bool:
     """True when a set-up step runs whenever the later step does: it runs after every job status the later step can
     run after, and, status terms aside, it has no `if:`, the same `if:`, or an `if:` whose top-level `||` terms
-    include the later step's."""
+    include the later step's or one of the terms the later step's joins with a top-level `&&`."""
     return _conditions_cover(condition(setup), condition(step))
 
 
@@ -833,6 +871,8 @@ def test_wrappers_the_website_copy_reads_are_read(line, kind):
         ("echo timeout 60 python3 x.py", "python"),
         ("timeout-minutes 60 node x.js", "node"),
         ("env -- NODE=1 true", "node"),
+        # `-u` takes the next word, so `node` here is the user, not the command.
+        ("sudo -u node whoami", "node"),
     ],
 )
 def test_wrapper_near_misses_are_not_found(line, kind):
@@ -855,6 +895,31 @@ def test_wrapper_near_misses_are_not_found(line, kind):
         ("bash -c $'python3 -c \\'print(1)\\''", "python"),
         ("bash -c 'bash -c \"node x.js\"'", "node"),
         ("FOO='a b' bash -c 'node x.js'", "node"),
+        # The script's last word is still a command, with nothing after it.
+        ("bash -c 'pytest'", "python"),
+        ("sh -c 'node'", "node"),
+        ('bash -c "cd web && yarn"', "node"),
+        ("bash -c 'npm ci && pytest'", "python"),
+        ("sudo bash -lc 'pytest'", "python"),
+        # Options after `-c`, and options that take a value.
+        ("bash -c -e 'node x'", "node"),
+        ("bash -c -x 'python3 x'", "python"),
+        ("bash -c -- 'node x.js'", "node"),
+        ("bash -O extglob -c 'node x'", "node"),
+        ("bash +O nullglob -c 'node x'", "node"),
+        ("bash --rcfile /tmp/empty -c 'node x'", "node"),
+        ("bash --init-file ./rc.sh -eo pipefail -c 'python3 x.py'", "python"),
+        ("version=$(sh -c 'node --version')", "node"),
+        ("if true; then\n  bash -c 'node x.js'\nfi", "node"),
+        # Inside double quotes `\`` is a backtick the inner shell runs; `$'...'` turns `\n` into a new line.
+        ('bash -c "echo \\`node --version\\`"', "node"),
+        ("bash -c $'echo start\\nnode x.js'", "node"),
+        # The outer shell runs `$(...)` and backticks in a double-quoted script first, whatever the inner one makes
+        # of them.
+        ("bash -c \"echo '$(node x)'\"", "node"),
+        ("sh -c \"echo '`node x`' > v\"", "node"),
+        ('bash -c "x=1 # $(node y)"', "node"),
+        ('bash -c "cat <<EOF\n$(python3 v)\nEOF"', "python"),
     ],
 )
 def test_a_script_given_to_a_shell_on_the_runner_is_read(line, kind):
@@ -872,6 +937,8 @@ def test_a_script_given_to_a_shell_on_the_runner_is_read(line, kind):
         ("bash x.sh 'node x.js'", "node"),
         ("ssh -c aes256-ctr host 'node x.js'", "node"),
         ("echo bash -c 'python3 x.py'", "python"),
+        ('docker exec web sh -c "python3 x.py"', "python"),
+        ("bash -c 'echo \"$0\"' python3", "python"),
     ],
 )
 def test_a_script_quoted_for_somewhere_else_is_not_read(line, kind):
@@ -890,6 +957,8 @@ def test_a_script_quoted_for_somewhere_else_is_not_read(line, kind):
         ("timeout 600 pytest -x", "python"),
         ("pipx run --spec checkov==3.3.30 checkov --directory .", "python"),
         ("pipx install zizmor", "python"),
+        ("CI=1 yarn build", "node"),
+        ("PYTHONPATH=src pytest tests", "python"),
     ],
 )
 def test_yarn_pnpm_pytest_and_pipx_are_runtimes(line, kind):
@@ -908,6 +977,10 @@ def test_yarn_pnpm_pytest_and_pipx_are_runtimes(line, kind):
         ("pytest-check x", "python"),
         ('echo "run pytest by hand"', "python"),
         ("echo pipx", "python"),
+        ("./scripts/yarn-audit.sh", "node"),
+        ("docker run img pnpm test", "node"),
+        ("grep pytest requirements.txt", "python"),
+        ("docker run img pytest", "python"),
     ],
 )
 def test_yarn_pnpm_pytest_and_pipx_as_words_are_not_found(line, kind):
@@ -922,6 +995,7 @@ def test_yarn_pnpm_pytest_and_pipx_as_words_are_not_found(line, kind):
         ("(( n = n<<k ))\nnode x.js", "node", True),
         ("(( n <<= 1 ))\nnode x.js", "node", True),
         ("echo $(( $(node -p 1) + 1 ))", "node", True),
+        ('for ((i = 0; i < 1<<k; i++)); do echo "$i"; done\nnode a.js', "node", True),
         # A heredoc whose delimiter is escaped hides its body, like a quoted one.
         ("cat <<\\EOF\npython3 is named here\nEOF", "python", False),
         ("cat <<-\\EOF > x.txt\n\tnode is named here\n\tEOF", "node", False),
@@ -931,12 +1005,28 @@ def test_yarn_pnpm_pytest_and_pipx_as_words_are_not_found(line, kind):
         ("echo $'it\\'s' ; echo '; node x.js'", "node", False),
         ("echo $'it\\'s'\npython3 x.py", "python", True),
         ("printf $'a\\tb\\n'; npm ci", "node", True),
+        ("echo $'it\\'s' 'node x'", "node", False),
     ],
 )
 def test_arithmetic_escaped_heredocs_and_ansi_c_strings_are_read_as_the_shell_does(
     line, kind, found
 ):
     assert runs_runtime(line, kind) is found
+
+
+def test_long_runs_of_options_are_read_quickly():
+    """Each option can be read only one way, so a long run of them cannot make the match try every split: with two
+    readings each, 22 `-oL`s after `stdbuf` took seconds and 16 `-uuu`s after `sudo` more than ten."""
+    started = time.perf_counter()
+    for line in (
+        "stdbuf" + " -oL" * 40 + " -",
+        "nice" + " -n10" * 40 + " -",
+        "sudo" + " -uuu" * 40 + " -",
+        "bash " + "-o -o " * 200 + "x'y'",
+        "bash " + "-c " * 200 + "x'node y'",
+    ):
+        assert not runs_runtime(line, "node"), line
+    assert time.perf_counter() - started < 1
 
 
 def test_a_job_that_sets_the_runtime_up_late_or_never_is_flagged():
@@ -1076,6 +1166,13 @@ def test_a_set_up_step_with_its_own_condition_covers_only_steps_it_always_runs_b
         ("(a || b) && c", "a", False),
         ("a || b", "a || c", False),
         ("", "anything", True),
+        # A later step joined by `&&` with the set-up condition, or with one of its `||` terms, needs it to hold
+        # (Copilot on HCW-HybridCloudWorks#1716).
+        ("a || b", "a && c", True),
+        ("a", "a && c", True),
+        ("a || b", "c && (a)", True),
+        ("a && b", "a && c", False),
+        ("a || b", "c && d", False),
         # The job's status: a set-up step with no `if:` runs only after success (the unwritten `success()`).
         ("", "", True),
         ("", "always()", False),
