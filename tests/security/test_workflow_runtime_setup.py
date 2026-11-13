@@ -243,11 +243,6 @@ PIPX = re.compile(rf"(?P<before>{START}){PATH}pipx(?=\s|$)(?P<words>[^;&|)]*)")
 ASSIGNMENT_WORD = re.compile(
     r"""(?:^|(?<=[\s;&|({`]))([A-Za-z_][A-Za-z0-9_]*)=((?:"(?:[^"\\]|\\.)*"|'[^']*'|[^\s"'])*)(?=\s|$)"""
 )
-# A non-empty quoted value for PIPX_DEFAULT_PYTHON in the raw `run:` text: the shell reading empties quoted text, so
-# `PIPX_DEFAULT_PYTHON="$P"` and `PIPX_DEFAULT_PYTHON=""` look alike after it, and only the raw text tells them apart.
-PIPX_DEFAULT_QUOTED = re.compile(
-    r"""(?:^|(?<=[\s;&|({`]))PIPX_DEFAULT_PYTHON=(?:"(?:[^"\\]|\\.)+"|'[^']+')"""
-)
 # pipx's options that take a value as the next word, so that word is not read as an option or as the app's name.
 PIPX_VALUE_OPTIONS = {
     "--spec",
@@ -366,12 +361,12 @@ def _shell_text(run: str) -> str:
             while j < n and run[j] != "'":
                 j += 2 if run[j] == "\\" else 1
             body = re.sub(r"\\(.)", lambda m: ANSI_C.get(m[1], m[0]), run[i + 2 : j], flags=re.S)
-            quoted(body, "''")
+            quoted(body, "'_'" if j > i + 2 else "''")
             i = j + 1
         elif char == "'":
             end = run.find("'", i + 1)
             end = n if end == -1 else end
-            quoted(run[i + 1 : end], "''")
+            quoted(run[i + 1 : end], "'_'" if end > i + 1 else "''")
             i = end + 1
         elif char == '"':
             # A command substitution in the string (`$(...)`, or a backtick pair) may hold quotes of its own, and it
@@ -395,7 +390,7 @@ def _shell_text(run: str) -> str:
             raw, text = run[i + 1 : min(j, n)], "".join(parts)
             # Given to `-c`, the inner shell runs the script, an escaped backtick included.
             script = re.sub(r"\\([\\\"$`\n])", lambda m: "" if m[1] == "\n" else m[1], raw)
-            quoted(script, f'"{text}"' if re.search(r"[$<]\(|`", text) else '""')
+            quoted(script, f'"{text}"' if re.search(r"[$<]\(|`", text) else '"_"' if text else '""')
             i = j + 1
         elif char == "#" and (i == 0 or run[i - 1] in " \t\n;"):
             end = run.find("\n", i)
@@ -796,19 +791,16 @@ def _pipx_option_chooses_python(words: str) -> bool:
     return False
 
 
-def _chooses_default_python(before: str, run: str) -> bool:
+def _chooses_default_python(before: str) -> bool:
     """Whether the assignments in front of `pipx` set PIPX_DEFAULT_PYTHON to something: an empty value
-    (`PIPX_DEFAULT_PYTHON= pipx`, `PIPX_DEFAULT_PYTHON='' pipx`) leaves pipx on its own interpreter. A quoted value
-    is emptied by the shell reading, so it counts only when the raw text quotes something non-empty."""
+    (`PIPX_DEFAULT_PYTHON= pipx`, `PIPX_DEFAULT_PYTHON='' pipx`, `PIPX_DEFAULT_PYTHON=''"" pipx`) leaves pipx on its own
+    interpreter. `_shell_text` writes an empty quoted string as `''` or `""` and any other as `'_'` or `"_"`, so a value
+    made only of empty quotes is empty. The last assignment of the name wins, as in the shell."""
+    chosen = False
     for m in ASSIGNMENT_WORD.finditer(before):
-        if m[1] != "PIPX_DEFAULT_PYTHON":
-            continue
-        if m[2] in ("", "''", '""'):
-            if m[2] and PIPX_DEFAULT_QUOTED.search(run):
-                return True
-            continue
-        return True
-    return False
+        if m[1] == "PIPX_DEFAULT_PYTHON":
+            chosen = re.sub(r"''|\"\"", "", m[2]) != ""
+    return chosen
 
 
 def pipx_without_python(run: str | None, env: dict) -> bool:
@@ -819,8 +811,7 @@ def pipx_without_python(run: str | None, env: dict) -> bool:
         return False
     return any(
         not (
-            _chooses_default_python(found["before"], run or "")
-            or _pipx_option_chooses_python(found["words"])
+            _chooses_default_python(found["before"]) or _pipx_option_chooses_python(found["words"])
         )
         for line in _shell_text(run or "").split("\n")
         for found in PIPX.finditer(line.strip())
@@ -1591,6 +1582,15 @@ def test_an_indirect_step_counts_as_running_its_runtime():
         ('PIPX_DEFAULT_PYTHON="$P" pipx run x', {}, False),
         ("PIPX_DEFAULT_PYTHON='/opt/py/bin/python3' pipx run x", {}, False),
         ("env PIPX_DEFAULT_PYTHON= pipx run x", {}, True),
+        # Empty quotes run together are still empty, a quoted value elsewhere in the script does not vouch for this
+        # command's, and the last assignment of the name wins (Copilot on HCW-HybridCloudWorks#1718).
+        ("PIPX_DEFAULT_PYTHON=''\"\" pipx run x", {}, True),
+        ("PIPX_DEFAULT_PYTHON=\"\"'' pipx run x", {}, True),
+        ("PIPX_DEFAULT_PYTHON='' pipx run x; PIPX_DEFAULT_PYTHON=\"$P\" echo", {}, True),
+        ("PIPX_DEFAULT_PYTHON='' pipx a; PIPX_DEFAULT_PYTHON='/p' pipx b", {}, True),
+        ("PIPX_DEFAULT_PYTHON='/p' PIPX_DEFAULT_PYTHON= pipx run x", {}, True),
+        ("PIPX_DEFAULT_PYTHON= PIPX_DEFAULT_PYTHON='/p' pipx run x", {}, False),
+        ('PIPX_DEFAULT_PYTHON=""/p pipx run x', {}, False),
         ('pipx run --python "$P" --spec x x', {}, False),
         ("pipx run --python=/opt/py/bin/python3 x", {}, False),
         ("PIPX_DEFAULT_PYTHON=/p pipx run x", {}, False),
