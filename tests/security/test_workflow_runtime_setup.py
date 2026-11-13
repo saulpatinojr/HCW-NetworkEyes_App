@@ -29,11 +29,18 @@ that is not actions/setup-python or one that may be skipped chooses nothing, and
 another way (`steps['py'].outputs`), which names no id this test can read. A shell variable in the value (`--python
 "$PYTHON_PATH"`) is read from the step's, job's or workflow's `env:`; one the script sets itself (`P=...`, `for P in`,
 `read P`, but not `echo P=...` or `P=/x pipx ...`) counts for the commands after it in the same shell, as does
-`$pythonLocation` (setup-python sets it), and any other one chooses nothing. A name set in a `-c` script, a shell fed a
+`$pythonLocation` (setup-python sets it) once an actions/setup-python step, with or without an id, is sure to have
+run first, and any other one chooses nothing. A name set in a `-c` script, a shell fed a
 heredoc, a `$(...)` or a `( ... )` subshell stays there, and one set outside reaches a child shell only when exported.
 A later assignment in the script wins over the `env:` value, and its value is read by the same rules (`P=/usr/bin/python3`
 chooses nothing). A bare
-`python3.15` and a path under `${{ env.pythonLocation }}` still count. Settings travel the way the shell passes them: `PIPX_DEFAULT_PYTHON=/p bash -c
+`python3.15` still counts, and so does a path under `${{ env.pythonLocation }}`, by the same rule as
+`$pythonLocation`. Any other GitHub expression chooses nothing (`${{ github.workspace }}/.venv/bin/python`,
+`${{ inputs.python }}`, `${{ env.UNSET }}`), except `${{ env.X }}` and `${{ matrix.X }}`, which are read as GitHub
+replaces them, from the step's, job's or workflow's `env:` and from every entry of the job's matrix list, so they
+choose when the value they stand for does (Copilot on HCW-NetworkEyes_AddOn#109). A path is read as the shell
+resolves it before it is compared, so `/usr/bin/../bin/python3` and `/usr/./bin/python3` are the runner's own
+(Copilot on HCW-MigrateOrchestrator_AddOn#75). Settings travel the way the shell passes them: `PIPX_DEFAULT_PYTHON=/p bash -c
 'pipx run x'` and `env PIPX_DEFAULT_PYTHON=/p env -S 'pipx run x'` give the inner script the setting, and `sudo` drops
 every inherited setting (its default `env_reset`) unless it is given `-E` or `--preserve-env` (bare, or with a list
 that names the variable), while `sudo PIPX_DEFAULT_PYTHON=/p pipx ...` sets it.
@@ -92,7 +99,9 @@ of those with a top-level `&&` and has no top-level `||` of its own (a step unde
 a set-up step under `a || c` has run; Copilot on HCW-HybridCloudWorks#1716; but `a && b || d` can run through `d`
 alone, so it is not split; Copilot on HCW-NetworkEyes_App#393), or, when the set-up's condition has no top-level
 `||`, a condition with no top-level `||` whose `&&` terms include every one of the set-up's (`a && b` covers
-`c && a && b`; Copilot on HCW-MigrateOrchestrator_App#117). Conditions are compared without a surrounding `${{ }}`, with runs of
+`c && a && b`; Copilot on HCW-MigrateOrchestrator_App#117), an `&&` term of the set-up's that joins terms with `||`
+counting as included when one of those terms is (`(a || b) && c` covers `a && c`, not `d && c`; Copilot on
+HCW-MigrateOrchestrator_App#118). Conditions are compared without a surrounding `${{ }}`, with runs of
 spaces made one, and a term without one pair of parentheses around the whole of it. Equal text means equal value only
 for values that stay fixed during a job (`matrix`, `github`, `inputs`, `needs`, `vars`, `secrets`); a term that reads
 anything else (`env.*`, which a step can change through `$GITHUB_ENV`, `steps.*`, `job`, `runner`, `hashFiles()`) is
@@ -141,6 +150,8 @@ word (`<<EOF-1`, `<<E"OF"`), its body ending only at a line that is exactly that
 
 from __future__ import annotations
 
+import itertools
+import posixpath
 import re
 import textwrap
 import time
@@ -477,17 +488,28 @@ LITERAL_DOLLAR = "\x03"
 # A shell variable in a value (`"$PYTHON_PATH"`, `${PYTHON_PATH}`), read from the step's, job's or workflow's `env:`.
 VARIABLE = re.compile(r"\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))")
 # A GitHub expression (`${{ steps.py.outputs.python-path }}`), which GitHub replaces before the shell starts. For the
-# pipx check it is written as one word, `__gha__` and the expression with every other character made `_`.
+# pipx check it is written as one word (see `_gha_tokens`).
 GHA_EXPRESSION = re.compile(r"\$\{\{(.*?)\}\}", re.DOTALL)
-# The id of each step whose `python-path` output a value reads (`steps.py.outputs.python-path`, or
-# `steps.py.outputs['python-path']`, which `_gha_tokens` writes `steps.py.outputs__python-path__`), and every mention
-# of `steps` at all: one written another way (`steps['py'].outputs`) or naming another output (`cache-hit`, or
-# `python-version`, which is a version, not a path) chooses nothing (Copilot on HCW-NetworkEyes_App#395).
-STEP_OUTPUT = re.compile(
-    r"(?<![A-Za-z0-9.-])steps\.([A-Za-z0-9_-]+)\.outputs(?:\.|__)python-path(?![A-Za-z0-9-])", re.I
+# The two GitHub expressions a value given to pipx may hold and still choose its Python: setup-python's
+# `python-path` output (`steps.py.outputs.python-path`, or `steps.py.outputs['python-path']`) and
+# `env.pythonLocation`. `_gha_tokens` writes each as one fixed word (STEP_OUTPUT, PYTHON_LOCATION) and any other
+# expression as OTHER_EXPRESSION, which chooses nothing: one written another way (`steps['py'].outputs`), naming
+# another output (`cache-hit`, or `python-version`, which is a version, not a path; Copilot on
+# HCW-NetworkEyes_App#395) or any other context (`github.workspace`, `inputs.python`; Copilot on
+# HCW-NetworkEyes_AddOn#109). A plain mention of `steps` outside an expression chooses nothing either.
+PYTHON_PATH_EXPRESSION = re.compile(
+    r"steps\.([A-Za-z0-9_-]+)\.outputs(?:\.python-path|\[\s*(['\"])python-path\2\s*\])", re.I
 )
+STEP_OUTPUT = re.compile(r"__gha__steps\.([A-Za-z0-9_-]+)\.outputs\.python-path__")
+PYTHON_LOCATION = "__gha__env.pythonLocation__"
+OTHER_EXPRESSION = "__gha__other__"
 STEPS = re.compile(r"(?<![A-Za-z0-9.-])steps(?![A-Za-z0-9-])", re.I)
-# The variables a value may name without the step's `env:` setting them: actions/setup-python sets `pythonLocation`.
+# A GitHub expression that reads the step's, job's or workflow's `env:` or the job's matrix (`${{ env.PY }}`,
+# `${{ matrix.python }}`), which GitHub replaces with that value before the shell starts (see `_expansions`).
+ENV_OR_MATRIX = re.compile(r"\$\{\{\s*(env|matrix)\.([A-Za-z0-9_-]+)\s*\}\}")
+# The variables a value may name without the step's `env:` setting them: actions/setup-python sets `pythonLocation`,
+# so it counts only after an actions/setup-python step that is sure to have run (Copilot on
+# HCW-NetworkEyes_AddOn#109).
 SET_UP_VARIABLES = {"pythonLocation"}
 # Stands for a value the script sets itself, in the names `_chooses` reads.
 SCRIPT_SET = object()
@@ -966,6 +988,18 @@ def _block(lines: list[str], at: int, indent: int) -> list[str]:
     return block
 
 
+def _scalar_lines(lines: list[str], at: int, indent: int) -> list[str]:
+    """The lines of a block scalar whose key is on line `at` (at `indent` spaces): blank lines and lines indented
+    further, up to the first other line. A comment indented no further than the key ends the value, as YAML reads it,
+    rather than being read into it (the same rule as a step's `run: |`)."""
+    block = []
+    for line in lines[at + 1 :]:
+        if line.strip() and _indent(line) <= indent:
+            break
+        block.append(line)
+    return block
+
+
 def _mapping(lines: list[str], at: int, indent: int) -> dict[str, str]:
     """The mapping under the key on line `at`: a `{ ... }` on the same line, or the `key: value` lines below it, each
     value plain, quoted, null (read as empty, see `_scalar`) or a block scalar (`|`, `>-`, read as its text)."""
@@ -981,7 +1015,7 @@ def _mapping(lines: list[str], at: int, indent: int) -> dict[str, str]:
             continue
         indicator = BLOCK_SCALAR.fullmatch(pair.group(2).strip())
         found[pair.group(1)] = (
-            _block_scalar(_block(block, index, inner), indicator, inner)
+            _block_scalar(_scalar_lines(block, index, inner), indicator, inner)
             if indicator
             else _scalar(pair.group(2))
         )
@@ -1310,9 +1344,7 @@ def _conditions_cover(
             every = (
                 len(_top_level_terms(rest, "||")) == 1
                 and len(_top_level_terms(need, "||")) == 1
-                and all(
-                    term in _and_terms(need) and _fixed_term(term, ran) for term in _and_terms(rest)
-                )
+                and all(_term_holds(term, _and_terms(need), ran) for term in _and_terms(rest))
             )
             if not (
                 rest == ""
@@ -1321,6 +1353,17 @@ def _conditions_cover(
             ):
                 return False
     return True
+
+
+def _term_holds(term: str, terms: list[str], ran: frozenset[str] | set[str] = frozenset()) -> bool:
+    """True when the set-up condition's `&&` term `term` surely holds whenever every one of `terms` (the later
+    condition's `&&` terms) does: it is one of them, or it joins terms with a top-level `||` and one of those is
+    (`a || b` holds when `a` does; Copilot on HCW-MigrateOrchestrator_App#118). The term matched must read only values
+    fixed from the set-up step on (`_fixed_term`)."""
+    return any(
+        option in terms and _fixed_term(option, ran)
+        for option in [term, *_top_level_terms(term, "||")]
+    )
 
 
 def _and_terms(expression: str) -> list[str]:
@@ -1373,10 +1416,18 @@ def unset_steps(
 
 
 def _gha_tokens(text: str) -> str:
-    """The text with each GitHub expression written as one word (see GHA_EXPRESSION)."""
-    return GHA_EXPRESSION.sub(
-        lambda m: "__gha__" + re.sub(r"[^A-Za-z0-9_.-]", "_", m[1].strip()) + "__", text
-    )
+    """The text with each GitHub expression written as one word: setup-python's `python-path` output as
+    `__gha__steps.<id>.outputs.python-path__`, `env.pythonLocation` as PYTHON_LOCATION, and any other expression as
+    OTHER_EXPRESSION (see STEP_OUTPUT)."""
+
+    def token(match: re.Match[str]) -> str:
+        expression = match[1].strip()
+        output = PYTHON_PATH_EXPRESSION.fullmatch(expression)
+        if output:
+            return f"__gha__steps.{output[1]}.outputs.python-path__"
+        return PYTHON_LOCATION if expression == "env.pythonLocation" else OTHER_EXPRESSION
+
+    return GHA_EXPRESSION.sub(token, text)
 
 
 def _chooses(
@@ -1384,19 +1435,21 @@ def _chooses(
 ) -> bool:
     """True when a value given to pipx as its Python (`--python`, PIPX_DEFAULT_PYTHON) chooses the set-up one: it is
     not empty (quotes aside), not the runner's own Python named by its path (SYSTEM_PYTHON: `/usr/bin/python3`,
-    `/bin/python3`), every mention of `steps` in it is a `steps.<id>.outputs` this check can read (`steps['py']` is
-    not), and each such id is of a step in `setup_ids`, the earlier actions/setup-python steps of the job that are sure
-    to have run first. Given `env` (the step's, job's and workflow's `env:`, and SCRIPT_SET for each name the script
+    `/bin/python3`, compared once `.`, `..` and doubled `/` are resolved as the shell resolves them), each GitHub
+    expression in it is a `steps.<id>.outputs.python-path` this check can read (`steps['py']` is not) or
+    `env.pythonLocation`, and each such id is of a step in `setup_ids`, the earlier actions/setup-python steps of the job
+    that are sure to have run first (an id-less one is `""` there). `$pythonLocation` and `${{ env.pythonLocation }}`
+    count only when `setup_ids` holds one. Given `env` (the step's, job's and workflow's `env:`, and SCRIPT_SET for each name the script
     sets itself), a shell variable in the value is read from it (`--python "$PYTHON_PATH"` with `PYTHON_PATH: ${{
     steps.python.outputs.python-path }}`); one the script sets counts, as does `$pythonLocation`, which
     actions/setup-python sets; any other one is unknown, so the value chooses nothing. Without `env` (an inherited
     value, which GitHub does not expand) the value is read as written. `python3.15` or a path under
     `${{ env.pythonLocation }}` counts. A command substitution (`$(...)`, a backtick) or a `$` the shell passes on as
     text (`'$P'`, `\\$P`) chooses nothing."""
-    unknown = False
+    unknown, located = False, False
 
     def variable(match: re.Match[str]) -> str:
-        nonlocal unknown
+        nonlocal unknown, located
         name = match[1] or match[2]
         if name in (env or {}):
             given = env[name]
@@ -1406,6 +1459,7 @@ def _chooses(
                 else _gha_tokens("" if given is None else str(given))
             )
         unknown = unknown or name not in SET_UP_VARIABLES
+        located = True
         return match[0]
 
     text = value.replace("'", "").replace('"', "")
@@ -1414,10 +1468,21 @@ def _chooses(
     # /usr/bin/python3)"`, or `<(...)`, which the shell passes as `/dev/fd/N`), is not a Python it can vouch for (Copilot
     # on HCW-NetworkEyes_App#395).
     unreadable = LITERAL_DOLLAR in text or any(sign in text for sign in ("$(", "<(", ">(", "`"))
-    if not text or unknown or unreadable or SYSTEM_PYTHON.fullmatch(text):
+    # A path is compared as the shell resolves it: `/usr/bin/../bin/python3` and `/usr/./bin/python3` are the
+    # runner's (posixpath keeps a leading `//`, which is `/` here; Copilot on HCW-MigrateOrchestrator_AddOn#75).
+    path = re.sub(r"^/+", "/", posixpath.normpath(text)) if text else text
+    if not text or unknown or unreadable or SYSTEM_PYTHON.fullmatch(path):
         return False
     ids = STEP_OUTPUT.findall(text)
-    return len(ids) == len(STEPS.findall(text)) and all(found in setup_ids for found in ids)
+    rest = STEP_OUTPUT.sub("", text)
+    located = located or PYTHON_LOCATION in rest
+    rest = rest.replace(PYTHON_LOCATION, "")
+    return (
+        "__gha__" not in rest
+        and not STEPS.search(rest)
+        and all(found in setup_ids for found in ids)
+        and (not located or bool(setup_ids))
+    )
 
 
 def _literal(value: str) -> str:
@@ -1690,8 +1755,67 @@ def _or_inherited(local: bool | None, inherited: bool) -> bool:
     return inherited if local is None else local
 
 
+def _expansions(run: str, env: dict, matrix: dict | None = None) -> list[tuple[str, dict]]:
+    """The run script and `env` as GitHub hands them to the shell, once for each combination of the matrix entries the
+    text names: each `${{ env.X }}` replaced by X's value in `env` and each `${{ matrix.X }}` by one entry of the job's
+    matrix list X, read again where a value holds one (at most five rounds). An expression it cannot replace stays, and
+    `_gha_tokens` writes it as one that chooses nothing (Copilot on HCW-NetworkEyes_AddOn#109)."""
+    texts = [run, *(str(value) for value in env.values() if value is not None)]
+    names = sorted(
+        {
+            found[2]
+            for text in texts
+            for found in ENV_OR_MATRIX.finditer(text)
+            if found[1] == "matrix" and (matrix or {}).get(found[2])
+        }
+    )
+    expansions = []
+    for values in itertools.product(*((matrix or {})[name] for name in names)):
+        entry = dict(zip(names, values, strict=True))
+
+        def value(found: re.Match[str], entry: dict = entry) -> str:
+            if found[1] == "matrix":
+                return str(entry.get(found[2], found[0]))
+            if found[2] not in env:
+                return found[0]
+            return "" if env[found[2]] is None else str(env[found[2]])
+
+        def expand(text: str) -> str:
+            for _ in range(5):
+                done = ENV_OR_MATRIX.sub(value, text)
+                if done == text:
+                    break
+                text = done
+            return text
+
+        expansions.append(
+            (
+                expand(run),
+                {
+                    name: given if given is None else expand(str(given))
+                    for name, given in env.items()
+                },
+            )
+        )
+    return expansions
+
+
 def pipx_without_python(
-    run: str | None, env: dict, setup_ids: frozenset[str] | set[str] = frozenset()
+    run: str | None,
+    env: dict,
+    setup_ids: frozenset[str] | set[str] = frozenset(),
+    matrix: dict | None = None,
+) -> bool:
+    """True when, for any entry of the job's `matrix` the script names, it runs `pipx` with no Python chosen (see
+    `_expansions` and `_pipx_without_python_once`)."""
+    return any(
+        _pipx_without_python_once(text, values, setup_ids)
+        for text, values in _expansions(run or "", env, matrix)
+    )
+
+
+def _pipx_without_python_once(
+    run: str, env: dict, setup_ids: frozenset[str] | set[str] = frozenset()
 ) -> bool:
     """True when a run script runs `pipx` in command position without choosing its interpreter: no `--python` among
     pipx's own options, and no PIPX_DEFAULT_PYTHON that chooses the set-up Python, read first from the words in front
@@ -1706,7 +1830,7 @@ def pipx_without_python(
     (https://github.com/actions/setup-python/blob/main/docs/advanced-usage.md#python-path), as is giving it through a
     variable of the step's `env:` (`--python "$PYTHON_PATH"`), which is read the same way; a variable that neither the
     `env:` nor the script sets chooses nothing. An inherited value is used as written, since GitHub does not expand a
-    variable in `env:`."""
+    shell variable in `env:`."""
     stack = [_chooses(_gha_tokens(str(env.get("PIPX_DEFAULT_PYTHON") or "")), setup_ids)]
     text = _shell_text(_gha_tokens(run or ""), values=True)
     scopes: list = []  # `_scope_paths(text)`, worked out the first time a script sets a name
@@ -1761,12 +1885,12 @@ def pipx_without_python(
 
 def python_setup_ids(steps: list[dict], i: int) -> set[str]:
     """The ids of the actions/setup-python steps before step `i` that are sure to have run before it (see `covers`),
-    the only steps whose outputs choose pipx's Python."""
+    the only steps whose outputs choose pipx's Python; one without an id is `""`, which no output names but which
+    lets `$pythonLocation` count (Copilot on HCW-NetworkEyes_AddOn#109)."""
     return {
-        str(earlier["id"])
+        "" if earlier.get("id") is None else str(earlier["id"])
         for j, earlier in enumerate(steps[:i])
-        if earlier.get("id") is not None
-        and SETUP["python"].search(earlier.get("uses", ""))
+        if SETUP["python"].search(earlier.get("uses", ""))
         and covers(earlier, steps[i], step_ids(steps[:j]))
     }
 
@@ -1783,6 +1907,7 @@ def pipx_problems(file: str, jobs: dict[str, dict]) -> list[str]:
             step.get("run"),
             {**job["env"], **(step.get("env") or {})},
             python_setup_ids(job["steps"], i),
+            job.get("matrix"),
         )
     ]
 
@@ -2975,7 +3100,8 @@ def test_round_two_forms_are_read_as_the_shell_reads_them(line, kind, found):
         ("PIPX_DEFAULT_PYTHON=/usr/bin/python3 pipx run x", {}, [], True),
         ("pipx run x", {"PIPX_DEFAULT_PYTHON": "/usr/bin/python3"}, [], True),
         ("pipx run --python python3.15 x", {}, [], False),
-        ("pipx run --python ${{ env.pythonLocation }}/bin/python x", {}, [], False),
+        ("pipx run --python ${{ env.pythonLocation }}/bin/python x", {}, [], True),
+        ("pipx run --python ${{ env.pythonLocation }}/bin/python x", {}, [""], False),
         ("pipx run --python /usr/bin/python3 --python /p x", {}, [], False),
         ("pipx run --python /opt/hostedtoolcache/Python/3.15.0/x64/bin/python3 x", {}, [], False),
         # `$'...'` is decoded before it is read.
@@ -3239,8 +3365,10 @@ def test_review_forms_are_read_as_the_shell_reads_them(line, kind, found):
         ('export P=/opt/py/bin/python3\npipx run --python "$P" x', {}, [], False),
         ('for P in /a /b; do pipx run --python "$P" x; done', {}, [], False),
         ('read -r P < p.txt; pipx run --python "$P" x', {}, [], False),
-        ('pipx run --python "$pythonLocation/bin/python" x', {}, [], False),
-        ('pipx run --python "${pythonLocation}/bin/python" x', {}, [], False),
+        ('pipx run --python "$pythonLocation/bin/python" x', {}, [], True),
+        ('pipx run --python "${pythonLocation}/bin/python" x', {}, [], True),
+        ('pipx run --python "$pythonLocation/bin/python" x', {}, [""], False),
+        ('pipx run --python "${pythonLocation}/bin/python" x', {}, ["py"], False),
         ("pipx run --python /usr/bin//python3 x", {}, [], True),
         # A heredoc or here-string given to a shell carries the settings in front of that shell.
         ("PIPX_DEFAULT_PYTHON=/p bash <<'EOF'\npipx run x\nEOF", {}, [], False),
@@ -3713,6 +3841,203 @@ def test_a_composite_action_without_steps_stops_the_test():
     """It would otherwise read as having no steps (Copilot on HCW-HybridCloudWorks#1719)."""
     with pytest.raises(AssertionError, match="no runs: steps: list"):
         read_action("name: x\nruns:\n  using: composite\n")
+
+
+@pytest.mark.parametrize(
+    ("run", "env", "ids", "flagged"),
+    [
+        # A: a GitHub expression other than setup-python's `python-path` output or `env.pythonLocation` chooses
+        # nothing (Copilot on HCW-NetworkEyes_AddOn#109, HCW-MigrateOrchestrator_AddOn#75 and
+        # HCW-CloudCrawler_App#85).
+        ("pipx run --python ${{ github.workspace }}/.venv/bin/python x", {}, ["py"], True),
+        ("pipx run --python ${{ inputs.python }} x", {}, ["py"], True),
+        ("pipx run --python ${{ env.UNSET }} x", {}, ["py"], True),
+        ("pipx run x", {"PIPX_DEFAULT_PYTHON": "${{ inputs.python }}"}, ["py"], True),
+        ("pipx run x", {"PIPX_DEFAULT_PYTHON": "${{ env.NOT_PYTHON_LOCATION }}"}, ["py"], True),
+        ('pipx run --python "$P" x', {"P": "${{ github.workspace }}/py"}, ["py"], True),
+        (
+            "pipx run --python ${{ steps.py.outputs.python-path }}${{ github.sha }} x",
+            {},
+            ["py"],
+            True,
+        ),
+        ("pipx run --python steps.py.outputs.python-path x", {}, ["py"], True),
+        # `${{ env.X }}` is read as GitHub replaces it: it chooses when the value it stands for does.
+        (
+            "pipx run --python ${{ env.PY }} x",
+            {"PY": "${{ steps.py.outputs.python-path }}"},
+            ["py"],
+            False,
+        ),
+        (
+            "pipx run --python ${{ env.PY }} x",
+            {"PY": "${{ steps.py.outputs.python-path }}"},
+            [],
+            True,
+        ),
+        ("pipx run --python ${{ env.PY }} x", {"PY": "/usr/bin/python3"}, ["py"], True),
+        ("pipx run --python ${{ env.PY }} x", {"PY": "/opt/py/bin/python3"}, [], False),
+        ("pipx run --python ${{env.PY}} x", {"PY": "${{ env.PY }}"}, ["py"], True),
+        (
+            "pipx run x",
+            {"PIPX_DEFAULT_PYTHON": "${{ env.PY }}", "PY": "/opt/py/bin/python3"},
+            [],
+            False,
+        ),
+        (
+            'pipx run --python "$PYTHON_PATH" x',
+            {"PYTHON_PATH": "${{ steps.python.outputs.python-path }}"},
+            ["python"],
+            False,
+        ),
+        ("PY=/opt/py; pipx run --python ${{ env.PY }} x", {"PY": "/usr/bin/python3"}, [], True),
+        # B: `$pythonLocation` and `${{ env.pythonLocation }}` count only after a set-up step, with or without an id.
+        ("pipx run --python ${{ env.pythonLocation }}/bin/python3 x", {}, ["py"], False),
+        ("pipx run x", {"PIPX_DEFAULT_PYTHON": "${{ env.pythonLocation }}/bin/python3"}, [], True),
+        (
+            "pipx run x",
+            {"PIPX_DEFAULT_PYTHON": "${{ env.pythonLocation }}/bin/python3"},
+            [""],
+            False,
+        ),
+        ("PIPX_DEFAULT_PYTHON=$pythonLocation/bin/python3 pipx run x", {}, [], True),
+        ("PIPX_DEFAULT_PYTHON=$pythonLocation/bin/python3 pipx run x", {}, [""], False),
+        (
+            "pipx run --python ${{ env.pythonLocation }}/bin/python3 x",
+            {"pythonLocation": "/opt/py"},
+            [],
+            False,
+        ),
+        (
+            "pipx run --python ${{ env.pythonLocation }}/bin/python3 x",
+            {"pythonLocation": "/usr"},
+            [""],
+            True,
+        ),
+        # C: a path is compared as the shell resolves it (Copilot on HCW-MigrateOrchestrator_AddOn#75).
+        ("pipx run --python /usr/bin/../bin/python3 x", {}, [], True),
+        ("pipx run --python /usr/./bin/python3 x", {}, [], True),
+        ("pipx run --python //usr/bin/python3 x", {}, [], True),
+        ("pipx run --python /opt/az/lib/../bin/python3 x", {}, [], True),
+        ("pipx run --python /usr/bin/python3/ x", {}, [], True),
+        ("PIPX_DEFAULT_PYTHON=/usr/local/../bin/python3 pipx run x", {}, [], True),
+        ("pipx run x", {"PIPX_DEFAULT_PYTHON": "/bin/./python3"}, [], True),
+        ("pipx run --python /usr/bin/../local/bin/python3 x", {}, [], False),
+        ("pipx run --python /opt/py/../py/bin/python3 x", {}, [], False),
+    ],
+)
+def test_copilot_round_four_pipx_values(run, env, ids, flagged):
+    assert pipx_without_python(run, env, set(ids)) is flagged
+
+
+def test_a_matrix_value_given_to_pipx_is_read_for_every_entry():
+    """`${{ matrix.X }}` is read as GitHub replaces it, once for each entry of the job's matrix list
+    (Copilot on HCW-NetworkEyes_AddOn#109): one entry naming the runner's Python is enough to report it."""
+    run = "pipx run --python ${{ matrix.py }} x"
+    assert (
+        pipx_without_python(run, {}, set(), {"py": ["/opt/a/python3", "/opt/b/python3"]}) is False
+    )
+    assert (
+        pipx_without_python(run, {}, set(), {"py": ["/opt/a/python3", "/usr/bin/python3"]}) is True
+    )
+    assert pipx_without_python(run, {}, set(), {}) is True
+    env = {"PIPX_DEFAULT_PYTHON": "${{ matrix.py }}"}
+    assert pipx_without_python("pipx run x", env, set(), {"py": ["/opt/a/python3"]}) is False
+    jobs = read_jobs(
+        "jobs:\n  j:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        py: [/opt/a/python3, "
+        "/bin/python3]\n    steps:\n      - name: Scan\n        run: pipx run --python ${{ matrix.py }} x\n"
+    )
+    assert pipx_problems("x.yml", jobs) == ["x.yml > j > Scan > pipx"]
+
+
+def test_a_python_location_counts_only_after_an_id_less_set_up_step_too():
+    """`python_setup_ids` names a set-up step without an id as `""` (Copilot on HCW-NetworkEyes_AddOn#109)."""
+    jobs = read_jobs(
+        "jobs:\n  j:\n    runs-on: ubuntu-26.04\n    steps:\n      - name: Before\n"
+        '        run: pipx run --python "$pythonLocation/bin/python3" x\n'
+        "      - uses: actions/setup-python@abc\n        with:\n          python-version: '3.15'\n"
+        "      - name: After\n"
+        '        run: pipx run --python "$pythonLocation/bin/python3" x\n'
+        "      - name: Skipped set-up\n        if: inputs.go\n        uses: actions/setup-python@abc\n"
+    )
+    assert python_setup_ids(jobs["j"]["steps"], 2) == {""}
+    assert pipx_problems("x.yml", jobs) == ["x.yml > j > Before > pipx"]
+
+
+@pytest.mark.parametrize(
+    ("setup", "step", "covered"),
+    [
+        # D: a set-up `&&` term that joins terms with `||` holds when one of those is among the later step's `&&`
+        # terms (Copilot on HCW-MigrateOrchestrator_App#118).
+        ("(a || b) && c", "a && c", True),
+        ("(a || b) && c", "c && b", True),
+        ("(a || b) && c", "d && c", False),
+        ("(a || b) && c", "a", False),
+        ("(a || b) && c", "(a || b) && c && d", True),
+        ("(a || env.B) && c", "a && c", True),
+        ("(env.A || b) && c", "env.A && c", False),
+        ("(a || b) && c", "a && c || d", False),
+        ("a || b && c", "a && c", True),
+        ("(a || (b && d)) && c", "b && d && c", False),
+    ],
+)
+def test_a_set_up_term_joined_with_or_holds_when_one_of_its_terms_does(setup, step, covered):
+    assert covers({"if": setup}, {"if": step}) is covered
+
+
+BLOCK_VALUE_YAML = """jobs:
+  j:
+    runs-on: ubuntu-26.04
+    steps:
+      - id: py
+        uses: actions/setup-python@abc
+        with:
+          python-version: '3.15'
+      - name: Comment after block
+        env:
+          PIPX_DEFAULT_PYTHON: |-
+            /usr/bin/python3
+# a comment at column 0
+        run: pipx run x
+      - name: Indented comment after block
+        env:
+          PIPX_DEFAULT_PYTHON: |-
+            /usr/bin/python3
+          # a comment at the key's indent
+        run: pipx run x
+      - name: Key after block
+        env:
+          A: |-
+            /usr/bin/python3
+          PIPX_DEFAULT_PYTHON: ${{ steps.py.outputs.python-path }}
+        run: pipx run x
+      - name: Blank and comment lines inside
+        env:
+          A: |
+            a
+
+            # kept: indented like the value
+            b
+        run: echo "$A"
+"""
+
+
+def test_a_block_value_ends_at_the_first_line_indented_no_further_than_its_key():
+    """A comment after a block value in `env:` or `with:`, indented no further than the value's key,
+    ends the value, as YAML reads it, instead of being read into it (found while porting the check to
+    HCW-MigrateOrchestrator); blank lines and comment-like lines indented like the value stay in it."""
+    jobs = read_jobs(BLOCK_VALUE_YAML)
+    envs = [step.get("env") for step in jobs["j"]["steps"]]
+    assert envs[1:] == [
+        {"PIPX_DEFAULT_PYTHON": "/usr/bin/python3"},
+        {"PIPX_DEFAULT_PYTHON": "/usr/bin/python3"},
+        {"A": "/usr/bin/python3", "PIPX_DEFAULT_PYTHON": "${{ steps.py.outputs.python-path }}"},
+        {"A": "a\n\n# kept: indented like the value\nb\n"},
+    ]
+    assert pipx_problems("x.yml", jobs) == [
+        "x.yml > j > Comment after block > pipx",
+        "x.yml > j > Indented comment after block > pipx",
+    ]
 
 
 FILES = sorted(p for p in WORKFLOWS.iterdir() if p.suffix in (".yml", ".yaml"))
