@@ -149,7 +149,8 @@ build = [
 # fails when it drifts from this file (`uv lock --check`). Regenerate with
 # `uv lock` after editing any dependency above. The uv version is pinned where
 # it runs — the `FROM ghcr.io/astral-sh/uv:<version>@sha256:…` stage in each
-# Python Dockerfile and the `uv==<version>` steps in 300-test-codebase.yml —
+# Python Dockerfile and the `uv==<version>` steps in 300-test-codebase.yml and
+# 320-release-engine.yml (tests/unit/test_ci_hygiene.py keeps them equal) —
 # not here: a `[tool.uv] required-version` floor would break Dependabot's uv
 # updater, which runs its own bundled uv (older than the one pinned here).
 
