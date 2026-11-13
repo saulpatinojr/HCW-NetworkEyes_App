@@ -241,7 +241,12 @@ PIPX = re.compile(rf"(?P<before>{START}){PATH}pipx(?=\s|$)(?P<words>[^;&|)]*)")
 # An assignment word (`NAME=value`, the value plain, quoted or both) that starts a word, as ASSIGNMENT reads one: so in
 # `FOO=PIPX_DEFAULT_PYTHON=/p` the name is FOO, and the rest is FOO's value.
 ASSIGNMENT_WORD = re.compile(
-    r"""(?:^|(?<=[\s;&|({`]))([A-Za-z_][A-Za-z0-9_]*)=(?:"(?:[^"\\]|\\.)*"|'[^']*'|[^\s"'])*(?=\s|$)"""
+    r"""(?:^|(?<=[\s;&|({`]))([A-Za-z_][A-Za-z0-9_]*)=((?:"(?:[^"\\]|\\.)*"|'[^']*'|[^\s"'])*)(?=\s|$)"""
+)
+# A non-empty quoted value for PIPX_DEFAULT_PYTHON in the raw `run:` text: the shell reading empties quoted text, so
+# `PIPX_DEFAULT_PYTHON="$P"` and `PIPX_DEFAULT_PYTHON=""` look alike after it, and only the raw text tells them apart.
+PIPX_DEFAULT_QUOTED = re.compile(
+    r"""(?:^|(?<=[\s;&|({`]))PIPX_DEFAULT_PYTHON=(?:"(?:[^"\\]|\\.)+"|'[^']+')"""
 )
 # pipx's options that take a value as the next word, so that word is not read as an option or as the app's name.
 PIPX_VALUE_OPTIONS = {
@@ -791,15 +796,30 @@ def _pipx_option_chooses_python(words: str) -> bool:
     return False
 
 
+def _chooses_default_python(before: str, run: str) -> bool:
+    """Whether the assignments in front of `pipx` set PIPX_DEFAULT_PYTHON to something: an empty value
+    (`PIPX_DEFAULT_PYTHON= pipx`, `PIPX_DEFAULT_PYTHON='' pipx`) leaves pipx on its own interpreter. A quoted value
+    is emptied by the shell reading, so it counts only when the raw text quotes something non-empty."""
+    for m in ASSIGNMENT_WORD.finditer(before):
+        if m[1] != "PIPX_DEFAULT_PYTHON":
+            continue
+        if m[2] in ("", "''", '""'):
+            if m[2] and PIPX_DEFAULT_QUOTED.search(run):
+                return True
+            continue
+        return True
+    return False
+
+
 def pipx_without_python(run: str | None, env: dict) -> bool:
     """True when a run script runs `pipx` in command position without choosing its interpreter: no `--python` among
-    pipx's own options, no `PIPX_DEFAULT_PYTHON` among the assignments in front of it (a whole assignment word, not a
-    value that happens to hold the text), and none in `env` (the step's, job's and workflow's)."""
+    pipx's own options, no non-empty `PIPX_DEFAULT_PYTHON` among the assignments in front of it (a whole assignment
+    word, not a value that happens to hold the text), and none in `env` (the step's, job's and workflow's)."""
     if str(env.get("PIPX_DEFAULT_PYTHON") or "").strip():
         return False
     return any(
         not (
-            any(m[1] == "PIPX_DEFAULT_PYTHON" for m in ASSIGNMENT_WORD.finditer(found["before"]))
+            _chooses_default_python(found["before"], run or "")
             or _pipx_option_chooses_python(found["words"])
         )
         for line in _shell_text(run or "").split("\n")
@@ -1563,6 +1583,14 @@ def test_an_indirect_step_counts_as_running_its_runtime():
         ("pipx install --python /p tool", {}, False),
         ("pipx install tool --python /p", {}, False),
         ("FOO=1 PIPX_DEFAULT_PYTHON=/p pipx run x", {}, False),
+        # An empty value leaves pipx on its own interpreter (Copilot on HCW-NetworkEyes_App#394); a quoted non-empty
+        # one still counts, though the shell reading empties it.
+        ("PIPX_DEFAULT_PYTHON= pipx run x", {}, True),
+        ("PIPX_DEFAULT_PYTHON='' pipx run x", {}, True),
+        ('PIPX_DEFAULT_PYTHON="" pipx run x', {}, True),
+        ('PIPX_DEFAULT_PYTHON="$P" pipx run x', {}, False),
+        ("PIPX_DEFAULT_PYTHON='/opt/py/bin/python3' pipx run x", {}, False),
+        ("env PIPX_DEFAULT_PYTHON= pipx run x", {}, True),
         ('pipx run --python "$P" --spec x x', {}, False),
         ("pipx run --python=/opt/py/bin/python3 x", {}, False),
         ("PIPX_DEFAULT_PYTHON=/p pipx run x", {}, False),
