@@ -2616,10 +2616,10 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   `Image Scan (Trivy)` jobs are the proof, and the web tier was not started against the built image.
 
 ### T-743 — Node.js 26 and Python 3.15, the HCW runtime floors (HCW-HybridCloudWorks#1707)
-- **Status:** Done 2026-11-12 (and (6) on 2026-11-13), except items (4) and (5), which are open. The HCW website's
-  version floors (`scripts/version-floors.json` in saulpatinojr/HCW-HybridCloudWorks, issue 1707 there) ask for the
-  newest Node.js LTS line (26, floor 26.11.0) and the newest Python line (3.15, floor 3.15.0). This repository ran
-  Node.js 24 in the web image and Python 3.14 everywhere.
+- **Status:** Done 2026-11-12 (and (6) and (7) on 2026-11-13), except items (4) and (5), which are open. The HCW
+  website's version floors (`scripts/version-floors.json` in saulpatinojr/HCW-HybridCloudWorks, issue 1707 there) ask
+  for the newest Node.js LTS line (26, floor 26.11.0) and the newest Python line (3.15, floor 3.15.0). This repository
+  ran Node.js 24 in the web image and Python 3.14 everywhere.
 - **(1) Node.js 26.** The six `FROM` lines of `apps/network-assessment-web/Dockerfile` are
   `node:26-trixie-slim@sha256:e6bedef2…` (Node 26.13.1, built 2026-11-11, Node's security release of that day; the
   26.13.0 digest the HCW MigrateOrchestrator images pinned predates it). The two test jobs that run `npm` and `npx`
@@ -2667,6 +2667,16 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   summary step that uses it. The deliberate exceptions in (1) and (2) and the 3.14 leg of (4) are listed in the test,
   each with its reason. ruff now agrees everywhere at 0.17.4 (`pyproject.toml` floor, `uv.lock`, the `Lint & Format`
   job and the pre-commit hook; it had been 0.17.2, 0.17.3, 0.17.1 and 0.15.10).
+- **(7) Done 2026-11-13: the runtime test reads more command forms.** It now also counts `nohup`, `stdbuf`,
+  `timeout <duration>` and a `--` after a wrapper's options (the website copy's list), the script of `bash -c` /
+  `sh -c` run on the runner (not one handed to a container), `yarn`, `pnpm`, `pytest` and `pipx`, and it no longer
+  mistakes `$((1<<k))` for a heredoc, misses a `<<\EOF` heredoc, or loses its place after a `$'...'` string holding
+  `\'`. After review it also reads a `-c` script's last word and options after `-c`, reads a double-quoted `-c`
+  script both ways, lets a set-up step under `a` cover a step under `a && b`, and reads a long run of wrapper options
+  in one way only (a long `stdbuf -oL ...` or `sudo -uuu ...` line used to take seconds or hang). Nothing new was
+  found in this repository's workflows. This file is the Python copy the other HCW Python repositories copy from,
+  and its logic matches the website's JavaScript copy. Not checked by it: that a `pipx` step passes `--python`
+  (pipx otherwise uses the Python it was installed with, the runner image's own even after actions/setup-python).
 - **Not checked here:** no image was built (no Docker daemon in the session that made the change). The Python tests and
   the install of each image's dependency set ran on CPython 3.15.2; the web checks ran on Node.js 26. The pull
   request's `Docker Build Smoke Test`, `Lab Boundary Image` and `Image Scan (Trivy)` jobs and the next `200` run on
