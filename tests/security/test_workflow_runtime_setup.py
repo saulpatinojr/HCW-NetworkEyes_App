@@ -18,7 +18,7 @@ single-quoted one may run over several lines, as a `docker run image bash -c '..
 (`docker run image python ...`, or the first word of a line that continues the one before it). The set-up step must come
 before the first such step. Limits, on purpose: a job that runs in a `container:` uses that image's runtime and is not
 checked; and a script a step calls (`bash scripts/ci/x.sh`) is not read, so a step whose script starts a runtime is
-listed in INDIRECT_RUNTIME (as the website's and HCW-CloudAssessor_App's copies do).
+listed in INDIRECT_RUNTIME (as HCW-CloudAssessor_App's and HCW-CloudCrawler_App's copies do).
 
 A set-up step with its own `if:` may be skipped while a later command still runs on the runner's own interpreter
 (Copilot on HCW-NetworkEyes_AddOn#100), so it covers a later step only when that step's `if:` is the same condition,

@@ -2616,10 +2616,10 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   `Image Scan (Trivy)` jobs are the proof, and the web tier was not started against the built image.
 
 ### T-743 — Node.js 26 and Python 3.15, the HCW runtime floors (HCW-HybridCloudWorks#1707)
-- **Status:** Done 2026-11-12 (and (6) on 2026-11-13), except items (4) and (5), which are open. The HCW website's version floors
-  (`scripts/version-floors.json` in saulpatinojr/HCW-HybridCloudWorks, issue 1707 there) ask for the newest Node.js LTS
-  line (26, floor 26.11.0) and the newest Python line (3.15, floor 3.15.0). This repository ran Node.js 24 in the web
-  image and Python 3.14 everywhere.
+- **Status:** Done 2026-11-12 (and (6) on 2026-11-13), except items (4) and (5), which are open. The HCW website's
+  version floors (`scripts/version-floors.json` in saulpatinojr/HCW-HybridCloudWorks, issue 1707 there) ask for the
+  newest Node.js LTS line (26, floor 26.11.0) and the newest Python line (3.15, floor 3.15.0). This repository ran
+  Node.js 24 in the web image and Python 3.14 everywhere.
 - **(1) Node.js 26.** The six `FROM` lines of `apps/network-assessment-web/Dockerfile` are
   `node:26-trixie-slim@sha256:e6bedef2…` (Node 26.13.1, built 2026-11-11, Node's security release of that day; the
   26.13.0 digest the HCW MigrateOrchestrator images pinned predates it). The two test jobs that run `npm` and `npx`

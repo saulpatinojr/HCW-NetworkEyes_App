@@ -40,7 +40,7 @@ repos:
 
   # --- Python linting ---
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.17.4  # same ruff as uv.lock and the lint job in 300-test-codebase.yml; move all three together
+    rev: v0.17.4  # same ruff as uv.lock, the lint job in 300-test-codebase.yml and pyproject's floor; move them together
     hooks:
       - id: ruff
         name: ruff lint

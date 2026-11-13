@@ -140,7 +140,7 @@ jobs:
         with:
           path: ~/.cache/pip
           key: lint-${{ hashFiles('pyproject.toml') }}
-      - run: pip install "ruff==0.17.4"  # same version as uv.lock and .pre-commit-config.yaml; move all three together
+      - run: pip install "ruff==0.17.4"  # same version as uv.lock, .pre-commit-config.yaml and pyproject's floor; move them together
       - name: ruff check (lint)
         run: ruff check . --output-format=github
       - name: ruff format check
