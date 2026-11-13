@@ -2616,10 +2616,10 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   `Image Scan (Trivy)` jobs are the proof, and the web tier was not started against the built image.
 
 ### T-743 — Node.js 26 and Python 3.15, the HCW runtime floors (HCW-HybridCloudWorks#1707)
-- **Status:** Done 2026-11-12, except items (4) and (5), which are open. The HCW website's version floors
-  (`scripts/version-floors.json` in saulpatinojr/HCW-HybridCloudWorks, issue 1707 there) ask for the newest Node.js LTS
-  line (26, floor 26.11.0) and the newest Python line (3.15, floor 3.15.0). This repository ran Node.js 24 in the web
-  image and Python 3.14 everywhere.
+- **Status:** Done 2026-11-12 (and (6) on 2026-11-13), except items (4) and (5), which are open. The HCW website's
+  version floors (`scripts/version-floors.json` in saulpatinojr/HCW-HybridCloudWorks, issue 1707 there) ask for the
+  newest Node.js LTS line (26, floor 26.11.0) and the newest Python line (3.15, floor 3.15.0). This repository ran
+  Node.js 24 in the web image and Python 3.14 everywhere.
 - **(1) Node.js 26.** The six `FROM` lines of `apps/network-assessment-web/Dockerfile` are
   `node:26-trixie-slim@sha256:e6bedef2…` (Node 26.13.1, built 2026-11-11, Node's security release of that day; the
   26.13.0 digest the HCW MigrateOrchestrator images pinned predates it). The two test jobs that run `npm` and `npx`
@@ -2649,7 +2649,9 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   `REQUIRED_CHECKS` in `390-repository-admin.yml` and to its test. Next: the owner runs `390 · repository-admin`,
   task `protect-main`, with apply, so the ruleset requires the 3.15 check; then one pull request removes 3.14 from the
   matrix, from `REQUIRED_CHECKS` and its test, and raises `requires-python` (both `pyproject.toml` files), ruff's
-  target and ty's version to 3.15, followed by a `protect-main` run with apply and `allow_weakening` ticked.
+  target and ty's version to 3.15, followed by a `protect-main` run with apply and `allow_weakening` ticked. The same
+  pull request removes the 3.14 entry from `BELOW_FLOOR_ALLOWED` in `tests/security/test_workflow_runtime_setup.py`
+  (the test fails until it does, because the entry would then name nothing).
 - **(5) Open: two small follow-ups.** (a) The lab stage of the root `Dockerfile` hard-codes
   `PYTHONPATH=/install-lab/lib/python3.15/site-packages`, so the next Python minor must change it by hand; derive it
   at build time instead (for example with Python's `sysconfig.get_path("purelib", vars={"base": "/install-lab"})`).
@@ -2657,6 +2659,14 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   `allowScripts`: `@prisma/client` 6.19.3, `@prisma/engines` 6.19.3, `prisma` 6.19.3 and `unrs-resolver` 1.12.2. They
   still run today; decide which to allow (`npm install-scripts approve <pkg>`) before a later npm stops running them,
   and check that the Dockerfile's Prisma engine checks still pass.
+- **(6) Done 2026-11-13: the runtime test and one ruff version.** `tests/security/test_workflow_runtime_setup.py`, a
+  copy of the NetworkEyes lab build's test with the same logic, fails any workflow step that runs `node`, `npm`, `npx`,
+  `python`, `pip` or `uv` before a set-up step that is sure to have run, or a set-up step that asks for less than the
+  floor. It found two gaps, both fixed: `verify` in `310` ran `python3` through `scripts/ci/find_release_image.sh`
+  with no set-up step (now Python 3.15), and the set-up step of `secret-scan` in `300` lacked the `if: always()` of the
+  summary step that uses it. The deliberate exceptions in (1) and (2) and the 3.14 leg of (4) are listed in the test,
+  each with its reason. ruff now agrees everywhere at 0.17.4 (`pyproject.toml` floor, `uv.lock`, the `Lint & Format`
+  job and the pre-commit hook; it had been 0.17.2, 0.17.3, 0.17.1 and 0.15.10).
 - **Not checked here:** no image was built (no Docker daemon in the session that made the change). The Python tests and
   the install of each image's dependency set ran on CPython 3.15.2; the web checks ran on Node.js 26. The pull
   request's `Docker Build Smoke Test`, `Lab Boundary Image` and `Image Scan (Trivy)` jobs and the next `200` run on
