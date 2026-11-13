@@ -11,7 +11,12 @@ when it is given a `python-version` at or above the floor. `yarn` and `pnpm` are
 (https://github.com/pypa/pipx/blob/main/src/pipx/interpreter.py, `get_default_python`). GitHub's Ubuntu runner images
 install pipx with the image's own python3 (`python3 -m pip install pipx`, actions/runner-images#14654), so after
 actions/setup-python a `pipx` step still uses the image's Python unless it is given `--python` (actions/setup-python's
-`python-path` output) or `PIPX_DEFAULT_PYTHON`. This test does not read that part.
+`python-path` output) or `PIPX_DEFAULT_PYTHON`. So a step that runs `pipx` in command position must also choose its
+interpreter: `--python` among that pipx command's own words (`pipx run --python "$PYTHON_PATH" ...`), or
+`PIPX_DEFAULT_PYTHON` set in front of it (`PIPX_DEFAULT_PYTHON=/p pipx ...`) or in the step's, job's or workflow's
+`env:` (Copilot on HCW-NetworkEyes_App#393). A step that does not is reported, named; one kept that way on purpose is
+listed, with its reason, in PIPX_ALLOWED. An `export PIPX_DEFAULT_PYTHON=...` earlier in the script is not read; use
+`env:` instead.
 
 A command counts when it is in command position on a line of a `run:` step: at the start, after `$(`, `<(`, a backtick,
 `(`, `{`, `|`, `&` or `;`, after a `case` pattern at the start of a line (`check)`), after leading `NAME=value`
@@ -25,7 +30,8 @@ single-quoted one may run over several lines, as a `docker run image bash -c '..
 (`docker run image python ...`, `command -v node`, `sudo -u node whoami`, or the first word of a line that continues
 the one before it). One more quoted string is read: the script of a shell that is itself in command position and
 given `-c` (`bash -c 'node x'`, `sh -euo pipefail -c "..."`, `sudo bash -lc '...'`, `bash -c -- '...'`). That script
-runs on the runner, so its commands count, while the same words after `docker run image` stay a container's. A
+runs on the runner, so its commands count, while the same words after `docker run image` stay a container's; an
+unquoted script is the one word after `-c` (`bash -c node x.js` runs `node`, while `bash -c echo node` does not). A
 double-quoted `-c` script is read both ways: as the outer shell reads it (its `$(...)` and backticks run first) and as
 the inner shell does. The set-up step must come before the first such step. Limits, on purpose: a job that runs in a
 `container:` uses that image's runtime and is not checked; a script a step calls (`bash scripts/ci/x.sh`) is not read,
@@ -36,8 +42,9 @@ x')"`) is not read, because a double-quoted string is kept as text.
 A set-up step with its own `if:` may be skipped while a later command still runs on the runner's own interpreter
 (Copilot on HCW-NetworkEyes_AddOn#100), so it covers a later step only when that step's `if:` makes the set-up's true:
 the same condition, one of the terms the set-up's condition joins with a top-level `||`, or a condition that joins one
-of those with a top-level `&&` (a step under `a && b` runs only when `a` holds, so a set-up step under `a || c` has
-run; Copilot on HCW-HybridCloudWorks#1716). Conditions are compared without a surrounding `${{ }}`, with runs of
+of those with a top-level `&&` and has no top-level `||` of its own (a step under `a && b` runs only when `a` holds, so
+a set-up step under `a || c` has run; Copilot on HCW-HybridCloudWorks#1716; but `a && b || d` can run through `d`
+alone, so it is not split; Copilot on HCW-NetworkEyes_App#393). Conditions are compared without a surrounding `${{ }}`, with runs of
 spaces made one, and a term without one pair of parentheses around the whole of it. Equal text means equal value only
 for values that stay fixed during a job (`matrix`, `github`, `inputs`, `needs`, `vars`); a condition on `steps.*` or
 `env.*` set between the two steps could differ, so prefer those fixed values in such conditions. A set-up step with no
@@ -116,6 +123,10 @@ INDIRECT_RUNTIME: dict[str, str] = {
     ),
 }
 
+# Steps that run `pipx` without choosing its interpreter (`--python` or PIPX_DEFAULT_PYTHON) on purpose, keyed by
+# "file > job > step name > pipx", each with its reason. Empty: every pipx step here chooses one.
+PIPX_ALLOWED: dict[str, str] = {}
+
 # Set-up steps that ask for a version below the floor on purpose, keyed by the problem `floor_problems` reports, each
 # with its reason. A new entry needs a reason a reviewer can check and a record of when it goes away.
 BELOW_FLOOR_ALLOWED: dict[str, str] = {
@@ -162,6 +173,26 @@ def _options_of(takes: str) -> str:
     )
 
 
+# A shell option (`-e`, `-o pipefail`, `-O extglob`, `--rcfile /tmp/rc`, `--login` or the `--` that ends them),
+# `letters` being the letters a short option may hold. The options that take an argument (`-o`, `-O`, `--rcfile`,
+# `--init-file`) never take one starting with `-`, so an option can be read only one way (otherwise `-o -o -o ...`
+# makes the match try every split).
+def _shell_option(letters: str) -> str:
+    return (
+        rf"(?:[-+]{letters}*[oO]\s+[^\s-][\w-]*|--(?:rcfile|init-file)\s+[^\s-]\S*"
+        rf"|[-+]{letters}+|--[\w-]+|--(?=\s))"
+    )
+
+
+# A shell given `-c`, with its options. The options before it hold no `c`, so the first short option that holds one
+# is the `-c` (`-c`, `-lc`, `-ec`), and a long run of options can be read only one way.
+SHELL_GIVEN_C = (
+    rf"(?:ba|da|k|z)?sh(?:\s+{_shell_option('(?:(?!c)[A-Za-z])')})*\s+-(?:(?!c)[A-Za-z])*c[A-Za-z]*"
+    rf"(?:\s+{_shell_option('[A-Za-z]')})*\s+"
+)
+# A shell given `-c` is also a word that runs the next one: an unquoted script is that one word (`bash -c node x.js`
+# runs `node`, with `x.js` as its `$0`). A quoted script is read by `_shell_text` instead.
+SHELL_C = r"(?:[^\s=]*/)?" + SHELL_GIVEN_C
 WRAPPERS = "|".join(
     [
         rf"timeout{_options_of(takes)}\s+\d+(?:\.\d+)?[smhd]?\s+"
@@ -169,7 +200,11 @@ WRAPPERS = "|".join(
         else rf"{word}{_options_of(takes)}\s+"
         for word, takes in WRAPPER_OPTIONS.items()
     ]
-    + [r"command(?:\s+(?:-p|--(?=\s)))*\s+", r"(?:if|then|else|elif|do|while|until|!)\s+"]
+    + [
+        r"command(?:\s+(?:-p|--(?=\s)))*\s+",
+        r"(?:if|then|else|elif|do|while|until|!)\s+",
+        SHELL_C,
+    ]
 )
 # A `case` pattern that ends at the start of a line (`check)`, `a|b)`), after which a command may follow.
 CASE_PATTERN = r"^[^()\s|]+(?:\|[^()\s|]+)*\)\s*"
@@ -196,19 +231,14 @@ COMMAND = {
 }
 # A shell in command position given a script with `-c` (`bash -c '...'`, `sh -euo pipefail -c "..."`, `sudo bash -lc
 # '...'`, `bash -c -- '...'`): the script runs on the runner too, so its commands count. The same words after
-# `docker run image` are not in command position, so a container's script stays unread. An option is `-e`,
-# `-o pipefail`, `-O extglob`, `--rcfile /tmp/rc`, `--login` or the `--` that ends them; the options that take an
-# argument (`-o`, `-O`, `--rcfile`, `--init-file`) never take one starting with `-`, so an option can be read only one
-# way (otherwise `-o -o -o ...` makes the match try every split).
-SHELL_OPTION = (
-    r"(?:[-+][A-Za-z]*[oO]\s+[^\s-][\w-]*|--(?:rcfile|init-file)\s+[^\s-]\S*"
-    r"|[-+][A-Za-z]+|--[\w-]+|--(?=\s))"
-)
-SHELL_SCRIPT = re.compile(
-    START
-    + PATH
-    + rf"(?:ba|da|k|z)?sh(?:\s+{SHELL_OPTION})*?\s+-[A-Za-z]*c[A-Za-z]*(?:\s+{SHELL_OPTION})*\s+$"
-)
+# `docker run image` are not in command position, so a container's script stays unread.
+SHELL_SCRIPT = re.compile(START + PATH + SHELL_GIVEN_C + "$")
+# `pipx` in command position, with what comes before it (its assignments and wrappers) and its own words, up to the
+# end of the command (`;`, `&`, `|` or `)`). It has chosen its interpreter when `--python` is among those words or
+# `PIPX_DEFAULT_PYTHON=` is among the assignments in front of it.
+PIPX = re.compile(rf"(?P<before>{START}){PATH}pipx(?=\s|$)(?P<words>[^;&|)]*)")
+PIPX_PYTHON_OPTION = re.compile(r"(?:^|\s)--python(?:=|\s|$)")
+PIPX_DEFAULT_ASSIGNMENT = re.compile(r"(?<![\w-])PIPX_DEFAULT_PYTHON=")
 # Where `((` opens an arithmetic command rather than two subshells: at the start of a command.
 ARITHMETIC_COMMAND = re.compile(r"(?:^|[;&|({]|\b(?:then|else|do|if|elif|while|until|for))\s*$")
 # The escapes `$'...'` turns into other characters; any other `\x` is left as it is.
@@ -611,9 +641,9 @@ def _without_status(expression: str) -> str:
 def _conditions_cover(given: str, wanted: str) -> bool:
     """True when a set-up step with condition `given` runs whenever a later step with condition `wanted` does: after
     every job status the later step may run after, the set-up step surely runs, or, status terms aside, the later
-    condition is the same, is one of the set-up condition's top-level `||` terms, or is joined by a top-level `&&`
-    with one of them (a step that runs only when `a && b` holds runs only when `a` holds, so a set-up step under
-    `a || c` has run)."""
+    condition is the same, is one of the set-up condition's top-level `||` terms, or, when it has no top-level `||`
+    of its own, joins one of them with a top-level `&&` (a step that runs only when `a && b` holds runs only when `a`
+    holds, so a set-up step under `a || c` has run; `a && b || d` can run through `d`, so it is not split)."""
     for status in sorted(STATUSES):
         if _runs_after(wanted, status) is False:
             continue
@@ -625,9 +655,11 @@ def _conditions_cover(given: str, wanted: str) -> bool:
             setup_terms = {
                 _without_outer_parentheses(term) for term in [rest, *_top_level_terms(rest, "||")]
             }
-            step_terms = [
-                _without_outer_parentheses(term) for term in [need, *_top_level_terms(need, "&&")]
-            ]
+            # Split on `&&` only when the later condition has no top-level `||`: `a && c || d` can run through `d`.
+            and_terms = (
+                _top_level_terms(need, "&&") if len(_top_level_terms(need, "||")) == 1 else []
+            )
+            step_terms = [_without_outer_parentheses(term) for term in [need, *and_terms]]
             if not (rest == "" or any(term in setup_terms for term in step_terms)):
                 return False
     return True
@@ -667,6 +699,33 @@ def unset_steps(
                 if not covered:
                     found.append(key)
     return found
+
+
+def pipx_without_python(run: str | None, env: dict) -> bool:
+    """True when a run script runs `pipx` in command position without choosing its interpreter: no `--python` in its
+    own words, no `PIPX_DEFAULT_PYTHON=` in front of it, and none in `env` (the step's, job's and workflow's)."""
+    if str(env.get("PIPX_DEFAULT_PYTHON") or "").strip():
+        return False
+    return any(
+        not (
+            PIPX_DEFAULT_ASSIGNMENT.search(found["before"])
+            or PIPX_PYTHON_OPTION.search(found["words"])
+        )
+        for line in _shell_text(run or "").split("\n")
+        for found in PIPX.finditer(line.strip())
+    )
+
+
+def pipx_problems(file: str, jobs: dict[str, dict]) -> list[str]:
+    """The steps of one workflow that run `pipx` without choosing its interpreter: "file > job > step > pipx". A job
+    in a `container:` is skipped, as `unset_steps` skips it."""
+    return [
+        step_key(file, name, step, i, "pipx")
+        for name, job in jobs.items()
+        if not job["container"]
+        for i, step in enumerate(job["steps"])
+        if pipx_without_python(step.get("run"), {**job["env"], **(step.get("env") or {})})
+    ]
 
 
 def _resolved(value: str, step: dict, job: dict, depth: int = 0) -> list[str] | None:
@@ -897,6 +956,10 @@ def test_wrapper_near_misses_are_not_found(line, kind):
         ("FOO='a b' bash -c 'node x.js'", "node"),
         # The script's last word is still a command, with nothing after it.
         ("bash -c 'pytest'", "python"),
+        # An unquoted script is the one word after `-c` (Copilot on HCW-HybridCloudWorks#1716).
+        ("bash -c node x.js", "node"),
+        ("sh -c python3 x.py", "python"),
+        ("sudo bash -lc -e pytest", "python"),
         ("sh -c 'node'", "node"),
         ('bash -c "cd web && yarn"', "node"),
         ("bash -c 'npm ci && pytest'", "python"),
@@ -938,6 +1001,8 @@ def test_a_script_given_to_a_shell_on_the_runner_is_read(line, kind):
         ("ssh -c aes256-ctr host 'node x.js'", "node"),
         ("echo bash -c 'python3 x.py'", "python"),
         ('docker exec web sh -c "python3 x.py"', "python"),
+        ("bash -c echo node", "node"),
+        ("docker run img bash -c node x.js", "node"),
         ("bash -c 'echo \"$0\"' python3", "python"),
     ],
 )
@@ -1173,6 +1238,12 @@ def test_a_set_up_step_with_its_own_condition_covers_only_steps_it_always_runs_b
         ("a || b", "c && (a)", True),
         ("a && b", "a && c", False),
         ("a || b", "c && d", False),
+        # The later condition is split on `&&` only when it has no top-level `||` (Copilot on
+        # HCW-NetworkEyes_App#393): `a && c || d` can run through `d` alone.
+        ("a || b", "a && c || d", False),
+        ("a || b", "d || a && c", False),
+        ("a || b", "(a && c) || d", False),
+        ("a || b", "a && (c || d)", True),
         # The job's status: a set-up step with no `if:` runs only after success (the unwritten `success()`).
         ("", "", True),
         ("", "always()", False),
@@ -1366,6 +1437,73 @@ def test_an_indirect_step_counts_as_running_its_runtime():
     assert unset_steps("x.yml", jobs, indirect={}) == []
 
 
+@pytest.mark.parametrize(
+    ("run", "env", "flagged"),
+    [
+        ("pipx run --spec checkov==3.3.30 checkov -d .", {}, True),
+        ("cd y && pipx install zizmor", {}, True),
+        ("bash -c 'pipx run x'", {}, True),
+        ('pipx run --python "$P" a && pipx run b', {}, True),
+        ("MY_PIPX_DEFAULT_PYTHON=/p pipx run x", {}, True),
+        ("pipx run x", {"PIPX_DEFAULT_PYTHON": ""}, True),
+        ('pipx run --python "$P" --spec x x', {}, False),
+        ("pipx run --python=/opt/py/bin/python3 x", {}, False),
+        ("PIPX_DEFAULT_PYTHON=/p pipx run x", {}, False),
+        ("env PIPX_DEFAULT_PYTHON=/p pipx run x", {}, False),
+        ("pipx run x", {"PIPX_DEFAULT_PYTHON": "/p"}, False),
+        ("echo pipx", {}, False),
+        ("docker run img pipx run x", {}, False),
+        ("python3 -m pip install pipx", {}, False),
+    ],
+)
+def test_a_pipx_command_must_choose_its_python(run, env, flagged):
+    assert pipx_without_python(run, env) is flagged
+
+
+def test_pipx_steps_are_read_with_the_step_job_and_workflow_env():
+    text = textwrap.dedent(
+        """\
+        name: x
+        on: push
+        env:
+          FROM_WORKFLOW: "1"
+        jobs:
+          bare:
+            runs-on: ubuntu-26.04
+            steps:
+              - name: Scan
+                run: pipx run --spec checkov==3.3.30 checkov -d .
+          step-env:
+            runs-on: ubuntu-26.04
+            steps:
+              - name: Scan
+                env:
+                  PIPX_DEFAULT_PYTHON: ${{ steps.python.outputs.python-path }}
+                run: pipx run checkov -d .
+          job-env:
+            runs-on: ubuntu-26.04
+            env: { PIPX_DEFAULT_PYTHON: /opt/py/bin/python3 }
+            steps:
+              - run: pipx run checkov -d .
+          option:
+            runs-on: ubuntu-26.04
+            steps:
+              - name: Scan
+                env:
+                  PYTHON_PATH: ${{ steps.python.outputs.python-path }}
+                run: pipx run --python "$PYTHON_PATH" --spec checkov==3.3.30 checkov -d .
+          boxed:
+            runs-on: ubuntu-26.04
+            container: python:3.15
+            steps:
+              - run: pipx run checkov -d .
+        """
+    )
+    assert pipx_problems("x.yml", read_jobs(text)) == ["x.yml > bare > Scan > pipx"]
+    workflow_env = text.replace('FROM_WORKFLOW: "1"', "PIPX_DEFAULT_PYTHON: /opt/py/bin/python3")
+    assert pipx_problems("x.yml", read_jobs(workflow_env)) == []
+
+
 FILES = sorted(p for p in WORKFLOWS.iterdir() if p.suffix in (".yml", ".yaml"))
 UNSET = [
     entry for p in FILES for entry in unset_steps(p.name, read_jobs(p.read_text(encoding="utf-8")))
@@ -1374,6 +1512,11 @@ FLOOR_PROBLEMS = [
     problem
     for p in FILES
     for problem in floor_problems(p.name, read_jobs(p.read_text(encoding="utf-8")))
+]
+PIPX_PROBLEMS = [
+    entry
+    for p in FILES
+    for entry in pipx_problems(p.name, read_jobs(p.read_text(encoding="utf-8")))
 ]
 
 
@@ -1399,11 +1542,18 @@ def test_every_step_that_runs_node_or_python_comes_after_its_version_is_set_up()
     assert [entry for entry in UNSET if entry not in RUNNER_DEFAULT_ALLOWED] == []
 
 
+def test_every_step_that_runs_pipx_chooses_its_python():
+    assert [entry for entry in PIPX_PROBLEMS if entry not in PIPX_ALLOWED] == []
+
+
 def test_every_allowed_exception_still_exists():
     """So the list cannot hide a step that has since changed, and every entry says why."""
     for entry, reason in RUNNER_DEFAULT_ALLOWED.items():
         assert isinstance(reason, str) and reason.strip(), f"{entry}: an exception needs a reason"
         assert entry in UNSET, entry
+    for entry, reason in PIPX_ALLOWED.items():
+        assert isinstance(reason, str) and reason.strip(), f"{entry}: an exception needs a reason"
+        assert entry in PIPX_PROBLEMS, entry
 
 
 def test_every_indirect_step_and_below_floor_exception_still_exists_and_has_a_reason():
