@@ -83,7 +83,7 @@ scripts/              Repository guards (documentation model, module graph, shap
 tests/                unit/ and integration/
 docs/                 Long-form documentation (no pages yet; see the Documentation map) and
                       roles/, the custom Azure role definition as a JSON file
-.github/workflows/    200 build images · 300 test · 310 release · 320 engine release · 370 registry cleanup · 390 repository admin
+.github/workflows/    200 build images · 300 test · 310 release · 320 engine release · 370 registry cleanup · 380 draw.io pin check · 390 repository admin
 local/agent-config/   Vendored agent configuration — gitignored, not project source
 ```
 
@@ -251,7 +251,7 @@ licence file for it and has not verified the statement (`REVIEW.md`, R-020). The
   where a consumer will look; nobody is notified — see [`CLAUDE.md`](CLAUDE.md).
 - **Numbered workflows.** Workflows use numeric bands:
   `000` bootstrap, `100` validation, `200` build, `300` test, release, and operations.
-  This repository has `200`, `300`, `310`, `320` (the engine release) and `370`, plus the one owner-approved
+  This repository has `200`, `300`, `310`, `320` (the engine release), `370` and `380` (the weekly draw.io pin check), plus the one owner-approved
   exception `390` (repository admin; manual, dry-run by default). Within a band, the
   number is stable — reference workflows by filename, not by position, and never renumber.
 - **Never hardcode a value at a call site.** Regions, endpoints, account IDs, and every other

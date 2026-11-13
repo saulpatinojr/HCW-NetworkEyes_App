@@ -900,6 +900,16 @@ order; do not reorder it.
   has no such attribute, and `core/throttle.py:78` can `raise last_exc` while it is still `None`
   (currently unreachable, but only by accident of the loop's structure). When the count reaches
   zero, delete the `stages: [manual]` line from the `ty` hook so it gates.
+- **Recount 2026-11-13 (HCW-HybridCloudWorks#1707):** with every extra installed (`uv run --locked --all-extras ty
+  check`, CPython 3.15.2, `ty` 0.0.98 from `uv.lock`; `pyproject.toml` asks for `ty>=0.0.91`), the count is **14**, not
+  2: the two T-413 `project.agents` lines, plus `invalid-argument-type` in `analysis_engine.py:212`,
+  `chat_agent.py:607,629`, the engine's `discovery/resource_graph.py:546`, `normalize/resource_graph.py:869` and
+  `rules/registry.py:468`; `invalid-assignment` in `rules/registry.py:387`; `unresolved-attribute` in the engine's
+  `discovery/resource_graph.py:566` and `azure_discovery.py:1874`; `invalid-attribute-override` in
+  `core/findings_schema.py:111`; `import-not-found` (`ManagementGroupsAPI`) in `azure_discovery.py:398`; and
+  `no-matching-overload` in `azure_discovery.py:2287`. Not yet worked out which come from the newer `ty` and which from
+  newer SDK stubs or code; the status below no longer holds until they are triaged. The `.pre-commit-config.yaml`
+  comment above the `ty` hook no longer gives a count and points here.
 - **Status:** Done bar an external blocker — **98 → 2**, and the 2 that remain are the T-413 SDK
   stub artifact described at the end of this entry, not project defects. The one remaining change
   (dropping `stages: [manual]` so the hook gates) is blocked on the `azure-ai-projects` SDK

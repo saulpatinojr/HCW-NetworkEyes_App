@@ -2,7 +2,8 @@
 # Install: pre-commit install
 # Run manually: pre-commit run --all-files
 #
-# All hooks are pinned to SHA (supply chain security, consistent with CI workflow pins)
+# Third-party hooks are pinned to a release tag (`rev:`), not to a commit SHA as the
+# workflows' actions are. The detect-secrets job in 300-test-codebase.yml runs this file.
 
 repos:
   # --- Secret detection ---
@@ -71,20 +72,18 @@ repos:
         name: no direct commit to main
 
   # --- Type checking (TODO.md T-402) ---
-  # `repo: local` / `language: system` so this runs the exact `ty` version
-  # pinned in pyproject.toml's `dev` group — no second place to bump, and no
+  # `repo: local` / `language: system` so this runs the `ty` that uv.lock
+  # locks for pyproject.toml's `dev` extra — no second place to bump, and no
   # third-party rev to pin.
   #
-  # NOT gating yet: `ty check` reports 2 diagnostics, down from 96. T-402 is
-  # explicit that ignore lists must not be widened to force a green first run,
-  # so the backlog was tracked in TODO.md T-410 and fixed instead — no
-  # suppressions were used to get here.
-  #
-  # The last 2 are both `AIProjectClient.agents` in foundry_agent_client.py.
-  # That attribute exists and works (verified at runtime); the azure-ai-projects
-  # 1.x stub annotates it `-> AgentsClient  # type: ignore[name-defined]`
-  # because the companion class is imported lazily, so the checker cannot
-  # resolve it. See TODO.md T-413. Run the hook with:
+  # NOT gating yet: `ty check` still reports diagnostics. T-402 is explicit
+  # that ignore lists must not be widened to force a green first run, so the
+  # backlog is tracked in TODO.md T-410 (the current count is kept there, not
+  # here) and fixed rather than suppressed. Two of them are
+  # `AIProjectClient.agents` in foundry_agent_client.py: that attribute exists
+  # and works (verified at runtime), but the azure-ai-projects 1.x stub
+  # annotates it `-> AgentsClient  # type: ignore[name-defined]`, so the
+  # checker cannot resolve it (TODO.md T-413). Run the hook with:
   #
   #     pre-commit run ty --hook-stage manual --all-files
   #
