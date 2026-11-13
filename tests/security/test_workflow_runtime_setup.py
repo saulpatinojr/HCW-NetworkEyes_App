@@ -150,10 +150,12 @@ ASSIGNMENT = r"""[A-Za-z_][A-Za-z0-9_]*=(?:"(?:[^"\\]|\\.)*"|'[^']*'|[^\s"'])*\s
 # Words that run the next word, each with the options it may take first: the letters of the options that take an
 # argument (`sudo -u nobody`, `nice -n 10`, `stdbuf -oL`), any other `-x`/`--long` flag, and the `--` that ends the
 # options (`env -- node`). `timeout` also takes its duration (`timeout 60 node`, `timeout -k 5 1m python3`).
-# `command` only with `-p` or `--`, because `command -v node` looks node up and runs nothing. The same table as the
-# website's copy.
+# `command` only with `-p` or `--`, because `command -v node` looks node up and runs nothing. `env -S`
+# (`--split-string`) is read as a flag, not as one that takes a value, because its value is the command it runs:
+# unquoted, the next word is in command position (`env -S node x.js`); quoted, see ENV_SPLIT_SCRIPT. The same table as
+# the website's copy.
 WRAPPER_OPTIONS = {
-    "env": "uCS",
+    "env": "uC",
     "sudo": "ugCDhprtU",
     "xargs": "InPLdaEs",
     "exec": "a",
@@ -168,7 +170,7 @@ WRAPPER_OPTIONS = {
 # `--long[=value]` is a flag, so each long option too can be read only one way (Copilot on
 # HCW-MigrateOrchestrator_AddOn#74). The same table as the website's copy.
 WRAPPER_LONG_OPTIONS = {
-    "env": ("unset", "chdir", "split-string"),
+    "env": ("unset", "chdir"),
     "sudo": (
         "user",
         "group",
@@ -271,15 +273,24 @@ COMMAND = {
 # '...'`, `bash -c -- '...'`): the script runs on the runner too, so its commands count. The same words after
 # `docker run image` are not in command position, so a container's script stays unread.
 SHELL_SCRIPT = re.compile(START + PATH + SHELL_GIVEN_C + "$")
+# `env -S` (`--split-string`) in command position: env splits its value into words and runs them, so a quoted value
+# there is read as a script, like a `-c` shell's (`env -S 'node x.js'`, `env --split-string='python3 x.py'`; Copilot
+# on HCW-MigrateOrchestrator_AddOn#74). An unquoted value is the next word, which is in command position already.
+ENV_SPLIT_SCRIPT = re.compile(
+    START
+    + PATH
+    + "env"
+    + _options_of(WRAPPER_OPTIONS["env"], WRAPPER_LONG_OPTIONS["env"])
+    + r"\s+(?:-(?:(?![uCS])[A-Za-z])*S|--split-string=?)\s*$"
+)
 # `pipx` in command position, with what comes before it (its assignments and wrappers) and its words, up to the end
 # of the command (`;`, `&`, `|` or `)`). It has chosen its interpreter when `--python` is one of pipx's own options
 # (see `_pipx_option_chooses_python`) or `PIPX_DEFAULT_PYTHON` is one of the assignments in front of it.
 PIPX = re.compile(rf"(?P<before>{START}){PATH}pipx(?=\s|$)(?P<words>[^;&|)]*)")
-# An assignment word (`NAME=value`, the value plain, quoted or both) that starts a word, as ASSIGNMENT reads one: so in
-# `FOO=PIPX_DEFAULT_PYTHON=/p` the name is FOO, and the rest is FOO's value.
-ASSIGNMENT_WORD = re.compile(
-    r"""(?:^|(?<=[\s;&|({`]))([A-Za-z_][A-Za-z0-9_]*)=((?:"(?:[^"\\]|\\.)*"|'[^']*'|[^\s"'])*)(?=\s|$)"""
-)
+# One word of a command as `_shell_text` leaves it: plain text and quoted strings run together. The first word in
+# front of a command may start with what opened it (`(`, `$(`, `&&`, `;`), which is not part of the word.
+WORD = re.compile(r"""(?:"(?:[^"\\]|\\.)*"|'[^']*'|[^\s"'])+""")
+OPENING = re.compile(r"^(?:[$<]?\(|[`{|;&])+")
 # pipx's options that take a value as the next word, so that word is not read as an option or as the app's name.
 PIPX_VALUE_OPTIONS = {
     "--spec",
@@ -381,10 +392,10 @@ def _shell_text(run: str) -> str:
         return "".join(reversed(tail))
 
     def quoted(script: str, text: str) -> None:
-        """Add a quoted string as `text`; a `-c` script also as the inner shell reads it. The outer reading stays,
-        because the outer shell runs a `$(...)` or backtick in a double-quoted script before the inner shell starts
-        (`bash -c "echo '$(node x)'"`)."""
-        is_script = SHELL_SCRIPT.search(line().lstrip())
+        """Add a quoted string as `text`; a `-c` script (or an `env -S` value) also as the inner shell reads it. The
+        outer reading stays, because the outer shell runs a `$(...)` or backtick in a double-quoted script before the
+        inner shell starts (`bash -c "echo '$(node x)'"`)."""
+        is_script = SHELL_SCRIPT.search(line().lstrip()) or ENV_SPLIT_SCRIPT.search(line().lstrip())
         out.append(f"{text}\n{_shell_text(script)}\n:" if is_script else text)
 
     while i < n:
@@ -866,30 +877,76 @@ def _pipx_option_chooses_python(words: str) -> bool:
     return False
 
 
-def _chooses_default_python(before: str) -> bool:
-    """Whether the assignments in front of `pipx` set PIPX_DEFAULT_PYTHON to something: an empty value
-    (`PIPX_DEFAULT_PYTHON= pipx`, `PIPX_DEFAULT_PYTHON='' pipx`, `PIPX_DEFAULT_PYTHON=''"" pipx`) leaves pipx on its own
-    interpreter. `_shell_text` writes an empty quoted string as `''` or `""` and any other as `'_'` or `"_"`, so a value
-    made only of empty quotes is empty. The last assignment of the name wins, as in the shell."""
-    chosen = False
-    for m in ASSIGNMENT_WORD.finditer(before):
-        if m[1] == "PIPX_DEFAULT_PYTHON":
-            chosen = re.sub(r"''|\"\"", "", m[2]) != ""
+def _local_default_python(before: str) -> bool | None:
+    """What the words in front of `pipx` do to PIPX_DEFAULT_PYTHON, read in order, the last one that touches it winning
+    as in the shell: True when an assignment sets it to something; False when one sets it empty
+    (`PIPX_DEFAULT_PYTHON=`, `PIPX_DEFAULT_PYTHON=''`, `PIPX_DEFAULT_PYTHON=''""`), or `env` unsets it (`-u`,
+    `--unset`) or clears the whole environment (`-i`, `-`, `--ignore-environment`); None when none of them touches it,
+    so the inherited value (the step's, job's or workflow's `env:`) applies (Copilot on HCW-NetworkEyes_App#394).
+    `_shell_text` writes an empty quoted string as `''` or `""` and any other as `'_'` or `"_"`, so a value made only of
+    empty quotes is empty."""
+    chosen: bool | None = None
+    in_env = False  # reading the options of an `env` word
+    following = (
+        ""  # the next word is the value of `-u`/`--unset` ("unset") or of `-C`/`--chdir` ("skip")
+    )
+    for word in (OPENING.sub("", w) for w in WORD.findall(before)):
+        # An assignment word (`NAME=value`): in `FOO=PIPX_DEFAULT_PYTHON=/p` the name is FOO, and the rest its value.
+        assignment = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)=(.*)", word, re.DOTALL)
+        if following:
+            if following == "unset" and word == "PIPX_DEFAULT_PYTHON":
+                chosen = False
+            following = ""
+        elif assignment:
+            if assignment[1] == "PIPX_DEFAULT_PYTHON":
+                chosen = re.sub(r"''|\"\"", "", assignment[2]) != ""
+            in_env = False
+        elif re.fullmatch(r"(?:\S*/)?env", word):
+            in_env = True
+        elif not in_env or word == "--":
+            in_env = False
+        elif word in ("-", "--ignore-environment"):
+            chosen = False
+        elif word in ("--unset", "--chdir"):
+            following = "unset" if word == "--unset" else "skip"
+        elif word.startswith("--"):
+            if word == "--unset=PIPX_DEFAULT_PYTHON":
+                chosen = False
+        elif word.startswith("-"):
+            for k in range(1, len(word)):
+                if word[k] == "i":
+                    chosen = False
+                elif word[k] in "uCS":
+                    value = word[k + 1 :]
+                    if word[k] != "S" and not value:
+                        following = "unset" if word[k] == "u" else "skip"
+                    elif word[k] == "u" and value == "PIPX_DEFAULT_PYTHON":
+                        chosen = False
+                    break
+        else:
+            in_env = False
     return chosen
+
+
+def _or_inherited(local: bool | None, inherited: bool) -> bool:
+    """The command's own setting when it has one, else the inherited one."""
+    return inherited if local is None else local
 
 
 def pipx_without_python(run: str | None, env: dict) -> bool:
     """True when a run script runs `pipx` in command position without choosing its interpreter: no `--python` among
-    pipx's own options, no non-empty `PIPX_DEFAULT_PYTHON` among the assignments in front of it (a whole assignment
-    word, not a value that happens to hold the text), and none in `env` (the step's, job's and workflow's). A `${{ }}`
+    pipx's own options, and no non-empty `PIPX_DEFAULT_PYTHON`, read first from the words in front of that `pipx` (a
+    whole assignment word, not a value that happens to hold the text, and `env`'s unset and clear options, see
+    `_local_default_python`) and only when they leave it alone from `env` (the step's, job's and workflow's): a
+    setting on the command overrides the inherited one (Copilot on HCW-NetworkEyes_App#394). A `${{ }}`
     expression counts as a value on purpose (`PIPX_DEFAULT_PYTHON: ${{ steps.python.outputs.python-path }}`): passing
     setup-python's `python-path` output that way is the documented way to point pipx at the Python it set up
     (https://github.com/actions/setup-python/blob/main/docs/advanced-usage.md#python-path)."""
-    if str(env.get("PIPX_DEFAULT_PYTHON") or "").strip():
-        return False
+    inherited = str(env.get("PIPX_DEFAULT_PYTHON") or "").strip() != ""
     return any(
         not (
-            _chooses_default_python(found["before"]) or _pipx_option_chooses_python(found["words"])
+            _pipx_option_chooses_python(found["words"])
+            or _or_inherited(_local_default_python(found["before"]), inherited)
         )
         for line in _shell_text(run or "").split("\n")
         for found in PIPX.finditer(line.strip())
@@ -1111,6 +1168,17 @@ def test_words_that_are_not_commands_are_not_found(line, kind):
         ("xargs --process-slot-var=SLOT node x", "node"),
         ("stdbuf --output L node x", "node"),
         ("time --output t.txt python3 x.py", "python"),
+        # `env -S` runs its value as a command, so a quoted value is read like a `-c` script (Copilot on
+        # HCW-MigrateOrchestrator_AddOn#74).
+        ("env -S 'node x.js'", "node"),
+        ('env -S "python3 x.py"', "python"),
+        ("env --split-string='node x'", "node"),
+        ("env --split-string 'node x'", "node"),
+        ("env -S'node x'", "node"),
+        ("env -iS 'python3 x.py'", "python"),
+        ("sudo env -S 'FOO=1 node x'", "node"),
+        ("env -S node x.js", "node"),
+        ("env -S 'pipx run x'", "python"),
     ],
 )
 def test_wrappers_the_website_copy_reads_are_read(line, kind):
@@ -1132,6 +1200,10 @@ def test_wrappers_the_website_copy_reads_are_read(line, kind):
         ("timeout --signal node 10 x", "node"),
         ("env --unset node x", "node"),
         ("stdbuf --output node x", "node"),
+        ("env -S 'echo node'", "node"),
+        ("env -S echo node", "node"),
+        ("echo env -S 'node x'", "node"),
+        ("docker run img env -S 'node x'", "node"),
     ],
 )
 def test_wrapper_near_misses_are_not_found(line, kind):
@@ -1299,6 +1371,8 @@ def test_long_runs_of_options_are_read_quickly():
         "sudo" + " -uuu" * 40 + " -",
         "timeout" + " --signal KILL --kill-after=5" * 40 + " -",
         "sudo" + " --user u --user=u --userx" * 40 + " -",
+        "env" + " -S -i -u X" * 40 + " -",
+        "env" + " -S 'x'" * 40 + " -",
         "bash " + "-o -o " * 200 + "x'y'",
         "bash " + "-c " * 200 + "x'node y'",
     ):
@@ -1774,6 +1848,37 @@ def test_an_indirect_step_counts_as_running_its_runtime():
         ("PIPX_DEFAULT_PYTHON=/p pipx run x", {}, False),
         ("env PIPX_DEFAULT_PYTHON=/p pipx run x", {}, False),
         ("pipx run x", {"PIPX_DEFAULT_PYTHON": "/p"}, False),
+        # A setting on the command overrides the inherited one (Copilot on HCW-NetworkEyes_App#394): set empty, unset
+        # or cleared by `env`, it chooses nothing; `--python` still chooses.
+        ("PIPX_DEFAULT_PYTHON= pipx run x", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, True),
+        ("PIPX_DEFAULT_PYTHON='' pipx run x", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, True),
+        ("env -u PIPX_DEFAULT_PYTHON pipx run x", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, True),
+        ("env -uPIPX_DEFAULT_PYTHON pipx run x", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, True),
+        ("env --unset PIPX_DEFAULT_PYTHON pipx run x", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, True),
+        ("env --unset=PIPX_DEFAULT_PYTHON pipx run x", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, True),
+        ("env -i pipx run x", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, True),
+        ("env --ignore-environment pipx run x", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, True),
+        (
+            "env --chdir /tmp -u PIPX_DEFAULT_PYTHON pipx run x",
+            {"PIPX_DEFAULT_PYTHON": "/opt/py"},
+            True,
+        ),
+        ("PIPX_DEFAULT_PYTHON=/p env -u PIPX_DEFAULT_PYTHON pipx run x", {}, True),
+        ("pipx run x", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, False),
+        (
+            "env -u PIPX_DEFAULT_PYTHON pipx run --python /p x",
+            {"PIPX_DEFAULT_PYTHON": "/opt/py"},
+            False,
+        ),
+        ("env -i PIPX_DEFAULT_PYTHON=/p pipx run x", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, False),
+        ("env -u OTHER pipx run x", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, False),
+        ("sudo -u PIPX_DEFAULT_PYTHON pipx run x", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, False),
+        ("env -S 'pipx run x'", {}, True),
+        ("env -S 'pipx run x'", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, False),
+        ("(PIPX_DEFAULT_PYTHON=/p pipx run x)", {}, False),
+        ("cd y &&PIPX_DEFAULT_PYTHON=/p pipx run x", {}, False),
+        ("(PIPX_DEFAULT_PYTHON= pipx run x)", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, True),
+        ("x=$(env -i pipx run x)", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, True),
         ("echo pipx", {}, False),
         ("docker run img pipx run x", {}, False),
         ("python3 -m pip install pipx", {}, False),
