@@ -20,8 +20,8 @@ listed, with its reason, in PIPX_ALLOWED. An `export PIPX_DEFAULT_PYTHON=...` ea
 
 What pipx is given must also be the set-up Python. The runner's own Python named by its path (`--python
 /usr/bin/python3`, `/usr/bin/python3.12`, `/bin/python3` or the Azure CLI's `/opt/az/bin/python3`, the same as
-`PIPX_DEFAULT_PYTHON`) chooses nothing, nor does a command substitution this test cannot run (`"$(command -v
-python3)"`) or a `$` the shell passes on as text (`'$P'`, `\\$P`). A `${{ steps.<id>.outputs.python-path }}` value
+`PIPX_DEFAULT_PYTHON`) chooses nothing, nor does a command or process substitution this test cannot run (`"$(command
+-v python3)"`, `<(...)`) or a `$` the shell passes on as text (`'$P'`, `\\$P`). A `${{ steps.<id>.outputs.python-path }}` value
 (only that output: `cache-hit` and `python-version` are not a path) counts only when `<id>` is an earlier
 actions/setup-python step of the same job that
 is sure to have run first, by the same rules as a set-up step with an `if:` (below); a missing id, a later step, a step
@@ -112,14 +112,15 @@ status-only `&&` terms taken out, but only from a condition with no top-level `|
 `||`, `&&`, `!` and parentheses are followed: `always() && !cancelled()` runs after
 success and failure, not after a cancel.
 
-Each set-up step must also ask for the floor or newer (Copilot on HCW-CloudCrawler_App#81): `python-version` or
-`python-version-file`, `node-version` or `node-version-file`, read through `${{ env.X }}` (the step's, job's or
-workflow's `env:`), `${{ matrix.X }}` (every entry of the job's matrix list) and the named file. A version that names a
-line only (`26`, `26.x`, `3.15`) stands for that line's newest release, so it passes when the line is at or above the
-floor's; an exact version (`26.10.0`) must be at or above the floor itself; anything else (`26.11.0-rc.1`,
-`26.11.0.0`, `lts/*`) cannot be compared. A value this test cannot work out fails it, naming
-the step, rather than passing unchecked. A set-up step kept below the floor on purpose is listed, with its reason, in
-BELOW_FLOOR_ALLOWED.
+Each set-up step (a composite action's too, which must have `runs: steps:`) must also ask for the floor or newer
+(Copilot on HCW-CloudCrawler_App#81): `python-version` or `python-version-file`, `node-version` or `node-version-file`,
+read through `${{ env.X }}` (the step's, job's or workflow's `env:`), `${{ matrix.X }}` (every entry of the job's matrix
+list) and the named file, read only when it is a `.python-version`, `.nvmrc` or `.node-version` file at a relative path
+inside the checkout with no `..` and no symbolic link on the way. A version that names a line only (`26`, `26.x`,
+`3.15`) stands for that line's newest release, so it passes when the line is at or above the floor's; an exact version
+(`26.10.0`) must be at or above the floor itself; anything else (`26.11.0-rc.1`, `26.11.0.0`, `lts/*`) cannot be
+compared. A value this test cannot work out fails it, naming the step, rather than passing unchecked. A set-up step kept
+below the floor on purpose is listed, with its reason, in BELOW_FLOOR_ALLOWED.
 
 This is the Python copy of the check; its JavaScript twin is the website's scripts/workflow-runtime-setup.test.mjs in
 HCW-HybridCloudWorks, and the other HCW Python repositories copy this file. The command reading (`_shell_text`,
@@ -201,7 +202,7 @@ BELOW_FLOOR_ALLOWED: dict[str, str] = {
 # `if node ...; then`). A plain value holds no `(`, `)` or backtick, so `x=$(sudo pipx run y)` is read from the `$(`,
 # not as an assignment whose value runs into the substitution, and no `;`, `&`, `|`, `<` or `>`, which end it
 # (`P=/x; pipx ...` is two commands).
-ASSIGNMENT = r"""[A-Za-z_][A-Za-z0-9_]*=(?:"(?:[^"\\]|\\.)*"|'[^']*'|\$\(\([^()`]*\)\)|\$\([^()`]*\)|`[^`]*`|[^\s"'()`;&|<>])*\s+"""
+ASSIGNMENT = r"""[A-Za-z_][A-Za-z0-9_]*=(?:"(?:[^"\\]|\\.)*"|'[^']*'|\$\(\([^()`]*\)\)|[$<>]\([^()`]*\)|`[^`]*`|[^\s"'()`;&|<>])*\s+"""
 # Words that run the next word, each with the options it may take first: the letters of the options that take an
 # argument (`sudo -u nobody`, `nice -n 10`, `stdbuf -oL`), any other `-x`/`--long` flag, and the `--` that ends the
 # options (`env -- node`). `timeout` also takes its duration (`timeout 60 node`, `timeout -k 5 1m python3`).
@@ -496,7 +497,7 @@ SCRIPT_SET = object()
 # `local`, `readonly` or `typeset` with assignments, `for P in` or `select P in`, and `read P` (`read -a P`); never an
 # argument (`echo P=/x`), quoted text, a comment or a heredoc's body, which `_shell_text` has already set apart.
 ASSIGNED_WORD = (
-    r"""([A-Za-z_][A-Za-z0-9_]*)\+?=(?:"(?:[^"\\]|\\.)*"|'[^']*'|\$\(\([^()`]*\)\)|\$\([^()`]*\)|`[^`]*`"""
+    r"""([A-Za-z_][A-Za-z0-9_]*)\+?=(?:"(?:[^"\\]|\\.)*"|'[^']*'|\$\(\([^()`]*\)\)|[$<>]\([^()`]*\)|`[^`]*`"""
     r"""|[^\s"'()`;&|<>])*"""
 )
 ONE_ASSIGNMENT = re.compile(ASSIGNED_WORD + r"\s*")
@@ -1117,7 +1118,9 @@ def read_jobs(text: str) -> dict[str, dict]:
 
 def read_action(text: str) -> dict[str, dict]:
     """A composite action's steps (`runs: using: composite`, `runs: steps:`) as one job named `composite`, read by
-    `read_jobs` so they are read the same way as a workflow's; {} for any other kind of action (`node24`, `docker`)."""
+    `read_jobs` so they are read the same way as a workflow's; {} for any other kind of action (`node24`, `docker`). A
+    composite action without `runs: steps:` stops the test with an error rather than read as having none (Copilot on
+    HCW-HybridCloudWorks#1719)."""
     lines = text.replace("\r\n", "\n").split("\n")
     runs = [i for i, line in enumerate(lines) if re.match(r"^runs:", line)]
     if not runs:
@@ -1132,6 +1135,9 @@ def read_action(text: str) -> dict[str, dict]:
     using = rf"^ {{{inner}}}using:\s*['\"]?composite['\"]?\s*(?:#.*)?$"
     if not any(re.match(using, line) for line in body):
         return {}
+    assert any(re.match(rf"^ {{{inner}}}steps:", line) for line in body), (
+        "a composite action has no runs: steps: list"
+    )
     wrapped = ["jobs:", "  composite:", *("  " + line if line.strip() else line for line in body)]
     return {"composite": read_jobs("\n".join(wrapped))["composite"]}
 
@@ -1404,9 +1410,10 @@ def _chooses(
 
     text = value.replace("'", "").replace('"', "")
     text = (text if env is None else VARIABLE.sub(variable, text)).strip()
-    # A `$` passed on as text, or a command substitution this check cannot run (`"$(printf /usr/bin/python3)"`), is
-    # not a Python it can vouch for (Copilot on HCW-NetworkEyes_App#395).
-    unreadable = LITERAL_DOLLAR in text or "$(" in text or "`" in text
+    # A `$` passed on as text, or a command or process substitution this check cannot run (`"$(printf
+    # /usr/bin/python3)"`, or `<(...)`, which the shell passes as `/dev/fd/N`), is not a Python it can vouch for (Copilot
+    # on HCW-NetworkEyes_App#395).
+    unreadable = LITERAL_DOLLAR in text or any(sign in text for sign in ("$(", "<(", ">(", "`"))
     if not text or unknown or unreadable or SYSTEM_PYTHON.fullmatch(text):
         return False
     ids = STEP_OUTPUT.findall(text)
@@ -1822,10 +1829,32 @@ def requested_versions(step: dict, job: dict, root: Path, kind: str) -> list[str
     if from_file not in given:
         return None
     paths = _resolved(str(given[from_file]), step, job) or []
-    if len(paths) != 1 or not (root / paths[0]).is_file():
+    if len(paths) != 1 or (path := _version_file(root, paths[0])) is None:
         return None
-    lines = (line.strip() for line in (root / paths[0]).read_text(encoding="utf-8").splitlines())
+    lines = (line.strip() for line in path.read_text(encoding="utf-8").splitlines())
     return [line for line in lines if line and not line.startswith("#")] or None
+
+
+# The version files this test reads: the names the website's `scripts (operations)` change filter matches wherever they
+# are, so a change to one runs this test (Copilot on HCW-HybridCloudWorks#1719). Any other name is not read, so its
+# set-up step is reported as asking for a version this test cannot work out, and needs an entry in BELOW_FLOOR_ALLOWED.
+VERSION_FILE_NAMES = (".python-version", ".nvmrc", ".node-version")
+
+
+def _version_file(root: Path, given: str) -> Path | None:
+    """The version file a set-up step names, when this test may read it: a path relative to `root` with no `..` and
+    no symbolic link on the way, to a regular file whose name is in VERSION_FILE_NAMES; None otherwise, so the step is
+    reported (Copilot on HCW-HybridCloudWorks#1719: a composite action's `../../proc/self/environ` must not be
+    read)."""
+    parts = given.replace("\\", "/").split("/")
+    if not given or given.startswith("/") or ".." in parts or parts[-1] not in VERSION_FILE_NAMES:
+        return None
+    path = root
+    for part in (part for part in parts if part not in ("", ".")):
+        path = path / part
+        if path.is_symlink():
+            return None
+    return path if path.is_file() else None
 
 
 def _below_floor(version: str, kind: str) -> bool | None:
@@ -2475,7 +2504,8 @@ def test_a_set_up_step_must_ask_for_the_floor_or_newer(tmp_path):
     (tmp_path / ".python-version").write_text(
         "# the line uv and setup-python read\n3.15\n", encoding="utf-8"
     )
-    (tmp_path / ".old-version").write_text("3.14\n", encoding="utf-8")
+    (tmp_path / "old").mkdir()
+    (tmp_path / "old" / ".python-version").write_text("3.14\n", encoding="utf-8")
     text = textwrap.dedent(
         """\
         name: x
@@ -2515,7 +2545,7 @@ def test_a_set_up_step_must_ask_for_the_floor_or_newer(tmp_path):
               - uses: actions/setup-python@abc
                 with: { python-version: "${{ env.PYTHON_VERSION }}" }
               - uses: actions/setup-python@abc
-                with: { python-version-file: .old-version }
+                with: { python-version-file: old/.python-version }
           matrix:
             runs-on: ubuntu-26.04
             strategy:
@@ -3585,6 +3615,104 @@ def test_a_composite_set_up_step_whose_version_cannot_be_read_is_reported():
 )
 def test_copilot_round_two_names_stay_in_their_shell_and_override_env(run, env, ids, flagged):
     assert pipx_without_python(run, env, set(ids)) is flagged
+
+
+@pytest.mark.parametrize(
+    ("run", "env", "ids", "flagged"),
+    [
+        # A process substitution given as pipx's Python is `/dev/fd/N` to pipx, which this check cannot vouch for
+        # (Copilot on HCW-NetworkEyes_App#395).
+        ("pipx run --python <(printf /opt/py/bin/python3) x", {}, [], True),
+        ("PIPX_DEFAULT_PYTHON=<(printf /opt/py/bin/python3) pipx run x", {}, [], True),
+        ('P=<(printf /opt/py/bin/python3); pipx run --python "$P" x', {}, [], True),
+        ("pipx run --python >(cat) x", {}, [], True),
+    ],
+)
+def test_copilot_round_three_pipx_forms(run, env, ids, flagged):
+    assert pipx_without_python(run, env, set(ids)) is flagged
+
+
+def test_a_process_substitution_in_an_assignment_runs_before_the_command():
+    assert runs_runtime("FOO=<(node v.js) true", "node")
+    assert runs_runtime("FOO=<(x) node y", "node")
+
+
+# Each job names a version file; only `.python-version`, `.nvmrc` or `.node-version` at a relative path inside the
+# checkout, with no `..` and no symbolic link on the way, is read (Copilot on HCW-HybridCloudWorks#1719).
+VERSION_FILE_YAML = """\
+on: push
+jobs:
+  plain:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/setup-python@abc
+        with: { python-version-file: .python-version }
+  nested-old:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/setup-python@abc
+        with: { python-version-file: ./sub/.python-version }
+  other-name:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/setup-node@abc
+        with: { node-version-file: ci/node-runtime.txt }
+  escape:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/setup-python@abc
+        with: { python-version-file: ../../../../proc/self/.python-version }
+  absolute:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/setup-python@abc
+        with: { python-version-file: /etc/.python-version }
+  link:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/setup-node@abc
+        with: { node-version-file: .nvmrc }
+  linked-folder:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/setup-python@abc
+        with: { python-version-file: linked/.python-version }
+  missing:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/setup-node@abc
+        with: { node-version-file: .node-version }
+"""
+
+
+def test_a_version_file_is_read_only_inside_the_checkout_and_by_its_usual_name(tmp_path):
+    root = tmp_path / "repo"
+    (root / "sub").mkdir(parents=True)
+    (root / "ci").mkdir()
+    (root / "real").mkdir()
+    (root / ".python-version").write_text("3.15\n", encoding="utf-8")
+    (root / "sub" / ".python-version").write_text("3.14\n", encoding="utf-8")
+    (root / "ci" / "node-runtime.txt").write_text("26\n", encoding="utf-8")
+    (root / "real" / ".nvmrc").write_text("26\n", encoding="utf-8")
+    (root / "real" / ".python-version").write_text("3.15\n", encoding="utf-8")
+    (root / ".nvmrc").symlink_to(root / "real" / ".nvmrc")
+    (root / "linked").symlink_to(root / "real", target_is_directory=True)
+    label = "x.yml"
+    assert floor_problems(label, read_jobs(VERSION_FILE_YAML), root) == [
+        f"{label} > nested-old > step 1 > python: asks for 3.14, below the floor",
+        f"{label} > other-name > step 1 > node: cannot work out the version it asks for",
+        f"{label} > escape > step 1 > python: cannot work out the version it asks for",
+        f"{label} > absolute > step 1 > python: cannot work out the version it asks for",
+        f"{label} > link > step 1 > node: cannot work out the version it asks for",
+        f"{label} > linked-folder > step 1 > python: cannot work out the version it asks for",
+        f"{label} > missing > step 1 > node: cannot work out the version it asks for",
+    ]
+
+
+def test_a_composite_action_without_steps_stops_the_test():
+    """It would otherwise read as having no steps (Copilot on HCW-HybridCloudWorks#1719)."""
+    with pytest.raises(AssertionError, match="no runs: steps: list"):
+        read_action("name: x\nruns:\n  using: composite\n")
 
 
 FILES = sorted(p for p in WORKFLOWS.iterdir() if p.suffix in (".yml", ".yaml"))
