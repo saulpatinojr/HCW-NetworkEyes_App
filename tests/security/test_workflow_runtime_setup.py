@@ -47,17 +47,22 @@ of those with a top-level `&&` and has no top-level `||` of its own (a step unde
 a set-up step under `a || c` has run; Copilot on HCW-HybridCloudWorks#1716; but `a && b || d` can run through `d`
 alone, so it is not split; Copilot on HCW-NetworkEyes_App#393). Conditions are compared without a surrounding `${{ }}`, with runs of
 spaces made one, and a term without one pair of parentheses around the whole of it. Equal text means equal value only
-for values that stay fixed during a job (`matrix`, `github`, `inputs`, `needs`, `vars`); a condition on `steps.*` or
-`env.*` set between the two steps could differ, so prefer those fixed values in such conditions. A set-up step with no
-`if:` covers every later step whose condition does not test the job's status. A job's own `if:` does not matter here,
-because it decides whether every step of the job runs, alike.
+for values that stay fixed during a job (`matrix`, `github`, `inputs`, `needs`, `vars`, `secrets`); a term that reads
+anything else (`env.*`, which a step can change through `$GITHUB_ENV`, `steps.*`, `job`, `runner`, `hashFiles()`) is
+never matched by its text, so its step is reported (Copilot on HCW-MigrateOrchestrator_AddOn#74). The one exception is
+`steps.<id>` of a step that comes before the set-up step: its outputs, outcome and conclusion are fixed once it has
+run (the `core-update.yml` jobs' `steps.refs.outputs.changed`). Prefer the fixed values in such conditions. A set-up
+step with no `if:` covers every later step whose condition does not test the job's status. A job's own `if:` does
+not matter here, because it decides whether every step of the job runs, alike.
 
 The job's status is compared on its own. Without `always()`, `failure()`, `cancelled()` or `success()` in it, a step's
 condition includes an unwritten `success()`, so a set-up step with no `if:` is skipped once an earlier step has
 failed, while a later `if: always()`, `failure()` or `!cancelled()` step still runs (Copilot on
 HCW-MigrateOrchestrator_AddOn#72). So after each job status (success, a failure, a cancel) a later step may run after,
 its set-up step must surely run, or depend on the same thing by the rule above, applied to the conditions with their
-status-only `&&` terms taken out. `||`, `&&`, `!` and parentheses are followed: `always() && !cancelled()` runs after
+status-only `&&` terms taken out, but only from a condition with no top-level `||`: `failure() && a || b` is
+`(failure() && a) || b`, so taking `failure()` out would change it (Copilot on HCW-MigrateOrchestrator_AddOn#74).
+`||`, `&&`, `!` and parentheses are followed: `always() && !cancelled()` runs after
 success and failure, not after a cancel.
 
 Each set-up step must also ask for the floor or newer (Copilot on HCW-CloudCrawler_App#81): `python-version` or
@@ -158,19 +163,51 @@ WRAPPER_OPTIONS = {
     "stdbuf": "ioe",
     "timeout": "sk",
 }
+# The long options of those words that take a value (`timeout --kill-after 5 10 node`, `sudo --user nobody node`), the
+# long forms of the letters above: the value follows `=` or is the next word, which never starts with `-`. Any other
+# `--long[=value]` is a flag, so each long option too can be read only one way (Copilot on
+# HCW-MigrateOrchestrator_AddOn#74). The same table as the website's copy.
+WRAPPER_LONG_OPTIONS = {
+    "env": ("unset", "chdir", "split-string"),
+    "sudo": (
+        "user",
+        "group",
+        "close-from",
+        "chdir",
+        "host",
+        "prompt",
+        "role",
+        "type",
+        "other-user",
+    ),
+    "xargs": ("max-args", "max-procs", "delimiter", "arg-file", "max-chars"),
+    "time": ("output", "format"),
+    "nice": ("adjustment",),
+    "stdbuf": ("input", "output", "error"),
+    "timeout": ("signal", "kill-after"),
+}
 
 
-def _options_of(takes: str) -> str:
+def _long_options_of(names: tuple[str, ...]) -> str:
+    """A wrapper's `--long` options: one of `names` with its value (`--signal=KILL`, `--signal KILL`), or any other
+    `--long[=value]` as a flag."""
+    if not names:
+        return r"--\w[\w-]*(?:=\S+)?"
+    joined = "|".join(names)
+    return rf"--(?:{joined})(?:=\S*|\s+[^\s-]\S*)|--(?!(?:{joined})(?![\w-]))\w[\w-]*(?:=\S+)?"
+
+
+def _options_of(takes: str, long: tuple[str, ...] = ()) -> str:
     """The options a wrapper may take before the word it runs (see WRAPPER_OPTIONS). Each option can be read only
     one way, so a long run of them cannot make the match try every split (`stdbuf -oL -oL ...` once took seconds): an
     option that takes an argument is the letters up to the first one in `takes`, then its value, joined to it (`-oL`)
     or as the next word, which never starts with `-` (`-o L`); a plain flag has no letter in `takes` (`-i`); then
-    `--long[=value]` and the bare `--`."""
+    the `--long` options (see `_long_options_of`) and the bare `--`."""
     if not takes:
-        return r"(?:\s+(?:--\w[\w-]*(?:=\S+)?|-\w+|--(?=\s)))*"
+        return rf"(?:\s+(?:{_long_options_of(long)}|-\w+|--(?=\s)))*"
     return (
         rf"(?:\s+(?:-(?:(?![{takes}])[A-Za-z])*[{takes}](?:\s+[^\s-]\S*|\S+)"
-        rf"|--\w[\w-]*(?:=\S+)?|-(?:(?![{takes}])\w)+|--(?=\s)))*"
+        rf"|{_long_options_of(long)}|-(?:(?![{takes}])\w)+|--(?=\s)))*"
     )
 
 
@@ -196,9 +233,9 @@ SHELL_GIVEN_C = (
 SHELL_C = r"(?:[^\s=]*/)?" + SHELL_GIVEN_C
 WRAPPERS = "|".join(
     [
-        rf"timeout{_options_of(takes)}\s+\d+(?:\.\d+)?[smhd]?\s+"
+        rf"timeout{_options_of(takes, WRAPPER_LONG_OPTIONS.get(word, ()))}\s+\d+(?:\.\d+)?[smhd]?\s+"
         if word == "timeout"
-        else rf"{word}{_options_of(takes)}\s+"
+        else rf"{word}{_options_of(takes, WRAPPER_LONG_OPTIONS.get(word, ()))}\s+"
         for word, takes in WRAPPER_OPTIONS.items()
     ]
     + [
@@ -321,7 +358,7 @@ def _shell_text(run: str) -> str:
     """The script as the shell reads it, for finding commands: comments and heredoc bodies dropped (`<<EOF`,
     `<<'EOF'`, `<<"EOF"`, `<<\\EOF`, `<<-EOF`, but not the shift `<<` inside `$((...))` or `((...))`), a line that ends
     in `\\` joined to the next (so the next line's first word is still an argument), single-quoted text and `$'...'`
-    text emptied, and double-quoted text emptied unless it runs a command (`"$(node x)"`, or the older "`node x`"). An
+    text written as `'_'` (`''` when empty), and double-quoted text as `"_"` (`""` when empty) unless it runs a command (`"$(node x)"`, or the older "`node x`"). An
     escaped backtick (`\\``, as in Markdown written to the step summary) is a plain character. A quoted string may run
     over several lines, as the script of `docker run image bash -c '...'` does; what it runs is the container's, not
     the runner's. The one quoted string that is read is the script of a shell in command position given `-c`
@@ -698,18 +735,53 @@ def statuses(expression: str) -> set[str]:
 
 
 def _without_status(expression: str) -> str:
-    """The condition without its top-level `&&` terms that test only the job's status (`always()`, `!cancelled()`)."""
+    """The condition without its top-level `&&` terms that test only the job's status (`always()`, `!cancelled()`),
+    when it has no top-level `||`: `failure() && a || b` is `(failure() && a) || b`, and `a || b` holds when it does
+    not (Copilot on HCW-MigrateOrchestrator_AddOn#74)."""
+    if len(_top_level_terms(expression, "||")) > 1:
+        return expression
     terms = _top_level_terms(expression, "&&", unwrap=False)
     kept = [term for term in terms if re.sub(r"[\s!()&|]", "", STATUS_CALL.sub("", term))]
     return expression if len(kept) == len(terms) else " && ".join(kept)
 
 
-def _conditions_cover(given: str, wanted: str) -> bool:
+# A name in a condition whose value is not fixed for the whole job: `env` (a step can write `$GITHUB_ENV`), `steps`,
+# `job`, `jobs`, `runner`, `strategy` and `hashFiles()`. Outside quoted strings and not after a `.`, so
+# `needs.build.outputs.env` and `'env.x'` are not one.
+CHANGING = re.compile(
+    r"(?<![\w.-])(?:env|steps|job|jobs|runner|strategy|hashfiles)(?![\w-])", re.IGNORECASE
+)
+
+
+def _fixed_term(term: str, ran: frozenset[str] | set[str] = frozenset()) -> bool:
+    """True when a term reads only values fixed from the set-up step on, so equal text means an equal value: no name
+    in CHANGING, apart from `steps.<id>` of a step in `ran` (the ids of the steps before the set-up step, whose
+    outputs, outcome and conclusion no longer change)."""
+    text = re.sub(r"'(?:[^']|'')*'", "''", term)
+    text = re.sub(
+        r"(?<![\w.-])steps\.([\w-]+)",
+        lambda m: "ran" if m[1] in ran else m[0],
+        text,
+        flags=re.IGNORECASE,
+    )
+    return not CHANGING.search(text)
+
+
+def step_ids(steps: list[dict]) -> set[str]:
+    """The ids of these steps, for `covers`."""
+    return {str(step["id"]) for step in steps if step.get("id") is not None}
+
+
+def _conditions_cover(
+    given: str, wanted: str, ran: frozenset[str] | set[str] = frozenset()
+) -> bool:
     """True when a set-up step with condition `given` runs whenever a later step with condition `wanted` does: after
     every job status the later step may run after, the set-up step surely runs, or, status terms aside, the later
     condition is the same, is one of the set-up condition's top-level `||` terms, or, when it has no top-level `||`
     of its own, joins one of them with a top-level `&&` (a step that runs only when `a && b` holds runs only when `a`
-    holds, so a set-up step under `a || c` has run; `a && b || d` can run through `d`, so it is not split)."""
+    holds, so a set-up step under `a || c` has run; `a && b || d` can run through `d`, so it is not split). The term
+    matched must read only values fixed from the set-up step on (`_fixed_term`, with `ran` the ids of the steps before
+    it): `env.RUN == 'true'` can be false at the set-up step and true later."""
     for status in sorted(STATUSES):
         if _runs_after(wanted, status) is False:
             continue
@@ -726,16 +798,20 @@ def _conditions_cover(given: str, wanted: str) -> bool:
                 _top_level_terms(need, "&&") if len(_top_level_terms(need, "||")) == 1 else []
             )
             step_terms = [_without_outer_parentheses(term) for term in [need, *and_terms]]
-            if not (rest == "" or any(term in setup_terms for term in step_terms)):
+            if not (
+                rest == ""
+                or any(term in setup_terms and _fixed_term(term, ran) for term in step_terms)
+            ):
                 return False
     return True
 
 
-def covers(setup: dict, step: dict) -> bool:
+def covers(setup: dict, step: dict, ran: frozenset[str] | set[str] = frozenset()) -> bool:
     """True when a set-up step runs whenever the later step does: it runs after every job status the later step can
     run after, and, status terms aside, it has no `if:`, the same `if:`, or an `if:` whose top-level `||` terms
-    include the later step's or one of the terms the later step's joins with a top-level `&&`."""
-    return _conditions_cover(condition(setup), condition(step))
+    include the later step's or one of the terms the later step's joins with a top-level `&&`, reading only values
+    fixed from the set-up step on (`ran` holds the ids of the steps before it)."""
+    return _conditions_cover(condition(setup), condition(step), ran)
 
 
 def step_key(file: str, job: str, step: dict, i: int, kind: str) -> str:
@@ -759,8 +835,9 @@ def unset_steps(
                 if not (runs_runtime(step.get("run"), kind) or key in indirect):
                     continue
                 covered = any(
-                    sets_up(earlier, job, kind) and covers(earlier, step)
-                    for earlier in job["steps"][:i]
+                    sets_up(earlier, job, kind)
+                    and covers(earlier, step, step_ids(job["steps"][:j]))
+                    for j, earlier in enumerate(job["steps"][:i])
                 )
                 if not covered:
                     found.append(key)
@@ -806,7 +883,10 @@ def _chooses_default_python(before: str) -> bool:
 def pipx_without_python(run: str | None, env: dict) -> bool:
     """True when a run script runs `pipx` in command position without choosing its interpreter: no `--python` among
     pipx's own options, no non-empty `PIPX_DEFAULT_PYTHON` among the assignments in front of it (a whole assignment
-    word, not a value that happens to hold the text), and none in `env` (the step's, job's and workflow's)."""
+    word, not a value that happens to hold the text), and none in `env` (the step's, job's and workflow's). A `${{ }}`
+    expression counts as a value on purpose (`PIPX_DEFAULT_PYTHON: ${{ steps.python.outputs.python-path }}`): passing
+    setup-python's `python-path` output that way is the documented way to point pipx at the Python it set up
+    (https://github.com/actions/setup-python/blob/main/docs/advanced-usage.md#python-path)."""
     if str(env.get("PIPX_DEFAULT_PYTHON") or "").strip():
         return False
     return any(
@@ -1017,6 +1097,20 @@ def test_words_that_are_not_commands_are_not_found(line, kind):
         ("timeout -k 5 1m python3 x.py", "python"),
         ("timeout --signal=KILL 2.5s uv run x.py", "python"),
         ("cd y && timeout 10m npm test", "node"),
+        # Long options that take a value, after `=` or as the next word (Copilot on HCW-MigrateOrchestrator_AddOn#74).
+        ("timeout --kill-after 5 10 python3 check.py", "python"),
+        ("timeout --kill-after=5 10 node x", "node"),
+        ("timeout --signal KILL 10 node x", "node"),
+        ("timeout -s KILL 10 node x", "node"),
+        ("timeout --foreground --signal=TERM 1m python3 x.py", "python"),
+        ("sudo --user nobody node x", "node"),
+        ("sudo --user=nobody -- python3 x.py", "python"),
+        ("env --unset FOO node x", "node"),
+        ("env --chdir=/tmp python3 x.py", "python"),
+        ("nice --adjustment 5 node x", "node"),
+        ("xargs --max-args 1 node", "node"),
+        ("stdbuf --output L node x", "node"),
+        ("time --output t.txt python3 x.py", "python"),
     ],
 )
 def test_wrappers_the_website_copy_reads_are_read(line, kind):
@@ -1034,6 +1128,10 @@ def test_wrappers_the_website_copy_reads_are_read(line, kind):
         ("env -- NODE=1 true", "node"),
         # `-u` takes the next word, so `node` here is the user, not the command.
         ("sudo -u node whoami", "node"),
+        ("sudo --user node whoami", "node"),
+        ("timeout --signal node 10 x", "node"),
+        ("env --unset node x", "node"),
+        ("stdbuf --output node x", "node"),
     ],
 )
 def test_wrapper_near_misses_are_not_found(line, kind):
@@ -1199,6 +1297,8 @@ def test_long_runs_of_options_are_read_quickly():
         "stdbuf" + " -oL" * 40 + " -",
         "nice" + " -n10" * 40 + " -",
         "sudo" + " -uuu" * 40 + " -",
+        "timeout" + " --signal KILL --kill-after=5" * 40 + " -",
+        "sudo" + " --user u --user=u --userx" * 40 + " -",
         "bash " + "-o -o " * 200 + "x'y'",
         "bash " + "-c " * 200 + "x'node y'",
     ):
@@ -1326,6 +1426,36 @@ def test_a_set_up_step_with_its_own_condition_covers_only_steps_it_always_runs_b
             steps:
               - uses: actions/setup-node@abc
               - run: node a.mjs
+          # A condition on `env` proves nothing; one on a step's outputs does once that step has run before the
+          # set-up step (Copilot on HCW-MigrateOrchestrator_AddOn#74).
+          env-condition:
+            runs-on: ubuntu-26.04
+            steps:
+              - uses: actions/setup-python@abc
+                if: env.RUN == 'true'
+              - name: Run
+                if: env.RUN == 'true'
+                run: python3 a.py
+          step-ran-first:
+            runs-on: ubuntu-26.04
+            steps:
+              - id: refs
+                run: echo x
+              - uses: actions/setup-python@abc
+                if: steps.refs.outputs.changed == 'true'
+              - name: Run
+                if: steps.refs.outputs.changed == 'true'
+                run: python3 a.py
+          step-ran-later:
+            runs-on: ubuntu-26.04
+            steps:
+              - uses: actions/setup-python@abc
+                if: steps.refs.outputs.changed == 'true'
+              - id: refs
+                run: echo x
+              - name: Run
+                if: steps.refs.outputs.changed == 'true'
+                run: python3 a.py
         """
     )
     assert unset_steps("x.yml", read_jobs(text)) == [
@@ -1333,6 +1463,8 @@ def test_a_set_up_step_with_its_own_condition_covers_only_steps_it_always_runs_b
         "x.yml > after-a-failure > Run > python",
         "x.yml > other-condition > Run > python",
         "x.yml > and-term > Run > node",
+        "x.yml > env-condition > Run > python",
+        "x.yml > step-ran-later > Run > python",
     ]
 
 
@@ -1380,10 +1512,53 @@ def test_a_set_up_step_with_its_own_condition_covers_only_steps_it_always_runs_b
         ("failure() || cancelled()", "cancelled()", True),
         ("failure() || cancelled()", "", False),
         ("success() || failure()", "!cancelled()", True),
+        # Status terms come out only of a condition with no top-level `||` (Copilot on
+        # HCW-MigrateOrchestrator_AddOn#74): after success with `a` true and `b` false, `failure() && a || b` is false
+        # while `a` is true.
+        ("failure() && a || b", "a", False),
+        ("always() && a || b", "b", True),
+        # A term that reads something a step can change is never matched by its text (Copilot on
+        # HCW-MigrateOrchestrator_AddOn#74): an earlier step can write `RUN=true` to `$GITHUB_ENV` after the set-up
+        # was skipped.
+        ("env.RUN == 'true'", "env.RUN == 'true'", False),
+        ("steps.changes.outputs.py == 'true'", "steps.changes.outputs.py == 'true'", False),
+        ("github.event_name == 'push' && env.RUN", "github.event_name == 'push' && env.RUN", False),
+        ("matrix.os == 'linux' || env.RUN == 'true'", "matrix.os == 'linux'", True),
+        ("matrix.os == 'linux'", "matrix.os == 'linux' && env.RUN == 'true'", True),
+        ("needs.build.outputs.env == 'x'", "needs.build.outputs.env == 'x'", True),
+        ("inputs.mode == 'env.RUN'", "inputs.mode == 'env.RUN'", True),
     ],
 )
 def test_covers_compares_normalised_conditions_and_top_level_or_terms(setup, step, covered):
     assert covers({"if": setup}, {"if": step}) is covered
+
+
+@pytest.mark.parametrize(
+    ("setup", "step", "ran", "covered"),
+    [
+        # `steps.<id>` is fixed once that step has run before the set-up step (`ran` is those steps' ids).
+        (
+            "steps.refs.outputs.changed == 'true'",
+            "steps.refs.outputs.changed == 'true'",
+            {"refs"},
+            True,
+        ),
+        (
+            "steps.refs.outputs.changed == 'true'",
+            "steps.refs.outputs.changed == 'true'",
+            {"other"},
+            False,
+        ),
+        (
+            "steps.refs.outputs.changed == 'true' && env.RUN",
+            "steps.refs.outputs.changed == 'true' && env.RUN",
+            {"refs"},
+            False,
+        ),
+    ],
+)
+def test_a_step_that_ran_before_the_set_up_step_has_fixed_outputs(setup, step, ran, covered):
+    assert covers({"if": setup}, {"if": step}, ran) is covered
 
 
 @pytest.mark.parametrize(
