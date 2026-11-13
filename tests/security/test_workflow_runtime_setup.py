@@ -22,8 +22,11 @@ What pipx is given must also be the set-up Python. The runner's own Python named
 /usr/bin/python3`, `/usr/bin/python3.12` or `/bin/python3`, the same as `PIPX_DEFAULT_PYTHON`) chooses nothing. A
 `${{ steps.<id>.outputs.* }}` value counts only when `<id>` is an earlier actions/setup-python step of the same job that
 is sure to have run first, by the same rules as a set-up step with an `if:` (below); a missing id, a later step, a step
-that is not actions/setup-python or one that may be skipped chooses nothing. A bare `python3.15` and a path under
-`${{ env.pythonLocation }}` still count. Settings travel the way the shell passes them: `PIPX_DEFAULT_PYTHON=/p bash -c
+that is not actions/setup-python or one that may be skipped chooses nothing, and so does a `steps` reference written
+another way (`steps['py'].outputs`), which names no id this test can read. A shell variable in the value (`--python
+"$PYTHON_PATH"`) is read from the step's, job's or workflow's `env:`; one the script sets itself (`P=...`, `for P in`,
+`read P`) counts, as does `$pythonLocation` (setup-python sets it), and any other one chooses nothing. A bare
+`python3.15` and a path under `${{ env.pythonLocation }}` still count. Settings travel the way the shell passes them: `PIPX_DEFAULT_PYTHON=/p bash -c
 'pipx run x'` and `env PIPX_DEFAULT_PYTHON=/p env -S 'pipx run x'` give the inner script the setting, and `sudo` drops
 every inherited setting (its default `env_reset`) unless it is given `-E` or `--preserve-env` (bare, or with a list
 that names the variable), while `sudo PIPX_DEFAULT_PYTHON=/p pipx ...` sets it.
@@ -56,7 +59,19 @@ the inner shell does. The set-up step must come before the first such step. Limi
 so a step whose script starts a runtime is listed in INDIRECT_RUNTIME (as HCW-CloudAssessor_App's and
 HCW-CloudCrawler_App's copies do). A command substitution inside a double-quoted string (`"$(...)"`, or a backtick
 pair) runs on the runner, so it is read like any other script, a `-c` script in it included (`echo "$(bash -c 'node
-x')"`); one that hands its script to a container (`"$(docker run img bash -c '...')"`) stays unread.
+x')"`); one that hands its script to a container (`"$(docker run img bash -c '...')"`) stays unread. A heredoc or a
+here-string given to a shell that reads its script from its input is that shell's script (`bash <<'EOF'`, `bash -s
+<<EOF`, `bash <<< 'node x'`), whatever the quoting of the delimiter, since the shell runs it; the same body given to
+`cat` is text.
+
+More limits, known and kept: a command named in quotes (`'node' x.js`, `"node" x.js`) is not read as that command
+(only a `$'...'` one is); `sudo python3` after a set-up step counts as covered, though sudo's `secure_path` makes it run
+the runner's own Python unless PATH is passed on (`sudo env "PATH=$PATH" ...`); a step with `shell: python` (or `node`)
+runs its `run:` text with that runtime and is not read; a double-quoted `-c` script with a substitution in it is also
+read as the outer shell reads it, which can report a `pipx` that the inner shell, given the outer settings, runs
+correctly (`PIPX_DEFAULT_PYTHON=/p bash -c "x; pipx run y $(true)"`); `unset PIPX_DEFAULT_PYTHON` and `export` earlier
+in the script are not read; and a composite action whose set-up step takes its version from `${{ inputs.* }}` cannot
+be read, so it fails the floor test and needs an entry in BELOW_FLOOR_ALLOWED.
 
 A composite action (`.github/actions/<name>/action.yml`, `runs: using: composite`) is checked like a job of its own,
 named `composite`, so its keys read `.github/actions/<name>/action.yml > composite > step name > runtime`. Its steps
@@ -68,7 +83,9 @@ A set-up step with its own `if:` may be skipped while a later command still runs
 the same condition, one of the terms the set-up's condition joins with a top-level `||`, or a condition that joins one
 of those with a top-level `&&` and has no top-level `||` of its own (a step under `a && b` runs only when `a` holds, so
 a set-up step under `a || c` has run; Copilot on HCW-HybridCloudWorks#1716; but `a && b || d` can run through `d`
-alone, so it is not split; Copilot on HCW-NetworkEyes_App#393). Conditions are compared without a surrounding `${{ }}`, with runs of
+alone, so it is not split; Copilot on HCW-NetworkEyes_App#393), or, when the set-up's condition has no top-level
+`||`, a condition with no top-level `||` whose `&&` terms include every one of the set-up's (`a && b` covers
+`c && a && b`; Copilot on HCW-MigrateOrchestrator_App#117). Conditions are compared without a surrounding `${{ }}`, with runs of
 spaces made one, and a term without one pair of parentheses around the whole of it. Equal text means equal value only
 for values that stay fixed during a job (`matrix`, `github`, `inputs`, `needs`, `vars`, `secrets`); a term that reads
 anything else (`env.*`, which a step can change through `$GITHUB_ENV`, `steps.*`, `job`, `runner`, `hashFiles()`) is
@@ -107,7 +124,9 @@ The workflows are read with a small line reader rather than a YAML library, beca
 relies on the layout every workflow in this repository has (a `jobs:` key at the top level, a `steps:` list, block
 `run: |` scripts, `with:` and `env:` written `{ ... }` or as indented `key: value` lines); a file it cannot read that
 way fails the test rather than being skipped. A `steps:` written on one line (`steps: [{run: ...}]`) or a step written
-as one (`- {run: ...}`) is such a file: the reader stops with an error rather than read the job as having no steps.
+as one (`- {run: ...}`) is such a file: the reader stops with an error rather than read the job as having no steps. A
+value YAML reads its own way is read that way: null (`~`, `null`, nothing) is empty, a block scalar (`|`, `>-`,
+`|2-`, `>-2`) is its text, and a heredoc's delimiter is its whole word (`<<EOF-1`, `<<E"OF"`).
 """
 
 from __future__ import annotations
@@ -168,9 +187,11 @@ BELOW_FLOOR_ALLOWED: dict[str, str] = {
 }
 
 # Where a command may start: the line's start or an opening or joining character, then any `NAME=value` assignments
-# (the value plain text, a quoted string, or both run together: `FOO="a b"`) and words that run the next word
-# (`env FOO=1 node`, `sudo node`, `if node ...; then`).
-ASSIGNMENT = r"""[A-Za-z_][A-Za-z0-9_]*=(?:"(?:[^"\\]|\\.)*"|'[^']*'|[^\s"'])*\s+"""
+# (the value plain text, a quoted string, a whole `$(...)`, `$((...))` or backtick pair with no parentheses inside, or
+# those run together: `FOO="a b"`, `FOO=$(date) node`) and words that run the next word (`env FOO=1 node`, `sudo node`,
+# `if node ...; then`). A plain value holds no `(`, `)` or backtick, so `x=$(sudo pipx run y)` is read from the `$(`,
+# not as an assignment whose value runs into the substitution.
+ASSIGNMENT = r"""[A-Za-z_][A-Za-z0-9_]*=(?:"(?:[^"\\]|\\.)*"|'[^']*'|\$\(\([^()`]*\)\)|\$\([^()`]*\)|`[^`]*`|[^\s"'()`])*\s+"""
 # Words that run the next word, each with the options it may take first: the letters of the options that take an
 # argument (`sudo -u nobody`, `nice -n 10`, `stdbuf -oL`), any other `-x`/`--long` flag, and the `--` that ends the
 # options (`env -- node`). `timeout` also takes its duration (`timeout 60 node`, `timeout -k 5 1m python3`).
@@ -346,6 +367,10 @@ SHELL_GIVEN_C = rf"{SHELL_UP_TO_C}(?:{SHELL_AFTER_C}|(?=\S))"
 # A shell given `-c` is also a word that runs the next one: an unquoted script is that one word (`bash -c node x.js`
 # runs `node`, with `x.js` as its `$0`). A quoted script is read by `_shell_text` instead.
 SHELL_C = PATH + SHELL_GIVEN_C
+# A shell that reads its script from its input: its name and options, none of them `-c` (`bash`, `bash -s`, `sh -e`).
+SHELL_READS_INPUT = PATH + rf"(?:ba|da|k|z)?sh(?:\s+{_shell_option('(?:(?!c)[A-Za-z])')})*"
+# A here-string given to such a shell (`bash <<< node`) is its script; unquoted, that is the one word after `<<<`.
+SHELL_HERE_STRING = SHELL_READS_INPUT + r"\s*<<<\s*"
 WRAPPERS = "|".join(
     [
         rf"{PATH}timeout{_options_of(takes, word)}\s+\d+(?:\.\d+)?[smhd]?\s+"
@@ -357,6 +382,7 @@ WRAPPERS = "|".join(
         r"command(?:\s+(?:-p|--(?=\s)))*\s+",
         r"(?:if|then|else|elif|do|while|until|!)\s+",
         SHELL_C,
+        SHELL_HERE_STRING,
     ]
 )
 # A `case` pattern that ends at the start of a line (`check)`, `a|b)`), after which a command may follow.
@@ -383,6 +409,10 @@ COMMAND = {
 # '...'`, `bash -c -- '...'`, `bash -ec'...'`): the script runs on the runner too, so its commands count. The same
 # words after `docker run image` are not in command position, so a container's script stays unread.
 SHELL_SCRIPT = re.compile(START + PATH + SHELL_UP_TO_C + rf"(?:{SHELL_AFTER_C})?$")
+# The same for a quoted here-string given to a shell that reads its script from its input (`bash <<< 'node x'`), and
+# for a heredoc given to one (`bash <<'EOF'`, `bash -s <<EOF`), read where the `<<` starts.
+HERE_STRING_SCRIPT = re.compile(START + SHELL_HERE_STRING + "$")
+HEREDOC_SCRIPT = re.compile(START + SHELL_READS_INPUT + r"\s*$")
 # `env -S` (`--split-string`, or any unambiguous start of it) in command position: env splits its value into words and
 # runs them, so a quoted value there is read as a script, like a `-c` shell's (`env -S 'node x.js'`,
 # `env --split-string='python3 x.py'`; Copilot on HCW-MigrateOrchestrator_AddOn#74). An unquoted value is the next
@@ -417,11 +447,12 @@ PIPX_VALUE_OPTIONS = {
 }
 # Where `((` opens an arithmetic command rather than two subshells: at the start of a command.
 ARITHMETIC_COMMAND = re.compile(r"(?:^|[;&|({]|\b(?:then|else|do|if|elif|while|until|for))\s*$")
-# The escapes `$'...'` turns into other characters: these, `\xHH`, `\uHHHH`, `\UHHHHHHHH` and octal `\NNN` (see
-# `_ansi_c`); any other `\x` is left as it is.
+# The escapes `$'...'` turns into other characters: these, `\xHH`, `\x{H...}`, `\uHHHH`, `\UHHHHHHHH` and octal
+# `\NNN` (see `_ansi_c`); any other `\x` is left as it is.
 ANSI_C = {"n": "\n", "t": "\t", "'": "'", '"': '"', "\\": "\\"}
 ANSI_C_ESCAPE = re.compile(
-    r"\\(x[0-9A-Fa-f]{1,2}|u[0-9A-Fa-f]{1,4}|U[0-9A-Fa-f]{1,8}|[0-7]{1,3}|.)", re.DOTALL
+    r"\\(x\{[0-9A-Fa-f]*\}?|x[0-9A-Fa-f]{1,2}|u[0-9A-Fa-f]{1,4}|U[0-9A-Fa-f]{1,8}|[0-7]{1,3}|.)",
+    re.DOTALL,
 )
 # A quoted string that is one plain word once the shell has read it (`$'\x70ython3'` is `python3`), written as that
 # word, so it is read in command position like any other.
@@ -434,12 +465,24 @@ VARIABLE = re.compile(r"\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]
 # A GitHub expression (`${{ steps.py.outputs.python-path }}`), which GitHub replaces before the shell starts. For the
 # pipx check it is written as one word, `__gha__` and the expression with every other character made `_`.
 GHA_EXPRESSION = re.compile(r"\$\{\{(.*?)\}\}", re.DOTALL)
-# The id of each step whose outputs a value reads (`steps.py.outputs.python-path`).
+# The id of each step whose outputs a value reads (`steps.py.outputs.python-path`), and every mention of `steps` at
+# all: one written another way (`steps['py'].outputs`) names no id this check can read, so it chooses nothing.
 STEP_OUTPUT = re.compile(
-    r"(?<![A-Za-z0-9.-])steps\.([A-Za-z0-9_-]+)\.outputs(?![A-Za-z0-9_-])", re.I
+    r"(?<![A-Za-z0-9.-])steps\.([A-Za-z0-9_-]+)\.outputs(?![A-Za-z0-9-])", re.I
 )
-# The runner's own Python named by its path, which pipx would use instead of the set-up one.
-SYSTEM_PYTHON = re.compile(r"(?:/usr)?/bin/python(?:3(?:\.\d+)*)?")
+STEPS = re.compile(r"(?<![A-Za-z0-9.-])steps(?![A-Za-z0-9-])", re.I)
+# The variables a value may name without the step's `env:` setting them: actions/setup-python sets `pythonLocation`.
+SET_UP_VARIABLES = {"pythonLocation"}
+# Stands for a value the script sets itself, in the names `_chooses` reads.
+SCRIPT_SET = object()
+# The names a script itself sets (`P=...`, `export P=...`, `for P in`, `read P`), whose values this check does not
+# follow, so a value naming one still counts.
+SCRIPT_ASSIGNMENT = re.compile(r"(?:^|(?<=[\s;&|({`]))([A-Za-z_][A-Za-z0-9_]*)\+?=")
+SCRIPT_LOOP = re.compile(r"(?:^|(?<=[\s;&|({`]))(?:for|select)\s+([A-Za-z_][A-Za-z0-9_]*)\s")
+SCRIPT_READ = re.compile(r"(?:^|(?<=[\s;&|({`]))read((?:[ \t]+[^\s;&|)]+)*)")
+# The runner's own Python named by its path, which pipx would use instead of the set-up one (a doubled `/` is read
+# as one).
+SYSTEM_PYTHON = re.compile(r"(?:/+usr)?/+bin/+python(?:3(?:\.\d+)*)?")
 SETUP = {
     "node": re.compile(r"^actions/setup-node@"),
     "python": re.compile(r"^actions/setup-python@"),
@@ -462,13 +505,69 @@ VERSION_INPUTS = {
 }
 
 
+# A heredoc's delimiter: the whole shell word after `<<` or `<<-` (`EOF`, `EOF-1`, `END.txt`, `'EOF X'`, `E"OF"`).
+HEREDOC_WORD = re.compile(
+    r"""<<-?[ \t]*((?:'[^']*'|"(?:[^"\\]|\\.)*"|\\.|[^\s;&|<>()'"\\])+)""", re.DOTALL
+)
+
+
+def _heredoc_word(run: str, at: int) -> tuple[str, bool, int] | None:
+    """The heredoc that `<<` at `at` starts: its delimiter with the quotes and backslashes taken out, whether any part
+    of it was quoted or escaped (then the body is text the shell does not expand), and where the word ends; None when
+    no word follows."""
+    found = HEREDOC_WORD.match(run, at)
+    if not found:
+        return None
+    word = found[1]
+    delimiter = re.sub(
+        r"""'([^']*)'|"((?:[^"\\]|\\.)*)"|\\(.)""",
+        lambda m: (
+            m[1]
+            if m[1] is not None
+            else re.sub(r'\\([\\"$`])', r"\1", m[2])
+            if m[2] is not None
+            else m[3]
+        ),
+        word,
+        flags=re.DOTALL,
+    )
+    return delimiter, bool(re.search(r"['\"\\]", word)), found.end()
+
+
+def _skip_heredoc_bodies(run: str, at: int, delimiters: list[str]) -> int:
+    """Where the text continues after the bodies of these heredocs, which start at `at` (just after a new line): each
+    body ends at a line that is its delimiter."""
+    k, n = at, len(run)
+    for delimiter in delimiters:
+        while k < n:
+            end = run.find("\n", k)
+            end = n if end == -1 else end
+            text, k = run[k:end], end + 1
+            if text.strip() == delimiter:
+                break
+    return k
+
+
 def _substitution_close(run: str, at: int) -> int:
-    """The index of the `)` that closes the `$(` at `at`, or the end of the text: escapes, quoted strings and the
-    substitutions inside them are skipped, so their quotes and parentheses do not count."""
+    """The index of the `)` that closes the `$(` at `at`, or the end of the text: escapes, quoted strings, heredoc
+    bodies and the substitutions inside them are skipped, so their quotes and parentheses do not count (`$(cat <<EOF`
+    with `it's` in the body). Inside `((...))` a `<<` is a shift."""
     depth, k, n = 0, at + 1, len(run)
+    pending: list[str] = []  # the delimiters of heredocs whose bodies start at the next new line
+    arithmetic: int | None = None  # the depth an open `((` started at
     while k < n:
         char = run[k]
-        if char == "\\":
+        if char == "\n" and pending:
+            k = _skip_heredoc_bodies(run, k + 1, pending)
+            pending = []
+        elif run.startswith("<<<", k):
+            k += 3
+        elif char == "<" and run.startswith("<<", k) and arithmetic is None:
+            word = _heredoc_word(run, k)
+            if word:
+                pending.append(word[0])
+            k = word[2] if word else k + 2
+        elif char == "\\":
             k += 2
         elif char == "'":
             end = run.find("'", k + 1)
@@ -484,7 +583,11 @@ def _substitution_close(run: str, at: int) -> int:
                     k += 1
             k += 1
         else:
+            if arithmetic is None and run.startswith("((", k):
+                arithmetic = depth
             depth += {"(": 1, ")": -1}.get(char, 0)
+            if arithmetic is not None and depth <= arithmetic:
+                arithmetic = None
             if depth == 0:
                 return k
             k += 1
@@ -500,17 +603,20 @@ def _backtick_close(run: str, at: int) -> int:
 
 
 def _ansi_c(body: str) -> str:
-    """The text of a `$'...'` string as the shell reads it: `\\n`, `\\t`, `\\'`, `\\"`, `\\\\`, `\\xHH`, `\\uHHHH`,
-    `\\UHHHHHHHH` and octal `\\NNN` decoded, cut at a NUL as bash cuts it, and every character that is not printable
-    ASCII, a tab or a new line written `_`, which the shell does not split a word on either."""
+    """The text of a `$'...'` string as the shell reads it: `\\n`, `\\t`, `\\'`, `\\"`, `\\\\`, `\\xHH`, `\\x{H...}`,
+    `\\uHHHH`, `\\UHHHHHHHH` and octal `\\NNN` decoded (an octal or `\\x{...}` value keeps its low eight bits, as bash
+    5.2 does: `\\560` is `p`), cut at a NUL as bash cuts it, and every character that is not printable ASCII, a tab or
+    a new line written `_`, which the shell does not split a word on either."""
 
     def one(match: re.Match[str]) -> str:
         escape = match[1]
+        if escape.startswith("x{"):
+            return chr(int((escape[2:].rstrip("}") or "0")[-2:], 16))
         if escape[0] in "xuU" and len(escape) > 1:
             code = int(escape[1:], 16)
             return chr(code) if code <= 0x10FFFF else "_"
         if escape[0] in "01234567":
-            return chr(int(escape, 8))
+            return chr(int(escape, 8) & 0xFF)
         return ANSI_C.get(escape, match[0])
 
     text = ANSI_C_ESCAPE.sub(one, body).split("\0", 1)[0]
@@ -570,7 +676,9 @@ def _shell_text(run: str, values: bool = False) -> str:
     script read that way is put between a line holding `\\x01` and the words in front of the shell (its assignments
     and wrappers) and a line holding `\\x02`, so the settings those words make reach the commands inside it."""
     out: list[str] = []
-    heredocs: list[tuple[str, bool]] = []
+    # Each heredoc whose body starts at the next new line: its delimiter, whether the shell expands its body, and, when
+    # it is given to a shell that reads its script from its input, the words in front of that shell.
+    heredocs: list[tuple[str, bool, str | None]] = []
     # Open parentheses inside `$((...))` or `((...))`, where `<<` is a shift; 0 outside.
     arithmetic = 0
     i, n = 0, len(run)
@@ -590,7 +698,11 @@ def _shell_text(run: str, values: bool = False) -> str:
         outer reading stays, because the outer shell runs a `$(...)` or backtick in a double-quoted script before the
         inner shell starts (`bash -c "echo '$(node x)'"`)."""
         head = line().lstrip()
-        found = SHELL_SCRIPT.search(head) or ENV_SPLIT_SCRIPT.search(head)
+        found = (
+            SHELL_SCRIPT.search(head)
+            or ENV_SPLIT_SCRIPT.search(head)
+            or HERE_STRING_SCRIPT.search(head)
+        )
         if not found:
             out.append(text)
         elif values:
@@ -656,17 +768,21 @@ def _shell_text(run: str, values: bool = False) -> str:
             arithmetic += 1 if char == "(" else -1
             out.append(char)
             i += 1
-        elif not arithmetic and run.startswith("<<", i) and not run.startswith("<<<", i):
-            found = re.match(r"<<-?\s*(\\?)(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\2", run[i:])
-            if found:
+        elif run.startswith("<<<", i):
+            out.append("<<<")
+            i += 3
+        elif not arithmetic and run.startswith("<<", i):
+            word = _heredoc_word(run, i)
+            if word:
                 # The body is expanded only when no part of the delimiter is quoted or escaped.
-                heredocs.append((found.group(3), not (found.group(1) or found.group(2))))
+                shell = HEREDOC_SCRIPT.search(line().lstrip())
+                heredocs.append((word[0], not word[1], shell.group(0) if shell else None))
             out.append("<<")
-            i += len(found.group(0)) if found else 2
+            i = word[2] if word else i + 2
         elif char == "\n" and heredocs:
             out.append("\n")
             i += 1
-            for delimiter, expands in heredocs:
+            for delimiter, expands, shell in heredocs:
                 body: list[str] = []
                 while i < n:
                     end = run.find("\n", i)
@@ -675,11 +791,14 @@ def _shell_text(run: str, values: bool = False) -> str:
                     if text.strip() == delimiter:
                         break
                     body.append(text)
+                script = "\n".join(body)
                 if expands:
-                    out.extend(
-                        f"{command}\n"
-                        for command in _heredoc_substitutions("\n".join(body), values)
-                    )
+                    out.extend(f"{command}\n" for command in _heredoc_substitutions(script, values))
+                    # What the shell given the body then reads: the body with the outer shell's escapes taken out.
+                    script = re.sub(r"\\([\\$`\n])", lambda m: "" if m[1] == "\n" else m[1], script)
+                if shell is not None:
+                    inner = _shell_text(script, values)
+                    out.append(f"\x01{shell}\n{inner}\n\x02\n" if values else f"{inner}\n")
             heredocs = []
         else:
             out.append(char)
@@ -707,6 +826,29 @@ def _unquote(value: str) -> str:
     return value
 
 
+# A block scalar's indicator (`|`, `>-`, `|2-`, `|-2`), and the plain values YAML reads as null, which GitHub reads as
+# an empty string.
+BLOCK_SCALAR = re.compile(r"([|>])(?:([+-]?)\d?|\d([+-]))\s*(?:#.*)?")
+NULL = {"", "~", "null", "Null", "NULL"}
+
+
+def _scalar(value: str) -> str:
+    """A plain or quoted value as YAML reads it: a comment after it dropped, null (`~`, `null`, nothing) empty."""
+    text = re.sub(r"\s+#.*$", "", value).strip()
+    return "" if text in NULL else _unquote(text)
+
+
+def _block_scalar(lines: list[str], indicator: re.Match[str]) -> str:
+    """The text of a block scalar from its indented lines: `|` keeps the line breaks, `>` joins the lines of each
+    paragraph with a space; `-` drops the final line break, and without it one is kept."""
+    text = textwrap.dedent("\n".join(lines)).strip("\n")
+    if indicator[1] == ">":
+        paragraphs = re.split(r"\n[ \t]*\n", text)
+        text = "\n".join(" ".join(part.split("\n")) for part in paragraphs)
+    chomp = indicator[2] or indicator[3] or ""
+    return text if chomp == "-" or not text else text + "\n"
+
+
 def _flow_mapping(text: str) -> dict[str, str]:
     """A one-line `{ key: value, ... }` mapping, split on the commas outside quotes and `${{ }}`."""
     inner = text[text.index("{") + 1 : text.rindex("}")]
@@ -725,7 +867,9 @@ def _flow_mapping(text: str) -> dict[str, str]:
             start = index + 1
     parts.append(inner[start:])
     pairs = (part.partition(":") for part in parts if part.strip())
-    return {key.strip(): _unquote(value) for key, _, value in pairs}
+    return {
+        key.strip(): "" if value.strip() in NULL else _unquote(value) for key, _, value in pairs
+    }
 
 
 def _block(lines: list[str], at: int, indent: int) -> list[str]:
@@ -739,14 +883,25 @@ def _block(lines: list[str], at: int, indent: int) -> list[str]:
 
 
 def _mapping(lines: list[str], at: int, indent: int) -> dict[str, str]:
-    """The mapping under the key on line `at`: a `{ ... }` on the same line, or the `key: value` lines below it."""
+    """The mapping under the key on line `at`: a `{ ... }` on the same line, or the `key: value` lines below it, each
+    value plain, quoted, null (read as empty, see `_scalar`) or a block scalar (`|`, `>-`, read as its text)."""
     rest = re.sub(r"\s+#.*$", "", lines[at].split(":", 1)[1]).strip()
     if rest.startswith("{"):
         return _flow_mapping(rest)
     block = _block(lines, at, indent)
     inner = min((_indent(line) for line in block if _meaningful(line)), default=indent + 2)
-    pairs = (re.match(rf"^ {{{inner}}}([A-Za-z0-9_.-]+):[ \t]*(.*)$", line) for line in block)
-    return {m.group(1): _unquote(re.sub(r"\s+#.*$", "", m.group(2))) for m in pairs if m}
+    found: dict[str, str] = {}
+    for index, line in enumerate(block):
+        pair = re.match(rf"^ {{{inner}}}([A-Za-z0-9_.-]+):[ \t]*(.*)$", line)
+        if not pair:
+            continue
+        indicator = BLOCK_SCALAR.fullmatch(pair.group(2).strip())
+        found[pair.group(1)] = (
+            _block_scalar(_block(block, index, inner), indicator)
+            if indicator
+            else _scalar(pair.group(2))
+        )
+    return found
 
 
 def _matrix(job: list[str], key_indent: int) -> dict[str, list[str]]:
@@ -794,7 +949,7 @@ def _step_keys(lines: list[str], key_indent: int) -> dict:
         if key in ("with", "env"):
             keys[key] = _mapping(lines, index - 1, key_indent)
             index += len(_block(lines, index - 1, key_indent))
-        elif re.fullmatch(r"[|>][+-]?\d?\s*(?:#.*)?", rest):
+        elif BLOCK_SCALAR.fullmatch(rest):
             block = []
             while index < len(lines) and (
                 not lines[index].strip() or _indent(lines[index]) > key_indent
@@ -1059,12 +1214,34 @@ def _conditions_cover(
                 _top_level_terms(need, "&&") if len(_top_level_terms(need, "||")) == 1 else []
             )
             step_terms = [_without_outer_parentheses(term) for term in [need, *and_terms]]
+            # A set-up condition with no top-level `||` holds whenever every one of its `&&` terms does, so a later
+            # step whose `&&` terms include all of them is covered too (`a && b` covers `c && a && b`; Copilot on
+            # HCW-MigrateOrchestrator_App#117).
+            every = (
+                len(_top_level_terms(rest, "||")) == 1
+                and len(_top_level_terms(need, "||")) == 1
+                and all(
+                    term in _and_terms(need) and _fixed_term(term, ran) for term in _and_terms(rest)
+                )
+            )
             if not (
                 rest == ""
+                or every
                 or any(term in setup_terms and _fixed_term(term, ran) for term in step_terms)
             ):
                 return False
     return True
+
+
+def _and_terms(expression: str) -> list[str]:
+    """The terms a condition with no top-level `||` joins with `&&`, a term in parentheses that itself joins terms with
+    `&&` alone opened up: `(a && b) && c` is `a`, `b` and `c`."""
+    terms = []
+    for term in _top_level_terms(_without_outer_parentheses(expression.strip()), "&&"):
+        inner = _top_level_terms(term, "&&")
+        nested = len(inner) > 1 and len(_top_level_terms(term, "||")) == 1
+        terms.extend(_and_terms(term) if nested else [term])
+    return terms
 
 
 def covers(setup: dict, step: dict, ran: frozenset[str] | set[str] = frozenset()) -> bool:
@@ -1117,19 +1294,43 @@ def _chooses(
 ) -> bool:
     """True when a value given to pipx as its Python (`--python`, PIPX_DEFAULT_PYTHON) chooses the set-up one: it is
     not empty (quotes aside), not the runner's own Python named by its path (SYSTEM_PYTHON: `/usr/bin/python3`,
-    `/bin/python3`), and every `steps.<id>.outputs` it reads is of a step in `setup_ids`, the earlier
-    actions/setup-python steps of the job that are sure to have run first. A shell variable in it is read from `env`
-    (the step's, job's and workflow's `env:`) when it is there (`--python "$PYTHON_PATH"` with `PYTHON_PATH: ${{
-    steps.python.outputs.python-path }}`); one that is not stays as it is. `python3.15` or a path under
+    `/bin/python3`), every mention of `steps` in it is a `steps.<id>.outputs` this check can read (`steps['py']` is
+    not), and each such id is of a step in `setup_ids`, the earlier actions/setup-python steps of the job that are sure
+    to have run first. Given `env` (the step's, job's and workflow's `env:`, and SCRIPT_SET for each name the script
+    sets itself), a shell variable in the value is read from it (`--python "$PYTHON_PATH"` with `PYTHON_PATH: ${{
+    steps.python.outputs.python-path }}`); one the script sets counts, as does `$pythonLocation`, which
+    actions/setup-python sets; any other one is unknown, so the value chooses nothing. Without `env` (an inherited
+    value, which GitHub does not expand) the value is read as written. `python3.15` or a path under
     `${{ env.pythonLocation }}` counts."""
-    env = env or {}
+    unknown = False
+
+    def variable(match: re.Match[str]) -> str:
+        nonlocal unknown
+        name = match[1] or match[2]
+        if name in (env or {}):
+            given = env[name]
+            return (
+                match[0]
+                if given is SCRIPT_SET
+                else _gha_tokens("" if given is None else str(given))
+            )
+        unknown = unknown or name not in SET_UP_VARIABLES
+        return match[0]
+
     text = value.replace("'", "").replace('"', "")
-    text = VARIABLE.sub(
-        lambda m: _gha_tokens(str(env[m[1] or m[2]])) if (m[1] or m[2]) in env else m[0], text
-    ).strip()
-    if not text or SYSTEM_PYTHON.fullmatch(text):
+    text = (text if env is None else VARIABLE.sub(variable, text)).strip()
+    if not text or unknown or SYSTEM_PYTHON.fullmatch(text):
         return False
-    return all(found in setup_ids for found in STEP_OUTPUT.findall(text))
+    ids = STEP_OUTPUT.findall(text)
+    return len(ids) == len(STEPS.findall(text)) and all(found in setup_ids for found in ids)
+
+
+def _script_names(run: str) -> set[str]:
+    """The names a script sets itself (see SCRIPT_ASSIGNMENT), whose values this check does not follow."""
+    names = set(SCRIPT_ASSIGNMENT.findall(run)) | set(SCRIPT_LOOP.findall(run))
+    for words in SCRIPT_READ.findall(run):
+        names |= {word for word in words.split() if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", word)}
+    return names
 
 
 def _pipx_option_chooses_python(
@@ -1263,10 +1464,13 @@ def pipx_without_python(
     of the earlier actions/setup-python steps that are sure to have run first; passing setup-python's `python-path`
     output that way is the documented way to point pipx at the Python it set up
     (https://github.com/actions/setup-python/blob/main/docs/advanced-usage.md#python-path), as is giving it through a
-    variable of the step's `env:` (`--python "$PYTHON_PATH"`), which is read the same way. An inherited value is used
-    as written, since GitHub does not expand a variable in `env:`."""
+    variable of the step's `env:` (`--python "$PYTHON_PATH"`), which is read the same way; a variable that neither the
+    `env:` nor the script sets chooses nothing. An inherited value is used as written, since GitHub does not expand a
+    variable in `env:`."""
     stack = [_chooses(_gha_tokens(str(env.get("PIPX_DEFAULT_PYTHON") or "")), setup_ids)]
-    for line in _shell_text(_gha_tokens(run or ""), values=True).split("\n"):
+    script = _gha_tokens(run or "")
+    env = {**dict.fromkeys(_script_names(script), SCRIPT_SET), **env}
+    for line in _shell_text(script, values=True).split("\n"):
         line = line.strip()
         if line.startswith("\x01"):
             # A `-c` script (or `env -S` value) starts: it inherits what the words in front of its shell make.
@@ -2169,7 +2373,7 @@ def test_an_indirect_step_counts_as_running_its_runtime():
         ('pipx run --pip-args "--python" tool', {}, True),
         ("env FOO=PIPX_DEFAULT_PYTHON=/p pipx run x", {}, True),
         ('FOO="PIPX_DEFAULT_PYTHON=/p" pipx run x', {}, True),
-        ('pipx run --python "$P" tool', {}, False),
+        ('pipx run --python "$P" tool', {"P": "/opt/py/bin/python3"}, False),
         ("pipx run --python=/p tool", {}, False),
         ("pipx run --spec checkov==3.3.30 --python /p checkov -d .", {}, False),
         ("pipx install --python /p tool", {}, False),
@@ -2180,7 +2384,7 @@ def test_an_indirect_step_counts_as_running_its_runtime():
         ("PIPX_DEFAULT_PYTHON= pipx run x", {}, True),
         ("PIPX_DEFAULT_PYTHON='' pipx run x", {}, True),
         ('PIPX_DEFAULT_PYTHON="" pipx run x', {}, True),
-        ('PIPX_DEFAULT_PYTHON="$P" pipx run x', {}, False),
+        ('PIPX_DEFAULT_PYTHON="$P" pipx run x', {"P": "/opt/py/bin/python3"}, False),
         ("PIPX_DEFAULT_PYTHON='/opt/py/bin/python3' pipx run x", {}, False),
         ("env PIPX_DEFAULT_PYTHON= pipx run x", {}, True),
         # Empty quotes run together are still empty, a quoted value elsewhere in the script does not vouch for this
@@ -2192,7 +2396,7 @@ def test_an_indirect_step_counts_as_running_its_runtime():
         ("PIPX_DEFAULT_PYTHON='/p' PIPX_DEFAULT_PYTHON= pipx run x", {}, True),
         ("PIPX_DEFAULT_PYTHON= PIPX_DEFAULT_PYTHON='/p' pipx run x", {}, False),
         ('PIPX_DEFAULT_PYTHON=""/p pipx run x', {}, False),
-        ('pipx run --python "$P" --spec x x', {}, False),
+        ('pipx run --python "$P" --spec x x', {"P": "/opt/py/bin/python3"}, False),
         ("pipx run --python=/opt/py/bin/python3 x", {}, False),
         ("PIPX_DEFAULT_PYTHON=/p pipx run x", {}, False),
         ("env PIPX_DEFAULT_PYTHON=/p pipx run x", {}, False),
@@ -2656,6 +2860,240 @@ def test_composite_actions_are_read_with_the_workflows_so_their_keys_can_be_list
         ".github/actions/a/action.yml > composite > Scan > pipx",
         ".github/actions/b/action.yaml > composite > Scan > pipx",
     ]
+
+
+@pytest.mark.parametrize(
+    ("line", "kind", "found"),
+    [
+        # An assignment's value holds a whole `$(...)`, `$((...))` or backtick pair, so a substitution that runs into
+        # the next word is read from its own `$(`.
+        ("FOO=$(date) node x", "node", True),
+        ("FOO=`date` node x", "node", True),
+        ("n=$((n+1)) node x", "node", True),
+        ("x=$(node y)", "node", True),
+        ("x=$(echo node)", "node", False),
+        # An octal or `\x{...}` value keeps its low eight bits, as bash 5.2 does.
+        ("$'\\560ython3' x.py", "python", True),
+        ("$'\\556ode' x", "node", True),
+        ("$'\\x{70}ython3' x.py", "python", True),
+        ("$'\\x{170}ython3' x.py", "python", True),
+        ("$'node\\x{0}x' y", "node", True),
+        ("$'\\x{zz}node' x", "node", False),
+        # A heredoc's delimiter is the whole word, quotes taken out; quoted anywhere, its body is text.
+        ("cat <<EOF-X\nhi\nEOF-X\nnode x", "node", True),
+        ("cat <<END.txt\nhi\nEND.txt\nnode x", "node", True),
+        ('cat <<E"OF"\nhi\nEOF\nnode x', "node", True),
+        ('cat <<E"OF"\n$(node x)\nEOF', "node", False),
+        ("cat <<'EOF X'\nhi\nEOF X\nnode x", "node", True),
+        ("cat <<EOF-1\n$(python3 x)\nEOF-1", "python", True),
+        # A heredoc or here-string given to a shell that reads its script from its input is that shell's script.
+        ("bash <<'EOF'\nnode x\nEOF", "node", True),
+        ("bash -s <<EOF\npython3 x\nEOF", "python", True),
+        ("sudo bash -s <<'EOF'\npython3 x\nEOF", "python", True),
+        ("/bin/sh <<EOF\nnode x\nEOF\necho done", "node", True),
+        ("bash <<< 'node x'", "node", True),
+        ('sh <<<"python3 x"', "python", True),
+        ("bash <<< node", "node", True),
+        ("cat <<'EOF'\nnode x\nEOF", "node", False),
+        ("bash x.sh <<'EOF'\nnode x\nEOF", "node", False),
+        ("bash -c 'true' <<'EOF'\nnode x\nEOF", "node", False),
+        ("cat <<< 'node x'", "node", False),
+        ("docker run -i img bash <<'EOF'\nnode x\nEOF", "node", False),
+        ("bash <<'EOF'\necho node\nEOF", "node", False),
+        # A heredoc's body inside a substitution is skipped, so its quotes do not hide what follows.
+        ('msg="$(cat <<EOF\nit\'s done\nEOF\n)"\nnode x.js', "node", True),
+        ('msg="$(cat <<\'EOF\'\n"quoted\nEOF\n)"\nnode x', "node", True),
+        ('v="$(( 1<<2 ))"\nnode x', "node", True),
+    ],
+)
+def test_review_forms_are_read_as_the_shell_reads_them(line, kind, found):
+    assert runs_runtime(line, kind) is found
+
+
+@pytest.mark.parametrize(
+    ("run", "env", "ids", "flagged"),
+    [
+        # A substitution in an assignment's value is read from its own `$(`, with what is in front of the command.
+        ("x=$(sudo pipx run y)", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, [], True),
+        ("x=`sudo pipx run y`", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, [], True),
+        ('x="$(sudo pipx run y)"', {"PIPX_DEFAULT_PYTHON": "/opt/py"}, [], True),
+        ("x=$(PIPX_DEFAULT_PYTHON= pipx run y)", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, [], True),
+        (
+            "x=$(PIPX_DEFAULT_PYTHON=/usr/bin/python3 pipx run y)",
+            {"PIPX_DEFAULT_PYTHON": "/opt/py"},
+            [],
+            True,
+        ),
+        ("x=$(sudo bash -c 'pipx run y')", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, [], True),
+        ("y=$(PIPX_DEFAULT_PYTHON=/p pipx run y)", {}, [], False),
+        # A `steps` reference written another way names no id this check can read.
+        ("pipx run --python ${{ steps['py'].outputs.python-path }} x", {}, ["py"], True),
+        ("pipx run --python ${{ steps.py['outputs'].python-path }} x", {}, ["py"], True),
+        ("pipx run --python ${{ steps[ 'py' ].outputs['python-path'] }} x", {}, ["py"], True),
+        (
+            "pipx run x",
+            {"PIPX_DEFAULT_PYTHON": "${{ steps['py'].outputs.python-path }}"},
+            ["py"],
+            True,
+        ),
+        ("pipx run --python ${{ STEPS.py.outputs.python-path }} x", {}, ["py"], False),
+        ("pipx run --python ${{ STEPS.py.outputs.python-path }} x", {}, [], True),
+        # A variable no `env:` and no line of the script sets chooses nothing; `pythonLocation` is setup-python's.
+        ("pipx run --python $NOPE x", {}, [], True),
+        ('pipx run --python "$NOPE" x', {}, [], True),
+        ("pipx run --python $HOME/py/bin/python x", {}, [], True),
+        ('PIPX_DEFAULT_PYTHON="$NOPE" pipx run x', {"PIPX_DEFAULT_PYTHON": "/opt/py"}, [], True),
+        ('P=/opt/py/bin/python3; pipx run --python "$P" x', {}, [], False),
+        ('export P=/opt/py/bin/python3\npipx run --python "$P" x', {}, [], False),
+        ('for P in /a /b; do pipx run --python "$P" x; done', {}, [], False),
+        ('read -r P < p.txt; pipx run --python "$P" x', {}, [], False),
+        ('pipx run --python "$pythonLocation/bin/python" x', {}, [], False),
+        ('pipx run --python "${pythonLocation}/bin/python" x', {}, [], False),
+        ("pipx run --python /usr/bin//python3 x", {}, [], True),
+        # A heredoc or here-string given to a shell carries the settings in front of that shell.
+        ("PIPX_DEFAULT_PYTHON=/p bash <<'EOF'\npipx run x\nEOF", {}, [], False),
+        ("bash <<'EOF'\npipx run x\nEOF", {}, [], True),
+        ("sudo bash <<< 'pipx run x'", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, [], True),
+        ("sudo -E bash <<< 'pipx run x'", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, [], False),
+    ],
+)
+def test_review_pipx_forms(run, env, ids, flagged):
+    assert pipx_without_python(run, env, set(ids)) is flagged
+
+
+@pytest.mark.parametrize(
+    ("setup", "step", "covered"),
+    [
+        # A set-up condition with no top-level `||` covers a later step whose `&&` terms include all of its own
+        # (Copilot on HCW-MigrateOrchestrator_App#117).
+        ("a && b", "a && b && c", True),
+        ("a && b", "c && a && b", True),
+        ("(a && b)", "c && (a && b)", True),
+        ("a && b", "(a && b) && c", True),
+        ("a && b", "a && c", False),
+        ("a && b", "a && b || c", False),
+        ("a && b || d", "a && b && c", False),
+        ("a && env.RUN", "a && env.RUN && c", False),
+        ("a && b", "!cancelled() && a && b && c", False),
+        ("always() && a && b", "c && a && b", True),
+    ],
+)
+def test_a_set_up_condition_whose_terms_are_all_in_the_later_one_covers_it(setup, step, covered):
+    assert covers({"if": setup}, {"if": step}) is covered
+
+
+# Values YAML reads its own way: null is empty, a block scalar is its text, and `|2-` is a block scalar too.
+REVIEW_YAML = """\
+on: push
+env:
+  PY: "3.15"
+jobs:
+  null-env:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/setup-python@abc
+        with: { python-version: "3.15" }
+      - name: Scan
+        env:
+          PIPX_DEFAULT_PYTHON: ~
+        run: pipx run checkov -d .
+  block-env:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/setup-python@abc
+        with: { python-version: "3.15" }
+      - name: Scan
+        env:
+          PIPX_DEFAULT_PYTHON: >-
+            /usr/bin/python3
+        run: pipx run checkov -d .
+  block-env-good:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/setup-python@abc
+        with: { python-version: "3.15" }
+      - name: Scan
+        env:
+          PIPX_DEFAULT_PYTHON: |
+            /opt/py/bin/python3
+        run: pipx run checkov -d .
+  block-run:
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Script
+        run: |2-
+            node x.js
+      - name: Other
+        run: >-2
+          python3 y.py
+  uv-dev:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: astral-sh/setup-uv@abc
+        with: { python-version: "3.15-dev" }
+      - name: Run
+        run: uv run x.py
+  uv-matrix:
+    runs-on: ubuntu-26.04
+    strategy:
+      matrix:
+        py: ["3.15"]
+    steps:
+      - uses: astral-sh/setup-uv@abc
+        with: { python-version: "${{ matrix.py }}" }
+      - name: Run
+        run: uv run x.py
+  uv-matrix-old:
+    runs-on: ubuntu-26.04
+    strategy:
+      matrix:
+        py: ["3.15", "3.14"]
+    steps:
+      - uses: astral-sh/setup-uv@abc
+        with: { python-version: "${{ matrix.py }}" }
+      - name: Run
+        run: uv run x.py
+  uv-env:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: astral-sh/setup-uv@abc
+        with:
+          python-version: ${{ env.PY }}
+      - name: Run
+        run: uv run x.py
+  uv-block:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: astral-sh/setup-uv@abc
+        with:
+          python-version: >-
+            3.15
+      - name: Run
+        run: uv run x.py
+"""
+
+
+def test_yaml_values_are_read_as_yaml_reads_them():
+    jobs = read_jobs(REVIEW_YAML)
+    assert unset_steps("x.yml", jobs, {}) == [
+        "x.yml > block-run > Script > node",
+        "x.yml > block-run > Other > python",
+        "x.yml > uv-dev > Run > python",
+        "x.yml > uv-matrix-old > Run > python",
+    ]
+    assert pipx_problems("x.yml", jobs) == [
+        "x.yml > null-env > Scan > pipx",
+        "x.yml > block-env > Scan > pipx",
+    ]
+
+
+def test_a_long_script_reads_quickly():
+    """Reading the current line must not rejoin the whole script each time (8,000 lines once took a minute)."""
+    script = "echo 'a' \"b\" $((1 + 2))\n" * 8000 + "node y"
+    started = time.perf_counter()
+    assert runs_runtime(script, "node")
+    assert not pipx_without_python(script, {})
+    assert time.perf_counter() - started < 1
 
 
 FILES = sorted(p for p in WORKFLOWS.iterdir() if p.suffix in (".yml", ".yaml"))
