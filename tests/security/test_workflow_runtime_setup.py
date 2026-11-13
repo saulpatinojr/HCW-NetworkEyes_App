@@ -28,8 +28,11 @@ is sure to have run first, by the same rules as a set-up step with an `if:` (bel
 that is not actions/setup-python or one that may be skipped chooses nothing, and so does a `steps` reference written
 another way (`steps['py'].outputs`), which names no id this test can read. A shell variable in the value (`--python
 "$PYTHON_PATH"`) is read from the step's, job's or workflow's `env:`; one the script sets itself (`P=...`, `for P in`,
-`read P`, but not `echo P=...` or `P=/x pipx ...`) counts for the commands after it, as does `$pythonLocation`
-(setup-python sets it), and any other one chooses nothing. A bare
+`read P`, but not `echo P=...` or `P=/x pipx ...`) counts for the commands after it in the same shell, as does
+`$pythonLocation` (setup-python sets it), and any other one chooses nothing. A name set in a `-c` script, a shell fed a
+heredoc, a `$(...)` or a `( ... )` subshell stays there, and one set outside reaches a child shell only when exported.
+A later assignment in the script wins over the `env:` value, and its value is read by the same rules (`P=/usr/bin/python3`
+chooses nothing). A bare
 `python3.15` and a path under `${{ env.pythonLocation }}` still count. Settings travel the way the shell passes them: `PIPX_DEFAULT_PYTHON=/p bash -c
 'pipx run x'` and `env PIPX_DEFAULT_PYTHON=/p env -S 'pipx run x'` give the inner script the setting, and `sudo` drops
 every inherited setting (its default `env_reset`) unless it is given `-E` or `--preserve-env` (bare, or with a list
@@ -499,7 +502,7 @@ ASSIGNED_WORD = (
 ONE_ASSIGNMENT = re.compile(ASSIGNED_WORD + r"\s*")
 NAMES_SET = re.compile(
     r"(?:^|[$<]\(|[`({|;&]|(?<![^\s])(?:then|do|else|elif|if|while|until|!))\s*"
-    r"(?:(?:export|declare|local|readonly|typeset)(?![A-Za-z0-9_=])(?:\s+[-+][A-Za-z]+)*"
+    r"(?:(?P<keyword>export|declare|local|readonly|typeset)(?![A-Za-z0-9_=])(?P<flags>(?:\s+[-+][A-Za-z]+)*)"
     r"(?P<declared>(?:\s+[^\s;&|)]+)*)"
     r"|(?:for|select)\s+(?P<loop>[A-Za-z_][A-Za-z0-9_]*)"
     r"|read(?![A-Za-z0-9_=])(?P<read>(?:[ \t]+[^\s;&|)]+)*)"
@@ -1410,33 +1413,142 @@ def _chooses(
     return len(ids) == len(STEPS.findall(text)) and all(found in setup_ids for found in ids)
 
 
-def _names_set(found: re.Match[str]) -> set[str]:
-    """The names one NAMES_SET match sets (see NAMES_SET), read from a line of `_shell_text` with values."""
-    names: set[str] = set()
+def _literal(value: str) -> str:
+    """A value a script assigns, as `_chooses` reads it in place of the variable: the text with its quotes taken off.
+    So `/usr/bin/python3` chooses nothing, nor does a substitution (`$(command -v python3)`), as when it is given to
+    pipx directly; a variable in it (`P="$X"`) is not followed further and counts."""
+    return value.replace("'", "").replace('"', "")
+
+
+def _names_set(found: re.Match[str]) -> tuple[list[tuple[str, object]], bool, list[str]]:
+    """What one NAMES_SET match sets, read from a line of `_shell_text` with values: each name with its value (see
+    `_literal`; SCRIPT_SET, a value this check does not know but counts, for `for`, `read` and `+=`), whether the command exports them (`export`, `declare -x`,
+    `typeset -x`), and the names it only exports (`export P`)."""
+    keyword, flags = found["keyword"] or "", found["flags"] or ""
+    exported = keyword == "export" or (
+        keyword in ("declare", "typeset") and re.search(r"(?:^|\s)-[A-Za-z]*x", flags) is not None
+    )
+    pairs: list[tuple[str, object]] = []
+    marks: list[str] = []
     if found["loop"]:
-        names.add(found["loop"])
+        pairs.append((found["loop"], SCRIPT_SET))
     for word in (found["declared"] or "").split():
-        named = re.match(r"([A-Za-z_][A-Za-z0-9_]*)\+?=", word)
-        names |= {named[1]} if named else set()
+        named = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)(\+?)=(.*)", word, re.DOTALL)
+        if named:
+            pairs.append((named[1], SCRIPT_SET if named[2] else _literal(named[3])))
+        elif exported and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", word):
+            marks.append(word)
     at, assigned = 0, found["assigned"] or ""
     while (one := ONE_ASSIGNMENT.match(assigned, at)) and one.end() > at:
-        names.add(one[1])
+        text = one[0].rstrip()
+        value = text[len(one[1]) :]
+        pairs.append((one[1], SCRIPT_SET if value.startswith("+") else _literal(value[1:])))
         at = one.end()
     pending = ""
     for word in (found["read"] or "").split():
         if pending:
-            names |= {word} if pending == "a" else set()
+            if pending == "a":
+                pairs.append((word, SCRIPT_SET))
             pending = ""
         elif word.startswith("-") and len(word) > 1:
             for k in range(1, len(word)):
                 if word[k] in READ_VALUE_OPTIONS:
                     if word[k + 1 :] and word[k] == "a":
-                        names.add(word[k + 1 :])
+                        pairs.append((word[k + 1 :], SCRIPT_SET))
                     pending = "" if word[k + 1 :] else word[k]
                     break
         elif re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", word):
-            names.add(word)
-    return names
+            pairs.append((word, SCRIPT_SET))
+    return pairs, exported, marks
+
+
+def _scope_paths(text: str) -> tuple[list[tuple[int, ...]], dict[int, str]]:
+    """For each character of a `_shell_text` reading with values, the shells and subshells it runs in, innermost last,
+    and what each one is: "child" for a shell the script starts with its own script (a `-c` or `env -S` script, a
+    heredoc or here-string given to a shell: the lines between `\\x01` and `\\x02`), which sees only exported
+    variables, and "sub" for a `$(...)`, `<(...)`, backtick pair or `( ... )` subshell, which sees all of them. Neither
+    hands the names it sets back out. `$((...))` and `((...))` are arithmetic, not a subshell; a `)` with nothing
+    open (a `case` pattern) closes nothing."""
+    paths: list[tuple[int, ...]] = []
+    kinds: dict[int, str] = {}
+    stack: list[list] = []  # [id or None, kind, open parentheses]
+
+    current: tuple[int, ...] = ()  # the ids on `stack`, kept up to date as it changes
+
+    def push(kind: str, depth: int = 0) -> None:
+        ident = None
+        if kind != "arith":
+            ident = len(kinds)
+            kinds[ident] = kind
+        stack.append([ident, kind, depth])
+        settle()
+
+    def settle() -> None:
+        nonlocal current
+        current = tuple(frame[0] for frame in stack if frame[0] is not None)
+
+    k, n = 0, len(text)
+    while k < n:
+        char, step = text[k], 1
+        top = stack[-1] if stack else None
+        if char == "\\":
+            step = 2
+        elif char == "\x01":
+            push("child")
+        elif char == "\x02":
+            while stack and stack.pop()[1] != "child":
+                pass
+            settle()
+        elif text.startswith("$((", k) or (
+            text.startswith("((", k) and not (top and top[1] == "arith")
+        ):
+            step = 3 if char == "$" else 2
+            push("arith", 2)
+        elif char in "$<>" and text.startswith("(", k + 1):
+            step = 2
+            push("sub")
+        elif char == "(":
+            if top and top[1] == "arith":
+                top[2] += 1
+            else:
+                push("sub")
+        elif char == ")":
+            if top and top[1] == "arith":
+                top[2] -= 1
+                if top[2] == 0:
+                    stack.pop()
+            elif top and top[1] == "sub":
+                stack.pop()
+                settle()
+        elif char == "`":
+            if top and top[1] == "tick":
+                stack.pop()
+                settle()
+            else:
+                push("tick")
+        paths.extend([current] * min(step, n - k))
+        k += step
+    return paths, kinds
+
+
+def _names_view(
+    env: dict,
+    records: list[tuple[str, object, tuple[int, ...], bool]],
+    here: tuple[int, ...],
+    kinds: dict,
+) -> dict:
+    """The variables a command at `here` sees: the step's, job's and workflow's `env:` (which GitHub exports), then
+    every earlier assignment of the script in this shell or one around it, in order, the last one winning over `env:`
+    too (Copilot on HCW-NetworkEyes_App#395); one made outside a child shell reaches into it only when exported (an
+    `env:` name stays exported when the script assigns it). An assignment inside a subshell or child shell that has
+    ended is not seen (Copilot on HCW-HybridCloudWorks#1719)."""
+    view = dict(env)
+    for name, value, at, exported in records:
+        if here[: len(at)] != at:
+            continue
+        if exported or name in env or all(kinds[i] != "child" for i in here[len(at) :]):
+            view[name] = value
+    return view
 
 
 def _pipx_commands(line: str) -> list[re.Match[str]]:
@@ -1590,32 +1702,50 @@ def pipx_without_python(
     variable in `env:`."""
     stack = [_chooses(_gha_tokens(str(env.get("PIPX_DEFAULT_PYTHON") or "")), setup_ids)]
     text = _shell_text(_gha_tokens(run or ""), values=True)
-    env = dict(env)
-    for line in text.split("\n"):
-        line = line.strip()
+    scopes: list = []  # `_scope_paths(text)`, worked out the first time a script sets a name
+
+    def view_at(index: int) -> dict:
+        """The variables a command at `index` of `text` sees (see `_names_view`)."""
+        if not records:
+            return dict(env)
+        if not scopes:
+            scopes.extend(_scope_paths(text))
+        return _names_view(env, records, scopes[0][index] if index >= 0 else (), scopes[1])
+
+    records: list[tuple[str, object, tuple[int, ...], bool]] = []
+    offset = 0
+    for raw in text.split("\n"):
+        line = raw.strip()
+        lead, offset = offset + len(raw) - len(raw.lstrip()), offset + len(raw) + 1
         if line.startswith("\x01"):
             # A `-c` script (or `env -S` value) starts: it inherits what the words in front of its shell make.
-            local = _local_default_python(line[1:], setup_ids, env)
+            local = _local_default_python(line[1:], setup_ids, view_at(lead - 1))
             stack.append(_or_inherited(local, stack[-1]))
             continue
         if line.startswith("\x02"):
             stack = stack[:-1] if len(stack) > 1 else stack
             continue
         # In the order the shell meets them: a name the script sets counts from the end of the command that sets it
-        # on (Copilot on HCW-HybridCloudWorks#1719); the step's `env:` stays first.
+        # on, in the shell that set it (see `_names_view`); the step's `env:` comes first.
         events = sorted(
             [(found.end(), 0, found) for found in NAMES_SET.finditer(line)]
-            + [(found.start(), 1, found) for found in _pipx_commands(line)],
+            + [(found.end("before"), 1, found) for found in _pipx_commands(line)],
             key=lambda event: (event[0], event[1]),
         )
-        for _, kind, found in events:
+        for at, kind, found in events:
             if kind == 0:
-                for name in _names_set(found):
-                    env.setdefault(name, SCRIPT_SET)
+                pairs, exported, marks = _names_set(found)
+                if not scopes and (pairs or marks):
+                    scopes.extend(_scope_paths(text))
+                here = scopes[0][lead + at - 1] if scopes else ()
+                records.extend((name, value, here, exported) for name, value in pairs)
+                view = view_at(lead + at - 1)
+                records.extend((name, view[name], here, True) for name in marks if name in view)
                 continue
-            local = _local_default_python(found["before"], setup_ids, env)
+            view = view_at(lead + at)
+            local = _local_default_python(found["before"], setup_ids, view)
             if not (
-                _pipx_option_chooses_python(found["words"], setup_ids, env)
+                _pipx_option_chooses_python(found["words"], setup_ids, view)
                 or _or_inherited(local, stack[-1])
             ):
                 return True
@@ -3404,6 +3534,57 @@ def test_a_composite_set_up_step_whose_version_cannot_be_read_is_reported():
         f"{label} > composite > step 2 > node: cannot work out the version it asks for",
         f"{label} > composite > step 3 > python: cannot work out the version it asks for",
     ]
+
+
+@pytest.mark.parametrize(
+    ("run", "env", "ids", "flagged"),
+    [
+        # A name the script sets stays in the shell that set it: a `-c` script, a shell fed a heredoc, a `$(...)`,
+        # a backtick pair or a `( ... )` subshell hands nothing back; a child shell sees only exported names, a
+        # subshell sees them all (Copilot on HCW-HybridCloudWorks#1719).
+        ("bash -c 'P=/opt/py/bin/python3' ; pipx run --python \"$P\" x", {}, [], True),
+        ('x=$(P=/opt/py/bin/python3; echo) ; pipx run --python "$P" x', {}, [], True),
+        ('(P=/opt/py/bin/python3); pipx run --python "$P" x', {}, [], True),
+        ("P=/opt/py/bin/python3; bash -c 'pipx run --python \"$P\" x'", {}, [], True),
+        ("export P=/opt/py/bin/python3; bash -c 'pipx run --python \"$P\" x'", {}, [], False),
+        ('P=/opt/py/bin/python3; x=$(pipx run --python "$P" x)', {}, [], False),
+        ('P=/opt/py/bin/python3; (pipx run --python "$P" x)', {}, [], False),
+        ("bash -c 'pipx run --python \"$P\" x'", {"P": "/opt/py/bin/python3"}, [], False),
+        ("bash -c 'P=/opt/py/bin/python3; pipx run --python \"$P\" x'", {}, [], False),
+        ("bash <<'EOF'\nP=/opt/py/bin/python3\nEOF\npipx run --python \"$P\" x", {}, [], True),
+        ("P=/opt/py/bin/python3\nbash <<'EOF'\npipx run --python \"$P\" x\nEOF", {}, [], True),
+        (
+            "declare -x P=/opt/py/bin/python3\nbash <<'EOF'\npipx run --python \"$P\" x\nEOF",
+            {},
+            [],
+            False,
+        ),
+        ('echo "$(P=/opt/py/bin/python3; echo)"; pipx run --python "$P" x', {}, [], True),
+        ('x=`P=/opt/py/bin/python3; echo`; pipx run --python "$P" x', {}, [], True),
+        ('{ P=/opt/py/bin/python3; }; pipx run --python "$P" x', {}, [], False),
+        # A later assignment in the script wins over the step's, job's or workflow's `env:`, and its value is read
+        # the same way (Copilot on HCW-NetworkEyes_App#395).
+        ('P=/usr/bin/python3; pipx run --python "$P" x', {"P": "/opt/py/bin/python3"}, [], True),
+        (
+            "bash -c 'P=/usr/bin/python3'; pipx run --python \"$P\" x",
+            {"P": "/opt/py/bin/python3"},
+            [],
+            False,
+        ),
+        ('pipx run --python "$P" x; P=/usr/bin/python3', {"P": "/opt/py/bin/python3"}, [], False),
+        (
+            "P=/usr/bin/python3\nbash -c 'pipx run --python \"$P\" x'",
+            {"P": "/opt/py/bin/python3"},
+            [],
+            True,
+        ),
+        ('P=\nPIPX_DEFAULT_PYTHON="$P" pipx run x', {"P": "/opt/py/bin/python3"}, [], True),
+        ('P=/opt/py/bin/python3; pipx run --python "$P" x', {"P": "/usr/bin/python3"}, [], False),
+        ('P=$(command -v python3); pipx run --python "$P" x', {}, [], True),
+    ],
+)
+def test_copilot_round_two_names_stay_in_their_shell_and_override_env(run, env, ids, flagged):
+    assert pipx_without_python(run, env, set(ids)) is flagged
 
 
 FILES = sorted(p for p in WORKFLOWS.iterdir() if p.suffix in (".yml", ".yaml"))
