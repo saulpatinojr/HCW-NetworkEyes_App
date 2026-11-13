@@ -56,7 +56,10 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       # The summary step runs python3; choose its version rather than take the runner's own (3.14 on ubuntu-26.04).
+      # `always()` like the summary step, so the summary never falls back to the runner's own python3 after an
+      # earlier step failed (tests/security/test_workflow_runtime_setup.py checks this).
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        if: always()
         with:
           python-version: "3.15"
       - name: Run gitleaks
@@ -137,7 +140,7 @@ jobs:
         with:
           path: ~/.cache/pip
           key: lint-${{ hashFiles('pyproject.toml') }}
-      - run: pip install "ruff==0.17.1"  # same version as uv.lock; move both together
+      - run: pip install "ruff==0.17.4"  # same version as uv.lock, .pre-commit-config.yaml and pyproject's floor; move them together
       - name: ruff check (lint)
         run: ruff check . --output-format=github
       - name: ruff format check
