@@ -2626,7 +2626,7 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   `Image Scan (Trivy)` jobs are the proof, and the web tier was not started against the built image.
 
 ### T-743 — Node.js 26 and Python 3.15, the HCW runtime floors (HCW-HybridCloudWorks#1707)
-- **Status:** Done 2026-11-12 (and (6) to (8) on 2026-11-13), except items (4) and (5), which are open. The HCW
+- **Status:** Done 2026-11-12 (and (6) to (9) on 2026-11-13), except items (4) and (5), which are open. The HCW
   website's version floors (`scripts/version-floors.json` in saulpatinojr/HCW-HybridCloudWorks, issue 1707 there) ask
   for the newest Node.js LTS line (26, floor 26.11.0) and the newest Python line (3.15, floor 3.15.0). This repository
   ran Node.js 24 in the web image and Python 3.14 everywhere.
@@ -2692,6 +2692,12 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   `&&` cover rule no longer splits a later condition that has its own top-level `||`, and `bash -c node x.js` (an
   unquoted script) is read. Made the same way in the website's JavaScript copy. Nothing new was found in this
   repository's workflows.
+- **(9) Done 2026-11-13: the workflow uv pins follow the images to 0.13.8, and a test ties them.** Dependabot moved
+  the uv stage of the root and API Dockerfiles to 0.13.8 (#385) but left `uv==0.13.7` in `300` and `320`. Both
+  workflows now pin 0.13.8, and `test_workflow_uv_pins_match_the_dockerfile_uv_stage` in
+  `tests/unit/test_ci_hygiene.py` fails when a workflow's `uv==` (or a `ghcr.io/astral-sh/uv:` version it names)
+  differs from the Dockerfiles' uv stage. The engine wheel is byte-identical under 0.13.7 and 0.13.8 with the same
+  `SOURCE_DATE_EPOCH`.
 - **Not checked here:** no image was built (no Docker daemon in the session that made the change). The Python tests and
   the install of each image's dependency set ran on CPython 3.15.2; the web checks ran on Node.js 26. The pull
   request's `Docker Build Smoke Test`, `Lab Boundary Image` and `Image Scan (Trivy)` jobs and the next `200` run on

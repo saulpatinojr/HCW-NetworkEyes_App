@@ -456,7 +456,7 @@ jobs:
   # as in the Dockerfiles, the build group is installed first and PyYAML is
   # built from its hash-checked source archive as plain Python with it. uv is
   # version-pinned to the release the Dockerfiles' `uv` stage copies in
-  # (`ghcr.io/astral-sh/uv:0.13.7`), so the check and the build read the lock
+  # (`ghcr.io/astral-sh/uv:0.13.8`), so the check and the build read the lock
   # identically.
   lockfile:
     name: Python Lockfile Consistency
@@ -475,7 +475,7 @@ jobs:
           path: ~/.cache/uv
           key: lockfile-uv-${{ hashFiles('uv.lock') }}
       - name: Install uv
-        run: pip install "uv==0.13.7"
+        run: pip install "uv==0.13.8"
       - name: uv.lock matches pyproject.toml
         run: uv lock --check
       - name: Every image install set installs from the lock with verified hashes
@@ -523,7 +523,7 @@ jobs:
           path: ~/.cache/pip
           key: pip-audit-${{ hashFiles('pyproject.toml', 'uv.lock') }}
       - name: Install pip-audit and uv
-        run: pip install "pip-audit==2.10.1" "uv==0.13.7"  # pip-audit 2.10.1 is the newest release (2026-06-10); move the pin deliberately
+        run: pip install "pip-audit==2.10.1" "uv==0.13.8"  # pip-audit 2.10.1 is the newest release (2026-06-10); move the pin deliberately
       - name: Audit the locked resolution
         # Audits exactly what the images ship (TODO.md T-702): the lock exported
         # with every extra, so the api/enrichment/dev sets are covered in one

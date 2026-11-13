@@ -14,6 +14,9 @@ What is pinned here and why:
 * The three Dockerfiles keep the properties the lint fixes gave them, so a later edit cannot undo them without a
   test failing: digests on every base image, numeric `USER`, exec-form `CMD`/`ENTRYPOINT`/`HEALTHCHECK`, and
   `pipefail` wherever a `RUN` has a pipe.
+* The uv every workflow installs (`uv==`) is the version the Dockerfiles' `uv` stage copies in, so CI checks and
+  builds the lock with the same uv as the images. Dependabot moves only the `FROM` line; on 2026-11-12 it moved the
+  stage to 0.13.8 while the workflows stayed on 0.13.7 (HCW-HybridCloudWorks#1707).
 """
 
 import re
@@ -25,6 +28,7 @@ import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 WORKFLOW_300 = REPO_ROOT / ".github" / "workflows" / "300-test-codebase.yml"
 LOCAL_CHECKS = REPO_ROOT / "scripts" / "ci" / "local-container-checks.sh"
 HARDEN_FLAGS = REPO_ROOT / "scripts" / "ci" / "harden-flags.sh"
@@ -547,6 +551,53 @@ def test_the_three_dockerfiles_are_tracked() -> None:
         "apps/network-assessment-api/Dockerfile",
         "apps/network-assessment-web/Dockerfile",
     ]
+
+
+UV_STAGE = re.compile(
+    r"^FROM\s+ghcr\.io/astral-sh/uv:([^@\s]+)@sha256:[0-9a-f]{64}\s+AS\s+uv\s*$", re.IGNORECASE
+)
+WORKFLOW_UV_PIN = re.compile(
+    r"(?<![\w.-])uv==(\d[^\s\"'`]*)|ghcr\.io/astral-sh/uv:(\d[^@\s\"'`)]*)"
+)
+
+
+def test_workflow_uv_pins_match_the_dockerfile_uv_stage() -> None:
+    """Every `uv==X` (and `ghcr.io/astral-sh/uv:X`) in a workflow is the version the Dockerfiles' uv stage copies in.
+
+    Dependabot's docker ecosystem moves the `FROM ghcr.io/astral-sh/uv:... AS uv` line and nothing else, so the
+    workflow pins have to follow by hand (CLAUDE.md). This fails the pull request that leaves them behind.
+    """
+    stage_versions: dict[str, str] = {}
+    for path in tracked_dockerfiles():
+        name = path.relative_to(REPO_ROOT).as_posix()
+        for number, keyword, arguments in instructions(path):
+            match = UV_STAGE.match(f"{keyword} {arguments}")
+            if match:
+                stage_versions[f"{name}:{number}"] = match.group(1)
+    assert stage_versions, (
+        "no Dockerfile has a digest-pinned `FROM ghcr.io/astral-sh/uv:<version>@sha256:... AS uv` stage"
+    )
+    assert len(set(stage_versions.values())) == 1, (
+        f"the Dockerfiles' uv stages disagree: {stage_versions}"
+    )
+    expected = next(iter(stage_versions.values()))
+
+    found = 0
+    mismatches = []
+    for workflow_file in sorted(WORKFLOWS_DIR.glob("*.y*ml")):
+        lines = workflow_file.read_text(encoding="utf-8").splitlines()
+        for number, line in enumerate(lines, start=1):
+            for match in WORKFLOW_UV_PIN.finditer(line):
+                found += 1
+                version = match.group(1) or match.group(2)
+                if version != expected:
+                    mismatches.append(f"{workflow_file.name}:{number} names uv {version}")
+    assert found, "no workflow pins uv; the test would pass on nothing"
+    assert not mismatches, (
+        f"the Dockerfiles' uv stage is {expected}, but: "
+        + "; ".join(mismatches)
+        + ". Move the workflow pins with the stage."
+    )
 
 
 @pytest.mark.parametrize(
