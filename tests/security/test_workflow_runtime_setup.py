@@ -1,24 +1,31 @@
 """Every workflow job that runs Node.js or Python chooses its version (saulpatinojr/HCW-HybridCloudWorks#1707).
 
-A job that runs `node`, `npm`, `npx`, `python3`, `pip`, `uv` or `uvx` without actions/setup-node or actions/setup-python
-gets whatever the runner image ships: on ubuntu-26.04 that was Node.js 24 and Python 3.14 in November 2026, both below
-the program's floors (Node.js 26, Python 3.15). Nothing else notices, because a job that names no version has nothing to
-read. This is a port of the website's check (scripts/workflow-runtime-setup.test.mjs in HCW-HybridCloudWorks). `uv` and
-`uvx` count as Python, because uv runs the interpreter it finds, the runner's own unless one was set up; so
-astral-sh/setup-uv counts as setting Python up only when it is given a `python-version` at or above the floor.
+A job that runs `node`, `npm`, `npx`, `yarn`, `pnpm`, `python3`, `pip`, `pipx`, `pytest`, `uv` or `uvx` without
+actions/setup-node or actions/setup-python gets whatever the runner image ships: on ubuntu-26.04 that was Node.js 24
+and Python 3.14 in November 2026, both below the program's floors (Node.js 26, Python 3.15). Nothing else notices,
+because a job that names no version has nothing to read. This is a port of the website's check
+(scripts/workflow-runtime-setup.test.mjs in HCW-HybridCloudWorks). `uv` and `uvx` count as Python, because uv runs the
+interpreter it finds, the runner's own unless one was set up; so astral-sh/setup-uv counts as setting Python up only
+when it is given a `python-version` at or above the floor. `pipx` counts as Python too, because it is a Python program
+that runs what it installs on a Python it picks; that Python is `PIPX_DEFAULT_PYTHON` or, unset, the one pipx was
+installed with, which on a runner may be the image's own even after actions/setup-python, so a `pipx` step should
+also say `--python`. This test does not read that.
 
 A command counts when it is in command position on a line of a `run:` step: at the start, after `$(`, `<(`, a backtick,
 `(`, `{`, `|`, `&` or `;`, after a `case` pattern at the start of a line (`check)`), after leading `NAME=value`
 assignments (the value plain text, a quoted string, or both run together), or after a word that runs the next one
-(`env`, `sudo`, `xargs`, `exec`, `time`, `nice`, `!`, `if`, `then`, `do` and the like) and that word's options (`sudo -u
-nobody`, `env -i`). It counts with a path in front too (`/usr/bin/python3`, `./venv/bin/python`), because a path to the
-runner's interpreter is still the runner's, and `python3.15.2` counts like `python3`. It does not count in a comment, a
-heredoc's body, a quoted string (unless a double-quoted string runs a command with `$(`, `<(` or a backtick; a
-single-quoted one may run over several lines, as a `docker run image bash -c '...'` script does) or as an argument
-(`docker run image python ...`, or the first word of a line that continues the one before it). The set-up step must come
-before the first such step. Limits, on purpose: a job that runs in a `container:` uses that image's runtime and is not
-checked; and a script a step calls (`bash scripts/ci/x.sh`) is not read, so a step whose script starts a runtime is
-listed in INDIRECT_RUNTIME (as HCW-CloudAssessor_App's and HCW-CloudCrawler_App's copies do).
+(`env`, `sudo`, `xargs`, `exec`, `time`, `nice`, `nohup`, `stdbuf`, `timeout` with its duration, `command -p`, `!`,
+`if`, `then`, `do` and the like) and that word's options (`sudo -u nobody`, `env -i`, `stdbuf -oL`, a `--` that ends
+them). It counts with a path in front too (`/usr/bin/python3`, `./venv/bin/python`), because a path to the runner's
+interpreter is still the runner's, and `python3.15.2` counts like `python3`. It counts inside the quoted script of a
+shell run on the runner (`bash -c 'node x'`, `sh -c "python3 x"`, `bash -euo pipefail -c '...'`). It does not count in
+a comment, a heredoc's body, a quoted string (unless a double-quoted string runs a command with `$(`, `<(` or a
+backtick; a single-quoted one may run over several lines, as a `docker run image bash -c '...'` script does, which is
+the container's) or as an argument (`docker run image python ...`, `command -v node`, or the first word of a line that
+continues the one before it). The set-up step must come before the first such step. Limits, on purpose: a job that runs
+in a `container:` uses that image's runtime and is not checked; and a script a step calls (`bash scripts/ci/x.sh`) is
+not read, so a step whose script starts a runtime is listed in INDIRECT_RUNTIME (as HCW-CloudAssessor_App's and
+HCW-CloudCrawler_App's copies do).
 
 A set-up step with its own `if:` may be skipped while a later command still runs on the runner's own interpreter
 (Copilot on HCW-NetworkEyes_AddOn#100), so it covers a later step only when that step's `if:` is the same condition,
@@ -47,7 +54,9 @@ BELOW_FLOOR_ALLOWED.
 
 Ported from tests/security/test_workflow_runtime_setup.py in HCW-NetworkEyes_AddOn, itself a port of the website's
 scripts/workflow-runtime-setup.test.mjs. The checking logic is kept the same so the copies stay in step; only the lists
-below, which name this repository's workflows, are its own.
+below, which name this repository's workflows, are its own. Since the command forms above were added (nohup, stdbuf,
+timeout, `--`, `bash -c`, yarn, pnpm, pytest, pipx, arithmetic, `<<\\EOF`, `$'...'`), this file is the Python copy the
+other HCW Python repositories take their logic from.
 
 The workflows are read with a small line reader rather than a YAML library, because none is a dependency here. It
 relies on the layout every workflow in this repository has (a `jobs:` key at the top level, a `steps:` list, block
@@ -112,8 +121,10 @@ BELOW_FLOOR_ALLOWED: dict[str, str] = {
 # (`env FOO=1 node`, `sudo node`, `if node ...; then`).
 ASSIGNMENT = r"""[A-Za-z_][A-Za-z0-9_]*=(?:"(?:[^"\\]|\\.)*"|'[^']*'|[^\s"'])*\s+"""
 # Words that run the next word, each with the options it may take first: the letters of the options that take an
-# argument (`sudo -u nobody`, `nice -n 10`), and any other `-x`/`--long` flag. `command` only with `-p`, because
-# `command -v node` looks node up and runs nothing.
+# argument (`sudo -u nobody`, `nice -n 10`, `stdbuf -oL`), any other `-x`/`--long` flag, and the `--` that ends the
+# options (`env -- node`). `timeout` also takes its duration (`timeout 60 node`, `timeout -k 5 1m python3`).
+# `command` only with `-p` or `--`, because `command -v node` looks node up and runs nothing. The same table as the
+# website's copy.
 WRAPPER_OPTIONS = {
     "env": "uCS",
     "sudo": "ugCDhprtU",
@@ -121,13 +132,26 @@ WRAPPER_OPTIONS = {
     "exec": "a",
     "time": "of",
     "nice": "n",
+    "nohup": "",
+    "stdbuf": "ioe",
+    "timeout": "sk",
 }
+
+
+def _options_of(takes: str) -> str:
+    """The options a wrapper may take before the word it runs (see WRAPPER_OPTIONS)."""
+    with_argument = rf"-[A-Za-z]*[{takes}]\s*[^\s-]\S*|" if takes else ""
+    return rf"(?:\s+(?:{with_argument}--?\w[\w-]*(?:=\S+)?|--(?=\s)))*"
+
+
 WRAPPERS = "|".join(
     [
-        rf"{word}(?:\s+(?:-[A-Za-z]*[{takes}]\s*[^\s-]\S*|--?\w[\w-]*(?:=\S+)?))*\s+"
+        rf"timeout{_options_of(takes)}\s+\d+(?:\.\d+)?[smhd]?\s+"
+        if word == "timeout"
+        else rf"{word}{_options_of(takes)}\s+"
         for word, takes in WRAPPER_OPTIONS.items()
     ]
-    + [r"command(?:\s+-p)*\s+", r"(?:if|then|else|elif|do|while|until|!)\s+"]
+    + [r"command(?:\s+(?:-p|--(?=\s)))*\s+", r"(?:if|then|else|elif|do|while|until|!)\s+"]
 )
 # A `case` pattern that ends at the start of a line (`check)`, `a|b)`), after which a command may follow.
 CASE_PATTERN = r"^[^()\s|]+(?:\|[^()\s|]+)*\)\s*"
@@ -143,10 +167,24 @@ START = (
 # A runtime may be named with a path in front (`/usr/bin/python3`, `./venv/bin/python`): a path to the runner's own
 # interpreter is still the runner's. The path holds no `=`, so an assignment (`NODE=/x/node`) is not a command.
 PATH = r"(?:[^\s=]*/)?"
+# `yarn` and `pnpm` run on Node.js like `npm`. `pytest` is a Python program, and so is `pipx`, which also makes the
+# virtual environment of what it installs or runs with the Python it finds (PIPX_DEFAULT_PYTHON, else the one pipx
+# itself was installed with); either way a Python starts on the runner, so it must be chosen first.
 COMMAND = {
-    "node": re.compile(START + PATH + r"(?:node|npm|npx)(?=\s|$)"),
-    "python": re.compile(START + PATH + r"(?:python(?:3(?:\.\d+){0,2})?|pip3?|uvx?)(?=\s|$)"),
+    "node": re.compile(START + PATH + r"(?:node|npm|npx|yarn|pnpm)(?=\s|$)"),
+    "python": re.compile(
+        START + PATH + r"(?:python(?:3(?:\.\d+){0,2})?|pip3?|pipx|pytest|uvx?)(?=\s|$)"
+    ),
 }
+# A shell given a script to run (`bash -c '...'`, `sh -c "..."`, `bash -lc`, `bash -euo pipefail -c`) in command
+# position, at the end of the text before that script: the script then runs on the runner, so its commands count.
+# Options that take an argument (`-o pipefail`, `-O extglob`) are read as such; the last option holds the `c`.
+SHELL_C = re.compile(
+    START
+    + PATH
+    + r"(?:ba|da|k|z)?sh(?:\s+(?:[-+][A-Za-z]*[oO]\s+[^\s-]\S*|[-+][A-Za-z]+|--[\w-]+))*"
+    + r"\s+-[A-Za-z]*c[A-Za-z]*\s+$"
+)
 SETUP = {
     "node": re.compile(r"^actions/setup-node@"),
     "python": re.compile(r"^actions/setup-python@"),
@@ -169,12 +207,43 @@ VERSION_INPUTS = {
 }
 
 
+def _script(before: list[str], script: str) -> str | None:
+    """The shell text of a quoted script, in parentheses so its first command is in command position and the words
+    after it are not, when the text before it on its line ends in a shell given a script (SHELL_C); otherwise None."""
+    line = "".join(before).rsplit("\n", 1)[-1]
+    return f"({_shell_text(script)})" if SHELL_C.search(line.lstrip()) else None
+
+
+def _ansi_c(body: str) -> str:
+    """The text of a `$'...'` string: `\\n` and `\\t` as a new line and a tab, any other escaped character as itself."""
+    return re.sub(r"\\(.)", lambda m: {"n": "\n", "t": "\t"}.get(m[1], m[1]), body, flags=re.S)
+
+
+def _double_quoted(body: str) -> str:
+    """The text of a `"..."` string: `\\"`, `\\\\`, `\\$` and `\\`` as the character, and `\\` at a line's end dropped."""
+    return re.sub(r"\\([\\\"$`\n])", lambda m: "" if m[1] == "\n" else m[1], body)
+
+
+def _closing(run: str, at: int) -> int:
+    """The index just after the parenthesis that closes the one at `at`, or -1 when none does."""
+    depth = 0
+    for index in range(at, len(run)):
+        depth += {"(": 1, ")": -1}.get(run[index], 0)
+        if depth == 0:
+            return index + 1
+    return -1
+
+
 def _shell_text(run: str) -> str:
     """The script as the shell reads it, for finding commands: comments and heredoc bodies dropped, a line that ends
-    in `\\` joined to the next (so the next line's first word is still an argument), single-quoted text emptied, and
-    double-quoted text emptied unless it runs a command (`"$(node x)"`, or the older "`node x`"). An escaped backtick
-    (`\\``, as in Markdown written to the step summary) is a plain character. A quoted string may run over several
-    lines, as the script of `docker run image bash -c '...'` does; what it runs is the container's, not the runner's."""
+    in `\\` joined to the next (so the next line's first word is still an argument), single-quoted text (`'...'`, and
+    `$'...'`, in which `\\'` does not end it) emptied, and double-quoted text emptied unless it runs a command
+    (`"$(node x)"`, or the older "`node x`"). An escaped backtick (`\\``, as in Markdown written to the step summary)
+    is a plain character. A quoted string may run over several lines, as the script of `docker run image bash -c
+    '...'` does; what it runs is the container's, not the runner's. A quoted script given to a shell in command
+    position (`bash -c 'node x'`, see SHELL_C) runs on the runner, so it is read the same way in its place. Arithmetic
+    (`$((1<<k))`, `(( n <<= 1 ))`) is kept as it is, so its `<<` is not taken for a heredoc; a heredoc's delimiter
+    may be quoted (`<<'EOF'`, `<<"EOF"`) or escaped (`<<\\EOF`)."""
     out: list[str] = []
     heredocs: list[str] = []
     i, n = 0, len(run)
@@ -183,10 +252,17 @@ def _shell_text(run: str) -> str:
         if char == "\\" and i + 1 < n:
             out.append(" " if run[i + 1] == "\n" else "" if run[i + 1] == "`" else run[i : i + 2])
             i += 2
+        elif run.startswith("$'", i):
+            j = i + 2
+            while j < n and run[j] != "'":
+                j += 2 if run[j] == "\\" else 1
+            out.append(_script(out, _ansi_c(run[i + 2 : j])) or "''")
+            i = j + 1
         elif char == "'":
             end = run.find("'", i + 1)
-            out.append("''")
-            i = n if end == -1 else end + 1
+            end = n if end == -1 else end
+            out.append(_script(out, run[i + 1 : end]) or "''")
+            i = end + 1
         elif char == '"':
             j, body = i + 1, []
             while j < n and run[j] != '"':
@@ -194,13 +270,19 @@ def _shell_text(run: str) -> str:
                 body.append("" if run[j : j + 2] == "\\`" else run[j : j + step])
                 j += step
             text = "".join(body)
-            out.append(f'"{text}"' if re.search(r"[$<]\(|`", text) else '""')
+            script = _double_quoted(run[i + 1 : j])
+            out.append(
+                _script(out, script) or (f'"{text}"' if re.search(r"[$<]\(|`", text) else '""')
+            )
             i = j + 1
         elif char == "#" and (i == 0 or run[i - 1] in " \t\n;"):
             end = run.find("\n", i)
             i = n if end == -1 else end
+        elif run.startswith("((", i) and (end := _closing(run, i)) != -1:
+            out.append(run[i:end])
+            i = end
         elif run.startswith("<<", i) and not run.startswith("<<<", i):
-            found = re.match(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1", run[i:])
+            found = re.match(r"<<-?\s*(?:\\|(['\"]))?([A-Za-z_][A-Za-z0-9_]*)(?(1)\1)", run[i:])
             if found:
                 heredocs.append(found.group(2))
             out.append("<<")
@@ -718,6 +800,143 @@ def test_python_in_command_position_is_found(line):
 )
 def test_words_that_are_not_commands_are_not_found(line, kind):
     assert not runs_runtime(line, kind)
+
+
+@pytest.mark.parametrize(
+    ("line", "kind"),
+    [
+        ("env -- node script.mjs", "node"),
+        ("command -- node scripts/x.mjs", "node"),
+        ("command -p -- npm ci", "node"),
+        ("sudo -u nobody -- node x.js", "node"),
+        ("sudo -- python3 check.py", "python"),
+        ("nohup node x.js &", "node"),
+        ("nohup -- python3 x.py", "python"),
+        ("stdbuf -oL python3 x.py", "python"),
+        ("stdbuf -i0 -o L -eL node x.js", "node"),
+        ("timeout 60 node x.js", "node"),
+        ("timeout -k 5 1m python3 x.py", "python"),
+        ("timeout --signal=KILL 2.5s uv run x.py", "python"),
+        ("cd y && timeout 10m npm test", "node"),
+    ],
+)
+def test_wrappers_the_website_copy_reads_are_read(line, kind):
+    assert runs_runtime(line, kind)
+
+
+@pytest.mark.parametrize(
+    ("line", "kind"),
+    [
+        ("command -v -- node", "node"),
+        ("command -V python3", "python"),
+        ("echo nohup node x.js", "node"),
+        ("echo timeout 60 python3 x.py", "python"),
+        ("timeout-minutes 60 node x.js", "node"),
+        ("env -- NODE=1 true", "node"),
+    ],
+)
+def test_wrapper_near_misses_are_not_found(line, kind):
+    assert not runs_runtime(line, kind)
+
+
+@pytest.mark.parametrize(
+    ("line", "kind"),
+    [
+        ("bash -c 'node x.js'", "node"),
+        ('sh -c "python3 x.py"', "python"),
+        ("bash -lc 'npm ci'", "node"),
+        ("bash -euo pipefail -c 'cd y && python3 x.py'", "python"),
+        ("bash --noprofile --norc -eo pipefail -c 'uv sync'", "python"),
+        ("/bin/bash -c 'set -e; node x.js'", "node"),
+        ("sudo -u nobody bash -c 'python3 x.py'", "python"),
+        ("xargs -I{} sh -c 'node {}'", "node"),
+        ("bash -c '\n  set -e\n  python3 x.py\n'", "python"),
+        ('bash -c "echo \\"$HOME\\" && node x.js"', "node"),
+        ("bash -c $'python3 -c \\'print(1)\\''", "python"),
+        ("bash -c 'bash -c \"node x.js\"'", "node"),
+        ("FOO='a b' bash -c 'node x.js'", "node"),
+    ],
+)
+def test_a_script_given_to_a_shell_on_the_runner_is_read(line, kind):
+    assert runs_runtime(line, kind)
+
+
+@pytest.mark.parametrize(
+    ("line", "kind"),
+    [
+        ("docker run --rm img bash -c 'node x.js'", "node"),
+        ('docker run --rm img sh -c "python3 x.py"', "python"),
+        ("bash -c 'echo node x.js'", "node"),
+        ("bash -c 'echo \"$0\"' node", "node"),
+        ('bash -c "echo \\"python3 x.py\\""', "python"),
+        ("bash x.sh 'node x.js'", "node"),
+        ("ssh -c aes256-ctr host 'node x.js'", "node"),
+        ("echo bash -c 'python3 x.py'", "python"),
+    ],
+)
+def test_a_script_quoted_for_somewhere_else_is_not_read(line, kind):
+    assert not runs_runtime(line, kind)
+
+
+@pytest.mark.parametrize(
+    ("line", "kind"),
+    [
+        ("yarn install --frozen-lockfile", "node"),
+        ("pnpm install --frozen-lockfile", "node"),
+        ("cd web && pnpm run build", "node"),
+        ("/usr/local/bin/yarn test", "node"),
+        ("pytest -q", "python"),
+        ("cd y && pytest tests/", "python"),
+        ("timeout 600 pytest -x", "python"),
+        ("pipx run --spec checkov==3.3.30 checkov --directory .", "python"),
+        ("pipx install zizmor", "python"),
+    ],
+)
+def test_yarn_pnpm_pytest_and_pipx_are_runtimes(line, kind):
+    assert runs_runtime(line, kind)
+
+
+@pytest.mark.parametrize(
+    ("line", "kind"),
+    [
+        ("git diff --exit-code yarn.lock", "node"),
+        ("cat pnpm-lock.yaml", "node"),
+        ("echo yarn is not used", "node"),
+        ("yarnpkg-check x", "node"),
+        ("cat pytest.ini", "python"),
+        ("mypytest x", "python"),
+        ("pytest-check x", "python"),
+        ('echo "run pytest by hand"', "python"),
+        ("echo pipx", "python"),
+    ],
+)
+def test_yarn_pnpm_pytest_and_pipx_as_words_are_not_found(line, kind):
+    assert not runs_runtime(line, kind)
+
+
+@pytest.mark.parametrize(
+    ("line", "kind", "found"),
+    [
+        # `<<` in arithmetic is a shift, not a heredoc that would hide the lines after it.
+        ("n=$((1<<k))\npython3 x.py", "python", True),
+        ("(( n = n<<k ))\nnode x.js", "node", True),
+        ("(( n <<= 1 ))\nnode x.js", "node", True),
+        ("echo $(( $(node -p 1) + 1 ))", "node", True),
+        # A heredoc whose delimiter is escaped hides its body, like a quoted one.
+        ("cat <<\\EOF\npython3 is named here\nEOF", "python", False),
+        ("cat <<-\\EOF > x.txt\n\tnode is named here\n\tEOF", "node", False),
+        ("cat <<\\EOF\nnode is named here\nEOF\nnode x.js", "node", True),
+        ('cat <<"EOF"\npython3 is named here\nEOF', "python", False),
+        # `$'...'` may hold `\'`, which does not end it.
+        ("echo $'it\\'s' ; echo '; node x.js'", "node", False),
+        ("echo $'it\\'s'\npython3 x.py", "python", True),
+        ("printf $'a\\tb\\n'; npm ci", "node", True),
+    ],
+)
+def test_arithmetic_escaped_heredocs_and_ansi_c_strings_are_read_as_the_shell_does(
+    line, kind, found
+):
+    assert runs_runtime(line, kind) is found
 
 
 def test_a_job_that_sets_the_runtime_up_late_or_never_is_flagged():
