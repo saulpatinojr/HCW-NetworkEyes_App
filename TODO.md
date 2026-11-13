@@ -910,7 +910,7 @@ order; do not reorder it.
   `no-matching-overload` in `azure_discovery.py:2287`. Not yet worked out which come from the newer `ty` and which from
   newer SDK stubs or code; the status below no longer holds until they are triaged. The `.pre-commit-config.yaml`
   comment above the `ty` hook no longer gives a count and points here.
-- **Status:** Done bar an external blocker — **98 → 2**, and the 2 that remain are the T-413 SDK
+- **Status:** Open again since the 2026-11-13 recount above: **14** diagnostics, 12 of them not yet triaged. Until that recount it read "Done bar an external blocker — **98 → 2**", the 2 being the T-413 SDK
   stub artifact described at the end of this entry, not project defects. The one remaining change
   (dropping `stages: [manual]` so the hook gates) is blocked on the `azure-ai-projects` SDK
   shipping a resolvable annotation; the unblock condition is written out below. The narrative that

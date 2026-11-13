@@ -25,7 +25,7 @@ overview, and `TODO.md` is the work queue.
   long-form documentation (guides, architecture, runbooks, decision records) under `docs/`; it is reviewed in the pull
   request like code, and `docs/README.md` says how pages are named. The community files GitHub itself reads (this
   guide, the security policy, the code of conduct, the pull request template and the issue forms) stay in `.github/`.
-- **Workflows:** `.github/workflows/` holds only the numbered workflows `200`, `300`, `310`, `320`, `370` and `390`.
+- **Workflows:** `.github/workflows/` holds only the numbered workflows `200`, `300`, `310`, `320`, `370`, `380` and `390`.
   Add a job to an existing workflow rather than a new file. Never rename a job in `300-test-codebase.yml`: the job
   names are the required checks of the `main` ruleset.
 

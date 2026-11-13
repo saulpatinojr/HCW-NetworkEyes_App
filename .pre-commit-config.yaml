@@ -72,9 +72,11 @@ repos:
         name: no direct commit to main
 
   # --- Type checking (TODO.md T-402) ---
-  # `repo: local` / `language: system` so this runs the `ty` that uv.lock
-  # locks for pyproject.toml's `dev` extra — no second place to bump, and no
-  # third-party rev to pin.
+  # `repo: local` / `language: system`: this runs whichever `ty` is on PATH.
+  # Inside the project's environment (`uv run pre-commit …`, or an activated
+  # `.venv` from `uv sync --all-extras`) that is the version uv.lock locks for
+  # pyproject.toml's `dev` extra, so there is no second place to bump and no
+  # third-party rev to pin; outside it, the result can differ.
   #
   # NOT gating yet: `ty check` still reports diagnostics. T-402 is explicit
   # that ignore lists must not be widened to force a green first run, so the
