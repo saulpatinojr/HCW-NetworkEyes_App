@@ -24,19 +24,19 @@ tools reported, and what this module records:
     rule was silenced and no gate weakened); both ``ruff check`` and ``ruff
     format --check`` are clean afterward. Recorded ``INFORMATIONAL``.
 
-  * **ty (residual gap, fixable).** ``ty check network_assessment`` reports two
-    ``unresolved-attribute`` diagnostics, both in
-    ``network_assessment/ai_engine/foundry_agent_client.py`` (``AIProjectClient.agents``), which
-    is the exact azure-ai-projects 1.x surface documented in ``pyproject.toml``
-    (T-413) and tracked as not-yet-green in ``TODO.md`` (T-410). **No ty
-    diagnostic touches this area's files** (``network_assessment/api_status.py``,
-    ``network_assessment/api_errors.py``, ``network_assessment/review/*``) — the Python-area work introduced no
-    type error. (Run against the base interpreter ty instead reports ~84
-    ``unresolved-import`` diagnostics for third-party libraries; those are a ty
-    environment-resolution artifact, not code defects, and clear when ty is
-    pointed at the environment that has the dependencies installed.) Recorded
-    ``LOW`` and owned by this area's tracked ``ty`` gap (T-410), not an
-    escalation.
+  * **ty (residual gap, fixable).** When this review was written, ``ty check network_assessment``
+    reported two ``unresolved-attribute`` diagnostics, both in
+    ``network_assessment/ai_engine/foundry_agent_client.py`` (``AIProjectClient.agents``, the
+    azure-ai-projects 1.x stub gap, T-413). The recount of 2026-11-13 (``TODO.md`` T-410; every extra
+    installed, ``ty`` 0.0.98 from ``uv.lock``) finds **nine** in ``network_assessment``: those two, plus
+    seven in ``ai_engine/analysis_engine.py``, ``ai_engine/chat_agent.py``,
+    ``core/findings_schema.py`` and ``modules/network/discovery/azure_discovery.py``, not yet
+    triaged. **None touches this area's files** (``network_assessment/api_status.py``,
+    ``network_assessment/api_errors.py``, ``network_assessment/review/*``). (Run against the base
+    interpreter ty instead reports ``unresolved-import`` diagnostics for third-party libraries;
+    those are a ty environment-resolution artifact, not code defects, and clear when ty is
+    pointed at the environment that has the dependencies installed.) Recorded ``LOW`` and owned
+    by this area's tracked ``ty`` gap (T-410), not an escalation.
 
   * **pytest (verified compliant + one cross-area failure).** ``pytest
     tests/unit/`` under ``--cov=network_assessment --cov-fail-under=80`` **passed the coverage
@@ -106,18 +106,20 @@ def python_engine_api_verify_findings() -> list[Finding]:
             area=_AREA,
             severity=Severity.LOW,
             proposed_action=(
-                "'ty check network_assessment' reports two unresolved-attribute diagnostics, "
-                "both in network_assessment/ai_engine/foundry_agent_client.py "
-                "(AIProjectClient.agents) — the azure-ai-projects 1.x surface "
-                "documented in pyproject.toml (T-413) and tracked not-yet-green in "
-                "TODO.md (T-410). No ty diagnostic touches this area's files "
-                "(network_assessment/api_status.py, network_assessment/api_errors.py, network_assessment/review/*); the "
-                "Python-area work introduced no type error. Resolve the two "
-                "foundry_agent_client findings (T-410) rather than widening any "
-                "ignore list, so 'ty check network_assessment' becomes green."
+                "'ty check network_assessment' reports nine diagnostics (recount of 2026-11-13, "
+                "TODO.md T-410: every extra installed, ty 0.0.98 from uv.lock). Two are the "
+                "unresolved-attribute AIProjectClient.agents lines in "
+                "network_assessment/ai_engine/foundry_agent_client.py, the azure-ai-projects 1.x "
+                "stub gap documented in pyproject.toml (T-413); this record named only those two "
+                "until the recount. The other seven, in ai_engine/analysis_engine.py, "
+                "ai_engine/chat_agent.py, core/findings_schema.py and "
+                "modules/network/discovery/azure_discovery.py, are not yet triaged. None touches "
+                "this area's files (network_assessment/api_status.py, network_assessment/api_errors.py, "
+                "network_assessment/review/*). Triage and fix them under T-410 rather than widening "
+                "any ignore list, so 'ty check network_assessment' becomes green."
             ),
             dedup_key="python-engine-api:verify-ty-foundry-agents-gap",
-            subject="network_assessment/ai_engine/foundry_agent_client.py",
+            subject="network_assessment (ty check; TODO.md T-410)",
         ),
         Finding(
             area=_AREA,

@@ -204,7 +204,8 @@ def test_the_workflow_findings_name_every_workflow_on_disk():
     They listed five workflows after 380 and 390 were added (Copilot on PR 397), so the
     recorded "verified compliant" text described a folder that no longer existed.
     """
-    on_disk = {p.name for p in _WORKFLOW_DIR.glob("*.yml")}
+    # GitHub Actions reads both extensions, so a .yaml workflow must not slip past the check.
+    on_disk = {p.name for p in _WORKFLOW_DIR.iterdir() if p.suffix in {".yml", ".yaml"}}
     assert on_disk, "no workflow files found"
     by_key = {f.dedup_key: f for f in documentation_findings() + documentation_verify_findings()}
     for key in (
@@ -212,5 +213,9 @@ def test_the_workflow_findings_name_every_workflow_on_disk():
         "documentation:commands-and-workflows-resolve",
     ):
         text = by_key[key].proposed_action
-        named = {word.strip("(),.") for word in text.split() if word.strip("(),.").endswith(".yml")}
+        named = {
+            word.strip("(),.")
+            for word in text.split()
+            if word.strip("(),.").endswith((".yml", ".yaml"))
+        }
         assert named == on_disk, (key, sorted(named ^ on_disk))
