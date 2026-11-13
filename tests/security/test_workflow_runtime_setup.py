@@ -36,8 +36,9 @@ double-quoted `-c` script is read both ways: as the outer shell reads it (its `$
 the inner shell does. The set-up step must come before the first such step. Limits, on purpose: a job that runs in a
 `container:` uses that image's runtime and is not checked; a script a step calls (`bash scripts/ci/x.sh`) is not read,
 so a step whose script starts a runtime is listed in INDIRECT_RUNTIME (as HCW-CloudAssessor_App's and
-HCW-CloudCrawler_App's copies do); and a `-c` script inside a double-quoted substitution (`echo "$(bash -c 'node
-x')"`) is not read, because a double-quoted string is kept as text.
+HCW-CloudCrawler_App's copies do). A command substitution inside a double-quoted string (`"$(...)"`, or a backtick
+pair) runs on the runner, so it is read like any other script, a `-c` script in it included (`echo "$(bash -c 'node
+x')"`); one that hands its script to a container (`"$(docker run img bash -c '...')"`) stays unread.
 
 A set-up step with its own `if:` may be skipped while a later command still runs on the runner's own interpreter
 (Copilot on HCW-NetworkEyes_AddOn#100), so it covers a later step only when that step's `if:` makes the set-up's true:
@@ -233,12 +234,26 @@ COMMAND = {
 # '...'`, `bash -c -- '...'`): the script runs on the runner too, so its commands count. The same words after
 # `docker run image` are not in command position, so a container's script stays unread.
 SHELL_SCRIPT = re.compile(START + PATH + SHELL_GIVEN_C + "$")
-# `pipx` in command position, with what comes before it (its assignments and wrappers) and its own words, up to the
-# end of the command (`;`, `&`, `|` or `)`). It has chosen its interpreter when `--python` is among those words or
-# `PIPX_DEFAULT_PYTHON=` is among the assignments in front of it.
+# `pipx` in command position, with what comes before it (its assignments and wrappers) and its words, up to the end
+# of the command (`;`, `&`, `|` or `)`). It has chosen its interpreter when `--python` is one of pipx's own options
+# (see `_pipx_option_chooses_python`) or `PIPX_DEFAULT_PYTHON` is one of the assignments in front of it.
 PIPX = re.compile(rf"(?P<before>{START}){PATH}pipx(?=\s|$)(?P<words>[^;&|)]*)")
-PIPX_PYTHON_OPTION = re.compile(r"(?:^|\s)--python(?:=|\s|$)")
-PIPX_DEFAULT_ASSIGNMENT = re.compile(r"(?<![\w-])PIPX_DEFAULT_PYTHON=")
+# An assignment word (`NAME=value`, the value plain, quoted or both) that starts a word, as ASSIGNMENT reads one: so in
+# `FOO=PIPX_DEFAULT_PYTHON=/p` the name is FOO, and the rest is FOO's value.
+ASSIGNMENT_WORD = re.compile(
+    r"""(?:^|(?<=[\s;&|({`]))([A-Za-z_][A-Za-z0-9_]*)=(?:"(?:[^"\\]|\\.)*"|'[^']*'|[^\s"'])*(?=\s|$)"""
+)
+# pipx's options that take a value as the next word, so that word is not read as an option or as the app's name.
+PIPX_VALUE_OPTIONS = {
+    "--spec",
+    "--python",
+    "--index-url",
+    "--pip-args",
+    "--suffix",
+    "--preinstall",
+    "--backend",
+    "--fetch-python",
+}
 # Where `((` opens an arithmetic command rather than two subshells: at the start of a command.
 ARITHMETIC_COMMAND = re.compile(r"(?:^|[;&|({]|\b(?:then|else|do|if|elif|while|until|for))\s*$")
 # The escapes `$'...'` turns into other characters; any other `\x` is left as it is.
@@ -263,6 +278,43 @@ VERSION_INPUTS = {
     "python": ("python-version", "python-version-file"),
     "node": ("node-version", "node-version-file"),
 }
+
+
+def _substitution_close(run: str, at: int) -> int:
+    """The index of the `)` that closes the `$(` at `at`, or the end of the text: escapes, quoted strings and the
+    substitutions inside them are skipped, so their quotes and parentheses do not count."""
+    depth, k, n = 0, at + 1, len(run)
+    while k < n:
+        char = run[k]
+        if char == "\\":
+            k += 2
+        elif char == "'":
+            end = run.find("'", k + 1)
+            k = n if end == -1 else end + 1
+        elif char == '"':
+            k += 1
+            while k < n and run[k] != '"':
+                if run[k] == "\\":
+                    k += 2
+                elif run.startswith("$(", k):
+                    k = _substitution_close(run, k) + 1
+                else:
+                    k += 1
+            k += 1
+        else:
+            depth += {"(": 1, ")": -1}.get(char, 0)
+            if depth == 0:
+                return k
+            k += 1
+    return n
+
+
+def _backtick_close(run: str, at: int) -> int:
+    """The index of the backtick that closes the one at `at` (an escaped one does not), or the end of the text."""
+    k, n = at + 1, len(run)
+    while k < n and run[k] != "`":
+        k += 2 if run[k] == "\\" else 1
+    return min(k, n)
 
 
 def _shell_text(run: str) -> str:
@@ -317,12 +369,26 @@ def _shell_text(run: str) -> str:
             quoted(run[i + 1 : end], "''")
             i = end + 1
         elif char == '"':
-            j = i + 1
+            # A command substitution in the string (`$(...)`, or a backtick pair) may hold quotes of its own, and it
+            # runs on the runner, so its script is read like any other. As text, an escaped backtick prints.
+            j, parts = i + 1, []
             while j < n and run[j] != '"':
-                j += 2 if run[j] == "\\" else 1
-            raw = run[i + 1 : j]
-            # Read as text, an escaped backtick prints; given to `-c`, the inner shell runs it.
-            text = re.sub(r"\\.", lambda m: "" if m[0] == "\\`" else m[0], raw, flags=re.S)
+                if run[j] == "\\":
+                    parts.append("" if run[j : j + 2] == "\\`" else run[j : j + 2])
+                    j += 2
+                elif run.startswith("$(", j) and not run.startswith("$((", j):
+                    close = _substitution_close(run, j)
+                    parts.append(f"$({_shell_text(run[j + 2 : close])})")
+                    j = close + 1
+                elif run[j] == "`":
+                    close = _backtick_close(run, j)
+                    parts.append(f"`{_shell_text(run[j + 1 : close])}`")
+                    j = close + 1
+                else:
+                    parts.append(run[j])
+                    j += 1
+            raw, text = run[i + 1 : min(j, n)], "".join(parts)
+            # Given to `-c`, the inner shell runs the script, an escaped backtick included.
             script = re.sub(r"\\([\\\"$`\n])", lambda m: "" if m[1] == "\n" else m[1], raw)
             quoted(script, f'"{text}"' if re.search(r"[$<]\(|`", text) else '""')
             i = j + 1
@@ -701,15 +767,40 @@ def unset_steps(
     return found
 
 
+def _pipx_option_chooses_python(words: str) -> bool:
+    """True when `--python` (or `--python=...`) is one of pipx's own options among the words after `pipx`. Reading
+    stops at a bare `--`, after which every word is the app's, and, for `pipx run`, at the app's name (the first word
+    after `run` that is not an option or an option's value), after which every word is the app's argument
+    (`pipx run tool --python x` gives `--python` to the tool)."""
+    command, value_next = None, False
+    for word in words.split():
+        if value_next:
+            value_next = False
+        elif word == "--":
+            return False
+        elif word == "--python" or word.startswith("--python="):
+            return True
+        elif word in PIPX_VALUE_OPTIONS:
+            value_next = True
+        elif word.startswith("-"):
+            continue
+        elif command is None:
+            command = word
+        elif command == "run":
+            return False
+    return False
+
+
 def pipx_without_python(run: str | None, env: dict) -> bool:
-    """True when a run script runs `pipx` in command position without choosing its interpreter: no `--python` in its
-    own words, no `PIPX_DEFAULT_PYTHON=` in front of it, and none in `env` (the step's, job's and workflow's)."""
+    """True when a run script runs `pipx` in command position without choosing its interpreter: no `--python` among
+    pipx's own options, no `PIPX_DEFAULT_PYTHON` among the assignments in front of it (a whole assignment word, not a
+    value that happens to hold the text), and none in `env` (the step's, job's and workflow's)."""
     if str(env.get("PIPX_DEFAULT_PYTHON") or "").strip():
         return False
     return any(
         not (
-            PIPX_DEFAULT_ASSIGNMENT.search(found["before"])
-            or PIPX_PYTHON_OPTION.search(found["words"])
+            any(m[1] == "PIPX_DEFAULT_PYTHON" for m in ASSIGNMENT_WORD.finditer(found["before"]))
+            or _pipx_option_chooses_python(found["words"])
         )
         for line in _shell_text(run or "").split("\n")
         for found in PIPX.finditer(line.strip())
@@ -983,6 +1074,14 @@ def test_wrapper_near_misses_are_not_found(line, kind):
         ("sh -c \"echo '`node x`' > v\"", "node"),
         ('bash -c "x=1 # $(node y)"', "node"),
         ('bash -c "cat <<EOF\n$(python3 v)\nEOF"', "python"),
+        # A substitution inside double quotes runs on the runner, so a `-c` script in it is read (Copilot on
+        # HCW-HybridCloudWorks#1716).
+        ("echo \"$(bash -c 'node x')\"", "node"),
+        ("FOO=\"$(sh -c 'node x')\" true", "node"),
+        ('FOO="$(sh -c "node x")" true', "node"),
+        ("v=`bash -c 'python3 y'`", "python"),
+        ("echo \"`bash -c 'python3 y'`\"", "python"),
+        ("x=$(echo \"$(bash -c 'node x')\")", "node"),
     ],
 )
 def test_a_script_given_to_a_shell_on_the_runner_is_read(line, kind):
@@ -1002,6 +1101,8 @@ def test_a_script_given_to_a_shell_on_the_runner_is_read(line, kind):
         ("echo bash -c 'python3 x.py'", "python"),
         ('docker exec web sh -c "python3 x.py"', "python"),
         ("bash -c echo node", "node"),
+        ("echo \"$(docker run img bash -c 'node x')\"", "node"),
+        ("echo \"$(echo 'node x')\"", "node"),
         ("docker run img bash -c node x.js", "node"),
         ("bash -c 'echo \"$0\"' python3", "python"),
     ],
@@ -1091,6 +1192,9 @@ def test_long_runs_of_options_are_read_quickly():
         "bash " + "-c " * 200 + "x'node y'",
     ):
         assert not runs_runtime(line, "node"), line
+    # 200 nested substitutions, quoted and not, each read once per level.
+    assert runs_runtime('x="' + '$(echo "' * 200 + "$(bash -c 'node y')" + '")' * 200 + '"', "node")
+    assert runs_runtime("$(" * 200 + "node y" + ")" * 200, "node")
     assert time.perf_counter() - started < 1
 
 
@@ -1446,6 +1550,19 @@ def test_an_indirect_step_counts_as_running_its_runtime():
         ('pipx run --python "$P" a && pipx run b', {}, True),
         ("MY_PIPX_DEFAULT_PYTHON=/p pipx run x", {}, True),
         ("pipx run x", {"PIPX_DEFAULT_PYTHON": ""}, True),
+        # Only pipx's own options and assignments count (Copilot on HCW-NetworkEyes_App#394): after `--`, and after the
+        # app's name for `pipx run`, `--python` is the app's; a value holding the text sets nothing.
+        ("pipx run --spec tool -- tool --python", {}, True),
+        ("pipx run tool --python x", {}, True),
+        ('pipx run --pip-args "--python" tool', {}, True),
+        ("env FOO=PIPX_DEFAULT_PYTHON=/p pipx run x", {}, True),
+        ('FOO="PIPX_DEFAULT_PYTHON=/p" pipx run x', {}, True),
+        ('pipx run --python "$P" tool', {}, False),
+        ("pipx run --python=/p tool", {}, False),
+        ("pipx run --spec checkov==3.3.30 --python /p checkov -d .", {}, False),
+        ("pipx install --python /p tool", {}, False),
+        ("pipx install tool --python /p", {}, False),
+        ("FOO=1 PIPX_DEFAULT_PYTHON=/p pipx run x", {}, False),
         ('pipx run --python "$P" --spec x x', {}, False),
         ("pipx run --python=/opt/py/bin/python3 x", {}, False),
         ("PIPX_DEFAULT_PYTHON=/p pipx run x", {}, False),
