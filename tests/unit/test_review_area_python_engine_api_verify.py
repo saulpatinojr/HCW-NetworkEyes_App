@@ -45,7 +45,7 @@ def test_records_ruff_verified_compliant():
 
 
 def test_records_ty_residual_gap_not_in_area_files():
-    """ty gap is recorded LOW, fixable, and confined to foundry_agent_client."""
+    """ty gap is recorded LOW and fixable, with the current count, and outside this area's files."""
     ty = next(
         f
         for f in python_engine_api_verify_findings()
@@ -54,11 +54,16 @@ def test_records_ty_residual_gap_not_in_area_files():
     assert ty.area == "python-engine-api"
     assert ty.severity is Severity.LOW
     assert ty.blocker_id is None
-    assert "foundry_agent_client" in ty.subject
+    assert "T-410" in ty.subject
+    # The count is the 2026-11-13 recount of 'ty check network_assessment' (TODO.md T-410), not
+    # the two diagnostics this record named before it; the T-413 stub lines are still named.
+    assert "reports nine diagnostics" in ty.proposed_action
+    assert "reports two" not in ty.proposed_action
+    assert "foundry_agent_client" in ty.proposed_action
     # The gap is explicitly outside this area's own files.
     action = ty.proposed_action.lower()
     assert "api_status" in action and "api_errors" in action
-    assert "no type error" in action
+    assert "none touches this area's files" in action
 
 
 def test_records_pytest_coverage_gate_pass():

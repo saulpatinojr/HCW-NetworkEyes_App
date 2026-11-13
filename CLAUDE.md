@@ -31,8 +31,9 @@ written there (owner, 2026-10-11)**; its wiki pages were to move here (`REVIEW.m
 the documents older than that date name threads of the original or the earlier core repository.
 
 Deployment is not this repository's job. There is no Terraform and no deploy workflow in this repository; it keeps
-only `200-build-images`, `300-test-codebase`, `310-release-version`, `320-release-engine` and `370-registry-cleanup`,
-plus one owner-approved exception, `390-repository-admin` (manual, dry-run by default, approved per run; it deploys
+only `200-build-images`, `300-test-codebase`, `310-release-version`, `320-release-engine`, `370-registry-cleanup` and
+`380-drawio-pin-check` (a weekly reminder that opens one issue when the pinned draw.io editor is behind; it changes no
+file and uses no secret), plus one owner-approved exception, `390-repository-admin` (manual, dry-run by default, approved per run; it deploys
 nothing and holds no product code). A deployment fix belongs to whoever deploys, never here.
 
 ## The image contract
@@ -169,7 +170,7 @@ change under `Changed` in `CHANGELOG.md` (and in the release notes) where a cons
   deprecated `/legacy` entry point.
 - **Workflows are numbered in bands** (`000` bootstrap, `100` validation, `200`
   build, `300` test/release/ops). Numbers are stable; never renumber, reference by
-  filename. This repository has `200`, `300`, `310`, `320`, `370` and the one exception `390`.
+  filename. This repository has `200`, `300`, `310`, `320`, `370`, `380` and the one exception `390`.
 - **Job names in `300-test-codebase.yml` are required checks.** The `Protect main` ruleset matches them by name. Add a job, never rename one; list
   new job names in the pull request so the owner can add them to the ruleset. Dockerfiles must pass hadolint (`.hadolint.yaml` lists the only
   ignored rules, each with a written reason) and workflows must pass actionlint; run both with

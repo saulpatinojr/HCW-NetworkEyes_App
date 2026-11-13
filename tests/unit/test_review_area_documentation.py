@@ -8,8 +8,12 @@ compliant, T-103 is withdrawn) (9.3), and, since 2026-10-27, no escalation: the
 R-009 wiki-publication finding was removed with the wiki (REVIEW.md R-031).
 """
 
+from pathlib import Path
+
 from network_assessment.review import AREAS, Severity, consolidate, gate_finding, load_blockers
 from network_assessment.review.areas import documentation_findings, documentation_verify_findings
+
+_WORKFLOW_DIR = Path(__file__).resolve().parents[2] / ".github" / "workflows"
 
 
 def test_findings_are_well_formed_and_in_area():
@@ -192,3 +196,26 @@ def test_verify_findings_gate_without_escalation():
         entry = gate_finding(finding, blockers)
         assert entry.is_escalation is False
         assert entry.blocker_id is None
+
+
+def test_the_workflow_findings_name_every_workflow_on_disk():
+    """The two "workflows resolve" findings name every file in .github/workflows, no more.
+
+    They listed five workflows after 380 and 390 were added (Copilot on PR 397), so the
+    recorded "verified compliant" text described a folder that no longer existed.
+    """
+    # GitHub Actions reads both extensions, so a .yaml workflow must not slip past the check.
+    on_disk = {p.name for p in _WORKFLOW_DIR.iterdir() if p.suffix in {".yml", ".yaml"}}
+    assert on_disk, "no workflow files found"
+    by_key = {f.dedup_key: f for f in documentation_findings() + documentation_verify_findings()}
+    for key in (
+        "documentation:workflow-references-accurate",
+        "documentation:commands-and-workflows-resolve",
+    ):
+        text = by_key[key].proposed_action
+        named = {
+            word.strip("(),.")
+            for word in text.split()
+            if word.strip("(),.").endswith((".yml", ".yaml"))
+        }
+        assert named == on_disk, (key, sorted(named ^ on_disk))

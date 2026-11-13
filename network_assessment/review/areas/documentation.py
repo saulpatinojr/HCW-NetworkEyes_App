@@ -33,9 +33,10 @@ findings so the plan captures what was checked, not only what broke:
     (``docs/README.md``) and the role definition ``docs/roles/`` (JSON, not a
     document); no long-form page has been restored yet.
   * **Numbered workflows.** ``README`` conventions describe numeric workflow
-    bands and name the five workflows this repository keeps
+    bands and name the seven workflows this repository keeps
     (``200-build-images.yml``, ``300-test-codebase.yml``,
-    ``310-release-version.yml``, ``320-release-engine.yml``, ``370-registry-cleanup.yml``). All five exist
+    ``310-release-version.yml``, ``320-release-engine.yml``, ``370-registry-cleanup.yml``,
+    ``380-drawio-pin-check.yml`` and the owner-approved ``390-repository-admin.yml``). All seven exist
     under ``.github/workflows/`` and every referenced filename resolves —
     consistent (the deploy and operations workflows left with the deployment
     layer, ``TODO.md`` T-504).
@@ -124,9 +125,10 @@ def _accuracy_findings() -> list[Finding]:
             area=_AREA,
             severity=Severity.INFORMATIONAL,
             proposed_action=(
-                "Verified compliant: the five core workflows exist under "
+                "Verified compliant: the seven workflows exist under "
                 ".github/workflows/ (200-build-images.yml, 300-test-codebase.yml, "
-                "310-release-version.yml, 320-release-engine.yml, 370-registry-cleanup.yml) and every "
+                "310-release-version.yml, 320-release-engine.yml, 370-registry-cleanup.yml, "
+                "380-drawio-pin-check.yml, 390-repository-admin.yml) and every "
                 "workflow filename README references resolves; the deploy and "
                 "operations workflows left this repository (TODO.md "
                 "T-504). Reference workflows by filename per the numbered-workflow "
@@ -229,7 +231,8 @@ def _verify_findings() -> list[Finding]:
         points at (repository root and ``apps/network-assessment-web/``).
       * **Command / workflow-name resolution.** Every workflow filename README
         references by name (``200-build-images.yml``, ``300-test-codebase.yml``,
-        ``310-release-version.yml``, ``320-release-engine.yml``, ``370-registry-cleanup.yml``) exists under
+        ``310-release-version.yml``, ``320-release-engine.yml``, ``370-registry-cleanup.yml``,
+        ``380-drawio-pin-check.yml``, ``390-repository-admin.yml``) exists under
         ``.github/workflows/``, and the
         documented ``network-assessment`` CLI command resolves to a declared entry point
         (``pyproject.toml`` ``[project.scripts] network-assessment = "network_assessment.cli.main:cli"`` with
@@ -277,7 +280,8 @@ def _verify_findings() -> list[Finding]:
             proposed_action=(
                 "Verified compliant: every workflow filename README references "
                 "by name (200-build-images.yml, 300-test-codebase.yml, "
-                "310-release-version.yml, 320-release-engine.yml, 370-registry-cleanup.yml) exists under "
+                "310-release-version.yml, 320-release-engine.yml, 370-registry-cleanup.yml, "
+                "380-drawio-pin-check.yml, 390-repository-admin.yml) exists under "
                 ".github/workflows/, and the "
                 "documented `network-assessment` command resolves to its declared entry point "
                 '(pyproject.toml [project.scripts] network-assessment = "network_assessment.cli.main:cli", '
