@@ -556,8 +556,15 @@ def test_the_three_dockerfiles_are_tracked() -> None:
 UV_STAGE = re.compile(
     r"^FROM\s+ghcr\.io/astral-sh/uv:([^@\s]+)@sha256:[0-9a-f]{64}\s+AS\s+uv\s*$", re.IGNORECASE
 )
+# A version is digits and dots only, so punctuation after it in prose ("(uv==0.13.8)", "uv==0.13.8,") is not
+# read as part of it. The four forms a workflow uses to name a uv version: a pip pin, a uvx/npx-style `uv@X`, the
+# image reference, and a `UV_VERSION:` env value.
+_UV_VERSION = r"(\d+(?:\.\d+)+)"
 WORKFLOW_UV_PIN = re.compile(
-    r"(?<![\w.-])uv==(\d[^\s\"'`]*)|ghcr\.io/astral-sh/uv:(\d[^@\s\"'`)]*)"
+    rf"(?<![\w.-])uv=={_UV_VERSION}"
+    rf"|(?<![\w.-])uv@{_UV_VERSION}"
+    rf"|ghcr\.io/astral-sh/uv:{_UV_VERSION}"
+    rf"|\bUV_VERSION:\s*[\"']?{_UV_VERSION}"
 )
 
 
@@ -566,6 +573,11 @@ def test_workflow_uv_pins_match_the_dockerfile_uv_stage() -> None:
 
     Dependabot's docker ecosystem moves the `FROM ghcr.io/astral-sh/uv:... AS uv` line and nothing else, so the
     workflow pins have to follow by hand (CLAUDE.md). This fails the pull request that leaves them behind.
+
+    Read in `.github/workflows/` and `.github/actions/`: `uv==X`, `uv@X`, `ghcr.io/astral-sh/uv:X` and
+    `UV_VERSION: X`, in comments too (a comment naming an old version is drift as well). Only a pin outside a
+    comment counts towards "at least one pin exists". Not read: a range (`uv>=X`), `astral-sh/setup-uv`'s
+    `version:` input, and scripts outside `.github/` (none of these pins uv here today).
     """
     stage_versions: dict[str, str] = {}
     for path in tracked_dockerfiles():
@@ -584,15 +596,24 @@ def test_workflow_uv_pins_match_the_dockerfile_uv_stage() -> None:
 
     found = 0
     mismatches = []
-    for workflow_file in sorted(WORKFLOWS_DIR.glob("*.y*ml")):
+    github_dir = WORKFLOWS_DIR.parent
+    workflow_files = sorted(
+        path
+        for path in github_dir.glob("**/*")
+        if path.suffix in {".yml", ".yaml"}
+        and path.relative_to(github_dir).parts[0] in {"workflows", "actions"}
+    )
+    for workflow_file in workflow_files:
+        name = workflow_file.relative_to(github_dir).as_posix()
         lines = workflow_file.read_text(encoding="utf-8").splitlines()
         for number, line in enumerate(lines, start=1):
             for match in WORKFLOW_UV_PIN.finditer(line):
-                found += 1
-                version = match.group(1) or match.group(2)
+                if not line[: match.start()].lstrip().startswith("#"):
+                    found += 1
+                version = next(group for group in match.groups() if group)
                 if version != expected:
-                    mismatches.append(f"{workflow_file.name}:{number} names uv {version}")
-    assert found, "no workflow pins uv; the test would pass on nothing"
+                    mismatches.append(f"{name}:{number} names uv {version}")
+    assert found, "no workflow pins uv outside a comment; the test would pass on nothing"
     assert not mismatches, (
         f"the Dockerfiles' uv stage is {expected}, but: "
         + "; ".join(mismatches)
