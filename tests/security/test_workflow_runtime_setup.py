@@ -2681,7 +2681,7 @@ def test_the_reader_finds_every_job_and_step():
     for label, jobs in SOURCES:
         if label.startswith(".github/actions/") and jobs:
             text = (ROOT / label).read_text(encoding="utf-8")
-            items = re.search(r"(?m)^\s+steps:\s*(?:#.*)?\n(?:\s*(?:#.*)?\n)*( *)- ", text)
+            items = re.search(r"(?m)^[ \t]+steps:[ \t]*(?:#.*)?\n(?:[ \t]*(?:#.*)?\n)*( *)- ", text)
             assert items, label
             dash = len(items.group(1))
             assert len(jobs["composite"]["steps"]) == len(
