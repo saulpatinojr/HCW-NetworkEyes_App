@@ -145,6 +145,12 @@ jobs:
         with:
           cosign-release: ${{ env.COSIGN_VERSION }}
 
+      # find_release_image.sh runs `python3 scripts/ci/paths_touch_build.py`; choose its version rather than take the
+      # runner's own (3.14 on ubuntu-26.04). This job holds no write credential (contents and actions read only).
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.15"
+
       # The digest 200 built, scanned and tagged `sha-<7>` for the tagged commit, or for the nearest earlier
       # commit it built when nothing 200 builds from changed since (see the header). 200 attaches that tag only
       # after every image passed Docker Scout, so its existence is the scan gate. Anonymous reads: the repository
