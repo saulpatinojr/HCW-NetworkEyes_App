@@ -96,45 +96,50 @@ expand; a `\\` in it is dropped first. `${{ env.X }}` is read as GitHub evaluate
 env.pythonLocation }}` stays setup-python's word, which chooses nothing when an `env:` sets `pythonLocation` itself or
 the script unsets it.
 
-Copilot's review of the round-3 ports (saulpatinojr/HCW-HybridCloudWorks#1707) reads five more forms, and the pre-PR
-review of those fixes three more. A `PATH=` in front of a command, as its assignment or an argument of `env`
-(`PATH=/usr/bin python3`, `env PATH=/usr/bin node`), that does not start with the PATH the shell already has (`$PATH`,
-`${PATH}`) makes the command be looked up on other folders, so it counts as the runner's own even after a set-up step;
-`PATH=/x:$PATH` puts /x first and counts the same. So do `env -u PATH` (`--unset PATH`) and `command -p`, which look
-the command up on the system's default folders. So does a runtime named by a path in one of the folders of
-RUNNER_PYTHON_FOLDERS, which hold the runner image's Node.js too (`/usr/bin/python3`, `/usr/local/bin/node`), in
-`run:` or `shell:`, whatever came before it. That rule covers every runtime name, not only interpreters:
-`/usr/bin/pipx`, `/usr/local/bin/uv` and `/usr/local/bin/npm` are reported after a set-up step though `pipx`, `uv` and
-`npm` are not, because a program in those folders is the runner's own copy or runs on the runner's own interpreter,
-and reporting the rare one that is not errs on the safe side. A Python named by a version below the floor counts the
-same (`python3.14`); a free-threaded name (`python3.14t`, `python3.15t`) is Python too, its version read by its
-number. The commands of each clause of a one-line `case` are read (`case "$k" in a) node x ;; esac`), the pattern
-after `case WORD in`, `;;`, `;&` or `;;&` set apart. A `${{ matrix.X }}` in the workflow-level `env:` is never the
-matrix value, since GitHub allows only `github`, `secrets`, `inputs` and `vars` there, so it chooses nothing and sets
-nothing up; one in a job's or a step's `env:` is read as before. The words of a step's `shell:` in front of its shell
-program act on PIPX_DEFAULT_PYTHON as the words in front of a `-c` shell do (`shell: env -u PIPX_DEFAULT_PYTHON bash
--e {0}` leaves pipx without the step's setting).
+Copilot's review of the round-3 ports (saulpatinojr/HCW-HybridCloudWorks#1707) reads five more forms, the pre-PR
+review of those fixes three more, and Copilot's second round on the ports five more. A `PATH=` in front of a command,
+as its assignment or an argument of `env` (`PATH=/usr/bin python3`, `env PATH=/usr/bin node`), that does not start
+with the PATH the shell already has (`$PATH`, `${PATH}`) makes the command be looked up on other folders, so it counts
+as the runner's own even after a set-up step; `PATH=/x:$PATH` puts /x first and counts the same. So do `env -u PATH`
+(`--unset PATH`), `env -i` (`--ignore-environment`, a lone `-`) and `command -p`, which look the command up on the
+system's default folders; the last PATH given to env wins, and the shell fills `$PATH` in before env starts, so `env
+-i PATH=$PATH node x` keeps the set-up one. A step named in INDIRECT_RUNTIME whose `shell:` runs through sudo or
+replaces PATH counts the same, since the script it calls runs under that shell. So does a runtime named by a path in
+one of the folders of RUNNER_PYTHON_FOLDERS, which hold the runner image's Node.js too (`/usr/bin/python3`,
+`/usr/local/bin/node`), in `run:` or `shell:`, whatever came before it. That rule covers every runtime name, not only
+interpreters: `/usr/bin/pipx`, `/usr/local/bin/uv` and `/usr/local/bin/npm` are reported after a set-up step though
+`pipx`, `uv` and `npm` are not, because a program in those folders is the runner's own copy or runs on the runner's
+own interpreter, and reporting the rare one that is not errs on the safe side. A Python named by a version below the
+floor counts the same (`python3.14`); a free-threaded name (`python3.14t`, `python3.15t`) is Python too, its version
+read by its number, and a bare `python3t` counts as the runner's, since PATH holds a free-threaded Python only where
+one was asked for. A bare name given to pipx counts only when it is the floor's own `python3.15`. The commands of each
+clause of a one-line `case` are read (`case "$k" in a) node x ;; esac`), the pattern after `case WORD in`, `;;`, `;&`
+or `;;&` set apart. A `${{ matrix.X }}` in the workflow-level `env:` is never the matrix value, since GitHub allows
+only `github`, `secrets`, `inputs` and `vars` there, so it chooses nothing and sets nothing up; one in a job's or a
+step's `env:` is read as before. The words of a step's `shell:` in front of its shell program act on
+PIPX_DEFAULT_PYTHON as the words in front of a `-c` shell do (`shell: env -u PIPX_DEFAULT_PYTHON bash -e {0}` leaves
+pipx without the step's setting). A `defaults:` written as a one-line mapping, nested ones included (`defaults: {run:
+{shell: "python {0}"}}`), is read whole, and one YAML refuses (a plain value holding a brace, or braces and quotes
+that do not balance) stops the check.
 
 Limits, known and kept: a composite action whose set-up step takes its version from `${{ inputs.* }}` cannot be read,
 so it fails closed and needs an entry in BELOW_FLOOR_ALLOWED; these are reported though they need not be, which can
 only add findings: a `shell: python` step's text is still read as shell too; an `eval` script is read as a child shell
 (a name set but not exported before it is not seen); a `$PATH` written inside double quotes or an unquoted heredoc in
 a nested script is read as the inner script's, so `sudo bash -c "sudo env PATH=$PATH node x"` is reported though the
-outer shell fills it in first; a later `PATH=$PATH` after a replacing `PATH=` or `-u PATH` in the same `env` (`env
-PATH=/usr/bin PATH=$PATH node x`, though env uses the last one); a folder put in front of `$PATH`, even the set-up one
-(`PATH=$pythonLocation/bin:$PATH python3 x`), on purpose; and a version named below the floor (`python3.14`), even
-where BELOW_FLOOR_ALLOWED lets the job set that version up. These are not reported: `eval` of a word joined from
-quoted parts (`eval no'de x'`); `env -i python3` after a set-up step (env empties PATH, so `python3` is looked up on
-the system's default folders); a `--python` path to a Python outside the folders of RUNNER_PYTHON_FOLDERS
-(`/opt/hostedtoolcache/Python/3.12...`, `/usr/share/miniconda/bin/python3`); a relative path after `cd` (`cd /usr/bin
-&& pipx run --python ./python3 x`); a value a `for` loop or `read` sets (`for P in /usr/bin/python3; do ...`), which
-counts as chosen; a PATH the script sets in an earlier command (`export PATH=/usr/bin; python3 x`, or `PATH=/usr/bin;
-python3 x`); a PATH or setting written to `$GITHUB_PATH` or `$GITHUB_ENV` by an earlier step; the commands of a `case`
-clause whose pattern holds parentheses (`@(a|b))`, `?(a))`) or an escaped `)` (`a\\))`, or whose `case` has a subject
-`$(...)` with spaces or `in` on the next line; and a set-up version `3` or `3.x` (a major line only), which reads as
-at the floor. `$VAR` in `shell:` is read as if a shell filled it in, though the runner starts the shell command
-directly and passes it on literally (actions/runner ScriptHandler.cs). `unset -n P` is read as unsetting P, which is
-what bash does unless P is a name reference.
+outer shell fills it in first; a folder put in front of `$PATH`, even the set-up one (`PATH=$pythonLocation/bin:$PATH
+python3 x`), on purpose; and a version named below the floor (`python3.14`), even where BELOW_FLOOR_ALLOWED lets the
+job set that version up. These are not reported: `eval` of a word joined from quoted parts (`eval no'de x'`); a
+`--python` path to a Python outside the folders of RUNNER_PYTHON_FOLDERS (`/opt/hostedtoolcache/Python/3.12...`,
+`/usr/share/miniconda/bin/python3`); a relative path after `cd` (`cd /usr/bin && pipx run --python ./python3 x`); a
+value a `for` loop or `read` sets (`for P in /usr/bin/python3; do ...`), which counts as chosen; a PATH the script
+sets in an earlier command (`export PATH=/usr/bin; python3 x`, or `PATH=/usr/bin; python3 x`); a PATH or setting
+written to `$GITHUB_PATH` or `$GITHUB_ENV` by an earlier step; the commands of a `case` clause whose pattern holds
+parentheses (`@(a|b))`, `?(a))`) or an escaped `)` (`a\\))`, or whose `case` has a subject `$(...)` with spaces or
+`in` on the next line; and a set-up version `3` or `3.x` (a major line only), which reads as at the floor. `$VAR` in
+`shell:` is read as if a shell filled it in, though the runner starts the shell command directly and passes it on
+literally (actions/runner ScriptHandler.cs). `unset -n P` is read as unsetting P, which is what bash does unless P is
+a name reference.
 
 A composite action (`.github/actions/<name>/action.yml`, `runs: using: composite`) is checked like a job of its own,
 named `composite`, so its keys read `.github/actions/<name>/action.yml > composite > step name > runtime`. Its steps
@@ -449,11 +454,14 @@ SHELL_C = PATH + SHELL_GIVEN_C
 SHELL_READS_INPUT = PATH + rf"(?:ba|da|k|z)?sh(?:\s+{_shell_option('(?:(?!c)[A-Za-z])')})*"
 # A here-string given to such a shell (`bash <<< node`) is its script; unquoted, that is the one word after `<<<`.
 SHELL_HERE_STRING = SHELL_READS_INPUT + r"\s*<<<\s*"
+# After env's options, a lone `-` (the same as `-i`) may come before its assignments and command (`env - node x`;
+# Copilot's second round on the ports, HCW-HybridCloudWorks#1707).
+ENV_DASH = r"(?:\s+-(?=\s))?"
 WRAPPERS = "|".join(
     [
         rf"{PATH}timeout{_options_of(takes, word)}\s+\d+(?:\.\d+)?[smhd]?\s+"
         if word == "timeout"
-        else rf"{'' if word == 'exec' else PATH}{word}{_options_of(takes, word)}\s+"
+        else rf"{'' if word == 'exec' else PATH}{word}{_options_of(takes, word)}{ENV_DASH if word == 'env' else ''}\s+"
         for word, takes in WRAPPER_OPTIONS.items()
     ]
     + [
@@ -529,6 +537,7 @@ AFTER_ENV_OR_SUDO = re.compile(
     + PATH
     + r"(?:env"
     + _options_of(WRAPPER_OPTIONS["env"], "env")
+    + ENV_DASH
     + r"|sudo"
     + _options_of(WRAPPER_OPTIONS["sudo"], "sudo")
     + r")\s+(?:"
@@ -1381,16 +1390,56 @@ def _flow_items(inner: str) -> list[str]:
     return [part for part in parts if part.strip()]
 
 
-def _flow_mapping(text: str) -> dict[str, str]:
-    """A one-line `{ key: value, ... }` mapping, split by `_flow_items`."""
-    pairs = [
-        part.partition(":") for part in _flow_items(text[text.index("{") + 1 : text.rindex("}")])
-    ]
+def _flow_end(text: str) -> int:
+    """Where the `{` that starts `text` is closed, by the quote rules of `_flow_items`; -1 when it is not."""
+    depth, quote, index = 0, "", 0
+    while index < len(text):
+        char = text[index]
+        if quote:
+            if (quote == '"' and char == "\\") or (
+                quote == "'" and text[index : index + 2] == "''"
+            ):
+                index += 1
+            elif char == quote:
+                quote = ""
+        elif char in "'\"" and (index == 0 or text[index - 1] in QUOTE_STARTS):
+            quote = char
+        elif char in "{[":
+            depth += 1
+        elif char in "}]":
+            depth -= 1
+            if depth == 0:
+                return index
+        index += 1
+    return -1
+
+
+def _flow_mapping(text: str) -> dict:
+    """A one-line `{ key: value, ... }` mapping, split by `_flow_items`. A value that is itself `{ ... }` is read the
+    same way, so `defaults: {run: {shell: "python {0}"}}` is read whole (Copilot's second round on the ports,
+    HCW-HybridCloudWorks#1707: HCW-CloudAssessor_AddOn#101 and HCW-CloudCrawler_AddOn#79). Braces or quotes that do not
+    balance stop the test, and so does a plain value holding `{`, `}`, `[` or `]` (`{ shell: bash -e {0} }`), which YAML
+    and the website's reader refuse in a one-line mapping."""
+    text = text.strip()
+    assert text.startswith("{") and _flow_end(text) == len(text) - 1, (
+        f"the braces or quotes of a one-line mapping do not balance: {text!r}"
+    )
+    pairs = [part.partition(":") for part in _flow_items(text[1:-1])]
     # A quoted key (`{'A': x}`) is refused, as the website's reader refuses it (round 3 review).
     assert not any(key.strip()[:1] in ("'", '"') for key, _, _ in pairs), (
         f"a quoted key in {text!r}"
     )
-    return {key.strip(): _scalar(value) for key, _, value in pairs}
+    found: dict = {}
+    for key, _, value in pairs:
+        value = value.strip()
+        if value.startswith("{"):
+            found[key.strip()] = _flow_mapping(value)
+            continue
+        assert value[:1] in ("'", '"', "[") or not re.search(r"[{}\[\]]", value), (
+            f"a plain value with a brace or bracket in a one-line mapping: {value!r}"
+        )
+        found[key.strip()] = _scalar(value)
+    return found
 
 
 def _block(lines: list[str], at: int, indent: int) -> list[str]:
@@ -1556,8 +1605,10 @@ def _default_shell(lines: list[str], at: int, indent: int) -> str | None:
     None when it names none."""
     rest = _without_comment(lines[at].split(":", 1)[1]).strip()
     if rest.startswith("{"):
-        found = re.search(r"\bshell:\s*([^,}]+)", rest)
-        return _scalar(found[1]) if found else None
+        # Read as the nested one-line mapping it is (see `_flow_mapping`), so a quoted `{0}` or comma stays in its
+        # value.
+        run = _flow_mapping(rest).get("run")
+        return run.get("shell") if isinstance(run, dict) else None
     block = _block(lines, at, indent)
     run = [i for i, line in enumerate(block) if re.match(r"^\s+run:", line)]
     if not run:
@@ -1920,16 +1971,18 @@ def _sudo_path(before: str, command: str = "") -> bool | None:
     later `env` that is given PATH, and then looks the command up itself, passes the set-up PATH on (round 3,
     HCW-HybridCloudWorks#1707). A `PATH=` in front of the command (`PATH=/usr/bin python3`, `env PATH=/usr/bin python3`)
     that does not start with the PATH the shell already has (`PASSES_PATH`) replaces it, so the command is looked up on
-    the runner's folders; `PATH=/x:$PATH` puts /x first, so it counts as replaced too. `env -u PATH` (`--unset PATH`)
-    and `command -p` look the command up on the system's default folders, so they replace it as well (pre-PR review of
-    Copilot's round-3 port fixes, HCW-HybridCloudWorks#1707). A command named by a path in one of the runner's folders,
-    or a Python named by a version below the floor, is not the set-up runtime whatever came before it (see
+    the runner's folders; `PATH=/x:$PATH` puts /x first, so it counts as replaced too. `env -u PATH` (`--unset PATH`),
+    `env -i` (`--ignore-environment`, a lone `-`) and `command -p` look the command up on the system's default folders,
+    so they replace it as well (pre-PR review of Copilot's round-3 port fixes and Copilot's second round on the ports,
+    HCW-HybridCloudWorks#1707), and the last PATH given to env wins. A command named by a path in one of the runner's
+    folders, or a Python named by a version below the floor, is not the set-up runtime whatever came before it (see
     `_runner_runtime`; Copilot's review of the round-3 ports, HCW-HybridCloudWorks#1707: HCW-CloudCrawler_App#90,
     HCW-CloudCrawler_AddOn#79 and HCW-NetworkEyes_AddOn#114)."""
     state: bool | None = None
     env = False  # an `env` came after the `sudo`, so a `PATH=` word is its assignment
     options = ""  # "env" or "command" while reading that word's options
     following = ""  # the next word is the value of env's `-u` ("unset") or of another of its options ("skip")
+    after_env = False  # the words since an `env` are its options and assignments, so the last `PATH=` among them wins
     for word in (OPENING.sub("", w) for w in WORD.findall(before)):
         bare = word.replace("'", "").replace('"', "")
         if following:
@@ -1939,15 +1992,20 @@ def _sudo_path(before: str, command: str = "") -> bool | None:
             following = ""
             continue
         if re.fullmatch(r"(?:\S*/)?sudo", word):
-            state, env, options = True, False, ""
+            state, env, options, after_env = True, False, "", False
             continue
         if re.fullmatch(r"(?:\S*/)?env", word):
             if state is not None:
                 env = True
-            options = "env"
+            options, after_env = "env", True
             continue
         if word == "command":
-            options = "command"
+            options, after_env = "command", False
+            continue
+        # `env -i` (`--ignore-environment`, or a lone `-`) clears PATH, so the command is looked up on the system's
+        # default folders too (Copilot's second round on the ports, HCW-HybridCloudWorks#1707: HCW-CloudCrawler_App#90).
+        if options == "env" and bare == "-":
+            state, options = True, ""
             continue
         # env's options (see `_local_default_python`), and `command -p`, which looks the command up on the system's
         # default folders (pre-PR review of Copilot's round-3 port fixes, HCW-HybridCloudWorks#1707).
@@ -1955,13 +2013,17 @@ def _sudo_path(before: str, command: str = "") -> bool | None:
             if bare.startswith("--"):
                 name, sign, value = bare[2:].partition("=")
                 option = _long_option(name, "env")
-                if option == "unset" and sign:
+                if option == "ignore-environment":
+                    state = True
+                elif option == "unset" and sign:
                     state = True if value == "PATH" else state
                 elif option in ("unset", "chdir") and not sign:
                     following = "unset" if option == "unset" else "skip"
             else:
                 for k in range(1, len(bare)):
-                    if bare[k] in "uCS":
+                    if bare[k] == "i":
+                        state = True
+                    elif bare[k] in "uCS":
                         value = bare[k + 1 :]
                         if bare[k] != "S" and not value:
                             following = "unset" if bare[k] == "u" else "skip"
@@ -1974,6 +2036,8 @@ def _sudo_path(before: str, command: str = "") -> bool | None:
                 state = True
             continue
         options = ""
+        if not re.match(r"[A-Za-z_][A-Za-z0-9_]*=", bare):
+            after_env = False
         # A `PATH=` that does not start with the PATH the shell already has replaces it (Copilot's review of the
         # round-3 ports, HCW-CloudCrawler_App#90).
         if bare.startswith("PATH=") and not PASSES_PATH.match(bare):
@@ -1983,6 +2047,13 @@ def _sudo_path(before: str, command: str = "") -> bool | None:
         # script around them, whose `$PATH` is sudo's `secure_path` when it runs under sudo.
         elif env and state is not None and PASSES_PATH.match(bare):
             state = False
+        # env sets its assignments in order, and the shell has filled `$PATH` in before env starts, so a later
+        # `PATH=$PATH` given to env gives the command the shell's PATH again (`env -i PATH=$PATH node`, `env
+        # PATH=/usr/bin PATH=$PATH node`; Copilot's second round on the ports, HCW-HybridCloudWorks#1707). Assignments
+        # in front of a command are made in order by the shell itself, so there a later `PATH=$PATH` is the earlier
+        # one's value and changes nothing.
+        elif after_env and PASSES_PATH.match(bare):
+            state = None
     return True if _runner_runtime(command) else state
 
 
@@ -2000,6 +2071,10 @@ def _runner_runtime(command: str) -> bool:
     front of it."""
     text = command.replace("'", "").replace('"', "")
     path = re.sub(r"^/+", "/", posixpath.normpath(text)) if text else "."
+    # A bare `python3t` is whatever free-threaded Python PATH finds, which a set-up step put there only when it was
+    # asked for one (Copilot on HCW-HybridCloudWorks#1723).
+    if path == "python3t":
+        return True
     head, slash, name = path.rpartition("/")
     if slash and path.startswith("/") and (head or "/") in RUNNER_PYTHON_FOLDERS:
         return True
@@ -2080,10 +2155,14 @@ def unset_steps(
                     and covers(earlier, step, step_ids(job["steps"][:j]))
                     for j, earlier in enumerate(job["steps"][:i])
                 )
+                # A step named in `indirect` runs its runtime from a script this check does not read, so a `shell:`
+                # that runs it through sudo or with a replaced PATH runs that runtime too (Copilot's second round on the
+                # ports, HCW-HybridCloudWorks#1707: HCW-CloudCrawler_AddOn#79).
                 if (
                     not covered
                     or runs_through_sudo(step.get("run"), kind, _sudo_path(shell))
                     or runs_through_sudo(shell, kind)
+                    or (key in indirect and _sudo_path(shell) is True)
                 ):
                     found.append(key)
     return found
@@ -2173,7 +2252,7 @@ def _chooses(
     # A bare name is looked up on PATH, which finds the runner's own Python before a set-up step has run, so only the
     # floor's own name counts (FLOOR_PYTHON_NAME; round 3, HCW-HybridCloudWorks#1707).
     if "/" not in text and "$" not in text and "__gha__" not in text:
-        return text in (FLOOR_PYTHON_NAME, f"{FLOOR_PYTHON_NAME}t")
+        return text == FLOOR_PYTHON_NAME
     ids = STEP_OUTPUT.findall(text)
     rest = STEP_OUTPUT.sub("", text)
     located = located or PYTHON_LOCATION in rest
@@ -5763,7 +5842,9 @@ PORTS_SHELL_YAML = 'on: push\njobs:\n  bash:\n    runs-on: ubuntu-26.04\n    ste
 
 def test_copilot_ports_the_words_of_a_steps_shell_reach_pipx_in_a_workflow():
     jobs = read_jobs(PORTS_SHELL_YAML)
-    assert unset_steps("x.yml", jobs, {}) == []
+    # Copilot's second round on the ports (HCW-HybridCloudWorks#1707): `env -i` clears PATH, so the `clear` job's pipx
+    # is the runner's too.
+    assert unset_steps("x.yml", jobs, {}) == ["x.yml > clear > Scan > python"]
     assert pipx_problems("x.yml", jobs) == [
         "x.yml > unset > Scan > pipx",
         "x.yml > clear > Scan > pipx",
@@ -5786,7 +5867,9 @@ def test_copilot_ports_the_words_of_a_steps_shell_reach_pipx_in_a_workflow():
         ("sudo env -u PATH node x", "node", True),
         ("command -p python3 x", "python", True),
         ("command -p -- node x", "node", True),
-        ("env -u PATH PATH=$PATH node x", "node", True),
+        # Copilot's second round on the ports (HCW-HybridCloudWorks#1707): the last PATH given to env wins, and
+        # `$PATH` is the shell's.
+        ("env -u PATH PATH=$PATH node x", "node", False),
         ("env -u FOO node x", "node", False),
         ("env --unset=FOO python3 x", "python", False),
         ("env -C /tmp node x", "node", False),
@@ -5852,7 +5935,8 @@ def test_copilot_ports_review_a_free_threaded_version_meets_the_floor_by_its_num
     [
         ("pipx run --python /usr/bin/python3.15t x", {}, True),
         ("pipx run --python /usr/local/bin/python3.14t x", {}, True),
-        ("pipx run --python python3.15t x", {}, False),
+        # Copilot's second round on the ports (HCW-MigrateOrchestrator_AddOn#77): only `python3.15` itself counts.
+        ("pipx run --python python3.15t x", {}, True),
         ("pipx run --python python3.14t x", {}, True),
     ],
 )
@@ -5872,6 +5956,97 @@ def test_copilot_ports_review_workflow():
         "x.yml > command-p > Run > node",
     ]
     assert pipx_problems("x.yml", jobs) == []
+
+
+# Copilot's second round on the round-3 ports (#1707): the same cases as the website's
+# scripts/workflow-runtime-setup.test.mjs, in the same order (Copilot on HCW-HybridCloudWorks#1723,
+# HCW-CloudCrawler_App#90, HCW-CloudCrawler_AddOn#79, HCW-MigrateOrchestrator_AddOn#77 and HCW-CloudAssessor_AddOn#101).
+@pytest.mark.parametrize(
+    ("line", "kind", "found"),
+    [
+        ("python3t x", "python", True),
+        ('sudo env "PATH=$PATH" python3t x', "python", True),
+        (".venv/bin/python3t x", "python", False),
+        ("python3.15t x", "python", False),
+        ("python3 x", "python", False),
+        ("env -i python3 x", "python", True),
+        ("env --ignore-environment python3 x", "python", True),
+        ("env --ignore-env python3 x", "python", True),
+        ("env - python3 x", "python", True),
+        ("env -i -C /tmp node x", "node", True),
+        ("env -iu FOO node x", "node", True),
+        ("env -i FOO=1 node x", "node", True),
+        ("sudo env -i python3 x", "python", True),
+        ("env -i PATH=/usr/bin:$PATH python3 x", "python", True),
+        ("PATH=/usr/bin PATH=$PATH node x", "node", True),
+        ("env -i PATH=$PATH python3 x", "python", False),
+        ("env -u PATH PATH=$PATH node x", "node", False),
+        ("env PATH=/usr/bin PATH=$PATH node x", "node", False),
+        ("PATH=/usr/bin env PATH=$PATH node x", "node", False),
+        ("sudo env -i PATH=$PATH node x", "node", False),
+        ("env -i env PATH=$PATH node x", "node", False),
+        ("env -v python3 x", "python", False),
+    ],
+)
+def test_copilot_second_round_python3t_and_a_cleared_path(line, kind, found):
+    assert runs_through_sudo(line, kind) is found
+
+
+@pytest.mark.parametrize(
+    ("run", "env", "flagged"),
+    [
+        ("pipx run --python python3.15t x", {}, True),
+        ("pipx run --python python3.15 x", {}, False),
+    ],
+)
+def test_copilot_second_round_pipx_names(run, env, flagged):
+    assert pipx_without_python(run, env) is flagged
+
+
+INDIRECT_SUDO_YAML = 'on: push\njobs:\n  sudo-shell:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-node@abc\n        with: { node-version: "26" }\n      - name: Build\n        shell: sudo bash -e {0}\n        run: make build\n  path-shell:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-node@abc\n        with: { node-version: "26" }\n      - name: Build\n        shell: env PATH=/usr/bin bash -e {0}\n        run: make build\n  clear-shell:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-node@abc\n        with: { node-version: "26" }\n      - name: Build\n        shell: env -i bash -e {0}\n        run: make build\n  plain-shell:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-node@abc\n        with: { node-version: "26" }\n      - name: Build\n        shell: bash -e {0}\n        run: make build\n  no-shell:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-node@abc\n        with: { node-version: "26" }\n      - name: Build\n        run: make build\n  no-set-up:\n    runs-on: ubuntu-26.04\n    steps:\n      - name: Build\n        run: make build\n  free-threaded:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        run: python3t x\n  cleared:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        run: env -i python3 x\n  restored:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        run: env -i PATH=$PATH python3 x\n'
+
+
+def test_copilot_second_round_indirect_step_under_sudo():
+    indirect = {
+        "x.yml > sudo-shell > Build > node": "runs node through make",
+        "x.yml > path-shell > Build > node": "runs node through make",
+        "x.yml > clear-shell > Build > node": "runs node through make",
+        "x.yml > plain-shell > Build > node": "runs node through make",
+        "x.yml > no-shell > Build > node": "runs node through make",
+        "x.yml > no-set-up > Build > node": "runs node through make",
+    }
+    assert unset_steps("x.yml", read_jobs(INDIRECT_SUDO_YAML), indirect) == [
+        "x.yml > sudo-shell > Build > node",
+        "x.yml > path-shell > Build > node",
+        "x.yml > clear-shell > Build > node",
+        "x.yml > no-set-up > Build > node",
+        "x.yml > free-threaded > Run > python",
+        "x.yml > cleared > Run > python",
+    ]
+
+
+ONE_LINE_DEFAULTS_YAML = 'on: push\ndefaults: {run: {shell: "python {0}"}}\njobs:\n  inherits:\n    runs-on: ubuntu-26.04\n    steps:\n      - name: Run\n        run: print(1)\n  set-up:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        run: print(1)\n  own-bash:\n    runs-on: ubuntu-26.04\n    defaults: {run: {shell: "bash -e {0}"}}\n    steps:\n      - name: Run\n        run: echo hi\n  own-comma:\n    runs-on: ubuntu-26.04\n    defaults: {run: {shell: \'python3 {0}\', working-directory: "a,b"}}\n    steps:\n      - name: Run\n        run: print(1)\n  own-block:\n    runs-on: ubuntu-26.04\n    defaults:\n      run: {shell: "sh -e {0}"}\n    steps:\n      - name: Run\n        run: echo hi\n'
+
+
+def test_copilot_second_round_one_line_defaults():
+    assert unset_steps("x.yml", read_jobs(ONE_LINE_DEFAULTS_YAML), {}) == [
+        "x.yml > inherits > Run > python",
+        "x.yml > own-comma > Run > python",
+    ]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "on: push\ndefaults: { run: { shell: bash -e {0} } }\njobs:\n  j:\n    runs-on: ubuntu-26.04\n    steps:\n      - run: echo\n",
+        'on: push\ndefaults: {run: {shell: "python {0}"}\njobs:\n  j:\n    runs-on: ubuntu-26.04\n    steps:\n      - run: echo\n',
+        "on: push\njobs:\n  j:\n    runs-on: ubuntu-26.04\n    defaults:\n      run: { shell: python {0} }\n    steps:\n      - run: echo\n",
+        "on: push\njobs:\n  j:\n    runs-on: ubuntu-26.04\n    defaults: {run: {shell: 'python {0}}}\n    steps:\n      - run: echo\n",
+    ],
+)
+def test_copilot_second_round_one_line_defaults_refused(text):
+    with pytest.raises(AssertionError):
+        read_jobs(text)
 
 
 FILES = sorted(p for p in WORKFLOWS.iterdir() if p.suffix in (".yml", ".yaml"))
