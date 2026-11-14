@@ -1,22 +1,21 @@
 """Every workflow job that runs Node.js or Python chooses its version (saulpatinojr/HCW-HybridCloudWorks#1707).
 
 A job that runs `node`, `npm`, `npx`, `yarn`, `pnpm`, `python3`, `pip`, `pipx`, `pytest`, `uv` or `uvx` without
-actions/setup-node or actions/setup-python gets whatever the runner image ships: on ubuntu-26.04 that was Node.js 24
-and Python 3.14 in November 2026, both below the program's floors (Node.js 26, Python 3.15). Nothing else notices,
-because a job that names no version has nothing to read. `uv` and `uvx` count as Python, because uv runs the
-interpreter it finds, the runner's own unless one was set up; so astral-sh/setup-uv counts as setting Python up only
-when it is given a `python-version` at or above the floor. `yarn` and `pnpm` are Node.js programs and count as Node.js;
-`pytest` and `pipx` are Python programs and count as Python. pipx builds each tool's virtual environment from
-`PIPX_DEFAULT_PYTHON` or, when that is unset, from the interpreter pipx itself runs on
-(https://github.com/pypa/pipx/blob/main/src/pipx/interpreter.py, `get_default_python`). GitHub's Ubuntu runner images
-install pipx with the image's own python3 (`python3 -m pip install pipx`, actions/runner-images#14654), so after
-actions/setup-python a `pipx` step still uses the image's Python unless it is given `--python` (actions/setup-python's
-`python-path` output) or `PIPX_DEFAULT_PYTHON`. So a step that runs `pipx` in command position must also choose its
-interpreter: `--python` among that pipx command's own words (`pipx run --python "$PYTHON_PATH" ...`), or
-`PIPX_DEFAULT_PYTHON` set in front of it (`PIPX_DEFAULT_PYTHON=/p pipx ...`) or in the step's, job's or workflow's
-`env:` (Copilot on HCW-NetworkEyes_App#393). A step that does not is reported, named; one kept that way on purpose is
-listed, with its reason, in PIPX_ALLOWED. An `export PIPX_DEFAULT_PYTHON=...` earlier in the script is not read; use
-`env:` instead.
+actions/setup-node or actions/setup-python gets whatever the runner image ships: on ubuntu-26.04 that was Node.js 24 and
+Python 3.14 in November 2026, both below the program's floors (Node.js 26, Python 3.15). Nothing else notices, because a
+job that names no version has nothing to read. `uv` and `uvx` count as Python, because uv runs the interpreter it finds,
+the runner's own unless one was set up; so astral-sh/setup-uv counts as setting Python up only when it is given a
+`python-version` at or above the floor. `yarn` and `pnpm` are Node.js programs and count as Node.js; `pytest` and `pipx`
+are Python programs and count as Python. pipx builds each tool's virtual environment from `PIPX_DEFAULT_PYTHON` or, when
+that is unset, from the interpreter pipx itself runs on (https://github.com/pypa/pipx/blob/main/src/pipx/interpreter.py,
+`get_default_python`). GitHub's Ubuntu runner images install pipx with the image's own python3 (`python3 -m pip install
+pipx`, actions/runner-images#14654), so after actions/setup-python a `pipx` step still uses the image's Python unless it
+is given `--python` (actions/setup-python's `python-path` output) or `PIPX_DEFAULT_PYTHON`. So a step that runs `pipx`
+in command position must also choose its interpreter: `--python` among that pipx command's own words (`pipx run --python
+"$PYTHON_PATH" ...`), or `PIPX_DEFAULT_PYTHON` set in front of it (`PIPX_DEFAULT_PYTHON=/p pipx ...`) or in the step's,
+job's or workflow's `env:` (Copilot on HCW-NetworkEyes_App#393). A step that does not is reported, named; one kept that
+way on purpose is listed, with its reason, in PIPX_ALLOWED. The script's own `unset`, `export` and assignments of it are
+read too, the last in a shell winning.
 
 What pipx is given must also be the set-up Python. The runner's own Python named by its path (`--python
 /usr/bin/python3`, `/usr/bin/python3.12`, `/bin/python3` or the Azure CLI's `/opt/az/bin/python3`, the same as
@@ -88,12 +87,13 @@ and a step whose `shell:` runs through sudo runs its whole text that way. A step
 `defaults.run.shell`) is a runtime (`python`, `node {0}`) runs it. The outer shell runs only the `$(...)` and backticks
 of a double-quoted string, so `bash -c "x; pipx run y $(true)"` runs no `pipx` outside. `unset`, `export -n` (which
 takes a name's export away) and `declare +x` are read, and so is a script line that sets PIPX_DEFAULT_PYTHON to a value
-that chooses nothing (one that chooses is still not read: use `env:`). sudo refuses `-i` together with `-E` outright, so
-`sudo -iE pipx` counts as having no Python chosen. A value given to pipx chooses nothing when it is a bare name other
-than the floor's own `python3.15` (PATH would find the runner's), a path under /usr/local/bin, a path with a `..` after
-a part this check cannot see, or a pattern or `~` the shell would still expand; a `\\` in it is dropped first. `${{
-env.X }}` is read as GitHub evaluates it, level by level, and `${{ env.pythonLocation }}` stays setup-python's word,
-which chooses nothing when an `env:` sets `pythonLocation` itself or the script unsets it.
+that chooses nothing (and, since Copilot's third review, one that chooses, the latest change in a shell winning). sudo
+refuses `-i` together with `-E` outright, so `sudo -iE pipx` counts as having no Python chosen. A value given to pipx
+chooses nothing when it is a bare name other than the floor's own `python3.15` (PATH would find the runner's), a path
+under /usr/local/bin, a path with a `..` after a part this check cannot see, or a pattern or `~` the shell would still
+expand; a `\\` in it is dropped first. `${{ env.X }}` is read as GitHub evaluates it, level by level, and `${{
+env.pythonLocation }}` stays setup-python's word, which chooses nothing when an `env:` sets `pythonLocation` itself or
+the script unsets it.
 
 Limits, known and kept: a composite action whose set-up step takes its version from `${{ inputs.* }}` cannot be read, so
 it fails closed and needs an entry in BELOW_FLOOR_ALLOWED; a `shell: python` step's text is still read as shell too, and
@@ -1189,19 +1189,47 @@ def _block_scalar(lines: list[str], indicator: re.Match[str], parent: int) -> st
     return text if chomp == "-" or not text else text + "\n"
 
 
+# Where a quote starts a quoted value: at the start, or after a space, `[`, `{`, `,` or `:` (`it's` is plain text).
+QUOTE_STARTS = " \t[{,:"
+
+
+def _without_comment(text: str) -> str:
+    """A one-line value without the comment after it: from a `#` after a space, outside quotes, by the quote rules of
+    `_flow_items`, so `["3.15 # floor"]` keeps its `#` (Copilot on HCW-NetworkEyes_App#399)."""
+    quote, index = "", 0
+    while index < len(text):
+        char = text[index]
+        if quote:
+            if (quote == '"' and char == "\\") or (
+                quote == "'" and text[index : index + 2] == "''"
+            ):
+                index += 1
+            elif char == quote:
+                quote = ""
+        elif char in "'\"" and (index == 0 or text[index - 1] in QUOTE_STARTS):
+            quote = char
+        elif char == "#" and index > 0 and text[index - 1] in " \t":
+            return text[:index].rstrip()
+        index += 1
+    return text.rstrip()
+
+
 def _flow_items(inner: str) -> list[str]:
     """The items of a one-line `{ ... }` or `[ ... ]` (its text inside the brackets), split on the commas outside quotes
     and `${{ }}`. Inside double quotes a `\\` takes the next character with it (`"a\\"b"`); inside single quotes `''` is
-    a quote, which leaving and entering the quotes again reads the same way (Copilot on HCW-NetworkEyes_App#399)."""
+    a quote, which leaving and entering the quotes again reads the same way (Copilot on HCW-NetworkEyes_App#399). A
+    quote starts a quoted value only where QUOTE_STARTS says, so `[it's, b]` is two plain items."""
     parts, depth, quote, start, index = [], 0, "", 0, 0
     while index < len(inner):
         char = inner[index]
         if quote:
-            if quote == '"' and char == "\\":
+            if (quote == '"' and char == "\\") or (
+                quote == "'" and inner[index : index + 2] == "''"
+            ):
                 index += 1
             elif char == quote:
                 quote = ""
-        elif char in "'\"":
+        elif char in "'\"" and (index == 0 or inner[index - 1] in QUOTE_STARTS):
             quote = char
         elif char in "{[":
             depth += 1
@@ -1265,7 +1293,7 @@ def _scalar_lines(lines: list[str], at: int, indent: int, indicator: re.Match[st
 def _mapping(lines: list[str], at: int, indent: int) -> dict[str, str]:
     """The mapping under the key on line `at`: a `{ ... }` on the same line, or the `key: value` lines below it, each
     value plain, quoted, null (read as empty, see `_scalar`) or a block scalar (`|`, `>-`, read as its text)."""
-    rest = re.sub(r"\s+#.*$", "", lines[at].split(":", 1)[1]).strip()
+    rest = _without_comment(lines[at].split(":", 1)[1]).strip()
     if rest.startswith("{"):
         return _flow_mapping(rest)
     block = _block(lines, at, indent)
@@ -1305,7 +1333,7 @@ def _matrix(job: list[str], key_indent: int) -> dict[str, list[str]]:
     at = [i for i, line in enumerate(block) if re.match(r"^\s+matrix:", line)]
     # Only a block of lists or a `${{ ... }}` expression is read; `matrix: [..]`, `matrix: {..}` or any other value
     # stops the test, as the website's reader stops on it (Copilot on HCW-NetworkEyes_App#399).
-    inline = re.sub(r"\s+#.*$", "", block[at[0]].split(":", 1)[1]).strip() if at else ""
+    inline = _without_comment(block[at[0]].split(":", 1)[1]).strip() if at else ""
     assert not inline or re.fullmatch(r"\$\{\{.*\}\}", inline), (
         f"matrix: is written on one line: {inline!r}"
     )
@@ -1325,7 +1353,7 @@ def _matrix(job: list[str], key_indent: int) -> dict[str, list[str]]:
                 or (line.lstrip().startswith("- ") and index > 0)
             ), f"cannot read the matrix line {line.strip()!r}"
             continue
-        rest = re.sub(r"\s+#.*$", "", match.group(2)).strip()
+        rest = _without_comment(match.group(2)).strip()
         if rest.startswith("["):
             assert rest.endswith("]"), f"cannot read the matrix list {rest!r}"
             found[match.group(1)] = [_scalar(v) for v in _flow_items(rest[1:-1])]
@@ -1388,7 +1416,7 @@ def _step_keys(lines: list[str], key_indent: int) -> dict:
 def _default_shell(lines: list[str], at: int, indent: int) -> str | None:
     """The `run: shell:` of the `defaults:` key on line `at` (at `indent` spaces), written as a block or `{ ... }`;
     None when it names none."""
-    rest = re.sub(r"\s+#.*$", "", lines[at].split(":", 1)[1]).strip()
+    rest = _without_comment(lines[at].split(":", 1)[1]).strip()
     if rest.startswith("{"):
         found = re.search(r"\bshell:\s*([^,}]+)", rest)
         return _scalar(found[1]) if found else None
@@ -2364,23 +2392,35 @@ def _pipx_without_python_once(
         records.setdefault(name, []).append((name, value, here, exported))
 
     def inherited(index: int) -> bool:
-        """What a command at `index` inherits for PIPX_DEFAULT_PYTHON: False once the shell it runs in (the innermost
-        child shell, or a subshell of it that is still open) has removed it, else what that shell was started with."""
-        if removals:
+        """What a command at `index` inherits for PIPX_DEFAULT_PYTHON: what the shell it runs in (the innermost child
+        shell) was started with, then each change the script made to it in that shell, or in a subshell of it that is
+        still open, in order, the latest winning (Copilot on HCW-NetworkEyes_App#399): `unset` removes it, `export -n`
+        keeps it from the commands the shell starts, `export` gives it to them again, and an assignment changes its
+        value. pipx sees the value only while it is exported: in the outermost shell when the step's, job's or
+        workflow's `env:` sets it or the script exports it, in a child shell when it was handed one that chooses."""
+        state = stack[-1]
+        exported = "PIPX_DEFAULT_PYTHON" in env if len(stack) == 1 else state
+        if changes:
             here = scopes[0][index] if index >= 0 else ()
             child = max(
                 (k for k, ident in enumerate(here) if scopes[1][ident] == "child"), default=-1
             )
-            if any(len(at) > child and here[: len(at)] == at for at in removals):
-                return False
-        return stack[-1]
+            for at, change, choice in changes:
+                if len(at) <= child or here[: len(at)] != at:
+                    continue
+                if change == "unset":
+                    state, exported = False, False
+                    continue
+                exported = {"unexport": False, "export": True}.get(change, exported)
+                state = state if choice is None else choice
+        return state and exported
 
     # name -> [(name, value, scope path, exported)], in the order the script sets them
     records: dict[str, list[tuple[str, object, tuple[int, ...], bool | str]]] = {}
-    # Where the script unsets, unexports or sets to a value that chooses nothing PIPX_DEFAULT_PYTHON (`unset
-    # PIPX_DEFAULT_PYTHON`, `export -n ...`, `PIPX_DEFAULT_PYTHON=/usr/bin/python3`): the scope path of each (round 3,
-    # HCW-HybridCloudWorks#1707). One that sets it to a value that chooses is not read, as before: use `env:` for that.
-    removals: list[tuple[int, ...]] = []
+    # Each change the script makes to PIPX_DEFAULT_PYTHON, in order (see `inherited`): its scope path, what it does
+    # ("unset", "unexport", "export" or "assign"), and whether the value it gives chooses the set-up Python (None when
+    # it gives none: `export -n PIPX_DEFAULT_PYTHON`). A value this check does not follow (`read`, `+=`) chooses nothing.
+    changes: list[tuple[tuple[int, ...], str, bool | None]] = []
     offset = 0
     for raw in text.split("\n"):
         line = raw.strip()
@@ -2409,18 +2449,26 @@ def _pipx_without_python_once(
                 if not scopes and (pairs or marks):
                     scopes.extend(_scope_paths(text))
                 here = scopes[0][lead + at - 1] if scopes else ()
+                change = {"unexport": "unexport", True: "export"}.get(exported, "assign")
                 for name, value in pairs:
-                    if name == "PIPX_DEFAULT_PYTHON" and (
-                        exported == "unexport"
-                        or not isinstance(value, str)
-                        or not _chooses(value, setup_ids, view_at(lead + at - 1, _names_in(value)))
-                    ):
-                        removals.append(here)
+                    if name == "PIPX_DEFAULT_PYTHON":
+                        changes.append(
+                            (here, "unset", None)
+                            if value is UNSET
+                            else (
+                                here,
+                                change,
+                                isinstance(value, str)
+                                and _chooses(
+                                    value, setup_ids, view_at(lead + at - 1, _names_in(value))
+                                ),
+                            )
+                        )
                     record(name, value, here, exported)
                 view = view_at(lead + at - 1, marks) if marks else {}
                 for name in marks:
-                    if name == "PIPX_DEFAULT_PYTHON" and exported == "unexport":
-                        removals.append(here)
+                    if name == "PIPX_DEFAULT_PYTHON":
+                        changes.append((here, change, None))
                     if name in view:
                         record(name, view[name], here, exported)
                 continue
@@ -4711,7 +4759,8 @@ def test_round_three_forms_are_read_as_the_shell_reads_them(line, kind, found):
             [],
             True,
         ),
-        ("export PIPX_DEFAULT_PYTHON=/opt/py/bin/python3; pipx run x", {}, [], True),
+        # An export in the script that chooses is read too since Copilot's third review of HCW-NetworkEyes_App#399.
+        ("export PIPX_DEFAULT_PYTHON=/opt/py/bin/python3; pipx run x", {}, [], False),
         # 5: the outer shell runs only the substitutions of a double-quoted string, not the rest of its text.
         ('PIPX_DEFAULT_PYTHON=/p bash -c "x; pipx run y $(true)"', {}, [], False),
         ('bash -c "x; pipx run y $(true)"', {}, [], True),
@@ -5139,6 +5188,84 @@ def test_round_three_copilot_two_block_values_matrices_and_quotes_read_as_yaml()
 def test_round_three_copilot_two_refused_forms(text):
     with pytest.raises(AssertionError):
         read_jobs(text)
+
+
+# Copilot's third review of HCW-NetworkEyes_App#399: the same cases as the website's
+# scripts/workflow-runtime-setup.test.mjs, in the same order. The latest change to PIPX_DEFAULT_PYTHON in a shell wins.
+@pytest.mark.parametrize(
+    ("run", "env", "flagged"),
+    [
+        (
+            "PIPX_DEFAULT_PYTHON=/usr/bin/python3; PIPX_DEFAULT_PYTHON=/opt/py/bin/python3; pipx run x",
+            {"PIPX_DEFAULT_PYTHON": "/opt/py"},
+            False,
+        ),
+        (
+            "PIPX_DEFAULT_PYTHON=/usr/bin/python3; PIPX_DEFAULT_PYTHON=/opt/py/bin/python3; bash -c 'pipx run x'",
+            {"PIPX_DEFAULT_PYTHON": "/opt/py"},
+            False,
+        ),
+        (
+            "PIPX_DEFAULT_PYTHON=/usr/bin/python3; PIPX_DEFAULT_PYTHON=/opt/py/bin/python3; pipx run x",
+            {},
+            True,
+        ),
+        (
+            "export PIPX_DEFAULT_PYTHON=/usr/bin/python3; export PIPX_DEFAULT_PYTHON=/opt/py/bin/python3; pipx run x",
+            {},
+            False,
+        ),
+        (
+            "PIPX_DEFAULT_PYTHON=/opt/py/bin/python3; PIPX_DEFAULT_PYTHON=/usr/bin/python3; pipx run x",
+            {"PIPX_DEFAULT_PYTHON": "/opt/py"},
+            True,
+        ),
+        (
+            "PIPX_DEFAULT_PYTHON=/opt/py/bin/python3; unset PIPX_DEFAULT_PYTHON; pipx run x",
+            {"PIPX_DEFAULT_PYTHON": "/opt/py"},
+            True,
+        ),
+        (
+            "unset PIPX_DEFAULT_PYTHON; export PIPX_DEFAULT_PYTHON=/opt/py/bin/python3; pipx run x",
+            {"PIPX_DEFAULT_PYTHON": "/opt/py"},
+            False,
+        ),
+        (
+            "unset PIPX_DEFAULT_PYTHON; PIPX_DEFAULT_PYTHON=/opt/py/bin/python3; pipx run x",
+            {"PIPX_DEFAULT_PYTHON": "/opt/py"},
+            True,
+        ),
+        (
+            "export -n PIPX_DEFAULT_PYTHON; export PIPX_DEFAULT_PYTHON; pipx run x",
+            {"PIPX_DEFAULT_PYTHON": "/opt/py"},
+            False,
+        ),
+        (
+            "export -n PIPX_DEFAULT_PYTHON; export PIPX_DEFAULT_PYTHON; bash -c 'pipx run x'",
+            {"PIPX_DEFAULT_PYTHON": "/opt/py"},
+            False,
+        ),
+        (
+            "export -n PIPX_DEFAULT_PYTHON; bash -c 'pipx run x'",
+            {"PIPX_DEFAULT_PYTHON": "/opt/py"},
+            True,
+        ),
+        ("(export PIPX_DEFAULT_PYTHON=/opt/py/bin/python3); pipx run x", {}, True),
+        ("bash -c 'export PIPX_DEFAULT_PYTHON=/opt/py/bin/python3; pipx run x'", {}, False),
+    ],
+)
+def test_round_three_copilot_three_latest_change_wins(run, env, flagged):
+    assert pipx_without_python(run, env) is flagged
+
+
+# A `#` inside quotes in a one-line `[ ]` or `{ }` is part of the value, not a comment.
+COPILOT_THREE_YAML = 'on: push\njobs:\n  matrix-hash:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        py: ["3.15 # floor"] # a comment\n    steps:\n      - uses: astral-sh/setup-uv@abc\n        with:\n          python-version: ${{ matrix.py }}\n      - name: Run\n        run: uv run x.py\n  flow-env-hash:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Scan\n        env: { NOTE: "a # b", PIPX_DEFAULT_PYTHON: /opt/py/bin/python3 } # c\n        run: pipx run x\n  flow-with-quote:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: astral-sh/setup-uv@abc\n        with: { note: \'it\'\'s # x\', python-version: "3.15" }\n      - name: Run\n        run: uv run x.py\n'
+
+
+def test_round_three_copilot_three_quoted_hash_in_one_line_values():
+    jobs = read_jobs(COPILOT_THREE_YAML)
+    assert unset_steps("x.yml", jobs, {}) == ["x.yml > matrix-hash > Run > python"]
+    assert pipx_problems("x.yml", jobs) == []
 
 
 FILES = sorted(p for p in WORKFLOWS.iterdir() if p.suffix in (".yml", ".yaml"))
