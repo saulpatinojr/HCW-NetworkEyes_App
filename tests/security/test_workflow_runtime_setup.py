@@ -146,7 +146,8 @@ workflow-level `defaults.run` allow none, and the workflow schema (actions/langu
 an expression there, so only a job's `defaults.run.shell` is filled in before the runner sees it. There a
 `${{ matrix.X }}` is read as each value of the job's matrix list, and any other expression, or one in a step's `shell:`
 or the workflow's default, counts as running both runtimes, so the step needs Node.js and Python set up before it
-(Copilot on HCW-NetworkEyes_App#403 and HCW-HybridCloudWorks#1725; see `shell_choices`).
+(Copilot on HCW-NetworkEyes_App#403 and HCW-HybridCloudWorks#1725; see `shell_choices`); pipx is read under each matrix
+value, and a step that runs pipx under a `shell:` this check cannot read is reported.
 
 Limits, known and kept: a composite action whose set-up step takes its version from `${{ inputs.* }}` cannot be read,
 so it fails closed and needs an entry in BELOW_FLOOR_ALLOWED; these are reported though they need not be, which can
@@ -163,9 +164,9 @@ sets in an earlier command (`export PATH=/usr/bin; python3 x`, or `PATH=/usr/bin
 written to `$GITHUB_PATH` or `$GITHUB_ENV` by an earlier step; the commands of a `case` clause whose pattern holds
 parentheses (`@(a|b))`, `?(a))`) or an escaped `)` (`a\\))`, or whose `case` has a subject `$(...)` with spaces or
 `in` on the next line; and a set-up version `3` or `3.x` (a major line only), which reads as at the floor. `unset -n
-P` is read as unsetting P, which is what bash does unless P is a name reference. For pipx, an expression left in
-`shell:` is still read as one word, as before. The runner fills `{0}` in with .NET's `string.Format`, where `{{` and
-`}}` stand for one brace and any other `{...}` stops the step; this check only replaces `{0}`.
+P` is read as unsetting P, which is what bash does unless P is a name reference. The runner fills `{0}` in with .NET's
+`string.Format`, where `{{` and `}}` stand for one brace and any other `{...}` stops the step; this check only replaces
+`{0}`.
 
 A composite action (`.github/actions/<name>/action.yml`, `runs: using: composite`) is checked like a job of its own,
 named `composite`, so its keys read `.github/actions/<name>/action.yml > composite > step name > runtime`. Its steps
@@ -2992,23 +2993,44 @@ def python_setup_ids(steps: list[dict], i: int) -> set[str]:
     }
 
 
+def _runs_pipx(run: str | None) -> bool:
+    """True when a run script runs `pipx` in command position anywhere (see `_pipx_commands`)."""
+    return any(
+        _pipx_commands(without_case_patterns(line.strip()))
+        for line in _shell_text(run or "").split("\n")
+    )
+
+
 def pipx_problems(file: str, jobs: dict[str, dict]) -> list[str]:
     """The steps of one workflow that run `pipx` without choosing its interpreter: "file > job > step > pipx", read
-    with the step's `shell:` (see `pipx_without_python`). A job in a `container:` is skipped, as `unset_steps` skips
-    it."""
-    return [
-        step_key(file, name, step, i, "pipx")
-        for name, job in jobs.items()
-        if not job["container"]
-        for i, step in enumerate(job["steps"])
-        if pipx_without_python(
-            step.get("run"),
-            step_env(job["env"], step.get("env") or {}),
-            python_setup_ids(job["steps"], i),
-            job.get("matrix"),
-            step_shell(step, job) if "run" in step else "",
-        )
-    ]
+    under each `shell:` the step may be handed to (see `shell_choices` and `pipx_without_python`). A step that runs
+    pipx under a `shell:` holding an expression this check cannot read is reported too, since that shell may set or
+    clear PIPX_DEFAULT_PYTHON (Copilot's second round on HCW-NetworkEyes_App#403). A job in a `container:` is skipped,
+    as `unset_steps` skips it."""
+    found = []
+    for name, job in jobs.items():
+        if job["container"]:
+            continue
+        for i, step in enumerate(job["steps"]):
+            env = step_env(job["env"], step.get("env") or {})
+            choices = shell_choices(step, job) if "run" in step else [""]
+            reported = (
+                _runs_pipx(step.get("run"))
+                if choices is None
+                else any(
+                    pipx_without_python(
+                        step.get("run"),
+                        env,
+                        python_setup_ids(job["steps"], i),
+                        job.get("matrix"),
+                        shell,
+                    )
+                    for shell in choices
+                )
+            )
+            if reported:
+                found.append(step_key(file, name, step, i, "pipx"))
+    return found
 
 
 def _resolved(value: str, step: dict, job: dict) -> list[str] | None:
@@ -6426,6 +6448,19 @@ def test_round_four_a_shell_holding_an_expression():
     assert unset_steps("x.yml", read_jobs(WORKFLOW_EXPRESSION_SHELL_YAML), {}) == [
         "x.yml > inherits > Run > node",
         "x.yml > inherits > Run > python",
+    ]
+
+
+# Copilot's second round on HCW-NetworkEyes_App#403: pipx is read under each `shell:` a step may be handed to, so a
+# job's `${{ matrix.shell }}` whose value sets PIPX_DEFAULT_PYTHON to the runner's own Python is reported, and a step
+# that runs pipx under a `shell:` this check cannot read (`${{ vars.RUN_SHELL }}`) is reported too.
+EXPRESSION_SHELL_PIPX_YAML = 'on: push\njobs:\n  matrix-runner-python:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        shell:\n          - env PIPX_DEFAULT_PYTHON=/usr/bin/python3 bash -e {0}\n    env:\n      PIPX_DEFAULT_PYTHON: /opt/py/bin/python3\n    defaults:\n      run:\n        shell: ${{ matrix.shell }}\n    steps:\n      - id: py\n        uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Scan\n        run: pipx run x\n  vars-shell:\n    runs-on: ubuntu-26.04\n    env:\n      PIPX_DEFAULT_PYTHON: /opt/py/bin/python3\n    defaults:\n      run:\n        shell: ${{ vars.RUN_SHELL }}\n    steps:\n      - id: py\n        uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - uses: actions/setup-node@abc\n        with: { node-version: "26" }\n      - name: Scan\n        run: pipx run x\n  vars-shell-no-pipx:\n    runs-on: ubuntu-26.04\n    defaults:\n      run:\n        shell: ${{ vars.RUN_SHELL }}\n    steps:\n      - id: py\n        uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - uses: actions/setup-node@abc\n        with: { node-version: "26" }\n      - name: Scan\n        run: echo hi\n  matrix-bash:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        shell: [bash]\n    defaults:\n      run:\n        shell: ${{ matrix.shell }} -e {0}\n    steps:\n      - id: py\n        uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Scan\n        run: pipx run --python "${{ steps.py.outputs.python-path }}" x\n'
+
+
+def test_round_four_pipx_under_a_shell_holding_an_expression():
+    assert pipx_problems("x.yml", read_jobs(EXPRESSION_SHELL_PIPX_YAML)) == [
+        "x.yml > matrix-runner-python > Scan > pipx",
+        "x.yml > vars-shell > Scan > pipx",
     ]
 
 
