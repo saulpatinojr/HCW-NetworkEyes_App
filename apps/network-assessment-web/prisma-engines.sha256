@@ -1,0 +1,18 @@
+# Fingerprints (sha256) of the Prisma engine files the web and migrator images keep (TODO.md T-744).
+#
+# @prisma/engines downloads these two programs while it installs, from binaries.prisma.sh (or PRISMA_ENGINES_MIRROR),
+# and checks them only against .sha256 files served by the same host: that catches a broken download, not a
+# substituted one. package-lock.json pins the npm packages but not these downloads. So the Dockerfile's deps, builder
+# and migrator-deps stages run scripts/check-prisma-engines.sh, which checks every Prisma engine file in node_modules
+# against the lines below (`sha256sum -c`) and fails the build on any difference.
+#
+# Written by scripts/prisma-engine-hashes.mjs; do not edit the lines by hand. After a Prisma update (Dependabot), from
+# apps/network-assessment-web, in bash or PowerShell:
+#   node scripts/prisma-engine-hashes.mjs --write
+# lib/prisma-engines.test.ts fails until this file names the @prisma/engines version in package-lock.json.
+#
+# @prisma/engines: 6.19.3
+# engines-commit: c2990dca591cba766e3b7ef5d9e8a84796e47ab7
+# binary-target: debian-openssl-3.0.x
+a2924eab1c78a0a7bb67edac5738939fa10589ef073af5542f53812a22e4a7d8  libquery_engine-debian-openssl-3.0.x.so.node
+5d42b181631fd20bb0ecc5abcdba72575e7f467a0d52f4d5ef1ff28f0c74e6e9  schema-engine-debian-openssl-3.0.x

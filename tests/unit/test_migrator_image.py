@@ -14,6 +14,8 @@ What is pinned here:
   the numeric user and the exec-form `CMD`/`HEALTHCHECK` stay as they were, and the migrator's file ownership too;
 * the runner's files stay owned by root (no `--chown`), and the only directory its user owns is `app/.next/cache`
   (issue 358);
+* the Prisma engine fingerprints (TODO.md T-744): the deps, builder and migrator-deps stages each run
+  `scripts/check-prisma-engines.sh` against `prisma-engines.sha256` after Prisma has downloaded or copied its engines;
 * `package.json`: `prisma` is a production dependency (the migrator runs it) at the same range as `@prisma/client`;
 * the lockfile: every x64/arm64 musl native package carries `libc: ["musl"]` (issue 358), and no
   `brace-expansion` below the versions that fix GHSA-qhr7-859c-m2p7 and GHSA-6j4f-fj2g-mc7p;
@@ -228,6 +230,59 @@ def test_the_builder_drops_group_and_world_write_from_everything_the_runner_copi
         if a.startswith("--from=builder")
     }
     assert taken <= set(stripped.group(1).split()), (taken, stripped.group(1))
+
+
+FINGERPRINT_CHECK = re.compile(
+    r"sh (?P<script>\S*check-prisma-engines\.sh) (?P<list>\S*prisma-engines\.sha256) node_modules(?:\s|$)"
+)
+
+
+@pytest.mark.parametrize(
+    ("stage", "after"),
+    [
+        ("deps", "npm ci"),
+        ("builder", "prisma generate"),
+        ("migrator-deps", "prisma generate"),
+    ],
+)
+def test_each_stage_that_fetches_or_copies_prisma_engines_checks_their_fingerprints(
+    stage: str, after: str
+) -> None:
+    """A substituted engine download must fail the build (TODO.md T-744), in every stage Prisma writes engines in.
+
+    The check runs after the last step that writes engines in the stage (in the same RUN), so nothing the stage
+    hands on holds an engine nobody checked. The deps stage copies the list and the script in itself; the builder has them from its
+    `COPY . .`; migrator-deps copies them to /src, which nothing copies on.
+    """
+    commands = [c for c in runs(stage) if after in c]
+    assert len(commands) == 1, (stage, runs(stage))
+    command = commands[0]
+    check = FINGERPRINT_CHECK.search(command)
+    assert check, f"the {stage} stage must run check-prisma-engines.sh after `{after}`: {command}"
+    assert command.index(after) < check.start(), command
+    copied = " ".join(a for _, a in copies(stage))
+    if stage == "builder":
+        assert any(a.strip() == ". ." for _, a in copies(stage)), copies(stage)
+    else:
+        assert "prisma-engines.sha256" in copied and "check-prisma-engines.sh" in copied, copied
+    assert "test -f node_modules/@prisma/engines/" not in command, (
+        "the fingerprint check replaces the presence test for the downloaded engines"
+    )
+
+
+def test_the_fingerprint_list_and_its_tools_are_in_the_build_context() -> None:
+    """The web .dockerignore must not drop the list or the check script from the build context."""
+    assert (WEB / "prisma-engines.sha256").is_file()
+    assert (WEB / "scripts" / "check-prisma-engines.sh").is_file()
+    assert (WEB / "scripts" / "prisma-engine-hashes.mjs").is_file()
+    ignored = [
+        line.strip()
+        for line in (WEB / ".dockerignore").read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.startswith("#")
+    ]
+    for pattern in ignored:
+        for name in ("prisma-engines.sha256", "scripts/check-prisma-engines.sh"):
+            assert not Path(name).match(pattern.lstrip("/")), (pattern, name)
 
 
 # --- package.json and the lockfile ---

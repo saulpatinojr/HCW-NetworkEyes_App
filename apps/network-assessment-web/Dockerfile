@@ -16,9 +16,14 @@ ARG DRAWIO_WEBAPP_SHA256=31afc82b7920c409d0591f6126ccb6c377d7800e7f11ab324f88bdf
 # on main from 2026-11-06 on a HIGH finding in Alpine's musl (CVE-2026-107891) whose fix was only in Alpine edge,
 # and the owner chose one distribution for every image instead of a second one to track (TODO.md T-741).
 # The base already carries libssl3t64 (libssl.so.3), which Prisma's engines load; the deps, builder and
-# migrator-deps stages check that the engines Prisma fetched are the debian-openssl-3.0.x builds this runs. Those are
-# the amd64 names, the only platform 200-build-images.yml builds; an arm64 build would fetch linux-arm64-openssl-3.0.x
-# and the checks would need that name.
+# migrator-deps stages check that the engines Prisma fetched are the debian-openssl-3.0.x builds this runs, byte for
+# byte: scripts/check-prisma-engines.sh compares every Prisma engine file in node_modules with its fingerprint (sha256)
+# in prisma-engines.sha256 and fails the build on any difference or on an engine the list does not name (TODO.md
+# T-744). Prisma checks its download only against .sha256 files from the same host, and package-lock.json does not
+# cover the download, so without this a substituted engine would pass. After a Prisma update (Dependabot), refresh the
+# list with `node scripts/prisma-engine-hashes.mjs --write` (from apps/network-assessment-web, bash or PowerShell);
+# lib/prisma-engines.test.ts fails until then. Those are the amd64 names, the only platform 200-build-images.yml
+# builds; an arm64 build would fetch linux-arm64-openssl-3.0.x and the list would need those engines.
 
 # ── Stage 1: deps ────────────────────────────────────────────────────────────
 FROM node:26-trixie-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc AS deps
@@ -26,13 +31,15 @@ WORKDIR /app
 
 # No extra packages: Alpine needed libc6-compat for glibc-built binaries, and Debian is glibc already. npm picks
 # the *-linux-x64-gnu builds of the native packages (Next.js SWC, sharp, lightningcss, tailwind oxide) from the
-# lockfile. The trailing test fails the build if Prisma fetched an engine for another platform, or fetched none: the
+# lockfile. The trailing check fails the build if Prisma fetched an engine for another platform, fetched none, or
+# fetched one whose fingerprint differs from prisma-engines.sha256 (see the top of this file): the
 # engine download is @prisma/engines' install script, approved in the `allowScripts` field of package.json so that
 # an npm that blocks unreviewed scripts still runs it (lib/install-scripts.test.ts holds the decision for each one).
 # .npmrc sets strict-allow-scripts, so a script nobody decided on fails this `npm ci` before any script runs.
-COPY package.json package-lock.json* .npmrc ./
+COPY package.json package-lock.json* .npmrc prisma-engines.sha256 ./
+COPY scripts/check-prisma-engines.sh ./scripts/
 RUN npm ci --legacy-peer-deps \
- && test -f node_modules/@prisma/engines/libquery_engine-debian-openssl-3.0.x.so.node
+ && sh scripts/check-prisma-engines.sh prisma-engines.sha256 node_modules
 
 # ── Stage 2: builder ─────────────────────────────────────────────────────────
 FROM node:26-trixie-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc AS builder
@@ -49,9 +56,11 @@ COPY . .
 #
 # One layer for both steps (hadolint DL3059): they read the same COPY . . layer, so splitting them cached nothing.
 # The generated client must hold the debian-openssl-3.0.x query engine, the one the runner (same base) loads; the
-# test fails the build if Prisma detected another platform.
+# test fails the build if Prisma detected another platform, and the fingerprint check (see the top of this file) if
+# the copy `prisma generate` made differs from the recorded engine. The runner copies these files.
 RUN npx prisma generate \
  && test -f node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node \
+ && sh scripts/check-prisma-engines.sh prisma-engines.sha256 node_modules \
  && node scripts/filter-shape-index.mjs lib/drawio-mcp/shape-index.json
 
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -89,7 +98,7 @@ WORKDIR /src
 # Prisma checkpoint telemetry would try to reach the network and write under $HOME.
 ENV CHECKPOINT_DISABLE=1
 
-COPY package.json package-lock.json scripts/migrator-lockfile.mjs ./
+COPY package.json package-lock.json prisma-engines.sha256 scripts/migrator-lockfile.mjs scripts/check-prisma-engines.sh ./
 RUN node migrator-lockfile.mjs /src /app
 
 WORKDIR /app
@@ -98,10 +107,12 @@ RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
 
 COPY prisma/schema.prisma ./prisma/schema.prisma
 # The schema engine (`prisma migrate deploy`) and the query engine (seed-local-admin.js) must be the
-# debian-openssl-3.0.x builds the migrator (same base) runs; the tests fail the build otherwise.
+# debian-openssl-3.0.x builds the migrator (same base) runs, with the fingerprints in prisma-engines.sha256 (see the
+# top of this file); the check covers the engines in @prisma/engines and the copies in .prisma/client and in the prisma
+# package, and the test and the check fail the build otherwise. /src (the check's inputs) is not copied anywhere.
 RUN node_modules/.bin/prisma generate \
- && test -f node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x \
- && test -f node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node
+ && test -f node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node \
+ && sh /src/check-prisma-engines.sh /src/prisma-engines.sha256 node_modules
 
 # ── Stage 4: migrator ─────────────────────────────────────────────────────────
 # Standalone image used exclusively to run `prisma migrate deploy` once per
