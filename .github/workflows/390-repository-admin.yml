@@ -70,10 +70,11 @@ jobs:
           APPLY: ${{ inputs.apply }}
           ALLOW_WEAKENING: ${{ inputs.allow_weakening }}
           # The required checks `protect-main` applies to the "Protect main" ruleset; every name must be a job name in
-          # 300-test-codebase.yml, and tests/unit/test_repository_admin_required_checks.py pins both. Until the owner runs
-          # `protect-main` with apply after the 2026-11-12 change (saulpatinojr/HCW-HybridCloudWorks#1707), the live
-          # ruleset lacks `Unit Tests (Python 3.15)`, the last name here. Change the live ruleset and this list together.
-          REQUIRED_CHECKS: '["Lint & Format","Unit Tests (Python 3.14)","Web lint, typecheck & tests","Python Lockfile Consistency","Python Dependency Audit (pip-audit)","Secret Scanning (detect-secrets, gating)","Repository Guardrails","Dockerfile Lint (hadolint)","Workflow Lint (actionlint)","Dependency Review","Image Scan (Trivy)","Unit Tests (Python 3.15)"]'
+          # 300-test-codebase.yml, and tests/unit/test_repository_admin_required_checks.py pins both. `Unit Tests (Python
+          # 3.14)` left this list on 2026-11-14 with the 3.14 leg of the unit tests (requires-python >=3.15.2); until the
+          # owner runs `protect-main` with apply and allow_weakening, the live ruleset still requires it. Change the live
+          # ruleset and this list together.
+          REQUIRED_CHECKS: '["Lint & Format","Web lint, typecheck & tests","Python Lockfile Consistency","Python Dependency Audit (pip-audit)","Secret Scanning (detect-secrets, gating)","Repository Guardrails","Dockerfile Lint (hadolint)","Workflow Lint (actionlint)","Dependency Review","Image Scan (Trivy)","Unit Tests (Python 3.15)"]'
           KEEP_REGEX: '^(main|master|develop|gh-pages|release/.*)$'
         run: |
           set -euo pipefail

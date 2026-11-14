@@ -703,7 +703,7 @@ One PR per change set, ready for review, following the Core's PR template; `CHAN
 - **Consumers of the images.** They pull by digest. From K the published images carry the `[aws]` extra (`TODO.md` T-729).
 - **Web tier.** The findings page reads the rule id from the title prefix (`_finding_model_to_dict`, `main.py:1176`); B keeps that convention until a `ruleId` column is added in a later migration.
 - **AddOn.** `TOPOLOGY_MODEL_VERSION`, `RULES_VERSION`, rule ids and severities in B are the contract the AddOn's interim port already uses; a Core change to any of them is a `[VERIFY]` item in the AddOn's `core-update` PR.
-- **Python floor.** `>=3.14` matches the images; a 3.13 developer environment runs `uv python install 3.14`.
+- **Python floor.** `>=3.14` matches the images; a 3.13 developer environment runs `uv python install 3.14`. (Since 2026-11-14 the floor is `>=3.15.2,<3.16`, the latest stable 3.15 release, by owner decision; the images run `python:3.15.2-slim-trixie`, and a developer runs `uv python install 3.15.2`.)
 - **Entra bearer (H).** The web tier must send a token carrying `Discovery.Run` before the API enforces it: the web image, the app role assignment (section 12) and the API image ship in the same release, web first. There is no runtime toggle; a mismatch is rolled back by deploying the previous API image digest.
 
 ## 17 Rollback considerations
@@ -764,7 +764,7 @@ PowerShell:
 
 ```powershell
 # Expected: ruff prints nothing; pytest ends with "passed" and no "failed"
-uv python install 3.14; uv sync --all-extras; uv run ruff check .; uv run ruff format --check .; uv run pytest -q
+uv python install 3.15.2; uv sync --all-extras; uv run ruff check .; uv run ruff format --check .; uv run pytest -q
 # Expected after B, F, G, D: all three print nothing
 git grep -c "def _check_" -- apps/network-assessment-api/main.py; git grep -n "Network Contributor" -- apps network_assessment docs .env.example; git grep -n "ClientSecretCredential|DefaultAzureCredential|sp_client_secret|spSecretEnc|gethostbyname" -- apps network_assessment packages
 # Expected: "boundary exit 0 (expected 0)", then ModuleNotFoundError: No module named 'azure' and "import exit 1 (expected 1)"
@@ -785,7 +785,7 @@ bash (Git Bash or Linux):
 
 ```bash
 # Expected: ruff prints nothing; pytest ends with "passed" and no "failed"
-uv python install 3.14 && uv sync --all-extras && uv run ruff check . && uv run ruff format --check . && uv run pytest -q
+uv python install 3.15.2 && uv sync --all-extras && uv run ruff check . && uv run ruff format --check . && uv run pytest -q
 # Expected after B, F, G, D: all three print nothing
 git grep -c "def _check_" -- apps/network-assessment-api/main.py; git grep -n "Network Contributor" -- apps network_assessment docs .env.example; git grep -n "ClientSecretCredential\|DefaultAzureCredential\|sp_client_secret\|spSecretEnc\|gethostbyname" -- apps network_assessment packages
 # Expected: "boundary exit 0 (expected 0)", then ModuleNotFoundError: No module named 'azure' and "import exit 1 (expected 1)"

@@ -2626,8 +2626,8 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   `Image Scan (Trivy)` jobs are the proof, and the web tier was not started against the built image.
 
 ### T-743 — Node.js 26 and Python 3.15, the HCW runtime floors (HCW-HybridCloudWorks#1707)
-- **Status:** Done 2026-11-12 (and (6) to (9) on 2026-11-13, (10) on 2026-11-14), except items (4) and (5), which are
-  open. The HCW website's version floors (`scripts/version-floors.json` in saulpatinojr/HCW-HybridCloudWorks, issue 1707
+- **Status:** Done 2026-11-12 (and (6) to (9) on 2026-11-13, (10) on 2026-11-14), except item (5), which is open, and
+  item (4), whose code change is made on 2026-11-14 and whose ruleset step is the owner's. The HCW website's version floors (`scripts/version-floors.json` in saulpatinojr/HCW-HybridCloudWorks, issue 1707
   there) ask for the newest Node.js LTS line (26, floor 26.11.0) and the newest Python line (3.15, floor 3.15.0). This
   repository ran Node.js 24 in the web image and Python 3.14 everywhere.
 - **(1) Node.js 26.** The six `FROM` lines of `apps/network-assessment-web/Dockerfile` are
@@ -2653,7 +2653,17 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   and build PyYAML from its hash-checked source archive with it (`--no-build-isolation-package pyyaml`), as plain
   Python (`PYYAML_FORCE_LIBYAML=0`; the builder stages have no C compiler and no code here imports `yaml.CLoader`).
   Remove both once a PyYAML release ships cp315 wheels.
-- **(4) Open: drop Python 3.14.** `Unit Tests (Python 3.14)` is a required check of the "Protect main" ruleset, and
+- **(4) Code change made 2026-11-14; the ruleset step is the owner's: drop Python 3.14.** On 2026-11-14 the owner
+  decided that every HCW Python repository requires Python 3.15.2, the latest stable 3.15 release. The pull request
+  of branch `claude/python-3.15.2` does what the next sentences planned: `requires-python` is `>=3.15.2,<3.16` in both
+  `pyproject.toml` files, ruff's target is `py315`, ty's version `3.15`, the matrix is `3.15` only, and
+  `Unit Tests (Python 3.14)` has left `REQUIRED_CHECKS`, its test and `BELOW_FLOOR_ALLOWED`. The live ruleset (read
+  2026-11-14: both 3.14 and 3.15 required) still requires the 3.14 check, which no longer reports, so the pull
+  request cannot merge while it does. `390` runs from `main` only (its `admin-ops` environment), and `main`'s list
+  still names the 3.14 check, so the ruleset must lose it another way first: the owner removes it on the ruleset's
+  settings page, or a smaller pull request takes it out of `REQUIRED_CHECKS` and its test alone (the 3.14 leg still
+  runs), the owner runs `protect-main` with apply and allow_weakening, and then this change merges. The plan as written
+  before: `Unit Tests (Python 3.14)` is a required check of the "Protect main" ruleset, and
   renaming it would block every pull request, so the unit tests run on both 3.14 and 3.15 and `requires-python`,
   ruff's `target-version` and ty's `python-version` stay at 3.14. `Unit Tests (Python 3.15)` was added to
   `REQUIRED_CHECKS` in `390-repository-admin.yml` and to its test. Next: the owner runs `390 · repository-admin`,
