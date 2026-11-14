@@ -703,7 +703,7 @@ One PR per change set, ready for review, following the Core's PR template; `CHAN
 - **Consumers of the images.** They pull by digest. From K the published images carry the `[aws]` extra (`TODO.md` T-729).
 - **Web tier.** The findings page reads the rule id from the title prefix (`_finding_model_to_dict`, `main.py:1176`); B keeps that convention until a `ruleId` column is added in a later migration.
 - **AddOn.** `TOPOLOGY_MODEL_VERSION`, `RULES_VERSION`, rule ids and severities in B are the contract the AddOn's interim port already uses; a Core change to any of them is a `[VERIFY]` item in the AddOn's `core-update` PR.
-- **Python floor.** `>=3.14` matches the images; a 3.13 developer environment runs `uv python install 3.14`. (Since 2026-11-14 the floor is `>=3.15.2,<3.16`, the latest stable 3.15 release, by owner decision; the images run `python:3.15.2-slim-trixie`, and a developer runs `uv python install 3.15.2`.)
+- **Python floor.** `>=3.15.2,<3.16` in both packages since 2026-11-14 (owner decision: the latest stable 3.15 release), matching the images' `python:3.15.2-slim-trixie`. A developer environment on an older Python runs `uv python install 3.15.2`. (Until then the floor was `>=3.14`.)
 - **Entra bearer (H).** The web tier must send a token carrying `Discovery.Run` before the API enforces it: the web image, the app role assignment (section 12) and the API image ship in the same release, web first. There is no runtime toggle; a mismatch is rolled back by deploying the previous API image digest.
 
 ## 17 Rollback considerations
