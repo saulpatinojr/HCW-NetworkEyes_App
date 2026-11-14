@@ -54,7 +54,8 @@ them). A wrapper's long option may be shortened as far as it stays unambiguous, 
 (`timeout --kill=5`, `nice --adj 5`); an ambiguous one is read as taking no value. A long or short option that takes a
 value takes the next word even when it starts with `-` (`timeout --kill-after -5`, `nice -n -5`). It counts with a
 path in front too (`/usr/bin/python3`, `./venv/bin/python`, `/usr/bin/env node`), because a path to the runner's
-interpreter is still the runner's, and `python3.15.2` counts like `python3`. A `$'...'` string is decoded as the shell
+interpreter is still the runner's, and a versioned name at or above the floor (`python3.15`, or the floor's own patch)
+counts like `python3`. A `$'...'` string is decoded as the shell
 decodes it (`\\xHH`, `\\uHHHH`, `\\UHHHHHHHH`, octal `\\NNN`, `\\n` and the like) and read as one word, so
 `$'\\x70ython3'` is `python3` while `$'node\\x20x'` is the one word `node x`. A heredoc's body is read only for the
 commands the shell runs in it: `$(...)` and backticks in the body of a heredoc whose delimiter is not quoted or escaped
@@ -122,6 +123,33 @@ pipx without the step's setting). A `defaults:` written as a one-line mapping, n
 {shell: "python {0}"}}`), is read whole, and one YAML refuses (a plain value holding a brace, or braces and quotes
 that do not balance) stops the check.
 
+Round 4 (saulpatinojr/HCW-HybridCloudWorks#1707) reads two more forms and holds Python to a higher floor. `coproc` runs
+the command after it (`coproc node x.js`, `coproc { python3 x; }`); a NAME may come first only before a compound command
+(`coproc NAME while node x; do ...`), so in `coproc NAME node x` the command is NAME, as bash reads it (Copilot on
+HCW-MigrateOrchestrator_AddOn#77). A step's `shell:` is read as the runner passes it on, not as a shell would read it:
+the runner splits the program off at the first space and hands the rest to .NET, which drops double quotes and fills
+nothing in (actions/runner ScriptHandler.cs and ScriptHandlerHelpers.cs `ParseShellOptionString`, dotnet/runtime
+ProcessUtils.Unix.cs `GetNextArgument`; see `literal_shell`). So `shell: sudo env PATH="$PATH:/usr/bin" bash -e {0}`
+gives env the text `$PATH:/usr/bin`, and the step's `python3` is the runner's own from /usr/bin, while a `$X` in a
+`PIPX_DEFAULT_PYTHON=` there chooses nothing (Copilot on HCW-MigrateOrchestrator_AddOn#77). The plain `env PATH="$PATH"
+bash -e {0}` is reported too, conservatively: env cannot find bash on the PATH `$PATH` and the step stops (`env: 'bash':
+No such file or directory`, exit 127) before anything runs. Python's floor is the newest patch of its line (3.15.2 on
+2026-11-14), by the owner's decision of 2026-11-14, so a set-up step that asks for an earlier patch of the line, or a
+command named by one (`python3.15.1` that day), is below it, while a line-only `3.15` still stands for the newest and
+passes. The floor now moves with every Python patch release: PYTHON_FLOOR mirrors the website's
+scripts/version-floors.json, and the tests here that name the floor's boundary versions (3.15.0, 3.15.1, 3.15.2, 3.15.3,
+written out, where the website builds them from its floor) move with it. A GitHub expression in `shell:` is read as one
+word, as GitHub fills it in. GitHub's contexts reference
+(https://docs.github.com/en/actions/reference/workflows-and-actions/contexts) lists contexts for
+`jobs.<job_id>.defaults.run` only (github, needs, strategy, matrix, env, vars, inputs); a step's `shell:` and the
+workflow-level `defaults.run` allow none, and the workflow schema (actions/languageservices, workflow-v1.0.json) refuses
+an expression there, so only a job's `defaults.run.shell` is filled in before the runner sees it. There a
+`${{ matrix.X }}` is read as each value of the job's matrix list, unless the matrix has an `include`; any other
+expression, one in a step's `shell:` or the workflow's default, or a matrix shell with an `include` is unreadable, and
+a step with an unreadable `shell:` is always reported for Node.js and Python, whatever was set up before it (Copilot on
+HCW-NetworkEyes_App#403 and HCW-HybridCloudWorks#1725; see `shell_choices`); pipx is read under each matrix value, and a
+step that runs pipx under a `shell:` this check cannot read is reported.
+
 Limits, known and kept: a composite action whose set-up step takes its version from `${{ inputs.* }}` cannot be read,
 so it fails closed and needs an entry in BELOW_FLOOR_ALLOWED; these are reported though they need not be, which can
 only add findings: a `shell: python` step's text is still read as shell too; an `eval` script is read as a child shell
@@ -136,10 +164,10 @@ value a `for` loop or `read` sets (`for P in /usr/bin/python3; do ...`), which c
 sets in an earlier command (`export PATH=/usr/bin; python3 x`, or `PATH=/usr/bin; python3 x`); a PATH or setting
 written to `$GITHUB_PATH` or `$GITHUB_ENV` by an earlier step; the commands of a `case` clause whose pattern holds
 parentheses (`@(a|b))`, `?(a))`) or an escaped `)` (`a\\))`, or whose `case` has a subject `$(...)` with spaces or
-`in` on the next line; and a set-up version `3` or `3.x` (a major line only), which reads as at the floor. `$VAR` in
-`shell:` is read as if a shell filled it in, though the runner starts the shell command directly and passes it on
-literally (actions/runner ScriptHandler.cs). `unset -n P` is read as unsetting P, which is what bash does unless P is
-a name reference.
+`in` on the next line; and a set-up version `3` or `3.x` (a major line only), which reads as at the floor. `unset -n
+P` is read as unsetting P, which is what bash does unless P is a name reference. The runner fills `{0}` in with .NET's
+`string.Format`, where `{{` and `}}` stand for one brace and any other `{...}` stops the step; this check only replaces
+`{0}`.
 
 A composite action (`.github/actions/<name>/action.yml`, `runs: using: composite`) is checked like a job of its own,
 named `composite`, so its keys read `.github/actions/<name>/action.yml > composite > step name > runtime`. Its steps
@@ -454,6 +482,11 @@ SHELL_C = PATH + SHELL_GIVEN_C
 SHELL_READS_INPUT = PATH + rf"(?:ba|da|k|z)?sh(?:\s+{_shell_option('(?:(?!c)[A-Za-z])')})*"
 # A here-string given to such a shell (`bash <<< node`) is its script; unquoted, that is the one word after `<<<`.
 SHELL_HERE_STRING = SHELL_READS_INPUT + r"\s*<<<\s*"
+# A NAME `coproc` takes before a compound command, as bash 5.2 reads it (Copilot's round 2 on HCW-HybridCloudWorks#1725,
+# checked with bash 5.2.21): before `{` or `[[` and a space, `(` or `((` (with or without a space), or `for`, `case`,
+# `select`, `while`, `until` or `if`. A NAME is a shell name (bash refuses `coproc node-x { ...; }`), and `coproc node{
+# x; }` is a syntax error, not a NAME.
+COPROC_NAME = r"[A-Za-z_][A-Za-z0-9_]*(?=\s*\(|\s+(?:\{|\[\[)(?=\s)|\s+(?:for|case|select|while|until|if)(?=\s|$))"
 # After env's options, a lone `-` (the same as `-i`) may come before its assignments and command (`env - node x`;
 # Copilot's second round on the ports, HCW-HybridCloudWorks#1707).
 ENV_DASH = r"(?:\s+-(?=\s))?"
@@ -466,6 +499,12 @@ WRAPPERS = "|".join(
     ]
     + [
         r"command(?:\s+(?:-p|--(?=\s)))*\s+",
+        # `coproc` runs the command after it in the background (round 4, HCW-HybridCloudWorks#1707: Copilot on
+        # HCW-MigrateOrchestrator_AddOn#77). A NAME may come first only before a compound command (bash's manual,
+        # Coprocesses), and is then taken as the NAME, never as a command: `coproc node { echo; }` runs no node
+        # (COPROC_NAME). Before anything else the first word is the command, so `coproc NAME node x` runs NAME and
+        # `coproc node node x` runs node. `{` and `(` open a command anyway.
+        rf"coproc\s+(?:{COPROC_NAME}\s*|(?!{COPROC_NAME}))",
         r"(?:if|then|else|elif|do|while|until|!)\s+",
         # `eval` runs its arguments as a script (round 3, HCW-HybridCloudWorks#1707): an unquoted first argument is in
         # command position. `builtin` runs the builtin named next (`builtin eval node x`).
@@ -683,8 +722,10 @@ SETUP = {
 SETUP_UV = re.compile(r"^astral-sh/setup-uv@")
 
 # The lowest versions a set-up step may ask for. The program's floors are kept in scripts/version-floors.json in
-# HCW-HybridCloudWorks; change them there first, then here.
-PYTHON_FLOOR = (3, 15, 0)
+# HCW-HybridCloudWorks; change them there first, then here. Python's is its line's newest patch since 2026-11-14
+# (HCW-HybridCloudWorks#1707), so it moves with every Python patch release, and so do the round-4 tests that name the
+# floor's boundary versions (3.15.0 to 3.15.3).
+PYTHON_FLOOR = (3, 15, 2)
 NODE_FLOOR = (26, 11, 0)
 FLOORS = {"python": PYTHON_FLOOR, "node": NODE_FLOOR}
 # The one bare interpreter name that chooses a Python at or above the floor wherever it is found on PATH: the floor's
@@ -1721,6 +1762,9 @@ def read_jobs(text: str) -> dict[str, dict]:
             "env": env,
             "matrix": _matrix(job, key_indent),
             "shell": (workflow_shell if shell is None else shell) or "",
+            # Whether that shell is the job's own `defaults.run.shell`, where GitHub fills in a matrix value (see
+            # `shell_choices`), rather than the workflow's, where it allows no expression.
+            "job_shell": shell is not None,
             "steps": steps,
         }
     return jobs
@@ -2127,8 +2171,130 @@ def step_shell(step: dict, job: dict) -> str:
     says (round 3, HCW-HybridCloudWorks#1707;
     https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idstepsshell). "" for
     the default shell. The same rule as the website's `stepShell`."""
+    return literal_shell(_given_shell(step, job))
+
+
+def _given_shell(step: dict, job: dict) -> str:
+    """A step's `shell:` as written: the step's own, else the job's or the workflow's `defaults.run.shell` (which
+    `read_jobs` keeps as the job's `shell`); "" for none."""
     shell = step["shell"] if "shell" in step else job.get("shell", "")
-    return str(shell or "").replace("{0}", "script")
+    return str(shell or "")
+
+
+# A matrix value in a job's `defaults.run.shell` (`${{ matrix.shell }}`), which GitHub fills in before the
+# runner sees it.
+MATRIX_IN_SHELL = re.compile(r"\$\{\{\s*matrix\.([A-Za-z0-9_-]+)\s*\}\}")
+
+
+def shell_choices(step: dict, job: dict) -> list[str] | None:
+    """The `shell:` commands a step that runs a script may be handed to, each as `literal_shell` writes it; None when
+    its `shell:` holds a GitHub expression this check cannot read (Copilot on HCW-NetworkEyes_App#403 and
+    HCW-HybridCloudWorks#1725). A job's `defaults.run.shell` may hold one (github, needs, strategy, matrix, env, vars,
+    inputs: https://docs.github.com/en/actions/reference/workflows-and-actions/contexts): a `${{ matrix.X }}` there is
+    read as each value of the job's matrix list X, every combination of them, and any other expression, a matrix list
+    that is missing or empty, a value that is not plain text, or a matrix with an `include` (which can add or change a
+    value; Copilot's third round on HCW-HybridCloudWorks#1725) gives None. An `exclude` only takes combinations away,
+    so the lists stay a safe superset. A step's `shell:` and the workflow's
+    `defaults.run.shell` allow no expression, so GitHub refuses one there, and it gives None too. `unset_steps` counts
+    a step with None as running both runtimes and reports it whatever was set up before it, since the shell may run
+    through sudo or replace PATH. The same rule as the website's `shellChoices`."""
+    given = _given_shell(step, job)
+    if "${{" not in given:
+        return [literal_shell(given)]
+    if "shell" in step or not job.get("job_shell"):
+        return None
+    names = sorted({found[1] for found in MATRIX_IN_SHELL.finditer(given)})
+    if names and "include" in (job.get("matrix") or {}):
+        return None
+    entries: list[dict[str, str]] = [{}]
+    for name in names:
+        values = (job.get("matrix") or {}).get(name)
+        if not values or any(not isinstance(value, str) for value in values):
+            return None
+        entries = [{**entry, name: value} for entry in entries for value in values]
+    texts = [
+        MATRIX_IN_SHELL.sub(lambda found, entry=entry: entry[found[1]], given) for entry in entries
+    ]
+    return None if any("${{" in text for text in texts) else [literal_shell(text) for text in texts]
+
+
+# A word of a `shell:` command that reads the same to a shell as the text it is: no quote, space, `\`, pattern,
+# operator or `$` (which `literal_shell` writes as LITERAL_DOLLAR first).
+SHELL_SAFE = re.compile(r"[A-Za-z0-9_./+:@%,=\x03-]+")
+# The white space .NET's `TrimStart` takes off the front of the arguments (the Latin-1 ones; the rest never appear in a
+# one-line `shell:`).
+LEADING_SPACE = re.compile(r"^[\t-\r \x85\xa0]+")
+
+
+def _runner_arguments(text: str) -> list[str]:
+    """The words .NET passes a program for an argument string, as dotnet/runtime's ProcessUtils.Unix.cs
+    `GetNextArgument` splits it (the Microsoft C runtime's rules): a space or tab outside double quotes ends a word,
+    double quotes group and are dropped (`""` inside them is one `"`), backslashes are literal unless they come before a
+    `"` (two make one, and an odd one makes the `"` literal), and nothing else is special: no `$`, `~`, pattern or single
+    quote. The same rule as the website's `runnerArguments`."""
+    words = []
+    n = len(text)
+    i = 0
+    while i < n:
+        while i < n and text[i] in " \t":
+            i += 1
+        if i == n:
+            break
+        word = ""
+        quoted = False
+        while i < n:
+            slashes = 0
+            while i < n and text[i] == "\\":
+                i += 1
+                slashes += 1
+            if slashes:
+                if i >= n or text[i] != '"':
+                    word += "\\" * slashes
+                else:
+                    word += "\\" * (slashes // 2)
+                    if slashes % 2:
+                        word += '"'
+                        i += 1
+                continue
+            char = text[i]
+            if char == '"':
+                if quoted and i < n - 1 and text[i + 1] == '"':
+                    word += '"'
+                    i += 1
+                else:
+                    quoted = not quoted
+                i += 1
+                continue
+            if char in " \t" and not quoted:
+                break
+            word += char
+            i += 1
+        words.append(word)
+    return words
+
+
+def literal_shell(shell: str) -> str:
+    """A step's `shell:` written as the words the runner starts it with, so the readers above take each word as the text
+    it is (round 4, HCW-HybridCloudWorks#1707: Copilot on HCW-MigrateOrchestrator_AddOn#77). The runner runs no shell to
+    read `shell:`: it splits the program off at the first space, looks it up on the step's PATH, and hands the rest,
+    `{0}` replaced by the script's path and white space taken off its front, to .NET as one argument string
+    (actions/runner src/Runner.Worker/Handlers/ScriptHandler.cs and ScriptHandlerHelpers.cs `ParseShellOptionString`),
+    which splits it as `_runner_arguments` does. So `sudo env PATH="$PATH" bash -e {0}` gives env the text
+    `PATH=$PATH`, and env sets PATH to it. Each `$` is written LITERAL_DOLLAR, so a `PATH=` holding one is a replaced
+    PATH (see `_sudo_path`) and a PIPX_DEFAULT_PYTHON holding one chooses nothing (see `_chooses`), and a word with any
+    other character a shell would read (a space, a quote, a `\\`, a pattern, an operator) is put in single quotes, a
+    `'` in it written `'"'"'`. A GitHub expression is written as one word first (see `_gha_tokens`), as the pipx check
+    read it before, and `{0}` as `script`. The same rule as the website's `literalShell`."""
+    text = _gha_tokens(shell).replace("{0}", "script")
+    if not text:
+        return ""
+    program, space, rest = text.partition(" ")
+    words = [program, *_runner_arguments(LEADING_SPACE.sub("", rest) if space else "")]
+    literals = (word.replace("$", LITERAL_DOLLAR) for word in words)
+    return " ".join(
+        literal if SHELL_SAFE.fullmatch(literal) else "'" + literal.replace("'", "'\"'\"'") + "'"
+        for literal in literals
+    )
 
 
 def unset_steps(
@@ -2146,10 +2312,16 @@ def unset_steps(
         for kind in COMMAND:
             for i, step in enumerate(job["steps"]):
                 key = step_key(file, name, step, i, kind)
-                shell = step_shell(step, job) if "run" in step else ""
+                # Each `shell:` the step may be handed to; None for one holding an expression this check cannot read,
+                # which may be either runtime and may run it through sudo or with a replaced PATH, so the step is
+                # reported for both whatever was set up before it (see `shell_choices`; Copilot's third round on
+                # HCW-HybridCloudWorks#1725).
+                choices = shell_choices(step, job) if "run" in step else [""]
+                shells = [""] if choices is None else choices
                 if not (
                     runs_runtime(step.get("run"), kind)
-                    or runs_runtime(shell, kind)
+                    or choices is None
+                    or any(runs_runtime(shell, kind) for shell in shells)
                     or key in indirect
                 ):
                     continue
@@ -2162,10 +2334,14 @@ def unset_steps(
                 # that runs it through sudo or with a replaced PATH runs that runtime too (Copilot's second round on the
                 # ports, HCW-HybridCloudWorks#1707: HCW-CloudCrawler_AddOn#79).
                 if (
-                    not covered
-                    or runs_through_sudo(step.get("run"), kind, _sudo_path(shell))
-                    or runs_through_sudo(shell, kind)
-                    or (key in indirect and _sudo_path(shell) is True)
+                    choices is None
+                    or not covered
+                    or any(
+                        runs_through_sudo(step.get("run"), kind, _sudo_path(shell))
+                        or runs_through_sudo(shell, kind)
+                        or (key in indirect and _sudo_path(shell) is True)
+                        for shell in shells
+                    )
                 ):
                     found.append(key)
     return found
@@ -2834,23 +3010,44 @@ def python_setup_ids(steps: list[dict], i: int) -> set[str]:
     }
 
 
+def _runs_pipx(run: str | None) -> bool:
+    """True when a run script runs `pipx` in command position anywhere (see `_pipx_commands`)."""
+    return any(
+        _pipx_commands(without_case_patterns(line.strip()))
+        for line in _shell_text(run or "").split("\n")
+    )
+
+
 def pipx_problems(file: str, jobs: dict[str, dict]) -> list[str]:
     """The steps of one workflow that run `pipx` without choosing its interpreter: "file > job > step > pipx", read
-    with the step's `shell:` (see `pipx_without_python`). A job in a `container:` is skipped, as `unset_steps` skips
-    it."""
-    return [
-        step_key(file, name, step, i, "pipx")
-        for name, job in jobs.items()
-        if not job["container"]
-        for i, step in enumerate(job["steps"])
-        if pipx_without_python(
-            step.get("run"),
-            step_env(job["env"], step.get("env") or {}),
-            python_setup_ids(job["steps"], i),
-            job.get("matrix"),
-            step_shell(step, job) if "run" in step else "",
-        )
-    ]
+    under each `shell:` the step may be handed to (see `shell_choices` and `pipx_without_python`). A step that runs
+    pipx under a `shell:` holding an expression this check cannot read is reported too, since that shell may set or
+    clear PIPX_DEFAULT_PYTHON (Copilot's second round on HCW-NetworkEyes_App#403). A job in a `container:` is skipped,
+    as `unset_steps` skips it."""
+    found = []
+    for name, job in jobs.items():
+        if job["container"]:
+            continue
+        for i, step in enumerate(job["steps"]):
+            env = step_env(job["env"], step.get("env") or {})
+            choices = shell_choices(step, job) if "run" in step else [""]
+            reported = (
+                _runs_pipx(step.get("run"))
+                if choices is None
+                else any(
+                    pipx_without_python(
+                        step.get("run"),
+                        env,
+                        python_setup_ids(job["steps"], i),
+                        job.get("matrix"),
+                        shell,
+                    )
+                    for shell in choices
+                )
+            )
+            if reported:
+                found.append(step_key(file, name, step, i, "pipx"))
+    return found
 
 
 def _resolved(value: str, step: dict, job: dict) -> list[str] | None:
@@ -3668,7 +3865,8 @@ def test_a_set_up_step_must_ask_for_the_floor_or_newer(tmp_path):
         ("v27.0.0", "node", False),
         ("24", "node", True),
         ("3.15", "python", False),
-        ("3.15.0", "python", False),
+        # Below the floor since it moved to 3.15.2 (owner decision 2026-11-14, HCW-HybridCloudWorks#1707).
+        ("3.15.0", "python", True),
         ("3.14.9", "python", True),
         ("3.14", "python", True),
         ("lts/*", "node", None),
@@ -5389,21 +5587,25 @@ ROUND_THREE_REVIEW_SUDO_YAML = 'on: push\njobs:\n  quoted-no-set-up:\n    runs-o
 
 def test_round_three_review_sudo_workflow():
     jobs = read_jobs(ROUND_THREE_REVIEW_SUDO_YAML)
+    # Since round 4 (HCW-HybridCloudWorks#1707) `sudo-path-shell` is reported, conservatively: its `shell:` gives env
+    # the text `PATH=$PATH`, since the runner fills nothing in (see `literal_shell`), so env replaces PATH, cannot find
+    # bash on it and stops the step (exit 127).
     assert unset_steps("x.yml", jobs, {}) == [
         "x.yml > quoted-no-set-up > Run > python",
         "x.yml > env-quoted-no-set-up > Run > python",
         "x.yml > sudo-shell > Run > python",
         "x.yml > sudo-default-shell > Run > python",
+        "x.yml > sudo-path-shell > Run > python",
     ]
     assert pipx_problems("x.yml", jobs) == []
 
 
 # Copilot on the round-3 ports (HCW-HybridCloudWorks#1707): under a `shell:` run through sudo the step's `$PATH` is
 # sudo's `secure_path`, so a `sudo env "PATH=$PATH"` in its text passes that on, not the set-up Python. The `path-shell`
-# job shows how the check reads a `shell:`, not what the runner does: the check reads `env PATH="$PATH"` there as
-# passing on the PATH the step started with, so the step is not reported, while the runner starts the shell command
-# directly and passes `$PATH` on as text (actions/runner ScriptHandler.cs), so env sets PATH to `$PATH` (see the known
-# limits above).
+# job is reported too since round 4 (HCW-HybridCloudWorks#1707), conservatively: the runner starts the shell command
+# directly and passes `$PATH` on as text (actions/runner ScriptHandler.cs, see `literal_shell`), so env sets PATH to the
+# text `$PATH`, cannot find bash on it and stops the step (exit 127). Until round 4 the check read it as passing on the
+# PATH the step started with, and did not report it.
 COPILOT_PORTS_SUDO_YAML = (
     "on: push\njobs:\n  sudo-shell:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n"
     '        with: { python-version: "3.15" }\n      - name: Run\n        shell: sudo bash -e {0}\n'
@@ -5415,7 +5617,8 @@ COPILOT_PORTS_SUDO_YAML = (
 
 def test_copilot_ports_a_sudo_shell_passes_on_only_its_own_secure_path():
     assert unset_steps("x.yml", read_jobs(COPILOT_PORTS_SUDO_YAML), {}) == [
-        "x.yml > sudo-shell > Run > python"
+        "x.yml > sudo-shell > Run > python",
+        "x.yml > path-shell > Run > python",
     ]
 
 
@@ -5906,7 +6109,8 @@ def test_copilot_ports_review_free_threaded_names_are_python(line, kind, found):
     [
         ("python3.14t x", "python", True),
         ("python3.15t x", "python", False),
-        ("python3.15.1t x", "python", False),
+        # 3.15.1 is below the floor since it moved to 3.15.2 (owner decision 2026-11-14, HCW-HybridCloudWorks#1707).
+        ("python3.15.1t x", "python", True),
         ("python3.9t x", "python", True),
         ("/usr/bin/python3.15t x", "python", True),
         (".venv/bin/python3.15t x", "python", False),
@@ -5921,7 +6125,8 @@ def test_copilot_ports_review_free_threaded_versions_are_read(line, kind, found)
     [
         ("3.14t", "python", True),
         ("3.15t", "python", False),
-        ("3.15.1t", "python", False),
+        # Below the floor since it moved to 3.15.2 (owner decision 2026-11-14, HCW-HybridCloudWorks#1707).
+        ("3.15.1t", "python", True),
         ("3.16t", "python", False),
         ("3.x", "python", False),
         ("26t", "node", None),
@@ -6053,6 +6258,265 @@ def test_copilot_second_round_one_line_defaults():
 def test_copilot_second_round_one_line_defaults_refused(text):
     with pytest.raises(AssertionError):
         read_jobs(text)
+
+
+# Round 4 (HCW-HybridCloudWorks#1707). coproc (Copilot on HCW-MigrateOrchestrator_AddOn#77): bash runs the command
+# after `coproc` in the background. A NAME may come first only before a compound command (`coproc NAME { ...; }`,
+# `coproc NAME while ...`); before a simple command the first word is the command, so `coproc NAME node x` runs NAME,
+# not node.
+@pytest.mark.parametrize(
+    ("line", "kind", "found"),
+    [
+        ("coproc node x.js", "node", True),
+        ("coproc python3 x.py", "python", True),
+        ("coproc NAME { node x; }", "node", True),
+        ("coproc { python3 x; }", "python", True),
+        ("coproc NAME ( node x )", "node", True),
+        ("coproc NAME while node x; do :; done", "node", True),
+        ("coproc until python3 x; do :; done", "python", True),
+        ("coproc NAME if node x; then :; fi", "node", True),
+        ("coproc FOO=1 node x", "node", True),
+        ("coproc bash -c 'node x'", "node", True),
+        ("x; coproc python3 y", "python", True),
+        ("coproc NAME node x", "node", False),
+        ("coproc NAME bash -c 'node x'", "node", False),
+        ("coproc echo node", "node", False),
+        ("echo coproc node", "node", False),
+        ("echo 'coproc node x'", "node", False),
+        ('echo "coproc python3 x"', "python", False),
+        ("coprocnode x", "node", False),
+        # Copilot on HCW-NetworkEyes_App#403 asked about a NAME before `for`, `case` and `select`: the command inside
+        # the clause is found on its own, so these were already read (regression cases).
+        ("coproc NAME for x in y; do python3 x; done", "python", True),
+        ("coproc NAME case $k in a) python3 x ;; esac", "python", True),
+        ("coproc NAME select x in y; do python3 x; done", "python", True),
+        # Copilot's round 2 on HCW-HybridCloudWorks#1725: bash takes `coproc NAME` before every compound command (`{`,
+        # `(`, `[[`, `((`, `for`, `case`, `select`, `while`, `until`, `if`), so these run no runtime, while a NAME
+        # before anything else is the command (`coproc node node x` runs node). Checked with bash 5.2.21; `coproc node{
+        # x; }` is a syntax error there.
+        ("coproc node { echo done; }", "node", False),
+        ("coproc python3 ( echo x )", "python", False),
+        ("coproc node(echo x)", "node", False),
+        ("coproc node for x in y; do echo; done", "node", False),
+        ("coproc node case a in a) echo ;; esac", "node", False),
+        ("coproc node select x in y; do echo; done", "node", False),
+        ("coproc node while true; do echo; done", "node", False),
+        ("coproc python3 [[ -n x ]]", "python", False),
+        ("coproc node (( 1 ))", "node", False),
+        ("coproc node node x", "node", True),
+        ("coproc node time echo t", "node", True),
+        ("coproc node [ -n x ]", "node", True),
+        ("coproc node{ x; }", "node", False),
+    ],
+)
+def test_round_four_coproc_runs_its_command(line, kind, found):
+    assert runs_runtime(line, kind) is found
+
+
+@pytest.mark.parametrize(
+    ("line", "kind", "found"),
+    [
+        ("coproc sudo python3 x", "python", True),
+        ("coproc python3 x", "python", False),
+        ("coproc /usr/bin/python3 x", "python", True),
+        ("coproc NAME /usr/bin/python3 x", "python", False),
+    ],
+)
+def test_round_four_coproc_through_sudo(line, kind, found):
+    assert runs_through_sudo(line, kind) is found
+
+
+@pytest.mark.parametrize(
+    ("run", "env", "flagged"),
+    [
+        ("coproc pipx run x", {}, True),
+        ("coproc PIPX_DEFAULT_PYTHON=/opt/py/bin/python3 pipx run x", {}, False),
+        ("coproc NAME { pipx run x; }", {}, True),
+        ("coproc NAME pipx run x", {}, False),
+        ("coproc pipx run --python /opt/py/bin/python3 x", {}, False),
+    ],
+)
+def test_round_four_coproc_pipx(run, env, flagged):
+    assert pipx_without_python(run, env) is flagged
+
+
+COPROC_YAML = 'on: push\njobs:\n  no-set-up:\n    runs-on: ubuntu-26.04\n    steps:\n      - name: Run\n        run: coproc node x\n  set-up:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-node@abc\n        with: { node-version: "26" }\n      - name: Run\n        run: coproc node x\n  named:\n    runs-on: ubuntu-26.04\n    steps:\n      - name: Run\n        run: coproc NAME node x\n  named-loop:\n    runs-on: ubuntu-26.04\n    steps:\n      - name: Run\n        run: coproc READER while python3 x; do :; done\n'
+
+
+def test_round_four_coproc_workflow():
+    assert unset_steps("x.yml", read_jobs(COPROC_YAML), {}) == [
+        "x.yml > no-set-up > Run > node",
+        "x.yml > named-loop > Run > python",
+    ]
+
+
+# The runner does not run a custom `shell:` through a shell (Copilot on HCW-MigrateOrchestrator_AddOn#77): it splits the
+# program off at the first space and hands the rest, `{0}` filled in, to .NET, which splits it at spaces outside double
+# quotes and drops those quotes, and fills nothing in (actions/runner ScriptHandlerHelpers.cs `ParseShellOptionString`;
+# dotnet/runtime ProcessUtils.Unix.cs `GetNextArgument`). `$PATH` there is text.
+@pytest.mark.parametrize(
+    ("shell", "words"),
+    [
+        ("bash -e {0}", "bash -e script"),
+        ('sudo env PATH="$PATH" bash -e {0}', "sudo env PATH=\x03PATH bash -e script"),
+        ("env PATH=$PATH bash -e {0}", "env PATH=\x03PATH bash -e script"),
+        ('bash -c "node x" {0}', "bash -c 'node x' script"),
+        ("env 'A=1' bash {0}", "env ''\"'\"'A=1'\"'\"'' bash script"),
+        ('bash -e "{0}"', "bash -e script"),
+        ("node  {0}", "node script"),
+        ('"bash" -e {0}', "'\"bash\"' -e script"),
+        (
+            "env PIPX_DEFAULT_PYTHON=$pythonLocation/bin/python3 bash -e {0}",
+            "env PIPX_DEFAULT_PYTHON=\x03pythonLocation/bin/python3 bash -e script",
+        ),
+        ('bash -e {0} a\\"b', "bash -e script 'a\"b'"),
+        ("bash -e {0} *", "bash -e script '*'"),
+        ("python", "python"),
+        ("", ""),
+    ],
+)
+def test_round_four_a_shell_is_the_words_the_runner_passes_on(shell, words):
+    assert step_shell({"shell": shell, "run": "x"}, {}) == words
+
+
+LITERAL_SHELL_YAML = 'on: push\njobs:\n  path-shell:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        shell: sudo env PATH="$PATH" bash -e {0}\n        run: python3 x\n  env-path-shell:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        shell: env PATH="$PATH" bash -e {0}\n        run: python3 x\n  plain-shell:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        shell: bash -e {0}\n        run: python3 x\n  location-pipx:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        shell: env PIPX_DEFAULT_PYTHON=$pythonLocation/bin/python3 bash -e {0}\n        run: pipx run x\n  double-quoted-pipx:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        shell: env PIPX_DEFAULT_PYTHON="/opt/py/bin/python3" bash -e {0}\n        run: pipx run x\n  single-quoted-pipx:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        shell: env \'PIPX_DEFAULT_PYTHON=/opt/py/bin/python3\' bash -e {0}\n        run: pipx run x\n  appended-path-shell:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        shell: sudo env PATH="$PATH:/usr/bin" bash -e {0}\n        run: python3 x\n'
+
+
+# `appended-path-shell` is the real risk: env gets the text `$PATH:/usr/bin`, finds bash in /usr/bin, and the step's
+# python3 is the runner's own. `path-shell` and `env-path-shell` are reported conservatively: env cannot find bash on
+# the PATH `$PATH`, so the step stops (exit 127) before anything runs.
+def test_round_four_a_literal_path_or_pipx_setting_in_a_shell():
+    jobs = read_jobs(LITERAL_SHELL_YAML)
+    assert unset_steps("x.yml", jobs, {}) == [
+        "x.yml > path-shell > Run > python",
+        "x.yml > env-path-shell > Run > python",
+        "x.yml > appended-path-shell > Run > python",
+    ]
+    assert pipx_problems("x.yml", jobs) == [
+        "x.yml > location-pipx > Run > pipx",
+        "x.yml > single-quoted-pipx > Run > pipx",
+    ]
+
+
+# Owner decision 2026-11-14: Python's floor is the newest patch of the newest line (3.15.2 that day), not N-2
+# (3.15.0). The cases name the floor's boundary versions as they stood that day, so they move with PYTHON_FLOOR; the
+# website builds the same cases from its floor.
+@pytest.mark.parametrize(
+    ("version", "kind", "below"),
+    [
+        ("3.15.0", "python", True),
+        ("3.15.1", "python", True),
+        ("3.15.2", "python", False),
+        ("3.15.3", "python", False),
+        ("3.15", "python", False),
+        ("3.15.x", "python", False),
+        ("3.16.0", "python", False),
+        ("3.15.1t", "python", True),
+        ("3.15.2t", "python", False),
+        ("3.14", "python", True),
+    ],
+)
+def test_round_four_python_is_held_to_the_newest_patch(version, kind, below):
+    assert _below_floor(version, kind) is below
+
+
+@pytest.mark.parametrize(
+    ("line", "kind", "found"),
+    [
+        ("python3.15.0 x", "python", True),
+        ("python3.15.1 x", "python", True),
+        ("python3.15.2 x", "python", False),
+        ("python3.15.3 x", "python", False),
+        ("python3.15 x", "python", False),
+        ("python3.16.0 x", "python", False),
+    ],
+)
+def test_round_four_a_python_named_below_the_newest_patch(line, kind, found):
+    assert runs_through_sudo(line, kind) is found
+
+
+@pytest.mark.parametrize(
+    ("run", "env", "flagged"),
+    [("pipx run --python python3.15 x", {}, False), ("pipx run --python python3.15.2 x", {}, True)],
+)
+def test_round_four_pipx_names_at_the_floor(run, env, flagged):
+    assert pipx_without_python(run, env) is flagged
+
+
+FLOOR_YAML = 'on: push\njobs:\n  exact-below:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15.1" }\n      - name: Run\n        run: python3 x\n  exact-at:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15.2" }\n      - name: Run\n        run: python3 x\n  line:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        run: python3 x\n  uv-below:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: astral-sh/setup-uv@abc\n        with: { python-version: "3.15.1" }\n      - name: Run\n        run: uv run x.py\n  uv-at:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: astral-sh/setup-uv@abc\n        with: { python-version: "3.15.2" }\n      - name: Run\n        run: uv run x.py\n'
+
+
+def test_round_four_a_set_up_step_below_the_newest_patch():
+    jobs = read_jobs(FLOOR_YAML)
+    assert floor_problems("x.yml", jobs) == [
+        "x.yml > exact-below > step 1 > python: asks for 3.15.1, below the floor",
+        "x.yml > uv-below > step 1 > python: asks for 3.15.1, below the floor",
+    ]
+    assert unset_steps("x.yml", jobs, {}) == ["x.yml > uv-below > Run > python"]
+
+
+# Copilot on HCW-NetworkEyes_App#403 and HCW-HybridCloudWorks#1725: a job's `defaults.run.shell` may hold an
+# expression (github, needs, strategy, matrix, env, vars, inputs). A `${{ matrix.X }}` there is read as each value
+# of the job's matrix list X, so `matrix-sudo-path` (sudo with a PATH that ends in /usr/bin) and `matrix-python` are
+# reported; any other expression, or a matrix value this check cannot read, may be any shell, so such a step is
+# reported for both runtimes whatever was set up before it (Copilot's third round: `vars-both`, set up for both, may
+# still run `sudo bash -e {0}`, which finds the runner's own), as is an expression in a step's `shell:` or the
+# workflow's `defaults.run.shell`, which GitHub refuses. A step without `run:` uses no shell.
+EXPRESSION_SHELL_YAML = 'on: push\njobs:\n  literal-python:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        shell: python {0}\n        run: print(1)\n  vars-no-set-up:\n    runs-on: ubuntu-26.04\n    defaults:\n      run:\n        shell: ${{ vars.RUN_SHELL }}\n    steps:\n      - name: Run\n        run: echo hi\n  vars-python-only:\n    runs-on: ubuntu-26.04\n    defaults:\n      run:\n        shell: ${{ vars.RUN_SHELL }}\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        run: echo hi\n  vars-both:\n    runs-on: ubuntu-26.04\n    defaults:\n      run:\n        shell: ${{ vars.RUN_SHELL }}\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - uses: actions/setup-node@abc\n        with: { node-version: "26" }\n      - name: Run\n        run: echo hi\n  matrix-sudo-path:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        shell:\n          - \'sudo env PATH="$PATH:/usr/bin" bash -e {0}\'\n    defaults:\n      run:\n        shell: ${{ matrix.shell }}\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        run: python3 x\n  matrix-bash:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        shell:\n          - bash\n    defaults:\n      run:\n        shell: ${{ matrix.shell }} -e {0}\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        run: python3 x\n  matrix-python:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        shell:\n          - python\n    defaults:\n      run:\n        shell: ${{ matrix.shell }} {0}\n    steps:\n      - name: Run\n        run: print(1)\n  matrix-missing:\n    runs-on: ubuntu-26.04\n    defaults:\n      run:\n        shell: ${{ matrix.missing }}\n    steps:\n      - name: Run\n        run: echo hi\n  step-expression:\n    runs-on: ubuntu-26.04\n    steps:\n      - name: Run\n        shell: ${{ inputs.shell }}\n        run: echo hi\n  no-run:\n    runs-on: ubuntu-26.04\n    defaults:\n      run:\n        shell: ${{ vars.RUN_SHELL }}\n    steps:\n      - uses: actions/checkout@abc\n'
+WORKFLOW_EXPRESSION_SHELL_YAML = "on: push\ndefaults:\n  run:\n    shell: ${{ vars.RUN_SHELL }}\njobs:\n  inherits:\n    runs-on: ubuntu-26.04\n    steps:\n      - name: Run\n        run: echo hi\n  own-shell:\n    runs-on: ubuntu-26.04\n    defaults:\n      run:\n        shell: bash -e {0}\n    steps:\n      - name: Run\n        run: echo hi\n"
+
+
+def test_round_four_a_shell_holding_an_expression():
+    jobs = read_jobs(EXPRESSION_SHELL_YAML)
+    assert unset_steps("x.yml", jobs, {}) == [
+        "x.yml > vars-no-set-up > Run > node",
+        "x.yml > vars-no-set-up > Run > python",
+        "x.yml > vars-python-only > Run > node",
+        "x.yml > vars-python-only > Run > python",
+        "x.yml > vars-both > Run > node",
+        "x.yml > vars-both > Run > python",
+        "x.yml > matrix-sudo-path > Run > python",
+        "x.yml > matrix-python > Run > python",
+        "x.yml > matrix-missing > Run > node",
+        "x.yml > matrix-missing > Run > python",
+        "x.yml > step-expression > Run > node",
+        "x.yml > step-expression > Run > python",
+    ]
+    assert pipx_problems("x.yml", jobs) == []
+    assert unset_steps("x.yml", read_jobs(WORKFLOW_EXPRESSION_SHELL_YAML), {}) == [
+        "x.yml > inherits > Run > node",
+        "x.yml > inherits > Run > python",
+    ]
+
+
+# Copilot's second round on HCW-NetworkEyes_App#403: pipx is read under each `shell:` a step may be handed to, so a
+# job's `${{ matrix.shell }}` whose value sets PIPX_DEFAULT_PYTHON to the runner's own Python is reported, and a step
+# that runs pipx under a `shell:` this check cannot read (`${{ vars.RUN_SHELL }}`) is reported too.
+EXPRESSION_SHELL_PIPX_YAML = 'on: push\njobs:\n  matrix-runner-python:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        shell:\n          - env PIPX_DEFAULT_PYTHON=/usr/bin/python3 bash -e {0}\n    env:\n      PIPX_DEFAULT_PYTHON: /opt/py/bin/python3\n    defaults:\n      run:\n        shell: ${{ matrix.shell }}\n    steps:\n      - id: py\n        uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Scan\n        run: pipx run x\n  vars-shell:\n    runs-on: ubuntu-26.04\n    env:\n      PIPX_DEFAULT_PYTHON: /opt/py/bin/python3\n    defaults:\n      run:\n        shell: ${{ vars.RUN_SHELL }}\n    steps:\n      - id: py\n        uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - uses: actions/setup-node@abc\n        with: { node-version: "26" }\n      - name: Scan\n        run: pipx run x\n  vars-shell-no-pipx:\n    runs-on: ubuntu-26.04\n    defaults:\n      run:\n        shell: ${{ vars.RUN_SHELL }}\n    steps:\n      - id: py\n        uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - uses: actions/setup-node@abc\n        with: { node-version: "26" }\n      - name: Scan\n        run: echo hi\n  matrix-bash:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        shell: [bash]\n    defaults:\n      run:\n        shell: ${{ matrix.shell }} -e {0}\n    steps:\n      - id: py\n        uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Scan\n        run: pipx run --python "${{ steps.py.outputs.python-path }}" x\n  matrix-unset:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        shell:\n          - env -u PIPX_DEFAULT_PYTHON bash -e {0}\n    defaults:\n      run:\n        shell: ${{ matrix.shell }}\n    steps:\n      - id: py\n        uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Scan\n        env:\n          PIPX_DEFAULT_PYTHON: /opt/py/bin/python3\n        run: pipx run x\n'
+
+
+def test_round_four_pipx_under_a_shell_holding_an_expression():
+    assert pipx_problems("x.yml", read_jobs(EXPRESSION_SHELL_PIPX_YAML)) == [
+        "x.yml > matrix-runner-python > Scan > pipx",
+        "x.yml > vars-shell > Scan > pipx",
+        "x.yml > matrix-unset > Scan > pipx",
+    ]
+
+
+# Copilot's third round on HCW-HybridCloudWorks#1725 and HCW-NetworkEyes_App#403: a matrix `include` can add or
+# change a value (`sudo env PATH="$PATH:/usr/bin" bash -e {0}`, `python {0}`), so a job whose matrix has one makes a
+# `${{ matrix.X }}` shell unreadable, and the step is reported; `exclude` only takes combinations away, so the lists
+# are still read.
+MATRIX_INCLUDE_SHELL_YAML = 'on: push\njobs:\n  include-sudo:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        shell: [bash]\n        include:\n          - shell: \'sudo env PATH="$PATH:/usr/bin" bash -e {0}\'\n    defaults:\n      run:\n        shell: ${{ matrix.shell }}\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        run: python3 x\n  include-python:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        shell: [bash]\n        include:\n          - shell: python {0}\n    defaults:\n      run:\n        shell: ${{ matrix.shell }}\n    steps:\n      - name: Run\n        run: print(1)\n  exclude-bash:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        shell: [bash, sh]\n        exclude:\n          - shell: sh\n    defaults:\n      run:\n        shell: ${{ matrix.shell }}\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        run: python3 x\n'
+
+
+def test_round_four_a_matrix_include_makes_a_matrix_shell_unreadable():
+    assert unset_steps("x.yml", read_jobs(MATRIX_INCLUDE_SHELL_YAML), {}) == [
+        "x.yml > include-sudo > Run > node",
+        "x.yml > include-sudo > Run > python",
+        "x.yml > include-python > Run > node",
+        "x.yml > include-python > Run > python",
+    ]
 
 
 FILES = sorted(p for p in WORKFLOWS.iterdir() if p.suffix in (".yml", ".yaml"))
