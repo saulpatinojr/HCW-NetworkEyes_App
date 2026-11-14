@@ -510,7 +510,7 @@ QUOTED_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
 # `pipx` in command position, with what comes before it (its assignments and wrappers) and its words, up to the end
 # of the command (`;`, `&`, `|` or `)`). It has chosen its interpreter when `--python` is one of pipx's own options
 # (see `_pipx_option_chooses_python`) or `PIPX_DEFAULT_PYTHON` is one of the assignments in front of it.
-PIPX = re.compile(rf"(?P<before>{START}){PATH}pipx(?=\s|$)(?P<words>[^;&|)]*)")
+PIPX = re.compile(rf"(?P<before>{START}){PATH}pipx{NAME_END}(?P<words>[^;&|)]*)")
 # One word of a command as `_shell_text` leaves it: plain text and quoted strings run together. The first word in
 # front of a command may start with what opened it (`(`, `$(`, `&&`, `;`), which is not part of the word.
 WORD = re.compile(r"""(?:"(?:[^"\\]|\\.)*"|'[^']*'|[^\s"'])+""")
@@ -1166,10 +1166,17 @@ def _block_text(lines: list[str], indicator: re.Match[str], parent: int) -> str:
     """A block scalar's lines without their indentation: the indentation indicator's (`|2-` is the parent's indent
     plus two) when it has one, so a line indented further keeps the rest, or else the lines' common indentation."""
     digit = indicator[3] or indicator[4]
+    # Blank lines before the first line of content are kept, as YAML keeps them; the ones after it go to chomping.
     if not digit:
-        return textwrap.dedent("\n".join(lines)).strip("\n")
+        return textwrap.dedent("\n".join(lines)).rstrip("\n")
     base = parent + int(digit)
-    return "\n".join(line[base:] if line.strip() else "" for line in lines).strip("\n")
+    return "\n".join(line[base:] if line.strip() else "" for line in lines).rstrip("\n")
+
+
+def _folded_block(text: str) -> str:
+    """`_folded` after the blank lines a `>` value starts with, which YAML keeps as they are."""
+    body = text.lstrip("\n")
+    return text[: len(text) - len(body)] + (_folded(body) if body else "")
 
 
 def _block_scalar(lines: list[str], indicator: re.Match[str], parent: int) -> str:
@@ -1177,18 +1184,23 @@ def _block_scalar(lines: list[str], indicator: re.Match[str], parent: int) -> st
     folds them (see `_folded`); `-` drops the final line break, and without it one is kept."""
     text = _block_text(lines, indicator, parent)
     if indicator[1] == ">" and text:
-        text = _folded(text)
+        text = _folded_block(text)
     chomp = indicator[2] or indicator[5] or ""
     return text if chomp == "-" or not text else text + "\n"
 
 
-def _flow_mapping(text: str) -> dict[str, str]:
-    """A one-line `{ key: value, ... }` mapping, split on the commas outside quotes and `${{ }}`."""
-    inner = text[text.index("{") + 1 : text.rindex("}")]
-    parts, depth, quote, start = [], 0, "", 0
-    for index, char in enumerate(inner):
+def _flow_items(inner: str) -> list[str]:
+    """The items of a one-line `{ ... }` or `[ ... ]` (its text inside the brackets), split on the commas outside quotes
+    and `${{ }}`. Inside double quotes a `\\` takes the next character with it (`"a\\"b"`); inside single quotes `''` is
+    a quote, which leaving and entering the quotes again reads the same way (Copilot on HCW-NetworkEyes_App#399)."""
+    parts, depth, quote, start, index = [], 0, "", 0, 0
+    while index < len(inner):
+        char = inner[index]
         if quote:
-            quote = "" if char == quote else quote
+            if quote == '"' and char == "\\":
+                index += 1
+            elif char == quote:
+                quote = ""
         elif char in "'\"":
             quote = char
         elif char in "{[":
@@ -1198,8 +1210,16 @@ def _flow_mapping(text: str) -> dict[str, str]:
         elif char == "," and depth == 0:
             parts.append(inner[start:index])
             start = index + 1
+        index += 1
     parts.append(inner[start:])
-    pairs = [part.partition(":") for part in parts if part.strip()]
+    return [part for part in parts if part.strip()]
+
+
+def _flow_mapping(text: str) -> dict[str, str]:
+    """A one-line `{ key: value, ... }` mapping, split by `_flow_items`."""
+    pairs = [
+        part.partition(":") for part in _flow_items(text[text.index("{") + 1 : text.rindex("}")])
+    ]
     # A quoted key (`{'A': x}`) is refused, as the website's reader refuses it (round 3 review).
     assert not any(key.strip()[:1] in ("'", '"') for key, _, _ in pairs), (
         f"a quoted key in {text!r}"
@@ -1223,13 +1243,19 @@ def _scalar_lines(lines: list[str], at: int, indent: int, indicator: re.Match[st
     or else the first non-blank line's), up to the first other line. So a comment indented no further than the key, or
     further than the key but less than the content, ends the value rather than being read into it, for a step's
     `run: |` and a block value in `env:` or `with:` alike (round 3, HCW-HybridCloudWorks#1707;
-    https://yaml.org/spec/1.2.2/#812-literal-style)."""
+    https://yaml.org/spec/1.2.2/#812-literal-style). A line starting with `#` at the content's indentation is content,
+    the first line of it too (YAML 1.2.2, 8.1.1.1 and Example 8.5; Copilot on HCW-NetworkEyes_App#399), and a blank
+    line before the first line of content with more spaces than it stops the test, as YAML refuses it."""
     digit = indicator[3] or indicator[4]
     content = indent + int(digit) if digit else None
-    block = []
+    block: list[str] = []
     for line in lines[at + 1 :]:
         if line.strip():
-            content = _indent(line) if content is None else content
+            if content is None:
+                content = _indent(line)
+                assert all(len(blank) <= content for blank in block), (
+                    "a block value's leading blank line is indented further than its first line"
+                )
             if content <= indent or _indent(line) < content:
                 break
         block.append(line)
@@ -1277,11 +1303,13 @@ def _matrix(job: list[str], key_indent: int) -> dict[str, list[str]]:
     )
     block = _block(job, strategy[0], key_indent)
     at = [i for i, line in enumerate(block) if re.match(r"^\s+matrix:", line)]
-    assert not at or not block[at[0]].split(":", 1)[1].strip().startswith("{"), (
-        "matrix: is written on one line"
+    # Only a block of lists or a `${{ ... }}` expression is read; `matrix: [..]`, `matrix: {..}` or any other value
+    # stops the test, as the website's reader stops on it (Copilot on HCW-NetworkEyes_App#399).
+    inline = re.sub(r"\s+#.*$", "", block[at[0]].split(":", 1)[1]).strip() if at else ""
+    assert not inline or re.fullmatch(r"\$\{\{.*\}\}", inline), (
+        f"matrix: is written on one line: {inline!r}"
     )
-    at = [i for i in at if re.match(r"^\s+matrix:\s*(?:#.*)?$", block[i])]
-    if not at:
+    if not at or inline:
         return {}
     matrix_lines = _block(block, at[0], _indent(block[at[0]]))
     inner = min((_indent(line) for line in matrix_lines if _meaningful(line)), default=0)
@@ -1289,10 +1317,18 @@ def _matrix(job: list[str], key_indent: int) -> dict[str, list[str]]:
     for index, line in enumerate(matrix_lines):
         match = re.match(rf"^ {{{inner}}}([A-Za-z0-9_-]+):[ \t]*(.*)$", line)
         if not match:
+            # A line at the keys' indent that is not a key is a `- ` item of the key above it, read below; anything
+            # else stops the test rather than being skipped (Copilot on HCW-NetworkEyes_App#399).
+            assert (
+                not _meaningful(line)
+                or _indent(line) > inner
+                or (line.lstrip().startswith("- ") and index > 0)
+            ), f"cannot read the matrix line {line.strip()!r}"
             continue
         rest = re.sub(r"\s+#.*$", "", match.group(2)).strip()
         if rest.startswith("["):
-            found[match.group(1)] = [_scalar(v) for v in rest.strip("[]").split(",") if v.strip()]
+            assert rest.endswith("]"), f"cannot read the matrix list {rest!r}"
+            found[match.group(1)] = [_scalar(v) for v in _flow_items(rest[1:-1])]
         else:
             # Each `- value` read as YAML reads it, a comment after it dropped (round 3, HCW-HybridCloudWorks#1707),
             # its `-` indented further than the key or at the key's own indent, as YAML allows (round 3 review).
@@ -1341,7 +1377,7 @@ def _step_keys(lines: list[str], key_indent: int) -> dict:
             block = _scalar_lines(lines, index - 1, key_indent, indicator)
             index += len(block)
             text = _block_text(block, indicator, key_indent)
-            keys[key] = _folded(text) if indicator[1] == ">" and text else text
+            keys[key] = _folded_block(text) if indicator[1] == ">" and text else text
         else:
             # Every other value, `run:` and `uses:` included, as YAML reads it (see `_scalar`; round 3,
             # HCW-HybridCloudWorks#1707: `run: "python3 x" # c` is the script `python3 x`).
@@ -1851,7 +1887,18 @@ def _chooses(
     parts = text.split("/")
     dynamic = next((k for k, part in enumerate(parts) if "__gha__" in part or "$" in part), None)
     climbs = dynamic is not None and ".." in parts[dynamic + 1 :]
-    if not text or unknown or unreadable or expands or climbs or SYSTEM_PYTHON.fullmatch(path):
+    # A value over more than one line (a block value with a `#` line in it, which YAML reads as part of the value) is
+    # no interpreter's path (Copilot on HCW-NetworkEyes_App#399).
+    several = "\n" in text or "\r" in text
+    if (
+        not text
+        or unknown
+        or unreadable
+        or expands
+        or climbs
+        or several
+        or SYSTEM_PYTHON.fullmatch(path)
+    ):
         return False
     # A bare name is looked up on PATH, which finds the runner's own Python before a set-up step has run, so only the
     # floor's own name counts (FLOOR_PYTHON_NAME; round 3, HCW-HybridCloudWorks#1707).
@@ -2348,9 +2395,12 @@ def _pipx_without_python_once(
             continue
         # In the order the shell meets them: a name the script sets counts from the end of the command that sets it
         # on, in the shell that set it (see `_names_view`); the step's `env:` comes first.
+        # A `case` pattern at the start of the line (`pipx) ...`) names no command, so `pipx` is looked for after it.
+        pattern = CASE_PREFIX.match(line)
+        skip = pattern.end() if pattern else 0
         events = sorted(
             [(found.end(), 0, found) for found in NAMES_SET.finditer(line)]
-            + [(found.end("before"), 1, found) for found in _pipx_commands(line)],
+            + [(skip + found.end("before"), 1, found) for found in _pipx_commands(line[skip:])],
             key=lambda event: (event[0], event[1]),
         )
         for at, kind, found in events:
@@ -5026,6 +5076,69 @@ def test_round_three_review_a_long_quoted_string_and_a_long_script_read_quickly(
 )
 def test_round_three_copilot_builtins_with_assignments_in_front_of_them(run, env, flagged):
     assert pipx_without_python(run, env) is flagged
+
+
+# Copilot on HCW-HybridCloudWorks#1722 and HCW-NetworkEyes_App#399: the same cases as the website's
+# scripts/workflow-runtime-setup.test.mjs, in the same order.
+@pytest.mark.parametrize(
+    ("run", "env", "flagged"),
+    [
+        # 5: `pipx` ends at an operator, as a runtime's name does, and not inside a `case` pattern.
+        ("pipx;", {}, True),
+        ("pipx | cat", {}, True),
+        ("pipx &", {}, True),
+        ("(pipx)", {}, True),
+        ("pipx>log", {}, True),
+        ("x=$(pipx)", {}, True),
+        ("pipx run x;", {}, True),
+        ("PIPX_DEFAULT_PYTHON=/p pipx;", {}, False),
+        ("pipx) echo ;;", {}, False),
+        ("pipx) pipx run x ;;", {}, True),
+        # 6: sudo's reset of the environment holds through a later `env`, unless sudo keeps the variable.
+        ('sudo env PATH="$PATH" pipx run x', {"PIPX_DEFAULT_PYTHON": "/opt/py"}, True),
+        ("sudo env -S 'pipx run x'", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, True),
+        ('sudo -E env PATH="$PATH" pipx run x', {"PIPX_DEFAULT_PYTHON": "/opt/py"}, False),
+        (
+            'sudo --preserve-env=PIPX_DEFAULT_PYTHON env PATH="$PATH" pipx run x',
+            {"PIPX_DEFAULT_PYTHON": "/opt/py"},
+            False,
+        ),
+        ("sudo -E env -S 'pipx run x'", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, False),
+        # 1: a `#` line at a block value's content indentation is part of the value, so a value over two lines chooses nothing.
+        ("pipx run x", {"PIPX_DEFAULT_PYTHON": "# note\n/opt/py/bin/python3"}, True),
+    ],
+)
+def test_round_three_copilot_two_pipx_forms(run, env, flagged):
+    assert pipx_without_python(run, env) is flagged
+
+
+# 1, 2 and 4: block values, matrices and quotes, read as YAML reads them.
+COPILOT_TWO_YAML = 'on: push\njobs:\n  comment-first-version:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: astral-sh/setup-uv@abc\n        with:\n          python-version: |-\n            # note\n            3.15\n      - name: Run\n        run: uv run x.py\n  comment-first-pipx:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Scan\n        env:\n          PIPX_DEFAULT_PYTHON: |-\n            # note\n            /usr/bin/python3\n        run: pipx run x\n  matrix-expression:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}\n    steps:\n      - uses: astral-sh/setup-uv@abc\n        with:\n          python-version: ${{ matrix.py }}\n      - name: Run\n        run: uv run x.py\n  escaped-quote:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: astral-sh/setup-uv@abc\n        with: { note: "a\\"b,c", python-version: "3.15" }\n      - name: Run\n        run: uv run x.py\n  single-quote:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: astral-sh/setup-uv@abc\n        with: { note: \'a\'\'b,c\', python-version: "3.15" }\n      - name: Run\n        run: uv run x.py\n  matrix-quoted-comma:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        py: ["3.15", "3.14,x"]\n    steps:\n      - uses: astral-sh/setup-uv@abc\n        with:\n          python-version: ${{ matrix.py }}\n      - name: Run\n        run: uv run x.py\n'
+
+
+def test_round_three_copilot_two_block_values_matrices_and_quotes_read_as_yaml():
+    jobs = read_jobs(COPILOT_TWO_YAML)
+    assert unset_steps("x.yml", jobs, {}) == [
+        "x.yml > comment-first-version > Run > python",
+        "x.yml > matrix-expression > Run > python",
+        "x.yml > matrix-quoted-comma > Run > python",
+    ]
+    assert pipx_problems("x.yml", jobs) == ["x.yml > comment-first-pipx > Scan > pipx"]
+
+
+# 1, 2 and 3: the forms YAML or the line readers refuse.
+@pytest.mark.parametrize(
+    "text",
+    [
+        "jobs:\n  j:\n    runs-on: ubuntu-26.04\n    steps:\n      - env:\n          P: |-\n                \n            x\n        run: echo\n",
+        "jobs:\n  j:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix: [3.14]\n    steps:\n      - run: echo\n",
+        "jobs:\n  j:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix: foo\n    steps:\n      - run: echo\n",
+        'jobs:\n  j:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        py: ["3.15"]\n        oops\n    steps:\n      - run: echo\n',
+    ],
+)
+def test_round_three_copilot_two_refused_forms(text):
+    with pytest.raises(AssertionError):
+        read_jobs(text)
 
 
 FILES = sorted(p for p in WORKFLOWS.iterdir() if p.suffix in (".yml", ".yaml"))
