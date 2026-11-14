@@ -1391,8 +1391,10 @@ def _flow_items(inner: str) -> list[str]:
 
 
 def _flow_end(text: str) -> int:
-    """Where the `{` that starts `text` is closed, by the quote rules of `_flow_items`; -1 when it is not."""
-    depth, quote, index = 0, "", 0
+    """Where the `{` that starts `text` is closed, by the quote rules of `_flow_items`; -1 when it is not, or when a
+    closer does not match the bracket it closes (`{run: "x"]`; Copilot on HCW-NetworkEyes_App#402)."""
+    stack: list[str] = []
+    quote, index = "", 0
     while index < len(text):
         char = text[index]
         if quote:
@@ -1405,10 +1407,11 @@ def _flow_end(text: str) -> int:
         elif char in "'\"" and (index == 0 or text[index - 1] in QUOTE_STARTS):
             quote = char
         elif char in "{[":
-            depth += 1
+            stack.append("}" if char == "{" else "]")
         elif char in "}]":
-            depth -= 1
-            if depth == 0:
+            if not stack or stack.pop() != char:
+                return -1
+            if not stack:
                 return index
         index += 1
     return -1
@@ -6042,6 +6045,9 @@ def test_copilot_second_round_one_line_defaults():
         'on: push\ndefaults: {run: {shell: "python {0}"}\njobs:\n  j:\n    runs-on: ubuntu-26.04\n    steps:\n      - run: echo\n',
         "on: push\njobs:\n  j:\n    runs-on: ubuntu-26.04\n    defaults:\n      run: { shell: python {0} }\n    steps:\n      - run: echo\n",
         "on: push\njobs:\n  j:\n    runs-on: ubuntu-26.04\n    defaults: {run: {shell: 'python {0}}}\n    steps:\n      - run: echo\n",
+        # A closer that does not match its opener (Copilot on HCW-NetworkEyes_App#402).
+        'on: push\ndefaults: {run: {shell: "python {0}"]}\njobs:\n  j:\n    runs-on: ubuntu-26.04\n    steps:\n      - run: echo\n',
+        'on: push\ndefaults: {run: {shell: "python {0}"}]\njobs:\n  j:\n    runs-on: ubuntu-26.04\n    steps:\n      - run: echo\n',
     ],
 )
 def test_copilot_second_round_one_line_defaults_refused(text):
