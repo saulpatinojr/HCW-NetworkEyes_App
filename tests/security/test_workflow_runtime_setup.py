@@ -150,9 +150,20 @@ a step with an unreadable `shell:` is always reported for Node.js and Python, wh
 HCW-NetworkEyes_App#403 and HCW-HybridCloudWorks#1725; see `shell_choices`); pipx is read under each matrix value, and a
 step that runs pipx under a `shell:` this check cannot read is reported.
 
-Limits, known and kept: a composite action whose set-up step takes its version from `${{ inputs.* }}` cannot be read,
-so it fails closed and needs an entry in BELOW_FLOOR_ALLOWED; these are reported though they need not be, which can
-only add findings: a `shell: python` step's text is still read as shell too; an `eval` script is read as a child shell
+Round 5 (saulpatinojr/HCW-HybridCloudWorks#1707) reads a step's `shell:` that is written but empty (`shell:`, `~`,
+`null`, a comment alone, `''`) as the runner does: as no shell of its own, so the step uses the job's
+`defaults.run.shell`, else the workflow's, the same as a step with no `shell:` at all (actions/runner
+src/Runner.Worker/Handlers/ScriptHandler.cs, lines 70-79 at 8cfa1049; see `_given_shell`). A job's own
+`defaults.run.shell: ''` still counts as the job's own empty shell.
+
+When this check changes. Owner decision 2026-11-14: round five is the last planned round. After it, this check changes
+only when (1) a real HCW workflow trips it or would get past it, or (2) a reviewer shows a way past it that a workflow
+could plausibly be written with. Any other edge case a reviewer raises is added to the known-limits list in this
+header, not to a new round.
+
+Known limits (the list later edge cases are added to): a composite action whose set-up step takes its version from
+`${{ inputs.* }}` cannot be read, so it fails closed and needs an entry in BELOW_FLOOR_ALLOWED; these are reported
+though they need not be, which can only add findings: a `shell: python` step's text is still read as shell too; an `eval` script is read as a child shell
 (a name set but not exported before it is not seen); a `$PATH` written inside double quotes or an unquoted heredoc in
 a nested script is read as the inner script's, so `sudo bash -c "sudo env PATH=$PATH node x"` is reported though the
 outer shell fills it in first; a folder put in front of `$PATH`, even the set-up one (`PATH=$pythonLocation/bin:$PATH
@@ -1316,7 +1327,9 @@ def _scalar(value: str) -> str:
         assert found, f"a single-quoted value runs over more than one line: {value!r}"
         decoded, rest = found[1].replace("''", "'"), text[found.end() :]
     else:
-        text = re.sub(r"\s+#.*$", "", text).strip()
+        # A comment needs a space before its `#`, or nothing at all: a value that is only a comment (`shell: # x`) is
+        # null, as YAML reads it, since a plain value cannot start with `#` (round 5, HCW-HybridCloudWorks#1707).
+        text = re.sub(r"(?:^|\s+)#.*$", "", text).strip()
         # An anchor (`&a`), an alias (`*a`) or a tag (`!!str`) is not text: refused, as the website's reader refuses it
         # (round 3 review, HCW-HybridCloudWorks#1707).
         assert not text.startswith(("&", "*", "!")), f"an anchor, alias or tag: {value!r}"
@@ -2170,9 +2183,19 @@ def step_shell(step: dict, job: dict) -> str:
 
 def _given_shell(step: dict, job: dict) -> str:
     """A step's `shell:` as written: the step's own, else the job's or the workflow's `defaults.run.shell` (which
-    `read_jobs` keeps as the job's `shell`); "" for none."""
-    shell = step["shell"] if "shell" in step else job.get("shell", "")
+    `read_jobs` keeps as the job's `shell`); "" for none. A step's `shell:` that is there but null or empty (`shell:`,
+    `~`, `null`, a comment alone, `''`, all read as "") counts as missing, as the runner reads it: it falls back to the
+    job's defaults when the step's shell is null or empty (round 5, HCW-HybridCloudWorks#1707; actions/runner
+    src/Runner.Worker/Handlers/ScriptHandler.cs, lines 70-79 at 8cfa1049). A job's own `defaults.run.shell: ''` stays
+    the job's own empty shell: GitHub merges the job's defaults over the workflow's before the runner sees them, and
+    that merge is not visible here. The same rule as the website's `givenShell`."""
+    shell = step["shell"] if _own_shell(step) else job.get("shell", "")
     return str(shell or "")
+
+
+def _own_shell(step: dict) -> bool:
+    """Whether a step names a `shell:` of its own: one that is there and not empty (see `_given_shell`)."""
+    return bool(step.get("shell"))
 
 
 # A matrix value in a job's `defaults.run.shell` (`${{ matrix.shell }}`), which GitHub fills in before the
@@ -2195,7 +2218,7 @@ def shell_choices(step: dict, job: dict) -> list[str] | None:
     given = _given_shell(step, job)
     if "${{" not in given:
         return [literal_shell(given)]
-    if "shell" in step or not job.get("job_shell"):
+    if _own_shell(step) or not job.get("job_shell"):
         return None
     names = sorted({found[1] for found in MATRIX_IN_SHELL.finditer(given)})
     if names and "include" in (job.get("matrix") or {}):
@@ -6511,6 +6534,60 @@ def test_round_four_a_matrix_include_makes_a_matrix_shell_unreadable():
         "x.yml > include-python > Run > node",
         "x.yml > include-python > Run > python",
     ]
+
+
+# Round 5 (HCW-HybridCloudWorks#1707): a step's `shell:` that is there but null or empty is no shell of its own: the
+# runner falls back to the job's `defaults.run.shell`, else the workflow's (actions/runner
+# src/Runner.Worker/Handlers/ScriptHandler.cs, lines 70-79 at 8cfa1049). Until round 5 every form below read as the
+# runner's default shell, so a `sudo python3 {0}` default went unreported. Each test builds one job per form, in this
+# order.
+EMPTY_STEP_SHELLS = ["", "~", "null", "Null", "NULL", "# no shell of its own", "''", '""']
+ROUND5_SET_UP_PYTHON = (
+    '      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n'
+)
+EMPTY_SHELL_REPORTED = [f"x.yml > empty-{i} > Run > python" for i in range(len(EMPTY_STEP_SHELLS))]
+
+
+def _empty_shell_workflow(top: str, head: str, steps: str = ROUND5_SET_UP_PYTHON) -> str:
+    jobs = "".join(
+        f"  empty-{i}:\n    runs-on: ubuntu-26.04\n{head}    steps:\n{steps}      - name: Run\n"
+        f"        shell:{' ' + form if form else ''}\n        run: python3 x\n"
+        for i, form in enumerate(EMPTY_STEP_SHELLS)
+    )
+    return f"on: push\n{top}jobs:\n{jobs}"
+
+
+def test_round_five_an_empty_step_shell_falls_back_to_the_job_default_and_shell_bash_still_wins():
+    head = "    defaults:\n      run:\n        shell: sudo python3 {0}\n"
+    own_bash = (
+        f"  own-bash:\n    runs-on: ubuntu-26.04\n{head}    steps:\n{ROUND5_SET_UP_PYTHON}      - name: Run\n"
+        "        shell: bash\n        run: python3 x\n"
+    )
+    text = _empty_shell_workflow("", head) + own_bash
+    assert unset_steps("x.yml", read_jobs(text), {}) == EMPTY_SHELL_REPORTED
+
+
+def test_round_five_an_empty_step_shell_falls_back_to_a_job_matrix_default_read_under_each_value():
+    head = (
+        '    strategy:\n      matrix:\n        shell: [bash, "sudo python3 {0}"]\n    defaults:\n      run:\n'
+        "        shell: ${{ matrix.shell }}\n"
+    )
+    assert (
+        unset_steps("x.yml", read_jobs(_empty_shell_workflow("", head)), {}) == EMPTY_SHELL_REPORTED
+    )
+
+
+def test_round_five_an_empty_step_shell_falls_back_to_the_workflow_default_and_with_none_to_the_runner_default():
+    top = "defaults:\n  run:\n    shell: sudo python3 {0}\n"
+    assert (
+        unset_steps("x.yml", read_jobs(_empty_shell_workflow(top, "")), {}) == EMPTY_SHELL_REPORTED
+    )
+    assert unset_steps("x.yml", read_jobs(_empty_shell_workflow("", "")), {}) == []
+
+
+def test_round_five_pipx_is_read_under_the_job_default_when_the_step_shell_is_empty():
+    text = "on: push\njobs:\n  empty-shell-pipx:\n    runs-on: ubuntu-26.04\n    env:\n      PIPX_DEFAULT_PYTHON: /opt/py/bin/python3\n    defaults:\n      run:\n        shell: env PIPX_DEFAULT_PYTHON=/usr/bin/python3 bash -e {0}\n    steps:\n      - id: py\n        uses: actions/setup-python@abc\n        with: { python-version: \"3.15\" }\n      - name: Scan\n        shell: ''\n        run: pipx run x\n"
+    assert pipx_problems("x.yml", read_jobs(text)) == ["x.yml > empty-shell-pipx > Scan > pipx"]
 
 
 FILES = sorted(p for p in WORKFLOWS.iterdir() if p.suffix in (".yml", ".yaml"))
