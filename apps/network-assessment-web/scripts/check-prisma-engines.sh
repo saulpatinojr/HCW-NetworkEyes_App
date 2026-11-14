@@ -32,7 +32,9 @@ fi
 found=$(mktemp)
 checklist=$(mktemp)
 trap 'rm -f "$found" "$checklist"' EXIT
-find "$modules" -type f \( -name 'libquery_engine-*' -o -name 'query_engine-*' -o -name 'query-engine-*' \
+# Symbolic links are included: sha256sum reads the file a link points to, which is what Prisma would load, and a
+# link that points nowhere fails the check.
+find "$modules" \( -type f -o -type l \) \( -name 'libquery_engine-*' -o -name 'query_engine-*' -o -name 'query-engine-*' \
   -o -name 'schema-engine-*' -o -name 'migration-engine-*' -o -name 'prisma-fmt-*' \) >"$found"
 count=0
 while IFS= read -r file; do

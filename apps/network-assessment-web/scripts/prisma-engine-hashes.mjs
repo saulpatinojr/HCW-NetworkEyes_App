@@ -86,7 +86,13 @@ export function renderFingerprints({ version, commit, target, hashes }) {
 }
 
 async function download(url) {
-  const response = await fetch(url, { redirect: "follow" });
+  // No redirects: the fingerprints this writes must come from Prisma's own host, not wherever it points (none today).
+  let response;
+  try {
+    response = await fetch(url, { redirect: "error" });
+  } catch (error) {
+    fail(`${url} could not be read without a redirect (${error.cause?.message ?? error.message})`);
+  }
   if (!response.ok) fail(`${url} answered HTTP ${response.status}`);
   return Buffer.from(await response.arrayBuffer());
 }
