@@ -2626,8 +2626,7 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   `Image Scan (Trivy)` jobs are the proof, and the web tier was not started against the built image.
 
 ### T-743 — Node.js 26 and Python 3.15, the HCW runtime floors (HCW-HybridCloudWorks#1707)
-- **Status:** Done 2026-11-12 (and (6) to (9) on 2026-11-13, (4) and (10) on 2026-11-14), except item (5), which is
-  open. The HCW website's version
+- **Status:** Done 2026-11-12 (and (6) to (9) on 2026-11-13, (4), (5) and (10) on 2026-11-14). The HCW website's version
   floors (`scripts/version-floors.json` in saulpatinojr/HCW-HybridCloudWorks, issue 1707 there) ask for the newest
   Node.js LTS line (26, floor 26.11.0) and the newest Python line (3.15, floor 3.15.2, the line's newest patch, since the
   owner's decision of 2026-11-14; it was 3.15.0 under the earlier N-2 rule). This
@@ -2665,13 +2664,28 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   `BELOW_FLOOR_ALLOWED` in `tests/security/test_workflow_runtime_setup.py` (now empty). Before this, the unit tests ran
   on both 3.14 and 3.15 because the 3.14 check was required and renaming it would have blocked every pull request;
   `Unit Tests (Python 3.15)` was added to `REQUIRED_CHECKS` and applied first for that reason.
-- **(5) Open: two small follow-ups.** (a) The lab stage of the root `Dockerfile` hard-codes
-  `PYTHONPATH=/install-lab/lib/python3.15/site-packages`, so the next Python minor must change it by hand; derive it
-  at build time instead (for example with Python's `sysconfig.get_path("purelib", vars={"base": "/install-lab"})`).
-  (b) npm 11, which Node.js 26 bundles, warns on `npm ci` that four packages have install scripts not yet covered by
-  `allowScripts`: `@prisma/client` 6.19.3, `@prisma/engines` 6.19.3, `prisma` 6.19.3 and `unrs-resolver` 1.12.2. They
-  still run today; decide which to allow (`npm install-scripts approve <pkg>`) before a later npm stops running them,
-  and check that the Dockerfile's Prisma engine checks still pass.
+- **(5) Done 2026-11-14: two small follow-ups.** (a) The lab stage of the root `Dockerfile` no longer hard-codes
+  `PYTHONPATH=/install-lab/lib/python3.15/site-packages`: the same `RUN` asks the image's Python for the prefix's
+  `purelib` and `platlib` folders (`sysconfig.get_path(..., vars={"base": "/install-lab", "platbase": "/install-lab"})`,
+  the layout uv's `--prefix` follows) and runs the boundary proof with that path, so the next Python minor changes only
+  the `FROM` lines. A wrong path fails the build, because the engine module is then not found either.
+  `test_the_lab_builder_asks_python_for_the_prefix_site_packages` in `tests/security/test_lab_boundary.py` fails if a
+  `python3.N` path comes back, and the Dependabot comment that listed the path as a hand step is updated. No other stage
+  or test named the path: the lab final stage copies the prefix to `/usr/local`, which carries no version. (b) npm 11
+  warned that four install scripts were not covered by `allowScripts`. Read from the lockfile's tarballs (integrity
+  hashes matched): `@prisma/engines` 6.19.3 postinstall downloads the Prisma schema engine and query engine for the
+  platform (allowed: the deps stage's `test -f` and the migrator need them); `@prisma/client` 6.19.3 postinstall writes
+  placeholder client files and runs `prisma generate` (allowed: the `web` job's type check and tests use the generated
+  client and run no generate of their own); `prisma` 6.19.3 preinstall only refuses Node.js older than 18.18 (denied);
+  `unrs-resolver` 1.12.2 postinstall (napi-postinstall) only downloads the native binding from the registry, outside
+  the lockfile, when the platform package is missing (denied: npm installs `@unrs/resolver-binding-linux-x64-gnu` from
+  the lockfile, and eslint loads it). Entries were written by `npm install-scripts approve --no-allow-scripts-pin` and
+  `npm install-scripts deny` (name-only, so a Prisma bump keeps them; `package-lock.json` did not change), and
+  `apps/network-assessment-web/lib/install-scripts.test.ts` pins the four and fails on a newly locked package with an
+  undecided install script. With all four denied, the engines were not fetched and `npm run typecheck` failed on the
+  missing generated client, which is why the two Prisma ones stay allowed. The migrator needs no entry: its `npm ci`
+  runs with `--ignore-scripts` (npm ranks it above `allowScripts`), its cut-out `package.json` carries none, and it runs
+  the engine download and `prisma generate` itself.
 - **(6) Done 2026-11-13: the runtime test and one ruff version.** `tests/security/test_workflow_runtime_setup.py`, a
   copy of the NetworkEyes lab build's test with the same logic, fails any workflow step that runs `node`, `npm`, `npx`,
   `python`, `pip` or `uv` before a set-up step that is sure to have run, or a set-up step that asks for less than the

@@ -91,6 +91,15 @@ class TestDockerfile:
         assert "--extra" not in body
         assert "network_assessment_azure_engine.edition" in body  # the proof runs at build time
 
+    def test_the_lab_builder_asks_python_for_the_prefix_site_packages(self, stages: dict[str, str]):
+        # The proof's PYTHONPATH is derived from the image's own Python (TODO.md T-743 item 5), so moving to the
+        # next minor changes only the FROM lines; a hard-coded lib/python3.X path here would need a hand edit.
+        body = stages["builder-lab"]
+        assert re.search(r"python3\.\d+", body) is None
+        assert 'sysconfig.get_path(k, vars=v) for k in ("purelib", "platlib")' in body
+        assert '"base": "/install-lab", "platbase": "/install-lab"' in body
+        assert 'PYTHONPATH="${LAB_SITE}" python -m network_assessment_azure_engine.edition' in body
+
     def test_the_lab_final_stage_ships_no_app_no_server_and_no_pip(self, stages: dict[str, str]):
         body = stages["final-lab"]
         assert "COPY --from=builder-lab /install-lab /usr/local" in body

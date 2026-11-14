@@ -91,13 +91,19 @@ COPY pyproject.toml uv.lock ./
 COPY packages/network-assessment-azure-engine/ packages/network-assessment-azure-engine/
 # The engine's base dependencies from the lock (hash-checked), then the engine itself
 # from the tree with no extras: no cloud SDK is named anywhere in this stage.
+# The proof at the end reads the prefix's site-packages, whose path names the Python minor
+# (lib/python<minor>/...). It is asked of this image's own Python (sysconfig, the layout uv's
+# --prefix follows) rather than written here, so the next minor needs no change; a wrong path
+# fails the build, because the engine module is then not found either.
 RUN uv export --locked --no-default-groups --no-emit-project --no-emit-workspace --package network-assessment-azure-engine -o /tmp/lab-requirements.txt \
  && uv pip install --system --no-cache --require-hashes --no-deps --prefix=/install-lab -r /tmp/lab-requirements.txt \
  && uv export --locked --only-group build -o /tmp/build-requirements.txt \
  && uv pip install --system --no-cache --require-hashes --no-deps -r /tmp/build-requirements.txt \
  && uv pip install --system --no-cache --no-deps --no-build-isolation --prefix=/install-lab ./packages/network-assessment-azure-engine \
  && rm -f /tmp/lab-requirements.txt /tmp/build-requirements.txt \
- && PYTHONPATH=/install-lab/lib/python3.15/site-packages python -m network_assessment_azure_engine.edition
+ && LAB_SITE="$(python -c 'import os, sysconfig; v = {"base": "/install-lab", "platbase": "/install-lab"}; print(os.pathsep.join(dict.fromkeys(sysconfig.get_path(k, vars=v) for k in ("purelib", "platlib"))))')" \
+ && echo "lab site-packages: ${LAB_SITE}" \
+ && PYTHONPATH="${LAB_SITE}" python -m network_assessment_azure_engine.edition
 
 # ---- drawio fetch stage ----
 # Pinned draw.io desktop release, verified by checksum before it can reach
