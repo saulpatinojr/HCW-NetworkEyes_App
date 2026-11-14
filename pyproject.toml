@@ -6,11 +6,10 @@ build-backend = "setuptools.build_meta"
 name = "network-assessment"
 version = "0.8.0b0"
 description = "NetworkEyes Cloud Network Assessment CLI"
-# Still >=3.14 on purpose (2026-11-12). The images and CI run Python 3.15 (the HCW runtime floor,
-# saulpatinojr/HCW-HybridCloudWorks#1707), but `Unit Tests (Python 3.14)` is still a required check, so
-# 3.14 must keep installing. Raise this, ruff's target-version and ty's python-version to 3.15 in the
-# change that drops that check (TODO.md T-743).
-requires-python = ">=3.14"
+# Python 3.15.2, the latest stable 3.15 release, is the minimum (owner decision 2026-11-14); the
+# images and CI run it. It was >=3.14 until then, while `Unit Tests (Python 3.14)` was a required check
+# (TODO.md T-743 item 4). ruff's target-version and ty's python-version below follow it.
+requires-python = ">=3.15.2,<3.16"
 dependencies = [
     # The Azure assessment engine (model, typed rules, classifier, normalizer, renderers):
     # a workspace member under packages/ until it is published (REFACTOR_APP.md change set C).
@@ -161,12 +160,12 @@ markers = [
     "aws: needs the [aws] extra (boto3); skipped without it (tests/conftest.py)",
 ]
 
-# Type checking (TODO.md T-402). Matches the ruff posture: py314, project
+# Type checking (TODO.md T-402). Matches the ruff posture: py315, project
 # source only, no widened ignore lists. `ty check network_assessment/` is NOT yet green — see
 # TODO.md T-410 for the remaining findings, which are to be fixed rather than
 # silenced. Nothing here suppresses a rule.
 [tool.ty.environment]
-python-version = "3.14"
+python-version = "3.15"
 # The engine is a workspace member under packages/: its import root is not a site-packages
 # path, so the checker is told where network_assessment_azure_engine resolves from.
 extra-paths = ["packages/network-assessment-azure-engine"]
@@ -177,7 +176,7 @@ exclude = ["local"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py314"
+target-version = "py315"
 # .claude, .agents, .codex, and .kiro are vendored agent/skill/tooling
 # configuration (Kiro's spec workspace included), not this repo's own source — they aren't held to project lint
 # standards. Kept in sync with EXCLUDED_DIRS in

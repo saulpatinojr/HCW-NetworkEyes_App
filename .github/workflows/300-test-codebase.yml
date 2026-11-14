@@ -1,8 +1,8 @@
 # CI pipeline — hardened
 # Changes from original:
 #   - All actions pinned to SHA digest (supply chain security)
-#   - Python 3.15, the HCW runtime floor (saulpatinojr/HCW-HybridCloudWorks#1707); the unit tests also still run on
-#     3.14, because `Unit Tests (Python 3.14)` is a required check and requires-python still allows 3.14
+#   - Python 3.15, the HCW runtime floor (saulpatinojr/HCW-HybridCloudWorks#1707); requires-python is >=3.15.2,<3.16
+#     since 2026-11-14, so the unit tests no longer run on 3.14
 #   - Node.js 26 from actions/setup-node for every job that runs node, npm or npx on the runner
 #   - pip cache via actions/cache (60-80% faster installs)
 #   - Coverage XML generated in the Python 3.15 job
@@ -275,13 +275,12 @@ jobs:
           fi
 
   # ------------------------------------------------------------------
-  # 3. Unit tests — Python 3.15 and 3.14
+  # 3. Unit tests — Python 3.15
   # ------------------------------------------------------------------
-  # 3.15 is the HCW runtime floor and the version every Python image runs (saulpatinojr/HCW-HybridCloudWorks#1707).
-  # 3.14 stays in the matrix for now, on purpose: `Unit Tests (Python 3.14)` is a required check of the "Protect main"
-  # ruleset, and a required check that stops reporting blocks every pull request. Dropping it is a later change that
-  # removes it from the ruleset (390-repository-admin.yml), from this matrix, and raises requires-python and ruff's
-  # target to 3.15, in one pull request (TODO.md T-743).
+  # 3.15 is the HCW runtime floor and the version every Python image runs (saulpatinojr/HCW-HybridCloudWorks#1707),
+  # and requires-python is >=3.15.2,<3.16 (owner decision 2026-11-14), so 3.14 left the matrix. The job keeps its
+  # matrix so its check name stays `Unit Tests (Python 3.15)`, the required check of the "Protect main" ruleset
+  # (390-repository-admin.yml; TODO.md T-743 item 4).
   test:
     name: Unit Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-26.04
@@ -290,7 +289,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.14", "3.15"]
+        python-version: ["3.15"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:

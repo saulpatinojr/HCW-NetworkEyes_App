@@ -42,15 +42,20 @@ ADMIN_WORKFLOW = WORKFLOWS / "390-repository-admin.yml"
 TEST_WORKFLOW = WORKFLOWS / "300-test-codebase.yml"
 STEP_NAME = "Run the chosen task"
 
-# The required status checks `protect-main` applies to the "Protect main" ruleset (ruleset 25778319). The first
-# eleven are the live ruleset as read 2026-10-25, in its order; `Unit Tests (Python 3.15)` was added 2026-11-12
-# (saulpatinojr/HCW-HybridCloudWorks#1707), and until the owner runs `protect-main` with apply after that change
-# merges, the live ruleset lacks it. CHANGING THE LIVE RULESET AND THIS LIST MUST HAPPEN TOGETHER: add or remove a
-# check in the ruleset, in `REQUIRED_CHECKS` of 390-repository-admin.yml and here, in one pull request.
-# Otherwise the next `protect-main` run undoes (or never applies) the change.
+# The required status checks `protect-main` applies to the "Protect main" ruleset (ruleset 25778319): the twelve
+# checks the live ruleset listed when read on 2026-11-14 (last updated 2026-11-12), in its order, minus
+# `Unit Tests (Python 3.14)`, which leaves with the 3.14 leg of the unit tests (requires-python >=3.15.2,<3.16).
+# That leaves eleven. 390 runs from `main` only, so it
+# cannot drop that check before this change merges, and the change cannot merge while the live ruleset still requires
+# a check that no longer reports. So the owner removes `Unit Tests (Python 3.14)` from the ruleset by hand first
+# (Settings > Rules > Rulesets > Protect main, or https://github.com/saulpatinojr/HCW-NetworkEyes_App/rules/25778319;
+# TODO.md T-743 (4)), then this change merges, and from then on this list and the live ruleset agree.
+# `Unit Tests (Python 3.15)` was added 2026-11-12 (saulpatinojr/HCW-HybridCloudWorks#1707) and is live since that
+# day's apply. CHANGING THE LIVE RULESET AND THIS LIST MUST HAPPEN TOGETHER: add or remove a check in the ruleset, in
+# `REQUIRED_CHECKS` of 390-repository-admin.yml and here, in one pull request. Otherwise the next `protect-main` run
+# undoes (or never applies) the change.
 EXPECTED_REQUIRED_CHECKS = [
     "Lint & Format",
-    "Unit Tests (Python 3.14)",
     "Web lint, typecheck & tests",
     "Python Lockfile Consistency",
     "Python Dependency Audit (pip-audit)",

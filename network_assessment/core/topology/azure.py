@@ -10,6 +10,8 @@ from network_assessment_azure_engine.model.azure import (
     TOPOLOGY_MODEL_VERSION as AZURE_TOPOLOGY_VERSION,
 )
 from network_assessment_azure_engine.model.azure import __all__ as _engine_all
-from network_assessment_azure_engine.model.common import SubnetType  # noqa: F401 — kept as an attribute
+from network_assessment_azure_engine.model.common import (
+    SubnetType,  # noqa: F401 — kept as an attribute
+)
 
 __all__ = [*_engine_all, "AZURE_TOPOLOGY_VERSION"]

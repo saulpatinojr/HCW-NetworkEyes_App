@@ -31,7 +31,7 @@ overview, and `TODO.md` is the work queue.
 
 ## Set up and check your change
 
-Python 3.15 (the version the images run; 3.14 still works) and [uv](https://docs.astral.sh/uv/) are needed. From the
+Python 3.15.2 or a later 3.15 release (the version the images run; 3.14 is no longer accepted) and [uv](https://docs.astral.sh/uv/) are needed. From the
 repository root:
 
 ```bash

@@ -116,7 +116,7 @@ class TestWheel:
             if line.startswith("Requires-Dist:") and "extra ==" not in line
         ]
         assert requires == ["pydantic<3,>=2.13"], requires
-        assert "Requires-Python: >=3.14" in text
+        assert "Requires-Python: <3.16,>=3.15.2" in text
 
     def test_wheel_ships_the_licence_text_and_notice(self, wheel: Path):
         """Apache-2.0 section 4: whoever redistributes the wheel must pass on LICENSE and NOTICE.
