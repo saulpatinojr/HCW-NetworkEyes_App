@@ -2626,10 +2626,10 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   `Image Scan (Trivy)` jobs are the proof, and the web tier was not started against the built image.
 
 ### T-743 — Node.js 26 and Python 3.15, the HCW runtime floors (HCW-HybridCloudWorks#1707)
-- **Status:** Done 2026-11-12 (and (6) to (9) on 2026-11-13), except items (4) and (5), which are open. The HCW
-  website's version floors (`scripts/version-floors.json` in saulpatinojr/HCW-HybridCloudWorks, issue 1707 there) ask
-  for the newest Node.js LTS line (26, floor 26.11.0) and the newest Python line (3.15, floor 3.15.0). This repository
-  ran Node.js 24 in the web image and Python 3.14 everywhere.
+- **Status:** Done 2026-11-12 (and (6) to (9) on 2026-11-13, (10) on 2026-11-14), except items (4) and (5), which are
+  open. The HCW website's version floors (`scripts/version-floors.json` in saulpatinojr/HCW-HybridCloudWorks, issue 1707
+  there) ask for the newest Node.js LTS line (26, floor 26.11.0) and the newest Python line (3.15, floor 3.15.0). This
+  repository ran Node.js 24 in the web image and Python 3.14 everywhere.
 - **(1) Node.js 26.** The six `FROM` lines of `apps/network-assessment-web/Dockerfile` are
   `node:26-trixie-slim@sha256:e6bedef2…` (Node 26.13.1, built 2026-11-11, Node's security release of that day; the
   26.13.0 digest the HCW MigrateOrchestrator images pinned predates it). The two test jobs that run `npm` and `npx`
@@ -2698,6 +2698,19 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   `tests/unit/test_ci_hygiene.py` fails when a workflow's `uv==` (or a `ghcr.io/astral-sh/uv:` version it names)
   differs from the Dockerfiles' uv stage. The engine wheel is byte-identical under 0.13.7 and 0.13.8 with the same
   `SOURCE_DATE_EPOCH`.
+- **(10) Done 2026-11-14: round 3 of the runtime test.** The eighteen gaps listed in the third review
+  (HCW-HybridCloudWorks#1707, comment 6848049164) are closed here and in the website's JavaScript copy alike:
+  quoted command names, `eval`, a runtime run through `sudo` (sudo's `secure_path` finds the runner's own),
+  `shell: python` and `defaults.run.shell`, the outer reading of a double-quoted `-c` script, `unset`, `export -n`,
+  `sudo -i` with `-E`, bare interpreter names, `/usr/local/bin`, `..` after `$pythonLocation`, globs, escapes and `~`,
+  `${{ env.X }}` read level by level and `${{ env.pythonLocation }}` kept as setup-python's own; and the line reader
+  now decodes quoted values, drops a matrix entry's comment, ends a block value at a less-indented comment, reads
+  `3.10` as `3.1` as GitHub does, and stops on forms it cannot read. Nothing new was found in this repository's
+  workflows, or in those of the eight other HCW repositories. A pre-pull-request review then found eight more gaps, now
+  closed in both copies too: a quoted `"NAME=..."` after `env` or `sudo`, a `PATH=` other than the job's own after
+  `sudo env`, YAML anchors, aliases and tags, an unset `pythonLocation`, more quoting forms and names that end at an
+  operator, a clearer failure message for sudo, a step `shell:` run through sudo, and two very slow inputs.
+  HCW-MigrateOrchestrator_App's copy is ported next.
 - **Not checked here:** no image was built (no Docker daemon in the session that made the change). The Python tests and
   the install of each image's dependency set ran on CPython 3.15.2; the web checks ran on Node.js 26. The pull
   request's `Docker Build Smoke Test`, `Lab Boundary Image` and `Image Scan (Trivy)` jobs and the next `200` run on
