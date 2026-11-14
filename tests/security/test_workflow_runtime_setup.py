@@ -79,23 +79,32 @@ here-string given to a shell that reads its script from its input is that shell'
 `cat` is text.
 
 Round 3 (saulpatinojr/HCW-HybridCloudWorks#1707) reads more forms the way the shell and GitHub do. A command named in
-quotes (`'node' x.js`, `"node" x.js`) is that command, and `eval` runs its arguments as a script. A runtime run through
-`sudo` counts as the runner's own even after a set-up step, because sudo looks its command up on its `secure_path`;
-only `sudo env "PATH=$PATH" ...` passes the set-up PATH on. A step whose `shell:` (or `defaults.run.shell`) is a
-runtime (`python`, `node {0}`) runs it. The outer shell runs only the `$(...)` and backticks of a double-quoted string,
-so `bash -c "x; pipx run y $(true)"` runs no `pipx` outside. `unset`, `export -n` and `declare +x` are read, and so is
-a script line that sets PIPX_DEFAULT_PYTHON to a value that chooses nothing (one that chooses is still not read: use
-`env:`); `sudo -i` resets the environment whatever `-E` says. A value given to pipx chooses nothing when it is a bare
-name other than the floor's own `python3.15` (PATH would find the runner's), a path under /usr/local/bin, a path with a
-`..` after a part this test cannot see, or a glob, brace or leading `~`; a `\\` in it is dropped first. `${{ env.X }}`
-is read as GitHub evaluates it, level by level, and `${{ env.pythonLocation }}` stays setup-python's word, which
-chooses nothing when an `env:` sets `pythonLocation` itself.
+quotes (`'node' x.js`, `"node" x.js`, `''node x`) or with a `\\` in it (`\\node x`) is that command, a command's name
+ends at an operator as well as a space (`node;`, `x=$(node)`), and `eval` and `builtin` run the words after them. A
+quoted `"NAME=..."` given to `env` or `sudo` is an assignment, as env and sudo read it. A runtime run through `sudo`
+counts as the runner's own even after a set-up step, because sudo looks its command up on its own fixed list of folders
+(`secure_path`); only `sudo env "PATH=$PATH" ...`, which passes the PATH the shell already has, keeps the set-up one,
+and a step whose `shell:` runs through sudo runs its whole text that way. A step whose `shell:` (or
+`defaults.run.shell`) is a runtime (`python`, `node {0}`) runs it. The outer shell runs only the `$(...)` and backticks
+of a double-quoted string, so `bash -c "x; pipx run y $(true)"` runs no `pipx` outside. `unset`, `export -n` (which
+takes a name's export away) and `declare +x` are read, and so is a script line that sets PIPX_DEFAULT_PYTHON to a value
+that chooses nothing (one that chooses is still not read: use `env:`). sudo refuses `-i` together with `-E` outright, so
+`sudo -iE pipx` counts as having no Python chosen. A value given to pipx chooses nothing when it is a bare name other
+than the floor's own `python3.15` (PATH would find the runner's), a path under /usr/local/bin, a path with a `..` after
+a part this check cannot see, or a pattern or `~` the shell would still expand; a `\\` in it is dropped first. `${{
+env.X }}` is read as GitHub evaluates it, level by level, and `${{ env.pythonLocation }}` stays setup-python's word,
+which chooses nothing when an `env:` sets `pythonLocation` itself or the script unsets it.
 
-Limits, known and kept: a composite action whose set-up step takes its version from `${{ inputs.* }}` cannot be read,
-so it fails the floor test and needs an entry in BELOW_FLOOR_ALLOWED; a `shell: python` step's text is still read as
-shell too, and an `eval` script is read as a child shell (a name set but not exported before it is not seen), both of
-which can only add findings; and `env -i python3` after a set-up step, which looks `python3` up on the system's default
-path, is not reported.
+Limits, known and kept: a composite action whose set-up step takes its version from `${{ inputs.* }}` cannot be read, so
+it fails closed and needs an entry in BELOW_FLOOR_ALLOWED; a `shell: python` step's text is still read as shell too, and
+an `eval` script is read as a child shell (a name set but not exported before it is not seen), both of which can only
+add findings; and these are not reported: `env -i python3` after a set-up step (env empties PATH, so `python3` is looked
+up on the system's default folders); a `--python` path to a Python outside the folders of RUNNER_PYTHON_FOLDERS
+(`/opt/hostedtoolcache/Python/3.12...`, `/usr/share/miniconda/bin/python3`); a relative path after `cd` (`cd /usr/bin &&
+pipx run --python ./python3 x`); a value a `for` loop or `read` sets (`for P in /usr/bin/python3; do ...`), which counts
+as chosen; a PATH or setting written to `$GITHUB_PATH` or `$GITHUB_ENV` by an earlier step; and a set-up version `3` or
+`3.x` (a major line only), which reads as at the floor. `unset -n P` is read as unsetting P, which is what bash does
+unless P is a name reference.
 
 A composite action (`.github/actions/<name>/action.yml`, `runs: using: composite`) is checked like a job of its own,
 named `composite`, so its keys read `.github/actions/<name>/action.yml > composite > step name > runtime`. Its steps
@@ -158,8 +167,10 @@ YAML folds it, a double-quoted value with its escapes decoded, a single-quoted o
 after a value dropped (a matrix entry's too), and a plain number in its shortest form (`3.10` is `3.1`, as GitHub hands
 it to an action); and a heredoc's delimiter is its whole word (`<<EOF-1`, `<<E"OF"`), its body ending only at a line
 that is exactly that word (after leading tabs for `<<-`). `strategy:` or `matrix:` written on one line, a value that
-runs over several lines and any other line the reader cannot place stop the test too, as the website's reader stops
-on them (round 3).
+runs over several lines or starts on the line after its key, a quoted key, a space before a key's colon, an anchor,
+alias or tag (`&a`, `*a`, `!!str`) and any other line the reader cannot place stop the test too, as the website's
+reader stops on them (round 3). A step's keys may follow `-` and any number of spaces, and a matrix list may start at
+its key's own indent, as YAML allows.
 """
 
 from __future__ import annotations
@@ -419,8 +430,8 @@ WRAPPERS = "|".join(
         r"command(?:\s+(?:-p|--(?=\s)))*\s+",
         r"(?:if|then|else|elif|do|while|until|!)\s+",
         # `eval` runs its arguments as a script (round 3, HCW-HybridCloudWorks#1707): an unquoted first argument is in
-        # command position.
-        r"eval(?:\s+--(?=\s))?\s+",
+        # command position. `builtin` runs the builtin named next (`builtin eval node x`).
+        r"(?:eval(?:\s+--(?=\s))?|builtin)\s+",
         SHELL_C,
         SHELL_HERE_STRING,
     ]
@@ -436,15 +447,23 @@ START = (
     + WRAPPERS
     + r")*"
 )
-# yarn and pnpm are Node.js programs; pytest and pipx are Python programs, so they run on the interpreter they were
-# installed with, which is the runner's own unless a set-up step came first (pipx also builds each tool's virtual
-# environment from that interpreter unless it is given `--python`).
-COMMAND = {
-    "node": re.compile(START + PATH + r"(?:node|npm|npx|yarn|pnpm)(?=\s|$)"),
-    "python": re.compile(
-        START + PATH + r"(?:python(?:3(?:\.\d+){0,2})?|pip3?|pipx|pytest|uvx?)(?=\s|$)"
-    ),
+# A runtime's command names. yarn and pnpm are Node.js programs; pytest and pipx are Python programs, so they run on
+# the interpreter they were installed with, which is the runner's own unless a set-up step came first (pipx also builds
+# each tool's virtual environment from that interpreter unless it is given `--python`).
+RUNTIME_NAMES = {
+    "node": r"(?:node|npm|npx|yarn|pnpm)",
+    "python": r"(?:python(?:3(?:\.\d+){0,2})?|pip3?|pipx|pytest|uvx?)",
 }
+# Where a command's name ends: a space, the end of the line, or an operator (`node;`, `x=$(node)`, `python3<<EOF`,
+# `'npx'|cat`; round 3 review, HCW-HybridCloudWorks#1707).
+NAME_END = r"(?=[\s;&|()<>]|$)"
+# A runtime command in command position, with the words in front of it (see `_runtime_commands`).
+RUNTIME = {
+    kind: re.compile(rf"(?P<before>{START}){PATH}{names}{NAME_END}")
+    for kind, names in RUNTIME_NAMES.items()
+}
+# The runtimes this check reads, by kind.
+COMMAND = RUNTIME
 # A shell in command position given a script with `-c` (`bash -c '...'`, `sh -euo pipefail -c "..."`, `sudo bash -lc
 # '...'`, `bash -c -- '...'`, `bash -ec'...'`): the script runs on the runner too, so its commands count. The same
 # words after `docker run image` are not in command position, so a container's script stays unread.
@@ -470,16 +489,24 @@ ENV_SPLIT_SCRIPT = re.compile(
 # so a quoted argument is read like a `-c` script (`eval 'node x'`, `eval echo 'a; node x'`; round 3,
 # HCW-HybridCloudWorks#1707).
 EVAL_SCRIPT = re.compile(START + r"eval(?:\s+[^\s;&|()<>]+)*\s+$")
-# A runtime's command names, for COMMAND and RUNTIME.
-RUNTIME_NAMES = {
-    "node": r"(?:node|npm|npx|yarn|pnpm)",
-    "python": r"(?:python(?:3(?:\.\d+){0,2})?|pip3?|pipx|pytest|uvx?)",
-}
-# A runtime command in command position with the words in front of it, for `runs_through_sudo`.
-RUNTIME = {
-    kind: re.compile(rf"(?P<before>{START}){PATH}{names}(?=\s|$)")
-    for kind, names in RUNTIME_NAMES.items()
-}
+# The words after `env` or `sudo` (with their options and assignments), where a quoted `"NAME=..."` is still an
+# assignment: env and sudo read their arguments after the shell has taken the quotes off, so `sudo env "PATH=$PATH"
+# python3` runs python3 with that PATH (round 3 review, HCW-HybridCloudWorks#1707). At the start of a command a quoted
+# `"NAME=..."` is the command's name, not an assignment, and PREFIX_ONLY (the line ends in the words in front of a
+# command) tells the two apart.
+AFTER_ENV_OR_SUDO = re.compile(
+    r"(?:^|[\s;&|(`])"
+    + PATH
+    + r"(?:env"
+    + _options_of(WRAPPER_OPTIONS["env"], "env")
+    + r"|sudo"
+    + _options_of(WRAPPER_OPTIONS["sudo"], "sudo")
+    + r")\s+(?:"
+    + ASSIGNMENT
+    + r")*$"
+)
+PREFIX_ONLY = re.compile(START + "$")
+QUOTED_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
 # `pipx` in command position, with what comes before it (its assignments and wrappers) and its words, up to the end
 # of the command (`;`, `&`, `|` or `)`). It has chosen its interpreter when `--python` is one of pipx's own options
 # (see `_pipx_option_chooses_python`) or `PIPX_DEFAULT_PYTHON` is one of the assignments in front of it.
@@ -747,15 +774,13 @@ def _quoted_text(content: str, mark: str, values: bool) -> str:
     )
 
 
-def _text_part(literal: str, values: bool) -> str:
-    """How `_shell_text` writes the text between the substitutions of a double-quoted string that runs one: `_`, or,
-    when asked for values, the text with every character VALUE_UNSAFE names made `_` (see `_quoted_text`); "" when
-    there is none (round 3, HCW-HybridCloudWorks#1707)."""
-    if not literal:
-        return ""
-    if not values:
-        return "_"
-    return VALUE_UNSAFE.sub("_", VARIABLE.sub(lambda m: "$" + (m[1] or m[2]), literal))
+def _text_part(literal: str) -> str:
+    """How `_shell_text` writes the text between the substitutions of a double-quoted string that runs one: ` _ ` (""
+    when there is none), with or without values. The text runs nothing, and a value that holds a substitution chooses
+    nothing whatever its text (see `_chooses`). The spaces keep a long string from being one long word, which PATH (a
+    run of characters up to a `/`) read again from every place it could start (round 3 review,
+    HCW-HybridCloudWorks#1707: 3,000 substitutions took seconds)."""
+    return " _ " if literal else ""
 
 
 def _heredoc_substitutions(body: str, values: bool) -> list[str]:
@@ -816,11 +841,17 @@ def _shell_text(run: str, values: bool = False) -> str:
             tail.append(part)
         return "".join(reversed(tail))
 
-    def quoted(script: str, text: str) -> None:
+    def quoted(script: str, text: str, following: str = "") -> None:
         """Add a quoted string as `text`; a `-c` script (or an `env -S` value) also as the inner shell reads it. The
         outer reading stays, because the outer shell runs a `$(...)` or backtick in a double-quoted script before the
-        inner shell starts (`bash -c "echo '$(node x)'"`)."""
+        inner shell starts (`bash -c "echo '$(node x)'"`). An empty quoted string run together with other text adds
+        nothing to its word (`''node x` runs node; round 3 review, HCW-HybridCloudWorks#1707); on its own it is an
+        empty word, and stays one."""
         head = line().lstrip()
+        if text in ("''", '""') and (
+            re.search(r"[^\s;&|()<>]$", head) or re.match(r"[^\s;&|()<>]", following)
+        ):
+            return
         found = (
             SHELL_SCRIPT.search(head)
             or ENV_SPLIT_SCRIPT.search(head)
@@ -834,10 +865,24 @@ def _shell_text(run: str, values: bool = False) -> str:
         else:
             out.append(f"{text}\n{_shell_text(script)}\n:")
 
+    def assigned(at: int) -> str:
+        """The `NAME=` of a quoted assignment given to `env` or `sudo` (see AFTER_ENV_OR_SUDO), which is written in
+        front of the quotes (`PATH="$PATH"`) so that it reads as the assignment it is; "" for any other quoted string.
+        `env -S 'A=1 node x'` is a script to split, not an assignment."""
+        name = QUOTED_NAME.match(run, at, at + 256)
+        if not name:
+            return ""
+        head = line().lstrip()
+        if AFTER_ENV_OR_SUDO.search(head) and PREFIX_ONLY.search(head):
+            return "" if ENV_SPLIT_SCRIPT.search(head) else name[0]
+        return ""
+
     while i < n:
         char = run[i]
         if char == "\\" and i + 1 < n:
             escaped = run[i + 1]
+            # A `\` in front of an ordinary character only stands for that character (`\node` is `node`; round 3
+            # review).
             out.append(
                 " "
                 if escaped == "\n"
@@ -845,6 +890,8 @@ def _shell_text(run: str, values: bool = False) -> str:
                 if escaped == "`"
                 else LITERAL_DOLLAR
                 if values and escaped == "$"
+                else escaped
+                if re.fullmatch(r"[A-Za-z0-9_./:@%+,=-]", escaped)
                 else run[i : i + 2]
             )
             i += 2
@@ -854,15 +901,18 @@ def _shell_text(run: str, values: bool = False) -> str:
             while j < n and run[j] != "'":
                 j += 2 if run[j] == "\\" else 1
             body = _ansi_c(run[i + 2 : j])
-            quoted(body, body if PLAIN_WORD.fullmatch(body) else _quoted_text(body, "'", values))
+            written = body if PLAIN_WORD.fullmatch(body) else _quoted_text(body, "'", values)
+            quoted(body, written, run[j + 1 : j + 2])
             i = j + 1
         elif char == "'":
             end = run.find("'", i + 1)
             end = n if end == -1 else end
-            body = run[i + 1 : end]
+            name = assigned(i + 1)
+            body = run[i + 1 + len(name) : end]
             # A quoted plain word is that word to the shell, so `'node' x` runs node (round 3,
             # HCW-HybridCloudWorks#1707).
-            quoted(body, body if PLAIN_WORD.fullmatch(body) else _quoted_text(body, "'", values))
+            written = body if PLAIN_WORD.fullmatch(body) else _quoted_text(body, "'", values)
+            quoted(body, name + written, run[end + 1 : end + 2])
             i = end + 1
         elif char == '"':
             # A command substitution in the string (`$(...)`, or a backtick pair) may hold quotes of its own, and it
@@ -870,7 +920,8 @@ def _shell_text(run: str, values: bool = False) -> str:
             # outer shell, written as `_quoted_text` writes text, so that a `;`, `|` or word in it is not read as a
             # command (round 3, HCW-HybridCloudWorks#1707: `bash -c "x; pipx run y $(true)"` runs no pipx in the outer
             # shell). As text, an escaped backtick prints.
-            j, parts, literal, runs = i + 1, [], "", False
+            name = assigned(i + 1)
+            j, parts, literal, runs = i + 1 + len(name), [], "", False
             while j < n and run[j] != '"':
                 if run[j] == "\\":
                     escape = run[j : j + 2]
@@ -880,23 +931,22 @@ def _shell_text(run: str, values: bool = False) -> str:
                 elif run.startswith("$(", j) and not run.startswith("$((", j):
                     close = _substitution_close(run, j)
                     parts.append(
-                        _text_part(literal, values)
-                        + f"$({_shell_text(run[j + 2 : close], values)})"
+                        _text_part(literal) + f"$({_shell_text(run[j + 2 : close], values)})"
                     )
                     literal = ""
                     runs, j = True, close + 1
                 elif run[j] == "`":
                     close = _backtick_close(run, j)
                     parts.append(
-                        _text_part(literal, values) + f"`{_shell_text(run[j + 1 : close], values)}`"
+                        _text_part(literal) + f"`{_shell_text(run[j + 1 : close], values)}`"
                     )
                     literal = ""
                     runs, j = True, close + 1
                 else:
                     literal += run[j]
                     j += 1
-            raw, text = run[i + 1 : min(j, n)], literal
-            parts.append(_text_part(literal, values))
+            raw, text = run[i + 1 + len(name) : min(j, n)], literal
+            parts.append(_text_part(literal))
             # Given to `-c`, the inner shell runs the script, an escaped backtick included.
             script = re.sub(r"\\([\\\"$`\n])", lambda m: "" if m[1] == "\n" else m[1], raw)
             written = (
@@ -906,7 +956,7 @@ def _shell_text(run: str, values: bool = False) -> str:
                 if PLAIN_WORD.fullmatch(raw)
                 else _quoted_text(text, '"', values)
             )
-            quoted(script, written)
+            quoted(script, name + written, run[j + 1 : j + 2])
             i = j + 1
         elif char == "#" and (i == 0 or run[i - 1] in " \t\n;"):
             end = run.find("\n", i)
@@ -961,9 +1011,20 @@ def _shell_text(run: str, values: bool = False) -> str:
     return "".join(out)
 
 
+# A `case` pattern at the start of a line, whose words are patterns, not commands (`node|npm) ...`).
+CASE_PREFIX = re.compile(CASE_PATTERN)
+
+
+def _runtime_commands(line: str, kind: str) -> list[re.Match[str]]:
+    """Every runtime command of `kind` in command position on a line (see `_pipx_commands`), each with the words in
+    front of it. A line that starts with a `case` pattern is read after the pattern, so `node)` names no command now
+    that a name may end at `)`."""
+    return _pipx_commands(CASE_PREFIX.sub("", line, count=1), RUNTIME[kind])
+
+
 def runs_runtime(run: str | None, kind: str) -> bool:
     """True when a run script calls the runtime in command position (see `_shell_text` for what is left out)."""
-    return any(COMMAND[kind].search(line.strip()) for line in _shell_text(run or "").split("\n"))
+    return any(_runtime_commands(line.strip(), kind) for line in _shell_text(run or "").split("\n"))
 
 
 def _indent(line: str) -> int:
@@ -1069,8 +1130,13 @@ def _scalar(value: str) -> str:
         assert found, f"a single-quoted value runs over more than one line: {value!r}"
         decoded, rest = found[1].replace("''", "'"), text[found.end() :]
     else:
-        return _plain(re.sub(r"\s+#.*$", "", text).strip())
-    assert re.fullmatch(r"\s*(?:#.*)?", rest), f"text after a quoted value: {value!r}"
+        text = re.sub(r"\s+#.*$", "", text).strip()
+        # An anchor (`&a`), an alias (`*a`) or a tag (`!!str`) is not text: refused, as the website's reader refuses it
+        # (round 3 review, HCW-HybridCloudWorks#1707).
+        assert not text.startswith(("&", "*", "!")), f"an anchor, alias or tag: {value!r}"
+        return _plain(text)
+    # A comment after a quoted value needs a space before its `#`, as YAML reads it (`"3.15"#x` is not YAML).
+    assert re.fullmatch(r"(?:\s+#.*)?\s*", rest), f"text after a quoted value: {value!r}"
     return decoded
 
 
@@ -1129,7 +1195,11 @@ def _flow_mapping(text: str) -> dict[str, str]:
             parts.append(inner[start:index])
             start = index + 1
     parts.append(inner[start:])
-    pairs = (part.partition(":") for part in parts if part.strip())
+    pairs = [part.partition(":") for part in parts if part.strip()]
+    # A quoted key (`{'A': x}`) is refused, as the website's reader refuses it (round 3 review).
+    assert not any(key.strip()[:1] in ("'", '"') for key, _, _ in pairs), (
+        f"a quoted key in {text!r}"
+    )
     return {key.strip(): _scalar(value) for key, _, value in pairs}
 
 
@@ -1220,8 +1290,16 @@ def _matrix(job: list[str], key_indent: int) -> dict[str, list[str]]:
         if rest.startswith("["):
             found[match.group(1)] = [_scalar(v) for v in rest.strip("[]").split(",") if v.strip()]
         else:
-            # Each `- value` read as YAML reads it, a comment after it dropped (round 3, HCW-HybridCloudWorks#1707).
-            items = _block(matrix_lines, index, inner)
+            # Each `- value` read as YAML reads it, a comment after it dropped (round 3, HCW-HybridCloudWorks#1707),
+            # its `-` indented further than the key or at the key's own indent, as YAML allows (round 3 review).
+            items = []
+            for item in matrix_lines[index + 1 :]:
+                if _meaningful(item) and (
+                    _indent(item) < inner
+                    or (_indent(item) == inner and not item.lstrip().startswith("- "))
+                ):
+                    break
+                items.append(item)
             found[match.group(1)] = [
                 _scalar(i.strip()[2:]) for i in items if i.strip().startswith("- ")
             ]
@@ -1321,6 +1399,9 @@ def read_jobs(text: str) -> dict[str, dict]:
             )
             dash = _indent(dashes[0])
             current: list[str] | None = None
+            column = (
+                dash + 2
+            )  # where the current step's keys start: after the `-` and its spaces (`-   run: x`)
             for line in rest:
                 if _meaningful(line) and (
                     _indent(line) < dash
@@ -1328,17 +1409,20 @@ def read_jobs(text: str) -> dict[str, dict]:
                 ):
                     break
                 if _meaningful(line) and _indent(line) == dash:
+                    if current is not None:
+                        steps.append(_step_keys(current, column))
+                    # The keys start after the `-` and all the spaces after it, as YAML reads `-   run: x` (round 3
+                    # review, HCW-HybridCloudWorks#1707).
+                    column = dash + 1 + _indent(line[dash + 1 :])
                     # Only a block mapping is read: `- {run: ...}` or `- python3` would read as an empty step.
-                    assert re.match(r"[A-Za-z_-]+:(?:\s|$)", line[dash + 2 :]), (
+                    assert column > dash + 1 and re.match(r"[A-Za-z_-]+:(?:\s|$)", line[column:]), (
                         f"job {match.group(1)}: a step is not a block mapping: {line.strip()!r}"
                     )
-                    if current is not None:
-                        steps.append(_step_keys(current, dash + 2))
-                    current = [" " * (dash + 2) + line[dash + 2 :]]
+                    current = [" " * column + line[column:]]
                 elif current is not None:
                     current.append(line)
             if current is not None:
-                steps.append(_step_keys(current, dash + 2))
+                steps.append(_step_keys(current, column))
         jobs[match.group(1)] = {
             "container": container,
             "env": env,
@@ -1599,21 +1683,31 @@ def _sudo_path(before: str) -> bool | None:
     for word in (OPENING.sub("", w) for w in WORD.findall(before)):
         if re.fullmatch(r"(?:\S*/)?sudo", word):
             state, env = True, False
-        elif re.fullmatch(r"(?:\S*/)?env", word):
+        elif state is not None and re.fullmatch(r"(?:\S*/)?env", word):
             env = True
-        elif env and word.replace("'", "").replace('"', "").startswith("PATH="):
+        # Only the PATH the outer shell had (`PATH=$PATH`, `PATH="$PATH":/x`): `PATH=/usr/bin` finds the runner's own
+        # (round 3 review, HCW-HybridCloudWorks#1707). Words with no `sudo` in front of them leave the state to the
+        # script around them, whose `$PATH` is sudo's `secure_path` when it runs under sudo.
+        elif (
+            env and state is not None and PASSES_PATH.match(word.replace("'", "").replace('"', ""))
+        ):
             state = False
     return state
 
 
-def runs_through_sudo(run: str | None, kind: str) -> bool:
+# A `PATH=` that passes on the PATH the shell already has.
+PASSES_PATH = re.compile(r"PATH=(?:\$PATH|\$\{PATH\})(?::|$)")
+
+
+def runs_through_sudo(run: str | None, kind: str, inherited: bool | None = None) -> bool:
     """True when a run script runs the runtime through `sudo` without passing PATH on (see `_sudo_path`): `sudo python3
     x.py`, `sudo -E node x`, `sudo bash -c 'node x'`. sudo's `secure_path` holds the runner's own Node.js and Python
     (Ubuntu's and Debian's sudoers set it, and actions/runner-images does not change it), not the set-up ones in
     /opt/hostedtoolcache, so such a step runs the runner's own runtime even after a set-up step (round 3,
     HCW-HybridCloudWorks#1707). A script a sudo'd shell runs (`-c`, a heredoc, `env -S`, `eval`) carries the sudo in
-    front of it."""
-    stack: list[bool | None] = [None]
+    front of it, and so does a step's whole text when its `shell:` is run through sudo (`inherited`, see
+    `step_shell`)."""
+    stack: list[bool | None] = [inherited]
     for raw in _shell_text(run or "", values=True).split("\n"):
         line = raw.strip()
         if line.startswith("\x01"):
@@ -1623,7 +1717,7 @@ def runs_through_sudo(run: str | None, kind: str) -> bool:
         if line.startswith("\x02"):
             stack = stack[:-1] if len(stack) > 1 else stack
             continue
-        for found in _pipx_commands(line, RUNTIME[kind]):
+        for found in _runtime_commands(line, kind):
             local = _sudo_path(found["before"])
             if (stack[-1] if local is None else local) is True:
                 return True
@@ -1670,7 +1764,7 @@ def unset_steps(
                 )
                 if (
                     not covered
-                    or runs_through_sudo(step.get("run"), kind)
+                    or runs_through_sudo(step.get("run"), kind, _sudo_path(shell))
                     or runs_through_sudo(shell, kind)
                 ):
                     found.append(key)
@@ -1715,9 +1809,10 @@ def _chooses(
         name = match[1] or match[2]
         if name in (env or {}):
             given = env[name]
+            unknown = unknown or given is UNSET
             return (
                 match[0]
-                if given is SCRIPT_SET
+                if given is SCRIPT_SET or given is UNSET
                 else _gha_tokens("" if given is None else str(given))
             )
         unknown = unknown or name not in SET_UP_VARIABLES
@@ -1896,25 +1991,33 @@ def _scope_paths(text: str) -> tuple[list[tuple[int, ...]], dict[int, str]]:
 
 def _names_view(
     env: dict,
-    records: list[tuple[str, object, tuple[int, ...], bool]],
+    records: dict[str, list[tuple[str, object, tuple[int, ...], bool | str]]],
     here: tuple[int, ...],
     kinds: dict,
+    names: set[str] | list[str],
 ) -> dict:
     """The variables a command at `here` sees: the step's, job's and workflow's `env:` (which GitHub exports), then
     every earlier assignment of the script in this shell or one around it, in order, the last one winning over `env:`
     too (Copilot on HCW-NetworkEyes_App#395); one made outside a child shell reaches into it only when exported (an
     `env:` name stays exported when the script assigns it). An assignment inside a subshell or child shell that has
-    ended is not seen (Copilot on HCW-HybridCloudWorks#1719)."""
+    ended is not seen (Copilot on HCW-HybridCloudWorks#1719). `records` holds the script's assignments by name, and
+    only the names in `names` are worked out, each from its own records, so a long script is not read again in full for
+    every command (round 3 review, HCW-HybridCloudWorks#1707: 4,000 lines took seconds); any other name keeps its
+    `env:` value."""
     view = dict(env)
     # Names the script has unset or unexported since, so an `env:` name no longer reaches a child shell (round 3,
     # HCW-HybridCloudWorks#1707).
     unexported: set[str] = set()
-    for name, value, at, exported in records:
+    for name, value, at, exported in (record for one in names for record in records.get(one, [])):
         if here[: len(at)] != at:
             continue
         crosses = any(kinds[i] == "child" for i in here[len(at) :])
         if value is UNSET or (exported == "unexport" and crosses):
-            view.pop(name, None)
+            # An unset `pythonLocation` is no longer the one setup-python set, so it is kept as UNSET for `_chooses`.
+            if name in SET_UP_VARIABLES and value is UNSET:
+                view[name] = UNSET
+            else:
+                view.pop(name, None)
             unexported.add(name)
             continue
         if exported == "unexport":
@@ -2163,6 +2266,11 @@ def pipx_without_python(
     )
 
 
+def _names_in(text: str) -> set[str]:
+    """The shell variables a text names (`$P`, `${P}`), the only ones `_chooses` reads from a view."""
+    return {found[1] or found[2] for found in VARIABLE.finditer(text)}
+
+
 def _pipx_without_python_once(
     run: str, env: dict, setup_ids: frozenset[str] | set[str] = frozenset()
 ) -> bool:
@@ -2184,13 +2292,17 @@ def _pipx_without_python_once(
     text = _shell_text(_gha_tokens(run or ""), values=True)
     scopes: list = []  # `_scope_paths(text)`, worked out the first time a script sets a name
 
-    def view_at(index: int) -> dict:
-        """The variables a command at `index` of `text` sees (see `_names_view`)."""
+    def view_at(index: int, names: set[str] | list[str]) -> dict:
+        """The variables a command at `index` of `text` sees, of those in `names` (see `_names_view`)."""
         if not records:
             return dict(env)
         if not scopes:
             scopes.extend(_scope_paths(text))
-        return _names_view(env, records, scopes[0][index] if index >= 0 else (), scopes[1])
+        here = scopes[0][index] if index >= 0 else ()
+        return _names_view(env, records, here, scopes[1], names)
+
+    def record(name: str, value: object, here: tuple[int, ...], exported: bool | str) -> None:
+        records.setdefault(name, []).append((name, value, here, exported))
 
     def inherited(index: int) -> bool:
         """What a command at `index` inherits for PIPX_DEFAULT_PYTHON: False once the shell it runs in (the innermost
@@ -2204,7 +2316,8 @@ def _pipx_without_python_once(
                 return False
         return stack[-1]
 
-    records: list[tuple[str, object, tuple[int, ...], bool | str]] = []
+    # name -> [(name, value, scope path, exported)], in the order the script sets them
+    records: dict[str, list[tuple[str, object, tuple[int, ...], bool | str]]] = {}
     # Where the script unsets, unexports or sets to a value that chooses nothing PIPX_DEFAULT_PYTHON (`unset
     # PIPX_DEFAULT_PYTHON`, `export -n ...`, `PIPX_DEFAULT_PYTHON=/usr/bin/python3`): the scope path of each (round 3,
     # HCW-HybridCloudWorks#1707). One that sets it to a value that chooses is not read, as before: use `env:` for that.
@@ -2215,7 +2328,7 @@ def _pipx_without_python_once(
         lead, offset = offset + len(raw) - len(raw.lstrip()), offset + len(raw) + 1
         if line.startswith("\x01"):
             # A `-c` script (or `env -S` value) starts: it inherits what the words in front of its shell make.
-            local = _local_default_python(line[1:], setup_ids, view_at(lead - 1))
+            local = _local_default_python(line[1:], setup_ids, view_at(lead - 1, _names_in(line)))
             stack.append(_or_inherited(local, inherited(lead - 1)))
             continue
         if line.startswith("\x02"):
@@ -2234,23 +2347,22 @@ def _pipx_without_python_once(
                 if not scopes and (pairs or marks):
                     scopes.extend(_scope_paths(text))
                 here = scopes[0][lead + at - 1] if scopes else ()
-                before = view_at(lead + at - 1)
                 for name, value in pairs:
                     if name == "PIPX_DEFAULT_PYTHON" and (
                         exported == "unexport"
                         or not isinstance(value, str)
-                        or not _chooses(value, setup_ids, before)
+                        or not _chooses(value, setup_ids, view_at(lead + at - 1, _names_in(value)))
                     ):
                         removals.append(here)
-                    records.append((name, value, here, exported))
-                view = view_at(lead + at - 1)
+                    record(name, value, here, exported)
+                view = view_at(lead + at - 1, marks) if marks else {}
                 for name in marks:
                     if name == "PIPX_DEFAULT_PYTHON" and exported == "unexport":
                         removals.append(here)
                     if name in view:
-                        records.append((name, view[name], here, exported))
+                        record(name, view[name], here, exported)
                 continue
-            view = view_at(lead + at)
+            view = view_at(lead + at, _names_in(found[0]))
             local = _local_default_python(found["before"], setup_ids, view)
             if not (
                 _pipx_option_chooses_python(found["words"], setup_ids, view)
@@ -4715,6 +4827,152 @@ def test_round_three_every_reader_refuses_these_forms(text):
         read_jobs(text)
 
 
+# The pre-PR review of round 3 (HCW-HybridCloudWorks#1707): the same cases as the website's
+# scripts/workflow-runtime-setup.test.mjs, in the same order.
+@pytest.mark.parametrize(
+    ("line", "kind", "found"),
+    [
+        # 1: a quoted assignment given to env or sudo is still an assignment.
+        ('env "PATH=$PATH" python3 x', "python", True),
+        ('sudo env "PATH=$PATH" python3 x', "python", True),
+        ("env 'A=1' node x", "node", True),
+        ("sudo -E 'A=1' node x", "node", True),
+        ('"A=1" node x', "node", False),
+        ("env -S 'A=1 node x'", "node", True),
+        ("echo env 'A=1' node x", "node", False),
+        # 5: empty quotes, escapes, builtin and a name that ends at an operator.
+        ("''node x", "node", True),
+        ('""node x', "node", True),
+        ('n""ode x', "node", True),
+        ("\\node x", "node", True),
+        ("n\\ode x", "node", True),
+        ("'' node x", "node", False),
+        ("'node'&& echo", "node", True),
+        ("'npx'|cat", "node", True),
+        ("'node';", "node", True),
+        ("builtin eval node x", "node", True),
+        ("\\eval node x", "node", True),
+        ("python3<<EOF\nx\nEOF", "python", True),
+        ("(cd a && npm)", "node", True),
+        ("x=$(node)", "node", True),
+        ("node;", "node", True),
+        ("python3>log", "python", True),
+        ('case "$k" in node) echo ;; esac', "node", False),
+        ("node|npm) echo hi ;;", "node", False),
+        ("node) node x ;;", "node", True),
+        ("nodejs x", "node", False),
+        ("echo node;", "node", False),
+    ],
+)
+def test_round_three_review_forms_are_read_as_the_shell_reads_them(line, kind, found):
+    assert runs_runtime(line, kind) is found
+
+
+@pytest.mark.parametrize(
+    ("line", "kind", "found"),
+    [
+        # 2: only the outer PATH, passed on by env after sudo, keeps the set-up runtime.
+        ("sudo env PATH=$PATH python3 x", "python", False),
+        ('sudo env "PATH=$PATH" python3 x', "python", False),
+        ('sudo env PATH="${PATH}" python3 x', "python", False),
+        ("sudo env PATH=$PATH:/usr/bin python3 x", "python", False),
+        ("sudo env PATH=/usr/bin:$PATH python3 x", "python", True),
+        ("sudo env PATH=/usr/bin python3 x", "python", True),
+        ("sudo bash -c 'env PATH=$PATH node x'", "node", True),
+        ("sudo bash -c 'sudo env PATH=$PATH node x'", "node", False),
+        ("env PATH=$PATH sudo python3 x", "python", True),
+        ("env PATH=/usr/bin node x", "node", False),
+    ],
+)
+def test_round_three_review_sudo_passes_the_set_up_runtime_only_with_the_outer_path(
+    line, kind, found
+):
+    assert runs_through_sudo(line, kind) is found
+
+
+@pytest.mark.parametrize(
+    ("run", "env", "ids", "flagged"),
+    [
+        # 1: a quoted assignment given to env or sudo is still an assignment.
+        ('env "A=1" pipx run x', {}, [], True),
+        ('env "PIPX_DEFAULT_PYTHON=/usr/bin/python3" pipx run x', {}, [], True),
+        ('env "PIPX_DEFAULT_PYTHON=/opt/py/bin/python3" pipx run x', {}, [], False),
+        ('sudo env "PIPX_DEFAULT_PYTHON=/opt/py/bin/python3" pipx run x', {}, [], False),
+        ("env 'PIPX_DEFAULT_PYTHON=' pipx run x", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, [], True),
+        # 4: an unset pythonLocation is not setup-python's any more.
+        ('unset pythonLocation; pipx run --python "$pythonLocation/bin/python3" x', {}, [""], True),
+        (
+            '(unset pythonLocation); pipx run --python "$pythonLocation/bin/python3" x',
+            {},
+            [""],
+            False,
+        ),
+        ('pipx run --python "$pythonLocation/bin/python3" x', {}, [""], False),
+    ],
+)
+def test_round_three_review_pipx_forms(run, env, ids, flagged):
+    assert pipx_without_python(run, env, set(ids)) is flagged
+
+
+# 1 and 7: a quoted assignment given to env does not hide the command after it, and a step whose shell is run through sudo runs its text under sudo.
+ROUND_THREE_REVIEW_SUDO_YAML = 'on: push\njobs:\n  quoted-no-set-up:\n    runs-on: ubuntu-26.04\n    steps:\n      - name: Run\n        run: sudo env "PATH=$PATH" python3 x\n  env-quoted-no-set-up:\n    runs-on: ubuntu-26.04\n    steps:\n      - name: Run\n        run: env "PATH=$PATH" python3 x\n  quoted-set-up:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        run: sudo env "PATH=$PATH" python3 x\n  sudo-shell:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        shell: sudo bash -e {0}\n        run: python3 x\n  sudo-default-shell:\n    runs-on: ubuntu-26.04\n    defaults:\n      run:\n        shell: sudo bash -e {0}\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        run: python3 x\n  sudo-path-shell:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        shell: sudo env PATH="$PATH" bash -e {0}\n        run: python3 x\n'
+
+
+def test_round_three_review_sudo_workflow():
+    jobs = read_jobs(ROUND_THREE_REVIEW_SUDO_YAML)
+    assert unset_steps("x.yml", jobs, {}) == [
+        "x.yml > quoted-no-set-up > Run > python",
+        "x.yml > env-quoted-no-set-up > Run > python",
+        "x.yml > sudo-shell > Run > python",
+        "x.yml > sudo-default-shell > Run > python",
+    ]
+    assert pipx_problems("x.yml", jobs) == []
+
+
+# reader alignment: a step's keys after `-   `, and a matrix list at its key's indent.
+ROUND_THREE_REVIEW_YAML_YAML = 'on: push\njobs:\n  spaced-dash:\n    runs-on: ubuntu-26.04\n    steps:\n      -   name: Run\n          run: node x\n  matrix-at-key:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        py:\n        - "3.15"\n    steps:\n      - uses: astral-sh/setup-uv@abc\n        with:\n          python-version: ${{ matrix.py }}\n      - name: Run\n        run: uv run x.py\n'
+
+
+def test_round_three_review_yaml_workflow():
+    jobs = read_jobs(ROUND_THREE_REVIEW_YAML_YAML)
+    assert unset_steps("x.yml", jobs, {}) == ["x.yml > spaced-dash > Run > node"]
+    assert pipx_problems("x.yml", jobs) == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "jobs:\n  j:\n    runs-on: ubuntu-26.04\n    steps:\n      - run: &a node x\n      - run: *a\n",
+        "jobs:\n  j:\n    runs-on: ubuntu-26.04\n    steps:\n      - run: !!str node x\n",
+        "jobs:\n  j:\n    runs-on: ubuntu-26.04\n    steps:\n      - env:\n          P: &p /usr/bin/python3\n        run: echo\n",
+        "jobs:\n  j:\n    runs-on: ubuntu-26.04\n    steps:\n      - env:\n          P: !!str /usr/bin/python3\n        run: echo\n",
+        "jobs:\n  j:\n    runs-on: ubuntu-26.04\n    steps:\n      - 'run': x\n",
+        "jobs:\n  j:\n    runs-on: ubuntu-26.04\n    steps:\n      - run : x\n",
+        "jobs:\n  j:\n    runs-on: ubuntu-26.04\n    steps:\n      - run:\n          node x\n",
+        "jobs:\n  j:\n    runs-on: ubuntu-26.04\n    steps:\n      - env: {'A': x}\n        run: echo\n",
+        'jobs:\n  j:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        py:\n          - "3.15"#x\n    steps:\n      - run: echo\n',
+    ],
+)
+def test_round_three_review_readers_refuse_anchors_aliases_tags_and_unreadable_forms(text):
+    with pytest.raises(AssertionError):
+        read_jobs(text)
+
+
+def test_round_three_review_a_long_quoted_string_and_a_long_script_read_quickly():
+    """The review found 3,000 substitutions in one string took 31 seconds, and 4,000 such lines 13 seconds."""
+    started = time.perf_counter()
+    quoted = 'echo "' + "$(true) x; " * 3000 + '"'
+    lines = (
+        "\n".join(f"unset P{i}; export -n Q{i}; eval 'echo {i}'" for i in range(4000))
+        + "\npipx run x"
+    )
+    for run in (quoted, lines):
+        runs_runtime(run, "node")
+        runs_through_sudo(run, "python")
+        pipx_without_python(run, {"PIPX_DEFAULT_PYTHON": "/opt/py/bin/python3"})
+    assert time.perf_counter() - started < 5
+
+
 FILES = sorted(p for p in WORKFLOWS.iterdir() if p.suffix in (".yml", ".yaml"))
 # The workflows and the composite actions (see `sources`), each with its jobs, read once for every test below.
 SOURCES = sources(ROOT)
@@ -4750,8 +5008,19 @@ def test_every_set_up_step_asks_for_the_floor_or_newer():
     assert [problem for problem in FLOOR_PROBLEMS if problem not in BELOW_FLOOR_ALLOWED] == []
 
 
+# What a reported step needs, for either of the two reasons a step is reported (round 3 review,
+# HCW-HybridCloudWorks#1707).
+UNSET_HELP = (
+    "Each step listed runs Node.js or Python on the runner's own version. Either no set-up step is sure to have run "
+    "before it: add actions/setup-node or actions/setup-python (or astral-sh/setup-uv with a python-version) before "
+    "it, under the same if: as the step. Or it runs the runtime through sudo, which looks commands up on its own fixed "
+    'list of folders (secure_path) and so finds the runner\'s: write `sudo env "PATH=$PATH" ...` so the set-up version '
+    "is found. A step kept that way on purpose goes in RUNNER_DEFAULT_ALLOWED with its reason."
+)
+
+
 def test_every_step_that_runs_node_or_python_comes_after_its_version_is_set_up():
-    assert [entry for entry in UNSET if entry not in RUNNER_DEFAULT_ALLOWED] == []
+    assert [entry for entry in UNSET if entry not in RUNNER_DEFAULT_ALLOWED] == [], UNSET_HELP
 
 
 def test_every_step_that_runs_pipx_chooses_its_python():
