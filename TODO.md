@@ -2628,7 +2628,8 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
 ### T-743 — Node.js 26 and Python 3.15, the HCW runtime floors (HCW-HybridCloudWorks#1707)
 - **Status:** Done 2026-11-12 (and (6) to (9) on 2026-11-13, (10) on 2026-11-14), except items (4) and (5), which are
   open. The HCW website's version floors (`scripts/version-floors.json` in saulpatinojr/HCW-HybridCloudWorks, issue 1707
-  there) ask for the newest Node.js LTS line (26, floor 26.11.0) and the newest Python line (3.15, floor 3.15.0). This
+  there) ask for the newest Node.js LTS line (26, floor 26.11.0) and the newest Python line (3.15, floor 3.15.2, the
+  line's newest patch, since the owner's decision of 2026-11-14; it was 3.15.0 under the earlier N-2 rule). This
   repository ran Node.js 24 in the web image and Python 3.14 everywhere.
 - **(1) Node.js 26.** The six `FROM` lines of `apps/network-assessment-web/Dockerfile` are
   `node:26-trixie-slim@sha256:e6bedef2…` (Node 26.13.1, built 2026-11-11, Node's security release of that day; the
