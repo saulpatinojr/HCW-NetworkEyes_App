@@ -19,7 +19,7 @@ claimed anew). Rows checked since: T-728 and T-730 on 2026-10-24; T-721, T-722, 
 | [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-419 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements + appliance migration | T-501 – T-509 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
-| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-743 |
+| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-744 |
 
 ---
 
@@ -2756,3 +2756,41 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   the install of each image's dependency set ran on CPython 3.15.2; the web checks ran on Node.js 26. The pull
   request's `Docker Build Smoke Test`, `Lab Boundary Image` and `Image Scan (Trivy)` jobs and the next `200` run on
   `main` are the proof for the images.
+
+### T-744 — The web image checks the Prisma engines it downloads against recorded fingerprints
+- **Status:** Done 2026-11-14 (owner decision of that day, "pin the Prisma engines").
+- **Why.** `@prisma/engines` 6.19.3's install script (and the explicit
+  `node node_modules/@prisma/engines/scripts/postinstall.js` of the `migrator-deps` stage) downloads the query engine
+  library and the schema engine for the platform from `binaries.prisma.sh` (or `PRISMA_ENGINES_MIRROR`), at the engine
+  commit `@prisma/engines-version` names, and checks them against `.sha256` files served by the same host. That
+  catches corruption, not substitution, and `package-lock.json` pins the npm tarballs, not these downloads. The
+  `allowScripts` approvals of T-743 (5) stay name-only for the same reason: they could not cover the downloads either.
+- **What.** `apps/network-assessment-web/prisma-engines.sha256` (`sha256sum -c` format, with the `@prisma/engines`
+  version, engine commit and binary target in comment lines) records the two engines of `debian-openssl-3.0.x`, the
+  only target the images build. `scripts/check-prisma-engines.sh` (POSIX sh and coreutils only, so no code from
+  `node_modules` takes part) runs `sha256sum -c --strict` in `node_modules/@prisma/engines`, then checks every other
+  Prisma engine file under `node_modules` against the fingerprint for its name, and fails on a file whose name the
+  list does not hold. The `deps` stage runs it after `npm ci`, the `builder` after `prisma generate` (the runner copies
+  the builder's `.prisma` and `@prisma`), and `migrator-deps` after its `prisma generate`; each replaces a `test -f`
+  presence check (the `.prisma/client` presence tests stay). Engine files seen in the stages: `@prisma/engines/`
+  `libquery_engine-debian-openssl-3.0.x.so.node` and `schema-engine-debian-openssl-3.0.x`, and after
+  `prisma generate` copies of the query engine in `.prisma/client/` and in `prisma/` (the CLI package).
+  `tests/unit/test_migrator_image.py` pins the wiring; `lib/prisma-engines.test.ts` fails when the file names another
+  `@prisma/engines` version or engine commit than `package-lock.json`.
+- **After a Prisma update** (a Dependabot pull request that moves `@prisma/engines`), from
+  `apps/network-assessment-web`, in bash or PowerShell, and commit the file to the same branch:
+  `node scripts/prisma-engine-hashes.mjs --write`. The script reads the version and engine commit from
+  `package-lock.json` (no install needed), downloads both engines from `binaries.prisma.sh` itself (never from a
+  mirror), checks each against the published `.gz.sha256` and `.sha256`, and, where `npm ci` installed the same engine
+  in `node_modules`, against that file too; any disagreement stops it and nothing is written. `--check` only compares.
+  The new fingerprints are reviewed in the pull request like any other change.
+- **Limits.** The fingerprints are taken from Prisma's host when recorded (trust on first use): the check stops a
+  later substitution (a changed mirror, host or download), not a bad file already published at recording time. An
+  arm64 image would fetch `linux-arm64-openssl-3.0.x` and need its own lines (the test pins one target today).
+- **Checked here (2026-11-14):** the two engines downloaded from `binaries.prisma.sh` for commit
+  `c2990dca591cba766e3b7ef5d9e8a84796e47ab7` match the published `.sha256` and `.gz.sha256` files and a local
+  `npm ci` on Node.js 26.13.1; locally built `deps` (with the builder's `prisma generate` added in a scratch copy) and
+  `migrator-deps` stages printed the same hashes for every engine file and passed the check; a scratch copy with one
+  wrong fingerprint failed the `migrator-deps` build. The full `builder`, `migrator` and `runner` targets were not
+  built here (disk space); the pull request's `Image Scan (Trivy)` job builds the `migrator` and `runner` targets
+  (and with them `deps`, `builder` and `migrator-deps`).
