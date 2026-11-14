@@ -2655,7 +2655,7 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   and build PyYAML from its hash-checked source archive with it (`--no-build-isolation-package pyyaml`), as plain
   Python (`PYYAML_FORCE_LIBYAML=0`; the builder stages have no C compiler and no code here imports `yaml.CLoader`).
   Remove both once a PyYAML release ships cp315 wheels.
-- **(4) Code change made 2026-11-14; the ruleset step is the owner's: drop Python 3.1- **(4) Done 2026-11-14: drop Python 3.14.** On 2026-11-14 the owner decided that every HCW Python repository
+- **(4) Done 2026-11-14: drop Python 3.14.** On 2026-11-14 the owner decided that every HCW Python repository
   requires Python 3.15.2, the latest stable 3.15 release. The owner first removed `Unit Tests (Python 3.14)` from the
   "Protect main" ruleset on its settings page (a pull request waits for a required check that never comes, and `390`
   runs from `main` only, whose list still named it); read back at 12:45 UTC, the ruleset requires
@@ -2665,7 +2665,7 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   `BELOW_FLOOR_ALLOWED` in `tests/security/test_workflow_runtime_setup.py` (now empty). Before this, the unit tests ran
   on both 3.14 and 3.15 because the 3.14 check was required and renaming it would have blocked every pull request;
   `Unit Tests (Python 3.15)` was added to `REQUIRED_CHECKS` and applied first for that reason.
--codes
+- **(5) Open: two small follow-ups.** (a) The lab stage of the root `Dockerfile` hard-codes
   `PYTHONPATH=/install-lab/lib/python3.15/site-packages`, so the next Python minor must change it by hand; derive it
   at build time instead (for example with Python's `sysconfig.get_path("purelib", vars={"base": "/install-lab"})`).
   (b) npm 11, which Node.js 26 bundles, warns on `npm ci` that four packages have install scripts not yet covered by
@@ -2677,9 +2677,10 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   `python`, `pip` or `uv` before a set-up step that is sure to have run, or a set-up step that asks for less than the
   floor. It found two gaps, both fixed: `verify` in `310` ran `python3` through `scripts/ci/find_release_image.sh`
   with no set-up step (now Python 3.15), and the set-up step of `secret-scan` in `300` lacked the `if: always()` of the
-  summary step that uses it. The deliberate exceptions in (1) and (2) are listed in the test, each with its reason (the 3.14 leg of (4)
-  was listed too until (4) removed it on 2026-11-14). ruff now agrees everywhere at 0.17.4 (`pyproject.toml` floor, `uv.lock`, the `Lint & Format`
-  job and the pre-commit hook; it had been 0.17.2, 0.17.3, 0.17.1 and 0.15.10).
+  summary step that uses it. The deliberate exceptions in (1) and (2) are listed in the test, each with its reason
+  (the 3.14 leg of (4) was listed too until (4) removed it on 2026-11-14). ruff now agrees everywhere at 0.17.4
+  (`pyproject.toml` floor, `uv.lock`, the `Lint & Format` job and the pre-commit hook; it had been 0.17.2, 0.17.3,
+  0.17.1 and 0.15.10).
 - **(7) Done 2026-11-13: the runtime test reads more command forms.** It now also counts `nohup`, `stdbuf`, `timeout`
   with its duration and a `--` after a wrapper's options (the website copy's list), the script of `bash -c` / `sh -c`
   run on the runner (not one handed to a container), `yarn`, `pnpm`, `pytest` and `pipx`, and it no longer mistakes
