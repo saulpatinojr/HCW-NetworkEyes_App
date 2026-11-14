@@ -54,7 +54,8 @@ them). A wrapper's long option may be shortened as far as it stays unambiguous, 
 (`timeout --kill=5`, `nice --adj 5`); an ambiguous one is read as taking no value. A long or short option that takes a
 value takes the next word even when it starts with `-` (`timeout --kill-after -5`, `nice -n -5`). It counts with a
 path in front too (`/usr/bin/python3`, `./venv/bin/python`, `/usr/bin/env node`), because a path to the runner's
-interpreter is still the runner's, and `python3.15.2` counts like `python3`. A `$'...'` string is decoded as the shell
+interpreter is still the runner's, and a versioned name at or above the floor (`python3.15`, or the floor's own patch)
+counts like `python3`. A `$'...'` string is decoded as the shell
 decodes it (`\\xHH`, `\\uHHHH`, `\\UHHHHHHHH`, octal `\\NNN`, `\\n` and the like) and read as one word, so
 `$'\\x70ython3'` is `python3` while `$'node\\x20x'` is the one word `node x`. A heredoc's body is read only for the
 commands the shell runs in it: `$(...)` and backticks in the body of a heredoc whose delimiter is not quoted or escaped
@@ -128,12 +129,21 @@ the command after it (`coproc node x.js`, `coproc { python3 x; }`); a NAME may c
 HCW-MigrateOrchestrator_AddOn#77). A step's `shell:` is read as the runner passes it on, not as a shell would read it:
 the runner splits the program off at the first space and hands the rest to .NET, which drops double quotes and fills
 nothing in (actions/runner ScriptHandler.cs and ScriptHandlerHelpers.cs `ParseShellOptionString`, dotnet/runtime
-ProcessUtils.Unix.cs `GetNextArgument`), so `shell: sudo env PATH="$PATH" bash -e {0}` gives env the text `PATH=$PATH`,
-which replaces PATH, and a `$X` in a `PIPX_DEFAULT_PYTHON=` there chooses nothing (Copilot on
-HCW-MigrateOrchestrator_AddOn#77; see `literal_shell`). Python's floor is the newest patch of its line, 3.15.2, by the
-owner's decision of 2026-11-14, so a set-up step that asks for 3.15.0 or 3.15.1, and a command named `python3.15.1`, are
-below it, while a line-only `3.15` still stands for the newest and passes. A GitHub expression in `shell:` is read as
-one word, as GitHub would fill it in, which no page of GitHub's documentation was found to confirm for `shell:`.
+ProcessUtils.Unix.cs `GetNextArgument`; see `literal_shell`). So `shell: sudo env PATH="$PATH:/usr/bin" bash -e {0}`
+gives env the text `$PATH:/usr/bin`, and the step's `python3` is the runner's own from /usr/bin, while a `$X` in a
+`PIPX_DEFAULT_PYTHON=` there chooses nothing (Copilot on HCW-MigrateOrchestrator_AddOn#77). The plain `env PATH="$PATH"
+bash -e {0}` is reported too, conservatively: env cannot find bash on the PATH `$PATH` and the step stops (`env: 'bash':
+No such file or directory`, exit 127) before anything runs. Python's floor is the newest patch of its line (3.15.2 on
+2026-11-14), by the owner's decision of 2026-11-14, so a set-up step that asks for an earlier patch of the line, or a
+command named by one (`python3.15.1` that day), is below it, while a line-only `3.15` still stands for the newest and
+passes. The floor now moves with every Python patch release: PYTHON_FLOOR mirrors the website's
+scripts/version-floors.json, and the tests here that name the floor's boundary versions (3.15.0, 3.15.1, 3.15.2, 3.15.3,
+written out, where the website builds them from its floor) move with it. A GitHub expression in `shell:` is read as one
+word, as GitHub fills it in. GitHub's contexts reference
+(https://docs.github.com/en/actions/reference/workflows-and-actions/contexts) lists contexts for
+`jobs.<job_id>.defaults.run` only (github, needs, strategy, matrix, env, vars, inputs); a step's `shell:` and the
+workflow-level `defaults.run` allow none, and the workflow schema (actions/languageservices, workflow-v1.0.json) refuses
+an expression there, so only a job's `defaults.run.shell` is filled in before the runner sees it.
 
 Limits, known and kept: a composite action whose set-up step takes its version from `${{ inputs.* }}` cannot be read,
 so it fails closed and needs an entry in BELOW_FLOOR_ALLOWED; these are reported though they need not be, which can
@@ -150,7 +160,10 @@ sets in an earlier command (`export PATH=/usr/bin; python3 x`, or `PATH=/usr/bin
 written to `$GITHUB_PATH` or `$GITHUB_ENV` by an earlier step; the commands of a `case` clause whose pattern holds
 parentheses (`@(a|b))`, `?(a))`) or an escaped `)` (`a\\))`, or whose `case` has a subject `$(...)` with spaces or
 `in` on the next line; and a set-up version `3` or `3.x` (a major line only), which reads as at the floor. `unset -n
-P` is read as unsetting P, which is what bash does unless P is a name reference.
+P` is read as unsetting P, which is what bash does unless P is a name reference. A job's `defaults.run.shell` whose
+expression GitHub fills in with a value holding spaces is split there by the runner, but read here as one word. The
+runner fills `{0}` in with .NET's `string.Format`, where `{{` and `}}` stand for one brace and any other `{...}` stops
+the step; this check only replaces `{0}`.
 
 A composite action (`.github/actions/<name>/action.yml`, `runs: using: composite`) is checked like a job of its own,
 named `composite`, so its keys read `.github/actions/<name>/action.yml > composite > step name > runtime`. Its steps
@@ -699,7 +712,9 @@ SETUP = {
 SETUP_UV = re.compile(r"^astral-sh/setup-uv@")
 
 # The lowest versions a set-up step may ask for. The program's floors are kept in scripts/version-floors.json in
-# HCW-HybridCloudWorks; change them there first, then here.
+# HCW-HybridCloudWorks; change them there first, then here. Python's is its line's newest patch since 2026-11-14
+# (HCW-HybridCloudWorks#1707), so it moves with every Python patch release, and so do the round-4 tests that name the
+# floor's boundary versions (3.15.0 to 3.15.3).
 PYTHON_FLOOR = (3, 15, 2)
 NODE_FLOOR = (26, 11, 0)
 FLOORS = {"python": PYTHON_FLOOR, "node": NODE_FLOOR}
@@ -5485,9 +5500,9 @@ ROUND_THREE_REVIEW_SUDO_YAML = 'on: push\njobs:\n  quoted-no-set-up:\n    runs-o
 
 def test_round_three_review_sudo_workflow():
     jobs = read_jobs(ROUND_THREE_REVIEW_SUDO_YAML)
-    # Since round 4 (HCW-HybridCloudWorks#1707) `sudo-path-shell` is reported: its `shell:` gives env the text
-    # `PATH=$PATH`, since the runner fills nothing in (see `literal_shell`), so env replaces PATH and the set-up Python
-    # is not found.
+    # Since round 4 (HCW-HybridCloudWorks#1707) `sudo-path-shell` is reported, conservatively: its `shell:` gives env
+    # the text `PATH=$PATH`, since the runner fills nothing in (see `literal_shell`), so env replaces PATH, cannot find
+    # bash on it and stops the step (exit 127).
     assert unset_steps("x.yml", jobs, {}) == [
         "x.yml > quoted-no-set-up > Run > python",
         "x.yml > env-quoted-no-set-up > Run > python",
@@ -5500,10 +5515,10 @@ def test_round_three_review_sudo_workflow():
 
 # Copilot on the round-3 ports (HCW-HybridCloudWorks#1707): under a `shell:` run through sudo the step's `$PATH` is
 # sudo's `secure_path`, so a `sudo env "PATH=$PATH"` in its text passes that on, not the set-up Python. The `path-shell`
-# job is reported too since round 4 (HCW-HybridCloudWorks#1707): the runner starts the shell command directly and passes
-# `$PATH` on as text (actions/runner ScriptHandler.cs, see `literal_shell`), so env sets PATH to the text `$PATH` and
-# the set-up Python is not on it. Until round 4 the check read it as passing on the PATH the step started with, and did
-# not report it.
+# job is reported too since round 4 (HCW-HybridCloudWorks#1707), conservatively: the runner starts the shell command
+# directly and passes `$PATH` on as text (actions/runner ScriptHandler.cs, see `literal_shell`), so env sets PATH to the
+# text `$PATH`, cannot find bash on it and stops the step (exit 127). Until round 4 the check read it as passing on the
+# PATH the step started with, and did not report it.
 COPILOT_PORTS_SUDO_YAML = (
     "on: push\njobs:\n  sudo-shell:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n"
     '        with: { python-version: "3.15" }\n      - name: Run\n        shell: sudo bash -e {0}\n'
@@ -6255,14 +6270,18 @@ def test_round_four_a_shell_is_the_words_the_runner_passes_on(shell, words):
     assert step_shell({"shell": shell, "run": "x"}, {}) == words
 
 
-LITERAL_SHELL_YAML = 'on: push\njobs:\n  path-shell:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        shell: sudo env PATH="$PATH" bash -e {0}\n        run: python3 x\n  env-path-shell:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        shell: env PATH="$PATH" bash -e {0}\n        run: python3 x\n  plain-shell:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        shell: bash -e {0}\n        run: python3 x\n  location-pipx:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        shell: env PIPX_DEFAULT_PYTHON=$pythonLocation/bin/python3 bash -e {0}\n        run: pipx run x\n  double-quoted-pipx:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        shell: env PIPX_DEFAULT_PYTHON="/opt/py/bin/python3" bash -e {0}\n        run: pipx run x\n  single-quoted-pipx:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        shell: env \'PIPX_DEFAULT_PYTHON=/opt/py/bin/python3\' bash -e {0}\n        run: pipx run x\n'
+LITERAL_SHELL_YAML = 'on: push\njobs:\n  path-shell:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        shell: sudo env PATH="$PATH" bash -e {0}\n        run: python3 x\n  env-path-shell:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        shell: env PATH="$PATH" bash -e {0}\n        run: python3 x\n  plain-shell:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        shell: bash -e {0}\n        run: python3 x\n  location-pipx:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        shell: env PIPX_DEFAULT_PYTHON=$pythonLocation/bin/python3 bash -e {0}\n        run: pipx run x\n  double-quoted-pipx:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        shell: env PIPX_DEFAULT_PYTHON="/opt/py/bin/python3" bash -e {0}\n        run: pipx run x\n  single-quoted-pipx:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        shell: env \'PIPX_DEFAULT_PYTHON=/opt/py/bin/python3\' bash -e {0}\n        run: pipx run x\n  appended-path-shell:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        shell: sudo env PATH="$PATH:/usr/bin" bash -e {0}\n        run: python3 x\n'
 
 
+# `appended-path-shell` is the real risk: env gets the text `$PATH:/usr/bin`, finds bash in /usr/bin, and the step's
+# python3 is the runner's own. `path-shell` and `env-path-shell` are reported conservatively: env cannot find bash on
+# the PATH `$PATH`, so the step stops (exit 127) before anything runs.
 def test_round_four_a_literal_path_or_pipx_setting_in_a_shell():
     jobs = read_jobs(LITERAL_SHELL_YAML)
     assert unset_steps("x.yml", jobs, {}) == [
         "x.yml > path-shell > Run > python",
         "x.yml > env-path-shell > Run > python",
+        "x.yml > appended-path-shell > Run > python",
     ]
     assert pipx_problems("x.yml", jobs) == [
         "x.yml > location-pipx > Run > pipx",
@@ -6270,7 +6289,9 @@ def test_round_four_a_literal_path_or_pipx_setting_in_a_shell():
     ]
 
 
-# Owner decision 2026-11-14: Python's floor is the newest patch of the newest line (3.15.2), not N-2 (3.15.0).
+# Owner decision 2026-11-14: Python's floor is the newest patch of the newest line (3.15.2 that day), not N-2
+# (3.15.0). The cases name the floor's boundary versions as they stood that day, so they move with PYTHON_FLOOR; the
+# website builds the same cases from its floor.
 @pytest.mark.parametrize(
     ("version", "kind", "below"),
     [
