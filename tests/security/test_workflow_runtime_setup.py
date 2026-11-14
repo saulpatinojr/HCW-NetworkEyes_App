@@ -1775,6 +1775,16 @@ def _sudo_path(before: str) -> bool | None:
 PASSES_PATH = re.compile(r"PATH=(?:\$PATH|\$\{PATH\})(?::|$)")
 
 
+def _under(local: bool | None, outer: bool | None) -> bool | None:
+    """The PATH a command finds its runtime on, from what the words in front of it do (`local`, see `_sudo_path`) and
+    the PATH of the script it is in (`outer`). `$PATH` in `env PATH=$PATH` is that script's PATH, so passing it on
+    under a sudo'd script still passes sudo's `secure_path`: `sudo bash -c 'sudo env PATH=$PATH node x'` runs the
+    runner's own Node.js (Copilot on the round-3 ports, HCW-HybridCloudWorks#1707)."""
+    if local is None:
+        return outer
+    return local or outer is True
+
+
 def runs_through_sudo(run: str | None, kind: str, inherited: bool | None = None) -> bool:
     """True when a run script runs the runtime through `sudo` without passing PATH on (see `_sudo_path`): `sudo python3
     x.py`, `sudo -E node x`, `sudo bash -c 'node x'`. sudo's `secure_path` holds the runner's own Node.js and Python
@@ -1787,15 +1797,13 @@ def runs_through_sudo(run: str | None, kind: str, inherited: bool | None = None)
     for raw in _shell_text(run or "", values=True).split("\n"):
         line = raw.strip()
         if line.startswith("\x01"):
-            local = _sudo_path(line[1:])
-            stack.append(stack[-1] if local is None else local)
+            stack.append(_under(_sudo_path(line[1:]), stack[-1]))
             continue
         if line.startswith("\x02"):
             stack = stack[:-1] if len(stack) > 1 else stack
             continue
         for found in _runtime_commands(line, kind):
-            local = _sudo_path(found["before"])
-            if (stack[-1] if local is None else local) is True:
+            if _under(_sudo_path(found["before"]), stack[-1]) is True:
                 return True
     return False
 
@@ -4992,7 +5000,13 @@ def test_round_three_review_forms_are_read_as_the_shell_reads_them(line, kind, f
         ("sudo env PATH=/usr/bin:$PATH python3 x", "python", True),
         ("sudo env PATH=/usr/bin python3 x", "python", True),
         ("sudo bash -c 'env PATH=$PATH node x'", "node", True),
-        ("sudo bash -c 'sudo env PATH=$PATH node x'", "node", False),
+        # Copilot on the round-3 ports: inside a sudo'd script `$PATH` is already sudo's `secure_path`.
+        ("sudo bash -c 'sudo env PATH=$PATH node x'", "node", True),
+        ("sudo bash -c 'sudo env PATH=$PATH python3 x'", "python", True),
+        ("sudo bash -c 'env PATH=$PATH sudo env PATH=$PATH node x'", "node", True),
+        ("sudo bash -c 'bash -c \"sudo env PATH=$PATH node x\"'", "node", True),
+        ("sudo env PATH=$PATH bash -c 'sudo env PATH=$PATH node x'", "node", False),
+        ("sudo env PATH=$PATH bash -c 'sudo bash -c \"sudo env PATH=$PATH node x\"'", "node", True),
         ("env PATH=$PATH sudo python3 x", "python", True),
         ("env PATH=/usr/bin node x", "node", False),
     ],
@@ -5040,6 +5054,23 @@ def test_round_three_review_sudo_workflow():
         "x.yml > sudo-default-shell > Run > python",
     ]
     assert pipx_problems("x.yml", jobs) == []
+
+
+# Copilot on the round-3 ports (HCW-HybridCloudWorks#1707): under a `shell:` run through sudo the step's `$PATH` is
+# sudo's `secure_path`, so a `sudo env "PATH=$PATH"` in its text passes that on, not the set-up Python.
+COPILOT_PORTS_SUDO_YAML = (
+    "on: push\njobs:\n  sudo-shell:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n"
+    '        with: { python-version: "3.15" }\n      - name: Run\n        shell: sudo bash -e {0}\n'
+    '        run: sudo env "PATH=$PATH" python3 x\n  path-shell:\n    runs-on: ubuntu-26.04\n    steps:\n'
+    '      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n'
+    '        shell: sudo env PATH="$PATH" bash -e {0}\n        run: sudo env "PATH=$PATH" python3 x\n'
+)
+
+
+def test_copilot_ports_a_sudo_shell_passes_on_only_its_own_secure_path():
+    assert unset_steps("x.yml", read_jobs(COPILOT_PORTS_SUDO_YAML), {}) == [
+        "x.yml > sudo-shell > Run > python"
+    ]
 
 
 # reader alignment: a step's keys after `-   `, and a matrix list at its key's indent.
