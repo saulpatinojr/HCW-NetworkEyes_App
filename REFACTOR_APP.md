@@ -84,7 +84,7 @@ Package contract:
 | Import name | `network_assessment_azure_engine` |
 | Base dependencies | `pydantic>=2.13,<3` only |
 | Extras | `[azure]`: `azure-identity`, `azure-mgmt-resourcegraph`, `azure-mgmt-network`, `azure-mgmt-monitor<7`, `azure-monitor-query<3`, `azure-mgmt-costmanagement<5`, `azure-mgmt-loganalytics<15`, `azure-mgmt-security<8` (bounds as `pyproject.toml` lines 71 to 82 already justify) |
-| `requires-python` | `>=3.14` (the images already run `python:3.14-slim`; CI already tests 3.14 at `300-test-codebase.yml` line 137) |
+| `requires-python` | `>=3.15.2,<3.16` since 2026-11-14 (owner decision: the latest stable 3.15 release; the images run `python:3.15.2-slim-trixie`). It was `>=3.14` when this plan was written. |
 | Public symbols | `TOPOLOGY_MODEL_VERSION`, `RULES_VERSION`, `RULES`, `AzureTopology`, `AzureSubscriptionTopology`, `Finding`, `FindingsReport`, `ObservedState`, `evaluate(topology) -> FindingsReport`, `normalize_resource_graph(rows) -> AzureTopology`, `render_markdown(report)`, `render_json(report)`, `classify_topology(topology)` |
 | Release tag | `engine-v<semver>` on the Core; image tags stay `v*.*.*` |
 
@@ -223,7 +223,7 @@ Rule mapping (ids, severities and evidence as the AddOn design table B.4; the Co
 **Exact change.**
 
 ```
-packages/network-assessment-azure-engine/pyproject.toml   # name, requires-python >=3.14, dependencies = ["pydantic>=2.13,<3"], optional azure extra (section 3)
+packages/network-assessment-azure-engine/pyproject.toml   # name, requires-python >=3.15.2,<3.16, dependencies = ["pydantic>=2.13,<3"], optional azure extra (section 3)
 packages/network-assessment-azure-engine/network_assessment_azure_engine/
   __init__.py            # exports of section 3; __version__
   model/azure.py, model/common.py        # from network_assessment/core/topology/{azure,common}.py (A); TOPOLOGY_MODEL_VERSION = "1.3.0"
@@ -460,7 +460,7 @@ def redact_exception(exc: BaseException) -> str:
 
 **Required behavior.** One root `Dockerfile` builds the appliance image and a build-only `lab` target. The `lab` target installs the engine without `[azure]`, copies no `apps/`, runs no server, and its `CMD` is the boundary proof (exit 0 only when `azure` is not importable); it is built in CI and never pushed. The deployable lab build, its HTTP contract (`/api/health` with `edition: "lab"`, uploads, pane) and the checks on it belong solely to the AddOn, which builds `docker.io/hybridcloudworks/hcw-addon-network-assessment` from its own source on the published engine using this same Dockerfile pattern.
 
-**Exact change.** Root `Dockerfile`, complete (digest-pinned base, uid 1001, pip removal and the stdlib healthcheck kept from `apps/network-assessment-api/Dockerfile`):
+**Exact change.** Root `Dockerfile`, complete (digest-pinned base, uid 1001, pip removal and the stdlib healthcheck kept from `apps/network-assessment-api/Dockerfile`). The `python:3.14-slim` lines below are the base image as written when this plan was drafted; the real `Dockerfile` now uses `python:3.15.2-slim-trixie` by digest, and that file is the one to follow:
 
 ```dockerfile
 ARG EDITION=appliance
@@ -607,7 +607,7 @@ Headers on every response: `X-Addon-Id: network-assessment`, `X-Addon-Version`, 
 | `psycopg2-binary`, `fastapi`, `uvicorn` | API image inline | `apps/network-assessment-api/requirements.txt` with exact pins, installed by the root Dockerfile for `EDITION=appliance`; the engine's public API server pins `fastapi` and `uvicorn` exact (`[VERIFY]` versions at lock time) |
 | `weasyprint`, `matplotlib`, `diagrams`, `n2g`, `python-docx`, `python-pptx`, `jinja2`, `cairosvg` | base / `enrichment` | Monorepo `render` extra; never in the engine or the lab image |
 | `cryptography` | base | Monorepo base (BYO AI keys); not in the engine |
-| `requires-python` | `>=3.11` (`pyproject.toml:9`) | `>=3.14` for the engine and the monorepo (the images already run 3.14; CI drops the 3.13 matrix entry at `300-test-codebase.yml:137`) |
+| `requires-python` | `>=3.11` (`pyproject.toml:9`) | `>=3.15.2,<3.16` for the engine and the monorepo since 2026-11-14 (the plan first set `>=3.14`; the images run `python:3.15.2-slim-trixie` and CI tests 3.15 only) |
 | `ty` | dev, not gating (T-402, T-410) | Unchanged; A and E reduce the finding count |
 | `pip-audit` | absent | dev extra; run in CI against the engine's lock; a dependency with a known CVE is flagged before use |
 
@@ -754,7 +754,7 @@ One PR per change set, ready for review, following the Core's PR template; `CHAN
 9. Every finding carries `rule_id`, `rule_version`, `observed_state.state`; every rule title and description passes `ObservedStateEnforcer`; `RULES_VERSION` changes when the id set changes.
 10. The step summary of `200-build-images.yml`'s `tag-images` job carries a digest for every image, and the `310` release notes list all five.
 11. `pip install .` of the monorepo installs no `boto3`; `pip install ".[aws]"` passes the AWS tests.
-12. `uv run pytest -q` and `uv run ruff check .` pass; `300-test-codebase.yml` is green on 3.14.
+12. `uv run pytest -q` and `uv run ruff check .` pass; `300-test-codebase.yml` is green on 3.15 (the only Python it tests since 2026-11-14).
 
 ## 20 Validation commands or procedures
 
@@ -834,7 +834,7 @@ Live acceptance (R-008), bash, after `az login` as an identity holding only Read
 | ID | Assumption | If wrong |
 |---|---|---|
 | A-1 | Core paths equal the `5d3b914` paths, except that `cna/` there is `network_assessment/` since the rename of 2026-10-27 (retirement README: created by merging this history) | Section 7 needs a path-mapping pass; validation uses `git grep` for symbols, so the commands still work |
-| A-2 | `python:3.14-slim` digest `cae66f2e...` is still the Core's pin or has been bumped deliberately | Use the Core's current pin; the `EDITION` change is independent of the base image |
+| A-2 | `python:3.14-slim` digest `cae66f2e...` is still the Core's pin or has been bumped deliberately (bumped: since 2026-11-12 the images use `python:3.15.2-slim-trixie` by digest) | Use the Core's current pin; the `EDITION` change is independent of the base image |
 | A-3 | Resource Graph `Resources`, `ResourceContainers`, `SecurityResources` tables and `skipToken` paging behave as at the time of writing `[VERIFY]` | Adjust the KQL in 7.D; the normalizer contract is unchanged |
 | A-4 | Container Apps Consumption `min_replicas = 1` cost is on the order of US$5 to 15 per month `[VERIFY]` | Owner may choose scale-to-zero with a persisted snapshot |
 | A-5 | Whoever deploys the appliance applies the Terraform additions of section 12 | This document records the contract and the deployer implements it |
