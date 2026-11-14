@@ -1299,6 +1299,14 @@ def _matrix(job: list[str], key_indent: int) -> dict[str, list[str]]:
                     or (_indent(item) == inner and not item.lstrip().startswith("- "))
                 ):
                     break
+                # A line that is neither a `- ` item nor a `key: value` member of an item's mapping (an `include:`
+                # entry) continues a value over several lines; the website's YAML reader refuses that too, so this
+                # reader stops rather than read part of the value (Copilot on HCW-NetworkEyes_App#399).
+                assert (
+                    not _meaningful(item)
+                    or item.lstrip().startswith("- ")
+                    or re.match(r"^\s+[A-Za-z0-9_-]+:(?:\s|$)", item)
+                ), f"a matrix value runs over more than one line: {item.strip()!r}"
                 items.append(item)
             found[match.group(1)] = [
                 _scalar(i.strip()[2:]) for i in items if i.strip().startswith("- ")
@@ -4819,6 +4827,8 @@ def test_round_three_yaml_values_workflow():
         "jobs:\n  j:\n    runs-on: ubuntu-26.04\n    steps:\n      - run: echo a\n          node x\n",
         'jobs:\n  j:\n    runs-on: ubuntu-26.04\n    steps:\n      - run: "echo a\n          node x"\n',
         "jobs:\n  j:\n    runs-on: ubuntu-26.04\n    steps:\n      - env:\n          A: one\n            two\n        run: echo\n",
+        # A matrix item continued on the next line (Copilot on HCW-NetworkEyes_App#399).
+        "jobs:\n  j:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        py:\n          - /usr/bin/python3\n            --x\n    steps:\n      - run: echo\n",
     ],
 )
 def test_round_three_every_reader_refuses_these_forms(text):
