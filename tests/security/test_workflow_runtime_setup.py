@@ -481,6 +481,11 @@ SHELL_C = PATH + SHELL_GIVEN_C
 SHELL_READS_INPUT = PATH + rf"(?:ba|da|k|z)?sh(?:\s+{_shell_option('(?:(?!c)[A-Za-z])')})*"
 # A here-string given to such a shell (`bash <<< node`) is its script; unquoted, that is the one word after `<<<`.
 SHELL_HERE_STRING = SHELL_READS_INPUT + r"\s*<<<\s*"
+# A NAME `coproc` takes before a compound command, as bash 5.2 reads it (Copilot's round 2 on HCW-HybridCloudWorks#1725,
+# checked with bash 5.2.21): before `{` or `[[` and a space, `(` or `((` (with or without a space), or `for`, `case`,
+# `select`, `while`, `until` or `if`. A NAME is a shell name (bash refuses `coproc node-x { ...; }`), and `coproc node{
+# x; }` is a syntax error, not a NAME.
+COPROC_NAME = r"[A-Za-z_][A-Za-z0-9_]*(?=\s*\(|\s+(?:\{|\[\[)(?=\s)|\s+(?:for|case|select|while|until|if)(?=\s|$))"
 # After env's options, a lone `-` (the same as `-i`) may come before its assignments and command (`env - node x`;
 # Copilot's second round on the ports, HCW-HybridCloudWorks#1707).
 ENV_DASH = r"(?:\s+-(?=\s))?"
@@ -495,9 +500,10 @@ WRAPPERS = "|".join(
         r"command(?:\s+(?:-p|--(?=\s)))*\s+",
         # `coproc` runs the command after it in the background (round 4, HCW-HybridCloudWorks#1707: Copilot on
         # HCW-MigrateOrchestrator_AddOn#77). A NAME may come first only before a compound command (bash's manual,
-        # Coprocesses): `coproc NAME while node x`; before a simple command the first word is the command, so `coproc
-        # NAME node x` runs NAME. `{` and `(` open a command anyway.
-        r"coproc(?:\s+[A-Za-z_][A-Za-z0-9_]*(?=\s+(?:while|until|if)\s))?\s+",
+        # Coprocesses), and is then taken as the NAME, never as a command: `coproc node { echo; }` runs no node
+        # (COPROC_NAME). Before anything else the first word is the command, so `coproc NAME node x` runs NAME and
+        # `coproc node node x` runs node. `{` and `(` open a command anyway.
+        rf"coproc\s+(?:{COPROC_NAME}\s*|(?!{COPROC_NAME}))",
         r"(?:if|then|else|elif|do|while|until|!)\s+",
         # `eval` runs its arguments as a script (round 3, HCW-HybridCloudWorks#1707): an unquoted first argument is in
         # command position. `builtin` runs the builtin named next (`builtin eval node x`).
@@ -6273,6 +6279,23 @@ def test_copilot_second_round_one_line_defaults_refused(text):
         ("coproc NAME for x in y; do python3 x; done", "python", True),
         ("coproc NAME case $k in a) python3 x ;; esac", "python", True),
         ("coproc NAME select x in y; do python3 x; done", "python", True),
+        # Copilot's round 2 on HCW-HybridCloudWorks#1725: bash takes `coproc NAME` before every compound command (`{`,
+        # `(`, `[[`, `((`, `for`, `case`, `select`, `while`, `until`, `if`), so these run no runtime, while a NAME
+        # before anything else is the command (`coproc node node x` runs node). Checked with bash 5.2.21; `coproc node{
+        # x; }` is a syntax error there.
+        ("coproc node { echo done; }", "node", False),
+        ("coproc python3 ( echo x )", "python", False),
+        ("coproc node(echo x)", "node", False),
+        ("coproc node for x in y; do echo; done", "node", False),
+        ("coproc node case a in a) echo ;; esac", "node", False),
+        ("coproc node select x in y; do echo; done", "node", False),
+        ("coproc node while true; do echo; done", "node", False),
+        ("coproc python3 [[ -n x ]]", "python", False),
+        ("coproc node (( 1 ))", "node", False),
+        ("coproc node node x", "node", True),
+        ("coproc node time echo t", "node", True),
+        ("coproc node [ -n x ]", "node", True),
+        ("coproc node{ x; }", "node", False),
     ],
 )
 def test_round_four_coproc_runs_its_command(line, kind, found):
@@ -6454,13 +6477,14 @@ def test_round_four_a_shell_holding_an_expression():
 # Copilot's second round on HCW-NetworkEyes_App#403: pipx is read under each `shell:` a step may be handed to, so a
 # job's `${{ matrix.shell }}` whose value sets PIPX_DEFAULT_PYTHON to the runner's own Python is reported, and a step
 # that runs pipx under a `shell:` this check cannot read (`${{ vars.RUN_SHELL }}`) is reported too.
-EXPRESSION_SHELL_PIPX_YAML = 'on: push\njobs:\n  matrix-runner-python:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        shell:\n          - env PIPX_DEFAULT_PYTHON=/usr/bin/python3 bash -e {0}\n    env:\n      PIPX_DEFAULT_PYTHON: /opt/py/bin/python3\n    defaults:\n      run:\n        shell: ${{ matrix.shell }}\n    steps:\n      - id: py\n        uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Scan\n        run: pipx run x\n  vars-shell:\n    runs-on: ubuntu-26.04\n    env:\n      PIPX_DEFAULT_PYTHON: /opt/py/bin/python3\n    defaults:\n      run:\n        shell: ${{ vars.RUN_SHELL }}\n    steps:\n      - id: py\n        uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - uses: actions/setup-node@abc\n        with: { node-version: "26" }\n      - name: Scan\n        run: pipx run x\n  vars-shell-no-pipx:\n    runs-on: ubuntu-26.04\n    defaults:\n      run:\n        shell: ${{ vars.RUN_SHELL }}\n    steps:\n      - id: py\n        uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - uses: actions/setup-node@abc\n        with: { node-version: "26" }\n      - name: Scan\n        run: echo hi\n  matrix-bash:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        shell: [bash]\n    defaults:\n      run:\n        shell: ${{ matrix.shell }} -e {0}\n    steps:\n      - id: py\n        uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Scan\n        run: pipx run --python "${{ steps.py.outputs.python-path }}" x\n'
+EXPRESSION_SHELL_PIPX_YAML = 'on: push\njobs:\n  matrix-runner-python:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        shell:\n          - env PIPX_DEFAULT_PYTHON=/usr/bin/python3 bash -e {0}\n    env:\n      PIPX_DEFAULT_PYTHON: /opt/py/bin/python3\n    defaults:\n      run:\n        shell: ${{ matrix.shell }}\n    steps:\n      - id: py\n        uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Scan\n        run: pipx run x\n  vars-shell:\n    runs-on: ubuntu-26.04\n    env:\n      PIPX_DEFAULT_PYTHON: /opt/py/bin/python3\n    defaults:\n      run:\n        shell: ${{ vars.RUN_SHELL }}\n    steps:\n      - id: py\n        uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - uses: actions/setup-node@abc\n        with: { node-version: "26" }\n      - name: Scan\n        run: pipx run x\n  vars-shell-no-pipx:\n    runs-on: ubuntu-26.04\n    defaults:\n      run:\n        shell: ${{ vars.RUN_SHELL }}\n    steps:\n      - id: py\n        uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - uses: actions/setup-node@abc\n        with: { node-version: "26" }\n      - name: Scan\n        run: echo hi\n  matrix-bash:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        shell: [bash]\n    defaults:\n      run:\n        shell: ${{ matrix.shell }} -e {0}\n    steps:\n      - id: py\n        uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Scan\n        run: pipx run --python "${{ steps.py.outputs.python-path }}" x\n  matrix-unset:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        shell:\n          - env -u PIPX_DEFAULT_PYTHON bash -e {0}\n    defaults:\n      run:\n        shell: ${{ matrix.shell }}\n    steps:\n      - id: py\n        uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Scan\n        env:\n          PIPX_DEFAULT_PYTHON: /opt/py/bin/python3\n        run: pipx run x\n'
 
 
 def test_round_four_pipx_under_a_shell_holding_an_expression():
     assert pipx_problems("x.yml", read_jobs(EXPRESSION_SHELL_PIPX_YAML)) == [
         "x.yml > matrix-runner-python > Scan > pipx",
         "x.yml > vars-shell > Scan > pipx",
+        "x.yml > matrix-unset > Scan > pipx",
     ]
 
 
