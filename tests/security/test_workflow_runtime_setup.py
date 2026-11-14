@@ -154,7 +154,10 @@ Round 5 (saulpatinojr/HCW-HybridCloudWorks#1707) reads a step's `shell:` that is
 `null`, a comment alone, `''`) as the runner does: as no shell of its own, so the step uses the job's
 `defaults.run.shell`, else the workflow's, the same as a step with no `shell:` at all (actions/runner
 src/Runner.Worker/Handlers/ScriptHandler.cs, lines 70-79 at 8cfa1049; see `_given_shell`). A job's own
-`defaults.run.shell: ''` still counts as the job's own empty shell.
+`defaults.run.shell` that is null (`shell:`, `~`, a comment alone) is no shell either, so the workflow's applies, as
+the website's YAML library reads it (this copy read it as the job's own empty shell until round 5; see
+`_default_shell`), while a quoted `''` still counts as the job's own empty shell: GitHub merges the job's defaults over
+the workflow's before the runner sees them, and that merge is not visible here.
 
 When this check changes. Owner decision 2026-11-14: round five is the last planned round. After it, this check changes
 only when (1) a real HCW workflow trips it or would get past it, or (2) a reviewer shows a way past it that a workflow
@@ -163,12 +166,13 @@ header, not to a new round.
 
 Known limits (the list later edge cases are added to): a composite action whose set-up step takes its version from
 `${{ inputs.* }}` cannot be read, so it fails closed and needs an entry in BELOW_FLOOR_ALLOWED; these are reported
-though they need not be, which can only add findings: a `shell: python` step's text is still read as shell too; an `eval` script is read as a child shell
-(a name set but not exported before it is not seen); a `$PATH` written inside double quotes or an unquoted heredoc in
-a nested script is read as the inner script's, so `sudo bash -c "sudo env PATH=$PATH node x"` is reported though the
-outer shell fills it in first; a folder put in front of `$PATH`, even the set-up one (`PATH=$pythonLocation/bin:$PATH
-python3 x`), on purpose; and a version named below the floor (`python3.14`), even where BELOW_FLOOR_ALLOWED lets the
-job set that version up. These are not reported: `eval` of a word joined from quoted parts (`eval no'de x'`); a
+though they need not be, which can only add findings: a `shell: python` step's text is still read as shell too; an
+`eval` script is read as a child shell (a name set but not exported before it is not seen); a `$PATH` written inside
+double quotes or an unquoted heredoc in a nested script is read as the inner script's, so `sudo bash -c "sudo env
+PATH=$PATH node x"` is reported though the outer shell fills it in first; a folder put in front of `$PATH`, even the
+set-up one (`PATH=$pythonLocation/bin:$PATH python3 x`), on purpose; and a version named below the floor
+(`python3.14`), even where BELOW_FLOOR_ALLOWED lets the job set that version up. These are not reported: `eval` of
+a word joined from quoted parts (`eval no'de x'`); a
 `--python` path to a Python outside the folders of RUNNER_PYTHON_FOLDERS (`/opt/hostedtoolcache/Python/3.12...`,
 `/usr/share/miniconda/bin/python3`); a relative path after `cd` (`cd /usr/bin && pipx run --python ./python3 x`); a
 value a `for` loop or `read` sets (`for P in /usr/bin/python3; do ...`), which counts as chosen; a PATH the script
@@ -1272,13 +1276,13 @@ def _number(value: float) -> str:
     return re.sub(r"e([-+])0*(\d)", r"e\1\2", repr(value))
 
 
-def _plain(text: str) -> str:
+def _plain(text: str, null: str | None = "") -> str | None:
     """A plain (unquoted) value as YAML 1.2's core schema reads it and GitHub hands it on (round 3,
-    HCW-HybridCloudWorks#1707): null (`~`, `null`, nothing) empty, a boolean as `true` or `false`, and a number in its
-    shortest form, so an unquoted `3.10` is `3.1`, as GitHub passes it to an action (actions/runner#849; the website's
-    YAML library reads it the same way)."""
+    HCW-HybridCloudWorks#1707): null (`~`, `null`, nothing) as `null` (empty unless a caller asks otherwise), a boolean
+    as `true` or `false`, and a number in its shortest form, so an unquoted `3.10` is `3.1`, as GitHub passes it to an
+    action (actions/runner#849; the website's YAML library reads it the same way)."""
     if text in NULL:
-        return ""
+        return null
     if text in ("true", "True", "TRUE", "false", "False", "FALSE"):
         return text.lower()
     if re.fullmatch(r"[-+]?[0-9]+", text):
@@ -1294,11 +1298,12 @@ def _plain(text: str) -> str:
     return text
 
 
-def _scalar(value: str) -> str:
+def _scalar(value: str, null: str | None = "") -> str | None:
     """A plain or quoted value on one line as YAML reads it (round 3, HCW-HybridCloudWorks#1707): a double-quoted one
     with its escapes decoded (`"\x70ython3 x"` is `python3 x`), a single-quoted one with `''` read as `'`, a comment
-    after either dropped, and a plain one read by `_plain`, its comment dropped too. A quoted value that does not close
-    on its line, or has text after it, stops the test (this reader does not fold a value over several lines)."""
+    after either dropped, and a plain one read by `_plain`, its comment dropped too, a null one given as `null`. A
+    quoted value that does not close on its line, or has text after it, stops the test (this reader does not fold a
+    value over several lines)."""
     text = value.strip()
     if text.startswith('"'):
         out, k = [], 1
@@ -1333,7 +1338,7 @@ def _scalar(value: str) -> str:
         # An anchor (`&a`), an alias (`*a`) or a tag (`!!str`) is not text: refused, as the website's reader refuses it
         # (round 3 review, HCW-HybridCloudWorks#1707).
         assert not text.startswith(("&", "*", "!")), f"an anchor, alias or tag: {value!r}"
-        return _plain(text)
+        return _plain(text, null)
     # A comment after a quoted value needs a space before its `#`, as YAML reads it (`"3.15"#x` is not YAML).
     assert re.fullmatch(r"(?:\s+#.*)?\s*", rest), f"text after a quoted value: {value!r}"
     return decoded
@@ -1465,7 +1470,7 @@ def _flow_end(text: str) -> int:
     return -1
 
 
-def _flow_mapping(text: str) -> dict:
+def _flow_mapping(text: str, null: str | None = "") -> dict:
     """A one-line `{ key: value, ... }` mapping, split by `_flow_items`. A value that is itself `{ ... }` is read the
     same way, so `defaults: {run: {shell: "python {0}"}}` is read whole (Copilot's second round on the ports,
     HCW-HybridCloudWorks#1707: HCW-CloudAssessor_AddOn#101 and HCW-CloudCrawler_AddOn#79). Braces or quotes that do not
@@ -1484,12 +1489,12 @@ def _flow_mapping(text: str) -> dict:
     for key, _, value in pairs:
         value = value.strip()
         if value.startswith("{"):
-            found[key.strip()] = _flow_mapping(value)
+            found[key.strip()] = _flow_mapping(value, null)
             continue
         assert value[:1] in ("'", '"', "[") or not re.search(r"[{}\[\]]", value), (
             f"a plain value with a brace or bracket in a one-line mapping: {value!r}"
         )
-        found[key.strip()] = _scalar(value)
+        found[key.strip()] = _scalar(value, null)
     return found
 
 
@@ -1528,12 +1533,15 @@ def _scalar_lines(lines: list[str], at: int, indent: int, indicator: re.Match[st
     return block
 
 
-def _mapping(lines: list[str], at: int, indent: int) -> dict[str, str]:
+def _mapping(
+    lines: list[str], at: int, indent: int, null: str | None = ""
+) -> dict[str, str | None]:
     """The mapping under the key on line `at`: a `{ ... }` on the same line, or the `key: value` lines below it, each
-    value plain, quoted, null (read as empty, see `_scalar`) or a block scalar (`|`, `>-`, read as its text)."""
+    value plain, quoted, null (read as `null`, empty unless a caller asks otherwise, see `_scalar`) or a block scalar
+    (`|`, `>-`, read as its text)."""
     rest = _without_comment(lines[at].split(":", 1)[1]).strip()
     if rest.startswith("{"):
-        return _flow_mapping(rest)
+        return _flow_mapping(rest, null)
     block = _block(lines, at, indent)
     inner = min((_indent(line) for line in block if _meaningful(line)), default=indent + 2)
     found: dict[str, str] = {}
@@ -1553,7 +1561,7 @@ def _mapping(lines: list[str], at: int, indent: int) -> dict[str, str]:
             found[pair.group(1)] = _block_scalar(scalar, indicator, inner)
             index += len(scalar)
         else:
-            found[pair.group(1)] = _scalar(pair.group(2))
+            found[pair.group(1)] = _scalar(pair.group(2), null)
     return found
 
 
@@ -1653,18 +1661,20 @@ def _step_keys(lines: list[str], key_indent: int) -> dict:
 
 def _default_shell(lines: list[str], at: int, indent: int) -> str | None:
     """The `run: shell:` of the `defaults:` key on line `at` (at `indent` spaces), written as a block or `{ ... }`;
-    None when it names none."""
+    None when it names none, or names a null one (`shell:`, `~`, `null`, a comment alone), which is no shell either,
+    as the website's YAML library reads it: a job's null shell uses the workflow's (round 5, HCW-HybridCloudWorks#1707,
+    as in HCW-MigrateOrchestrator_AddOn#80). A quoted `''` stays an empty shell of the job's own."""
     rest = _without_comment(lines[at].split(":", 1)[1]).strip()
     if rest.startswith("{"):
         # Read as the nested one-line mapping it is (see `_flow_mapping`), so a quoted `{0}` or comma stays in its
         # value.
-        run = _flow_mapping(rest).get("run")
+        run = _flow_mapping(rest, None).get("run")
         return run.get("shell") if isinstance(run, dict) else None
     block = _block(lines, at, indent)
     run = [i for i, line in enumerate(block) if re.match(r"^\s+run:", line)]
     if not run:
         return None
-    return _mapping(block, run[0], _indent(block[run[0]])).get("shell")
+    return _mapping(block, run[0], _indent(block[run[0]]), None).get("shell")
 
 
 # What a `${{ matrix.X }}` in the workflow-level `env:` is written as: an expression this check cannot read, which
@@ -6588,6 +6598,25 @@ def test_round_five_an_empty_step_shell_falls_back_to_the_workflow_default_and_w
 def test_round_five_pipx_is_read_under_the_job_default_when_the_step_shell_is_empty():
     text = "on: push\njobs:\n  empty-shell-pipx:\n    runs-on: ubuntu-26.04\n    env:\n      PIPX_DEFAULT_PYTHON: /opt/py/bin/python3\n    defaults:\n      run:\n        shell: env PIPX_DEFAULT_PYTHON=/usr/bin/python3 bash -e {0}\n    steps:\n      - id: py\n        uses: actions/setup-python@abc\n        with: { python-version: \"3.15\" }\n      - name: Scan\n        shell: ''\n        run: pipx run x\n"
     assert pipx_problems("x.yml", read_jobs(text)) == ["x.yml > empty-shell-pipx > Scan > pipx"]
+
+
+# A job's own `defaults.run.shell` that is null (every form above but the quoted two) is no shell either, so the job
+# uses the workflow's; a quoted `''` or `""` stays the job's own empty shell (as in HCW-MigrateOrchestrator_AddOn#80;
+# this copy read every form as the job's own empty shell until round 5).
+def test_round_five_a_null_job_shell_uses_the_workflow_default_and_a_quoted_empty_one_is_the_jobs_own():
+    jobs = "".join(
+        f"  job-{i}:\n    runs-on: ubuntu-26.04\n    defaults:\n      run:\n"
+        f"        shell:{' ' + form if form else ''}\n    steps:\n{ROUND5_SET_UP_PYTHON}      - name: Run\n"
+        "        run: python3 x\n"
+        for i, form in enumerate(EMPTY_STEP_SHELLS)
+    )
+    reported = [
+        f"x.yml > job-{i} > Run > python"
+        for i, form in enumerate(EMPTY_STEP_SHELLS)
+        if form not in ("''", '""')
+    ]
+    text = f"on: push\ndefaults:\n  run:\n    shell: sudo python3 {{0}}\njobs:\n{jobs}"
+    assert unset_steps("x.yml", read_jobs(text), {}) == reported
 
 
 FILES = sorted(p for p in WORKFLOWS.iterdir() if p.suffix in (".yml", ".yaml"))

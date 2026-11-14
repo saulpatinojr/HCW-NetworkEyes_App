@@ -2721,13 +2721,14 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   `src/Runner.Worker/Handlers/ScriptHandler.cs`, lines 70-79 at commit 8cfa1049), in the set-up check, a job's
   `${{ matrix.shell }}` default and the pipx check alike; before, it read as the runner's default shell, so a
   `sudo python3 {0}` default went unreported. A job's own `defaults.run.shell: ''` still counts as its own empty
-  shell. The line reader now reads a value that is only a comment as empty, as YAML does. The same four tests are in
-  the website's JavaScript copy, and the two copies agree on 89,672 generated cases; no HCW workflow has an empty step
-  `shell:`, and no workflow's result changed. Owner decision 2026-11-14: round five is the last planned round. After
-  it, this check changes only when (1) a real HCW workflow trips it or would get past it, or (2) a reviewer shows a
-  way past it that a workflow could plausibly be written with. Any other edge case a reviewer raises is added to the
-  known-limits list in this header, not to a new round (the "Known limits" paragraph of the test file's header).
-  The seven other copies are ported after this and the website's change merge.
+  shell, while a null one now uses the workflow's, as the website's copy already read it. The line reader now reads a
+  value that is only a comment as empty, as YAML does. The same five tests are in the website's JavaScript copy, and
+  the two copies agree on 94,952 generated cases; no HCW workflow has an empty step `shell:`, and no workflow's result
+  changed. Owner decision 2026-11-14: round five is the last planned round. After it, this check changes only when
+  (1) a real HCW workflow trips it or would get past it, or (2) a reviewer shows a way past it that a workflow could
+  plausibly be written with. Any other edge case a reviewer raises is added to the known-limits list in this header,
+  not to a new round (the "Known limits" paragraph of the test file's header). The seven other copies are ported
+  after this and the website's change merge.
 - **Not checked here:** no image was built (no Docker daemon in the session that made the change). The Python tests and
   the install of each image's dependency set ran on CPython 3.15.2; the web checks ran on Node.js 26. The pull
   request's `Docker Build Smoke Test`, `Lab Boundary Image` and `Image Scan (Trivy)` jobs and the next `200` run on
