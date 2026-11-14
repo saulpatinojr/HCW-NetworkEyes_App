@@ -14,6 +14,9 @@ What is pinned here and why:
 * The three Dockerfiles keep the properties the lint fixes gave them, so a later edit cannot undo them without a
   test failing: digests on every base image, numeric `USER`, exec-form `CMD`/`ENTRYPOINT`/`HEALTHCHECK`, and
   `pipefail` wherever a `RUN` has a pipe.
+* The uv every workflow installs (`uv==`) is the version the Dockerfiles' `uv` stage copies in, so CI checks and
+  builds the lock with the same uv as the images. Dependabot moves only the `FROM` line; on 2026-11-12 it moved the
+  stage to 0.13.8 while the workflows stayed on 0.13.7 (HCW-HybridCloudWorks#1707).
 """
 
 import re
@@ -25,6 +28,7 @@ import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 WORKFLOW_300 = REPO_ROOT / ".github" / "workflows" / "300-test-codebase.yml"
 LOCAL_CHECKS = REPO_ROOT / "scripts" / "ci" / "local-container-checks.sh"
 HARDEN_FLAGS = REPO_ROOT / "scripts" / "ci" / "harden-flags.sh"
@@ -547,6 +551,74 @@ def test_the_three_dockerfiles_are_tracked() -> None:
         "apps/network-assessment-api/Dockerfile",
         "apps/network-assessment-web/Dockerfile",
     ]
+
+
+UV_STAGE = re.compile(
+    r"^FROM\s+ghcr\.io/astral-sh/uv:([^@\s]+)@sha256:[0-9a-f]{64}\s+AS\s+uv\s*$", re.IGNORECASE
+)
+# A version is digits and dots only, so punctuation after it in prose ("(uv==0.13.8)", "uv==0.13.8,") is not
+# read as part of it. The four forms a workflow uses to name a uv version: a pip pin, a uvx/npx-style `uv@X`, the
+# image reference, and a `UV_VERSION:` env value.
+_UV_VERSION = r"(\d+(?:\.\d+)+)"
+WORKFLOW_UV_PIN = re.compile(
+    rf"(?<![\w.-])uv=={_UV_VERSION}"
+    rf"|(?<![\w.-])uv@{_UV_VERSION}"
+    rf"|ghcr\.io/astral-sh/uv:{_UV_VERSION}"
+    rf"|\bUV_VERSION:\s*[\"']?{_UV_VERSION}"
+)
+
+
+def test_workflow_uv_pins_match_the_dockerfile_uv_stage() -> None:
+    """Every `uv==X` (and `ghcr.io/astral-sh/uv:X`) in a workflow is the version the Dockerfiles' uv stage copies in.
+
+    Dependabot's docker ecosystem moves the `FROM ghcr.io/astral-sh/uv:... AS uv` line and nothing else, so the
+    workflow pins have to follow by hand (CLAUDE.md). This fails the pull request that leaves them behind.
+
+    Read in `.github/workflows/` and `.github/actions/`: `uv==X`, `uv@X`, `ghcr.io/astral-sh/uv:X` and
+    `UV_VERSION: X`, in comments too (a comment naming an old version is drift as well). Only a pin outside a
+    comment counts towards "at least one pin exists". Not read: a range (`uv>=X`), `astral-sh/setup-uv`'s
+    `version:` input, and scripts outside `.github/` (none of these pins uv here today).
+    """
+    stage_versions: dict[str, str] = {}
+    for path in tracked_dockerfiles():
+        name = path.relative_to(REPO_ROOT).as_posix()
+        for number, keyword, arguments in instructions(path):
+            match = UV_STAGE.match(f"{keyword} {arguments}")
+            if match:
+                stage_versions[f"{name}:{number}"] = match.group(1)
+    assert stage_versions, (
+        "no Dockerfile has a digest-pinned `FROM ghcr.io/astral-sh/uv:<version>@sha256:... AS uv` stage"
+    )
+    assert len(set(stage_versions.values())) == 1, (
+        f"the Dockerfiles' uv stages disagree: {stage_versions}"
+    )
+    expected = next(iter(stage_versions.values()))
+
+    found = 0
+    mismatches = []
+    github_dir = WORKFLOWS_DIR.parent
+    workflow_files = sorted(
+        path
+        for path in github_dir.glob("**/*")
+        if path.suffix in {".yml", ".yaml"}
+        and path.relative_to(github_dir).parts[0] in {"workflows", "actions"}
+    )
+    for workflow_file in workflow_files:
+        name = workflow_file.relative_to(github_dir).as_posix()
+        lines = workflow_file.read_text(encoding="utf-8").splitlines()
+        for number, line in enumerate(lines, start=1):
+            for match in WORKFLOW_UV_PIN.finditer(line):
+                if not line[: match.start()].lstrip().startswith("#"):
+                    found += 1
+                version = next(group for group in match.groups() if group)
+                if version != expected:
+                    mismatches.append(f"{name}:{number} names uv {version}")
+    assert found, "no workflow pins uv outside a comment; the test would pass on nothing"
+    assert not mismatches, (
+        f"the Dockerfiles' uv stage is {expected}, but: "
+        + "; ".join(mismatches)
+        + ". Move the workflow pins with the stage."
+    )
 
 
 @pytest.mark.parametrize(

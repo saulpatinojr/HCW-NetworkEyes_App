@@ -156,8 +156,9 @@ change under `Changed` in `CHANGELOG.md` (and in the release notes) where a cons
   digest bump still moves the base; on its own it is not the fix for a Scout
   finding. The uv
   version is pinned in the `FROM ghcr.io/astral-sh/uv:… AS uv` stage of each
-  Python Dockerfile and the `uv==` steps of `300-test-codebase.yml`; when
-  Dependabot bumps the stage, move the workflow pins with it.
+  Python Dockerfile and the `uv==` steps of `300-test-codebase.yml` and
+  `320-release-engine.yml`; when Dependabot bumps the stage, move the workflow
+  pins with it (`tests/unit/test_ci_hygiene.py` fails until they match).
 - **TypeScript runs side by side in `apps/network-assessment-web`.** `typescript` is the alias `npm:@typescript/typescript6` (the
   TypeScript 6 API that eslint, typescript-eslint and Next.js import) and `@typescript/native` is `npm:typescript@^7`
   (the `tsc` that `npm run typecheck` runs). Never change `typescript` to a plain 7.x: TypeScript 7 has no
