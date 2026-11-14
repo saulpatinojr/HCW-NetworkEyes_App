@@ -28,7 +28,11 @@ from network_assessment.core.exceptions import (  # noqa: E402
     NetworkAssessmentAuthError,
     NetworkAssessmentRateLimitError,
 )
-from network_assessment.core.topology.aws import AWSAccount, AWSRegionTopology, AWSTopology  # noqa: E402
+from network_assessment.core.topology.aws import (  # noqa: E402
+    AWSAccount,
+    AWSRegionTopology,
+    AWSTopology,
+)
 from network_assessment.core.topology.common import AttachmentType, PeeringState  # noqa: E402
 from network_assessment.modules.network.discovery.aws_discovery import (  # noqa: E402
     AWSDiscovery,

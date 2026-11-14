@@ -36,7 +36,7 @@ HADOLINT_CONFIG = REPO_ROOT / ".hadolint.yaml"
 TRIVY_IGNORE = REPO_ROOT / ".trivyignore.yaml"
 
 # Job names that exist today and are required checks of the "Protect main" ruleset (read 2026-10-25).
-# `Unit Tests (Python ...)` is a template in the workflow; the ruleset holds the rendered 3.14 form.
+# `Unit Tests (Python ...)` is a template in the workflow; the ruleset holds the rendered 3.15 form.
 REQUIRED_CHECK_JOB_NAMES = {
     "Lint & Format",
     "Unit Tests (Python ${{ matrix.python-version }})",

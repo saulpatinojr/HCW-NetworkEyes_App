@@ -260,13 +260,7 @@ PIPX_ALLOWED: dict[str, str] = {}
 
 # Set-up steps that ask for a version below the floor on purpose, keyed by the problem `floor_problems` reports, each
 # with its reason. A new entry needs a reason a reviewer can check and a record of when it goes away.
-BELOW_FLOOR_ALLOWED: dict[str, str] = {
-    "300-test-codebase.yml > test > step 2 > python: asks for 3.14, below the floor": (
-        "the unit tests still run on Python 3.14 as well as 3.15 while requires-python is >=3.14; TODO.md T-743 "
-        "item 4 drops the 3.14 leg, raises requires-python and ruff's target to 3.15 and removes this entry, in one "
-        "pull request (the comment above the job says so)"
-    ),
-}
+BELOW_FLOOR_ALLOWED: dict[str, str] = {}
 
 # Where a command may start: the line's start or an opening or joining character, then any `NAME=value` assignments
 # (the value plain text, a quoted string, a whole `$(...)`, `$((...))` or backtick pair with no parentheses inside, or
