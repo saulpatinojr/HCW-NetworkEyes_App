@@ -143,7 +143,10 @@ word, as GitHub fills it in. GitHub's contexts reference
 (https://docs.github.com/en/actions/reference/workflows-and-actions/contexts) lists contexts for
 `jobs.<job_id>.defaults.run` only (github, needs, strategy, matrix, env, vars, inputs); a step's `shell:` and the
 workflow-level `defaults.run` allow none, and the workflow schema (actions/languageservices, workflow-v1.0.json) refuses
-an expression there, so only a job's `defaults.run.shell` is filled in before the runner sees it.
+an expression there, so only a job's `defaults.run.shell` is filled in before the runner sees it. There a
+`${{ matrix.X }}` is read as each value of the job's matrix list, and any other expression, or one in a step's `shell:`
+or the workflow's default, counts as running both runtimes, so the step needs Node.js and Python set up before it
+(Copilot on HCW-NetworkEyes_App#403 and HCW-HybridCloudWorks#1725; see `shell_choices`).
 
 Limits, known and kept: a composite action whose set-up step takes its version from `${{ inputs.* }}` cannot be read,
 so it fails closed and needs an entry in BELOW_FLOOR_ALLOWED; these are reported though they need not be, which can
@@ -160,10 +163,9 @@ sets in an earlier command (`export PATH=/usr/bin; python3 x`, or `PATH=/usr/bin
 written to `$GITHUB_PATH` or `$GITHUB_ENV` by an earlier step; the commands of a `case` clause whose pattern holds
 parentheses (`@(a|b))`, `?(a))`) or an escaped `)` (`a\\))`, or whose `case` has a subject `$(...)` with spaces or
 `in` on the next line; and a set-up version `3` or `3.x` (a major line only), which reads as at the floor. `unset -n
-P` is read as unsetting P, which is what bash does unless P is a name reference. A job's `defaults.run.shell` whose
-expression GitHub fills in with a value holding spaces is split there by the runner, but read here as one word. The
-runner fills `{0}` in with .NET's `string.Format`, where `{{` and `}}` stand for one brace and any other `{...}` stops
-the step; this check only replaces `{0}`.
+P` is read as unsetting P, which is what bash does unless P is a name reference. For pipx, an expression left in
+`shell:` is still read as one word, as before. The runner fills `{0}` in with .NET's `string.Format`, where `{{` and
+`}}` stand for one brace and any other `{...}` stops the step; this check only replaces `{0}`.
 
 A composite action (`.github/actions/<name>/action.yml`, `runs: using: composite`) is checked like a job of its own,
 named `composite`, so its keys read `.github/actions/<name>/action.yml > composite > step name > runtime`. Its steps
@@ -1752,6 +1754,9 @@ def read_jobs(text: str) -> dict[str, dict]:
             "env": env,
             "matrix": _matrix(job, key_indent),
             "shell": (workflow_shell if shell is None else shell) or "",
+            # Whether that shell is the job's own `defaults.run.shell`, where GitHub fills in a matrix value (see
+            # `shell_choices`), rather than the workflow's, where it allows no expression.
+            "job_shell": shell is not None,
             "steps": steps,
         }
     return jobs
@@ -2158,8 +2163,46 @@ def step_shell(step: dict, job: dict) -> str:
     says (round 3, HCW-HybridCloudWorks#1707;
     https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idstepsshell). "" for
     the default shell. The same rule as the website's `stepShell`."""
+    return literal_shell(_given_shell(step, job))
+
+
+def _given_shell(step: dict, job: dict) -> str:
+    """A step's `shell:` as written: the step's own, else the job's or the workflow's `defaults.run.shell` (which
+    `read_jobs` keeps as the job's `shell`); "" for none."""
     shell = step["shell"] if "shell" in step else job.get("shell", "")
-    return literal_shell(str(shell or ""))
+    return str(shell or "")
+
+
+# A matrix value in a job's `defaults.run.shell` (`${{ matrix.shell }}`), which GitHub fills in before the
+# runner sees it.
+MATRIX_IN_SHELL = re.compile(r"\$\{\{\s*matrix\.([A-Za-z0-9_-]+)\s*\}\}")
+
+
+def shell_choices(step: dict, job: dict) -> list[str] | None:
+    """The `shell:` commands a step that runs a script may be handed to, each as `literal_shell` writes it; None when
+    its `shell:` holds a GitHub expression this check cannot read (Copilot on HCW-NetworkEyes_App#403 and
+    HCW-HybridCloudWorks#1725). A job's `defaults.run.shell` may hold one (github, needs, strategy, matrix, env, vars,
+    inputs: https://docs.github.com/en/actions/reference/workflows-and-actions/contexts): a `${{ matrix.X }}` there is
+    read as each value of the job's matrix list X, every combination of them, and any other expression, a matrix list
+    that is missing or empty, or a value that is not plain text gives None. A step's `shell:` and the workflow's
+    `defaults.run.shell` allow no expression, so GitHub refuses one there, and it gives None too. `unset_steps` counts
+    a step with None as running both runtimes. The same rule as the website's `shellChoices`."""
+    given = _given_shell(step, job)
+    if "${{" not in given:
+        return [literal_shell(given)]
+    if "shell" in step or not job.get("job_shell"):
+        return None
+    names = sorted({found[1] for found in MATRIX_IN_SHELL.finditer(given)})
+    entries: list[dict[str, str]] = [{}]
+    for name in names:
+        values = (job.get("matrix") or {}).get(name)
+        if not values or any(not isinstance(value, str) for value in values):
+            return None
+        entries = [{**entry, name: value} for entry in entries for value in values]
+    texts = [
+        MATRIX_IN_SHELL.sub(lambda found, entry=entry: entry[found[1]], given) for entry in entries
+    ]
+    return None if any("${{" in text for text in texts) else [literal_shell(text) for text in texts]
 
 
 # A word of a `shell:` command that reads the same to a shell as the text it is: no quote, space, `\`, pattern,
@@ -2256,10 +2299,15 @@ def unset_steps(
         for kind in COMMAND:
             for i, step in enumerate(job["steps"]):
                 key = step_key(file, name, step, i, kind)
-                shell = step_shell(step, job) if "run" in step else ""
+                # Each `shell:` the step may be handed to; None for one holding an expression this check cannot read,
+                # which may be either runtime, so the step needs both set up (see `shell_choices`) and is read as
+                # having no `shell:`.
+                choices = shell_choices(step, job) if "run" in step else [""]
+                shells = [""] if choices is None else choices
                 if not (
                     runs_runtime(step.get("run"), kind)
-                    or runs_runtime(shell, kind)
+                    or choices is None
+                    or any(runs_runtime(shell, kind) for shell in shells)
                     or key in indirect
                 ):
                     continue
@@ -2271,11 +2319,11 @@ def unset_steps(
                 # A step named in `indirect` runs its runtime from a script this check does not read, so a `shell:`
                 # that runs it through sudo or with a replaced PATH runs that runtime too (Copilot's second round on the
                 # ports, HCW-HybridCloudWorks#1707: HCW-CloudCrawler_AddOn#79).
-                if (
-                    not covered
-                    or runs_through_sudo(step.get("run"), kind, _sudo_path(shell))
+                if not covered or any(
+                    runs_through_sudo(step.get("run"), kind, _sudo_path(shell))
                     or runs_through_sudo(shell, kind)
                     or (key in indirect and _sudo_path(shell) is True)
+                    for shell in shells
                 ):
                     found.append(key)
     return found
@@ -6198,6 +6246,11 @@ def test_copilot_second_round_one_line_defaults_refused(text):
         ("echo 'coproc node x'", "node", False),
         ('echo "coproc python3 x"', "python", False),
         ("coprocnode x", "node", False),
+        # Copilot on HCW-NetworkEyes_App#403 asked about a NAME before `for`, `case` and `select`: the command inside
+        # the clause is found on its own, so these were already read (regression cases).
+        ("coproc NAME for x in y; do python3 x; done", "python", True),
+        ("coproc NAME case $k in a) python3 x ;; esac", "python", True),
+        ("coproc NAME select x in y; do python3 x; done", "python", True),
     ],
 )
 def test_round_four_coproc_runs_its_command(line, kind, found):
@@ -6344,6 +6397,36 @@ def test_round_four_a_set_up_step_below_the_newest_patch():
         "x.yml > uv-below > step 1 > python: asks for 3.15.1, below the floor",
     ]
     assert unset_steps("x.yml", jobs, {}) == ["x.yml > uv-below > Run > python"]
+
+
+# Copilot on HCW-NetworkEyes_App#403 and HCW-HybridCloudWorks#1725: a job's `defaults.run.shell` may hold an
+# expression (github, needs, strategy, matrix, env, vars, inputs). A `${{ matrix.X }}` there is read as each value
+# of the job's matrix list X, so `matrix-sudo-path` (sudo with a PATH that ends in /usr/bin) and `matrix-python` are
+# reported; any other expression, or a matrix value this check cannot read, may be either runtime, so such a step
+# needs both set up before it, as does an expression in a step's `shell:` or the workflow's `defaults.run.shell`,
+# which GitHub refuses. A step without `run:` uses no shell.
+EXPRESSION_SHELL_YAML = 'on: push\njobs:\n  literal-python:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        shell: python {0}\n        run: print(1)\n  vars-no-set-up:\n    runs-on: ubuntu-26.04\n    defaults:\n      run:\n        shell: ${{ vars.RUN_SHELL }}\n    steps:\n      - name: Run\n        run: echo hi\n  vars-python-only:\n    runs-on: ubuntu-26.04\n    defaults:\n      run:\n        shell: ${{ vars.RUN_SHELL }}\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        run: echo hi\n  vars-both:\n    runs-on: ubuntu-26.04\n    defaults:\n      run:\n        shell: ${{ vars.RUN_SHELL }}\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - uses: actions/setup-node@abc\n        with: { node-version: "26" }\n      - name: Run\n        run: echo hi\n  matrix-sudo-path:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        shell:\n          - \'sudo env PATH="$PATH:/usr/bin" bash -e {0}\'\n    defaults:\n      run:\n        shell: ${{ matrix.shell }}\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        run: python3 x\n  matrix-bash:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        shell:\n          - bash\n    defaults:\n      run:\n        shell: ${{ matrix.shell }} -e {0}\n    steps:\n      - uses: actions/setup-python@abc\n        with: { python-version: "3.15" }\n      - name: Run\n        run: python3 x\n  matrix-python:\n    runs-on: ubuntu-26.04\n    strategy:\n      matrix:\n        shell:\n          - python\n    defaults:\n      run:\n        shell: ${{ matrix.shell }} {0}\n    steps:\n      - name: Run\n        run: print(1)\n  matrix-missing:\n    runs-on: ubuntu-26.04\n    defaults:\n      run:\n        shell: ${{ matrix.missing }}\n    steps:\n      - name: Run\n        run: echo hi\n  step-expression:\n    runs-on: ubuntu-26.04\n    steps:\n      - name: Run\n        shell: ${{ inputs.shell }}\n        run: echo hi\n  no-run:\n    runs-on: ubuntu-26.04\n    defaults:\n      run:\n        shell: ${{ vars.RUN_SHELL }}\n    steps:\n      - uses: actions/checkout@abc\n'
+WORKFLOW_EXPRESSION_SHELL_YAML = "on: push\ndefaults:\n  run:\n    shell: ${{ vars.RUN_SHELL }}\njobs:\n  inherits:\n    runs-on: ubuntu-26.04\n    steps:\n      - name: Run\n        run: echo hi\n  own-shell:\n    runs-on: ubuntu-26.04\n    defaults:\n      run:\n        shell: bash -e {0}\n    steps:\n      - name: Run\n        run: echo hi\n"
+
+
+def test_round_four_a_shell_holding_an_expression():
+    jobs = read_jobs(EXPRESSION_SHELL_YAML)
+    assert unset_steps("x.yml", jobs, {}) == [
+        "x.yml > vars-no-set-up > Run > node",
+        "x.yml > vars-no-set-up > Run > python",
+        "x.yml > vars-python-only > Run > node",
+        "x.yml > matrix-sudo-path > Run > python",
+        "x.yml > matrix-python > Run > python",
+        "x.yml > matrix-missing > Run > node",
+        "x.yml > matrix-missing > Run > python",
+        "x.yml > step-expression > Run > node",
+        "x.yml > step-expression > Run > python",
+    ]
+    assert pipx_problems("x.yml", jobs) == []
+    assert unset_steps("x.yml", read_jobs(WORKFLOW_EXPRESSION_SHELL_YAML), {}) == [
+        "x.yml > inherits > Run > node",
+        "x.yml > inherits > Run > python",
+    ]
 
 
 FILES = sorted(p for p in WORKFLOWS.iterdir() if p.suffix in (".yml", ".yaml"))
