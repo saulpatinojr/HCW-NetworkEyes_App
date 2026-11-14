@@ -2672,7 +2672,8 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   `test_the_lab_builder_asks_python_for_the_prefix_site_packages` in `tests/security/test_lab_boundary.py` fails if a
   `python3.N` path comes back, and the Dependabot comment that listed the path as a hand step is updated. No other stage
   or test named the path: the lab final stage copies the prefix to `/usr/local`, which carries no version. (b) npm 11
-  warned that four install scripts were not covered by `allowScripts`. Read from the lockfile's tarballs (integrity
+  warned that four install scripts were not covered by `allowScripts` (npm 12 blocks such undecided scripts; npm 11.20
+  and 11.21 warn and run them). Read from the lockfile's tarballs (integrity
   hashes matched): `@prisma/engines` 6.19.3 postinstall downloads the Prisma schema engine and query engine for the
   platform (allowed: the deps stage's `test -f` and the migrator need them); `@prisma/client` 6.19.3 postinstall writes
   placeholder client files and runs `prisma generate` (allowed: the `web` job's type check and tests use the generated
@@ -2682,9 +2683,17 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   the lockfile, and eslint loads it). Entries were written by `npm install-scripts approve --no-allow-scripts-pin` and
   `npm install-scripts deny` (name-only, so a Prisma bump keeps them; `package-lock.json` did not change), and
   `apps/network-assessment-web/lib/install-scripts.test.ts` pins the four and fails on a newly locked package with an
-  undecided install script. With all four denied, the engines were not fetched and `npm run typecheck` failed on the
+  undecided install script. `apps/network-assessment-web/.npmrc` sets `strict-allow-scripts=true`, so with npm 11.20
+  an undecided script fails `npm ci` here now, before any script runs (ESTRICTALLOWSCRIPTS; checked by removing an
+  entry), and the CI `web` and canary jobs and the image's deps stage all read that file. The approvals stay name-only
+  on purpose: with strict mode, a pinned approval that no longer matches fails `npm ci`, so every Prisma bump from
+  Dependabot would go red until re-approved, while the lockfile's integrity hashes already pin the code, a bump arrives
+  as a reviewed pull request, strict mode blocks any new package's script, and a pin would not cover the engine binary
+  `@prisma/engines` downloads. Dependabot's npm updater runs `npm install --package-lock-only --ignore-scripts`, which
+  strict mode does not affect (checked locally with npm 11.20). With all four denied, the engines were not fetched and `npm run typecheck` failed on the
   missing generated client, which is why the two Prisma ones stay allowed. The migrator needs no entry: its `npm ci`
-  runs with `--ignore-scripts` (npm ranks it above `allowScripts`), its cut-out `package.json` carries none, and it runs
+  runs with `--ignore-scripts` (seen with npm 11.20 to override `allowScripts`; npm's docs do not state it), its cut-out
+  `package.json` carries none, its folder gets no `.npmrc`, and it runs
   the engine download and `prisma generate` itself.
 - **(6) Done 2026-11-13: the runtime test and one ruff version.** `tests/security/test_workflow_runtime_setup.py`, a
   copy of the NetworkEyes lab build's test with the same logic, fails any workflow step that runs `node`, `npm`, `npx`,
