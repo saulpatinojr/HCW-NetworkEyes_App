@@ -579,8 +579,9 @@ UNSET = object()
 # read only where the shell sets a variable (Copilot on HCW-NetworkEyes_App#395), at the start of a command: a command
 # made only of assignments (`P=/x;`; `P=/x pipx ...` sets P for pipx alone, after `$P` was read), `export`, `declare`,
 # `local`, `readonly` or `typeset` with assignments, `for P in` or `select P in`, `read P` (`read -a P`) and `unset P`
-# (round 3); never an argument (`echo P=/x`), quoted text, a comment or a heredoc's body, which `_shell_text` has
-# already set apart.
+# (round 3), those builtins with assignments in front of them too (`FOO=1 unset P`: bash still runs the builtin, and,
+# outside POSIX mode, keeps FOO for that one command only, so FOO is not read as set; Copilot on HCW-HybridCloudWorks#1722);
+# never an argument (`echo P=/x`), quoted text, a comment or a heredoc's body, which `_shell_text` has already set apart.
 ASSIGNED_WORD = (
     r"""([A-Za-z_][A-Za-z0-9_]*)\+?=(?:"(?:[^"\\]|\\.)*"|'[^']*'|\$\(\([^()`]*\)\)|[$<>]\([^()`]*\)|`[^`]*`"""
     r"""|[^\s"'()`;&|<>])*"""
@@ -588,11 +589,14 @@ ASSIGNED_WORD = (
 ONE_ASSIGNMENT = re.compile(ASSIGNED_WORD + r"\s*")
 NAMES_SET = re.compile(
     r"(?:^|[$<]\(|[`({|;&]|(?<![^\s])(?:then|do|else|elif|if|while|until|!))\s*"
-    r"(?:(?P<keyword>export|declare|local|readonly|typeset)(?![A-Za-z0-9_=])(?P<flags>(?:\s+[-+][A-Za-z]+)*)"
+    r"(?:(?:"
+    + ASSIGNMENT
+    + r")*(?:(?P<keyword>export|declare|local|readonly|typeset)(?![A-Za-z0-9_=])"
+    r"(?P<flags>(?:\s+[-+][A-Za-z]+)*)"
     r"(?P<declared>(?:\s+[^\s;&|)]+)*)"
     r"|(?:for|select)\s+(?P<loop>[A-Za-z_][A-Za-z0-9_]*)"
     r"|read(?![A-Za-z0-9_=])(?P<read>(?:[ \t]+[^\s;&|)]+)*)"
-    r"|unset(?![A-Za-z0-9_=])(?P<unset>(?:[ \t]+[^\s;&|)]+)*)"
+    r"|unset(?![A-Za-z0-9_=])(?P<unset>(?:[ \t]+[^\s;&|)]+)*))"
     r"|(?P<assigned>(?:" + ASSIGNED_WORD.replace("(", "(?:", 1) + r"\s*)+)(?=$|[;&|)}]))"
 )
 # `read`'s options that take a value; `-a` names the array it sets.
@@ -4981,6 +4985,47 @@ def test_round_three_review_a_long_quoted_string_and_a_long_script_read_quickly(
         runs_through_sudo(run, "python")
         pipx_without_python(run, {"PIPX_DEFAULT_PYTHON": "/opt/py/bin/python3"})
     assert time.perf_counter() - started < 5
+
+
+# Copilot on HCW-HybridCloudWorks#1722: bash runs `FOO=1 unset P`, `FOO=1 export -n P` and `FOO=1 declare +x P` like
+# the builtin alone. The same cases as the website's scripts/workflow-runtime-setup.test.mjs, in the same order.
+@pytest.mark.parametrize(
+    ("run", "env", "flagged"),
+    [
+        (
+            "FOO=1 unset PIPX_DEFAULT_PYTHON; bash -c 'pipx run x'",
+            {"PIPX_DEFAULT_PYTHON": "/opt/py"},
+            True,
+        ),
+        ("FOO=1 unset PIPX_DEFAULT_PYTHON; pipx run x", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, True),
+        (
+            "FOO=1 export -n PIPX_DEFAULT_PYTHON; pipx run x",
+            {"PIPX_DEFAULT_PYTHON": "/opt/py"},
+            True,
+        ),
+        (
+            "FOO=1 declare +x PIPX_DEFAULT_PYTHON; bash -c 'pipx run x'",
+            {"PIPX_DEFAULT_PYTHON": "/opt/py"},
+            True,
+        ),
+        (
+            'A=1 B="x y" export -n P; bash -c \'pipx run --python "$P" x\'',
+            {"P": "/opt/py/bin/python3"},
+            True,
+        ),
+        ('FOO=1 unset P; pipx run --python "$P" x', {"P": "/opt/py/bin/python3"}, True),
+        ("FOO=1 export P=/opt/py/bin/python3; bash -c 'pipx run --python \"$P\" x'", {}, False),
+        ('FOO=1 read P < p.txt; pipx run --python "$P" x', {}, False),
+        (
+            "FOO=1 unset -f PIPX_DEFAULT_PYTHON; pipx run x",
+            {"PIPX_DEFAULT_PYTHON": "/opt/py"},
+            False,
+        ),
+        ("echo unset PIPX_DEFAULT_PYTHON; pipx run x", {"PIPX_DEFAULT_PYTHON": "/opt/py"}, False),
+    ],
+)
+def test_round_three_copilot_builtins_with_assignments_in_front_of_them(run, env, flagged):
+    assert pipx_without_python(run, env) is flagged
 
 
 FILES = sorted(p for p in WORKFLOWS.iterdir() if p.suffix in (".yml", ".yaml"))
