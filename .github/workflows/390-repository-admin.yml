@@ -71,9 +71,13 @@ jobs:
           ALLOW_WEAKENING: ${{ inputs.allow_weakening }}
           # The required checks `protect-main` applies to the "Protect main" ruleset; every name must be a job name in
           # 300-test-codebase.yml, and tests/unit/test_repository_admin_required_checks.py pins both. `Unit Tests (Python
-          # 3.14)` left this list on 2026-11-14 with the 3.14 leg of the unit tests (requires-python >=3.15.2); until the
-          # owner runs `protect-main` with apply and allow_weakening, the live ruleset still requires it. Change the live
-          # ruleset and this list together.
+          # 3.14)` left this list on 2026-11-14 with the 3.14 leg of the unit tests (requires-python >=3.15.2). This
+          # workflow runs from `main` only, so it cannot drop that check before the change merges, and the change cannot
+          # merge while the live ruleset still requires a check that no longer reports. So the owner removes `Unit Tests
+          # (Python 3.14)` from the ruleset by hand first (Settings > Rules > Rulesets > Protect main, or
+          # https://github.com/saulpatinojr/HCW-NetworkEyes_App/rules/25778319; TODO.md T-743 (4)), then the change
+          # merges, and from then on this list and the live ruleset agree. Change the live ruleset and this list
+          # together.
           REQUIRED_CHECKS: '["Lint & Format","Web lint, typecheck & tests","Python Lockfile Consistency","Python Dependency Audit (pip-audit)","Secret Scanning (detect-secrets, gating)","Repository Guardrails","Dockerfile Lint (hadolint)","Workflow Lint (actionlint)","Dependency Review","Image Scan (Trivy)","Unit Tests (Python 3.15)"]'
           KEEP_REGEX: '^(main|master|develop|gh-pages|release/.*)$'
         run: |

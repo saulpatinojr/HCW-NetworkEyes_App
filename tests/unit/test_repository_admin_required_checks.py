@@ -44,11 +44,15 @@ STEP_NAME = "Run the chosen task"
 
 # The required status checks `protect-main` applies to the "Protect main" ruleset (ruleset 25778319). The first
 # ten are the live ruleset as read 2026-10-25, in its order, without `Unit Tests (Python 3.14)`, which left on
-# 2026-11-14 with the 3.14 leg of the unit tests (requires-python >=3.15.2,<3.16; until the owner runs
-# `protect-main` with apply and allow_weakening, the live ruleset still requires it). `Unit Tests (Python 3.15)` was
-# added 2026-11-12 (saulpatinojr/HCW-HybridCloudWorks#1707) and is live since that day's apply. CHANGING THE LIVE RULESET AND THIS LIST MUST HAPPEN TOGETHER: add or remove a
-# check in the ruleset, in `REQUIRED_CHECKS` of 390-repository-admin.yml and here, in one pull request.
-# Otherwise the next `protect-main` run undoes (or never applies) the change.
+# 2026-11-14 with the 3.14 leg of the unit tests (requires-python >=3.15.2,<3.16). 390 runs from `main` only, so it
+# cannot drop that check before this change merges, and the change cannot merge while the live ruleset still requires
+# a check that no longer reports. So the owner removes `Unit Tests (Python 3.14)` from the ruleset by hand first
+# (Settings > Rules > Rulesets > Protect main, or https://github.com/saulpatinojr/HCW-NetworkEyes_App/rules/25778319;
+# TODO.md T-743 (4)), then this change merges, and from then on this list and the live ruleset agree.
+# `Unit Tests (Python 3.15)` was added 2026-11-12 (saulpatinojr/HCW-HybridCloudWorks#1707) and is live since that
+# day's apply. CHANGING THE LIVE RULESET AND THIS LIST MUST HAPPEN TOGETHER: add or remove a check in the ruleset, in
+# `REQUIRED_CHECKS` of 390-repository-admin.yml and here, in one pull request. Otherwise the next `protect-main` run
+# undoes (or never applies) the change.
 EXPECTED_REQUIRED_CHECKS = [
     "Lint & Format",
     "Web lint, typecheck & tests",
