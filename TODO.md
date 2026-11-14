@@ -2626,8 +2626,8 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   `Image Scan (Trivy)` jobs are the proof, and the web tier was not started against the built image.
 
 ### T-743 — Node.js 26 and Python 3.15, the HCW runtime floors (HCW-HybridCloudWorks#1707)
-- **Status:** Done 2026-11-12 (and (6) to (9) on 2026-11-13, (4) and (10) on 2026-11-14), except item (5), which is
-  open. The HCW website's version
+- **Status:** Done 2026-11-12 (and (6) to (9) on 2026-11-13, (4), (10) and (11) on 2026-11-14), except item (5),
+  which is open. The HCW website's version
   floors (`scripts/version-floors.json` in saulpatinojr/HCW-HybridCloudWorks, issue 1707 there) ask for the newest
   Node.js LTS line (26, floor 26.11.0) and the newest Python line (3.15, floor 3.15.2, the line's newest patch, since the
   owner's decision of 2026-11-14; it was 3.15.0 under the earlier N-2 rule). This
@@ -2715,6 +2715,20 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   `sudo env`, YAML anchors, aliases and tags, an unset `pythonLocation`, more quoting forms and names that end at an
   operator, a clearer failure message for sudo, a step `shell:` run through sudo, and two very slow inputs.
   HCW-MigrateOrchestrator_App's copy is ported next.
+- **(11) Done 2026-11-14: round 5 of the runtime test, the last planned round.** A step whose `shell:` is there but
+  empty (`shell:`, `~`, `null`, `Null`, `NULL`, a comment alone, `''`, `""`) now falls back to the job's
+  `defaults.run.shell`, else the workflow's, as the runner does (actions/runner
+  `src/Runner.Worker/Handlers/ScriptHandler.cs`, lines 70-79 at commit 8cfa1049), in the set-up check, a job's
+  `${{ matrix.shell }}` default and the pipx check alike; before, it read as the runner's default shell, so a
+  `sudo python3 {0}` default went unreported. A job's own `defaults.run.shell: ''` still counts as its own empty
+  shell, while a null one now uses the workflow's, as the website's copy already read it. The line reader now reads a
+  value that is only a comment as empty, as YAML does. The same five tests are in the website's JavaScript copy, and
+  the two copies agree on 94,952 generated cases; no HCW workflow has an empty step `shell:`, and no workflow's result
+  changed. Owner decision 2026-11-14: round five is the last planned round. After it, this check changes only when
+  (1) a real HCW workflow trips it or would get past it, or (2) a reviewer shows a way past it that a workflow could
+  plausibly be written with. Any other edge case a reviewer raises is added to the known-limits list in this header,
+  not to a new round (the "Known limits" paragraph of the test file's header). The seven other copies are ported
+  after this and the website's change merge.
 - **Not checked here:** no image was built (no Docker daemon in the session that made the change). The Python tests and
   the install of each image's dependency set ran on CPython 3.15.2; the web checks ran on Node.js 26. The pull
   request's `Docker Build Smoke Test`, `Lab Boundary Image` and `Image Scan (Trivy)` jobs and the next `200` run on
