@@ -26,8 +26,11 @@ WORKDIR /app
 
 # No extra packages: Alpine needed libc6-compat for glibc-built binaries, and Debian is glibc already. npm picks
 # the *-linux-x64-gnu builds of the native packages (Next.js SWC, sharp, lightningcss, tailwind oxide) from the
-# lockfile. The trailing test fails the build if Prisma fetched an engine for another platform.
-COPY package.json package-lock.json* ./
+# lockfile. The trailing test fails the build if Prisma fetched an engine for another platform, or fetched none: the
+# engine download is @prisma/engines' install script, approved in the `allowScripts` field of package.json so that
+# an npm that blocks unreviewed scripts still runs it (lib/install-scripts.test.ts holds the decision for each one).
+# .npmrc sets strict-allow-scripts, so a script nobody decided on fails this `npm ci` before any script runs.
+COPY package.json package-lock.json* .npmrc ./
 RUN npm ci --legacy-peer-deps \
  && test -f node_modules/@prisma/engines/libquery_engine-debian-openssl-3.0.x.so.node
 
@@ -73,8 +76,10 @@ RUN npm run build \
 # `npm ci` installs the versions and integrity hashes the web app is audited with
 # and fails if the cut-out lockfile does not match its manifest.
 #
-# Install scripts stay off (`--ignore-scripts`). Prisma needs two things from
-# them, done explicitly: @prisma/engines downloads the schema and query engines
+# Install scripts stay off (`--ignore-scripts`; with npm 11.20 it was seen to
+# override the `allowScripts` field, which npm's docs do not state; the cut-out
+# package.json carries none, and this folder gets no .npmrc). Prisma needs two
+# things from them, done explicitly: @prisma/engines downloads the schema and query engines
 # (its own postinstall script, the same download the deps stage makes), and the
 # client is generated from the schema. The generated client is what seed-local-admin.js
 # loads, so this stage does not depend on the builder (no Next.js build).
