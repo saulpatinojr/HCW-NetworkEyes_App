@@ -772,9 +772,9 @@ jobs:
       # `prisma migrate deploy` with root-owned files (issue 367): the image's own command (prisma/migrate.sh, which
       # migrates and then runs the local-admin seed; the seed skips without LOCAL_ADMIN_PASSWORD) runs as the image's
       # own user (1001, checked above) with a read-only root file system against a throwaway PostgreSQL. The two
-      # containers share an internal network: they reach each other and nothing else. The database trusts every
+      # containers share an internal network: they reach each other and the runner, and nothing outside it. The database trusts every
       # connection on that network, so no password exists anywhere; it lives in memory and is deleted at the end.
-      # Then: every migration directory is recorded as applied, a second `migrate deploy` finds nothing pending, and
+      # Then: every migration directory is recorded as applied, a second `migrate deploy` reports nothing pending, and
       # the migrator's Prisma client (the one seed-local-admin.js uses) reads the migrated database.
       - name: The migrator applies every migration to a throwaway database as uid 1001, read-only
         run: |
@@ -786,6 +786,12 @@ jobs:
             docker network rm "$net" > /dev/null 2>&1 || true
           }
           trap cleanup EXIT
+          # Pulled first, with retries, so a brief registry error does not fail this required check.
+          for attempt in 1 2 3; do
+            docker pull -q "$MIGRATE_TEST_POSTGRES_IMAGE" > /dev/null && break
+            if [ "$attempt" = 3 ]; then echo "::error::could not pull the throwaway PostgreSQL image"; exit 1; fi
+            sleep 10
+          done
           docker network create --internal "$net" > /dev/null
           docker run -d --name "$db" --network "$net" --read-only --cap-drop ALL --security-opt no-new-privileges \
             --user 999:999 --tmpfs /var/lib/postgresql/data:uid=999,gid=999,mode=0700 \
@@ -813,8 +819,13 @@ jobs:
             echo "::error::the migrator applied ${applied} of ${expected} migrations"
             exit 1
           fi
-          docker run "${migrator[@]}" --entrypoint node_modules/.bin/prisma network-assessment-scan-migrator:ci migrate deploy \
-            || { echo "::error::a second prisma migrate deploy failed"; exit 1; }
+          second="$(docker run "${migrator[@]}" --entrypoint node_modules/.bin/prisma network-assessment-scan-migrator:ci \
+            migrate deploy 2>&1)" || { echo "$second"; echo "::error::a second prisma migrate deploy failed"; exit 1; }
+          if ! grep -q 'No pending migrations to apply' <<< "$second"; then
+            echo "$second"
+            echo "::error::a second prisma migrate deploy did not report that nothing was pending"
+            exit 1
+          fi
           docker run "${migrator[@]}" --entrypoint node network-assessment-scan-migrator:ci -e \
             'const { PrismaClient } = require("@prisma/client"); const db = new PrismaClient(); db.user.count().then((n) => { console.log(`the migrator client reads the migrated database: ${n} users`); return db.$disconnect(); }).catch((error) => { console.error(error.message); process.exit(1); });' \
             || { echo "::error::the migrator's Prisma client could not read the migrated database"; exit 1; }
