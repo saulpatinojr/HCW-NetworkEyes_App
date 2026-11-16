@@ -346,6 +346,63 @@ def test_image_scan_job_checks_the_migrator_tree_inside_the_built_image() -> Non
     )
 
 
+MIGRATOR_OWNERSHIP_STEP = (
+    "The migrator's files belong to root and its user can write nothing in them"
+)
+MIGRATE_DEPLOY_STEP = (
+    "The migrator applies every migration to a throwaway database as uid 1001, read-only"
+)
+
+
+def test_image_scan_job_checks_that_the_migrator_user_owns_nothing() -> None:
+    """Issue 367: the built migrator is run as its own user and fails on any file uid 1001 owns or can write."""
+    runs = image_scan_runs()
+    run = runs[MIGRATOR_OWNERSHIP_STEP]
+    assert "network-assessment-scan-migrator:ci" in run
+    assert "find /app -xdev" in run
+    for condition in ("-user 1001", "-group 1001", "-perm /022"):
+        assert condition in run, condition
+    assert "! -path" not in run, "the migrator has no writable exception, unlike the runner's cache"
+    assert "--read-only" not in run, "a read-only root file system would hide a writable path"
+    assert "--user" not in run, "the check runs as the image's own user"
+    for path in ("prisma/migrate.sh", "prisma/migrations", "node_modules/@prisma/engines"):
+        assert f"test ! -w {path}" in run, path
+    names = list(runs)
+    assert names.index(MIGRATOR_OWNERSHIP_STEP) > names.index(
+        "Build the migrator and web runner images"
+    )
+
+
+def test_image_scan_job_proves_migrate_deploy_against_a_pinned_throwaway_database() -> None:
+    """Issue 367: `prisma migrate deploy` runs from the root-owned image, as uid 1001, read-only."""
+    image = workflow()["jobs"]["image-scan"]["env"]["MIGRATE_TEST_POSTGRES_IMAGE"]
+    assert re.fullmatch(r"postgres:\d+\.\d+-trixie@sha256:[0-9a-f]{64}", image), (
+        "the test database is the official Debian trixie PostgreSQL image, pinned by version and digest"
+    )
+    run = image_scan_runs()[MIGRATE_DEPLOY_STEP]
+    assert '"$MIGRATE_TEST_POSTGRES_IMAGE"' in run
+    assert "postgres:" not in run, "the image is named once, in the job's env"
+    assert "docker network create --internal" in run, (
+        "the two containers reach each other and nothing else"
+    )
+    assert "trap cleanup EXIT" in run
+    migrator = re.search(r"migrator=\(([^)]*)\)", run)
+    assert migrator, run
+    for flag in ("--read-only", "--cap-drop ALL", "--security-opt no-new-privileges"):
+        assert flag in migrator.group(1), flag
+    assert "--user" not in migrator.group(1), "the migrator runs as the image's own user (1001)"
+    # The image's own command (prisma/migrate.sh), the count of applied migrations, and a second, idempotent run.
+    assert re.search(
+        r'docker run "\$\{migrator\[@\]\}" network-assessment-scan-migrator:ci\s', run
+    ), "the migrator's own command runs, with no --entrypoint"
+    assert "_prisma_migrations" in run
+    assert "apps/network-assessment-web/prisma/migrations" in run
+    assert "migrate deploy" in run
+    assert "POSTGRES_PASSWORD" not in run, (
+        "the throwaway database trusts its internal network; no password"
+    )
+
+
 def trivy_ignore() -> dict:
     return yaml.safe_load(TRIVY_IGNORE.read_text(encoding="utf-8")) or {}
 

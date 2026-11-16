@@ -2,8 +2,8 @@
 # and the sha256 of its draw.war. Declared here, before the first FROM, so that the runner can record the version in
 # an image label and the weekly check (.github/workflows/380-drawio-pin-check.yml) reads one line. Change both
 # together; tests/security/test_drawio_self_hosted.py checks their shape.
-ARG DRAWIO_WEBAPP_VERSION=32.6.9
-ARG DRAWIO_WEBAPP_SHA256=31afc82b7920c409d0591f6126ccb6c377d7800e7f11ab324f88bdf1e4249ce7
+ARG DRAWIO_WEBAPP_VERSION=32.6.10
+ARG DRAWIO_WEBAPP_SHA256=a57b06b3b6a876a351dacfe65d027d9509319cd030e9bacf6ae04a034d66a38f
 
 # Every stage is node:26-trixie-slim (Debian 13, glibc), the same Debian release as the Python images, digest pinned
 # 2026-11-12 (Node 26.13.1, built 2026-11-11; the digest the tag pointed to that day). 26.13.1 is Node's security
@@ -155,10 +155,17 @@ RUN printf 'upgrade run: %s\n' "${PUBLISH_CACHE_BUST}" \
 # client seed-local-admin.js loads, so copy it whole. Never copy the builder's
 # node_modules here: it carries every devDependency (tests/unit/test_ci_hygiene.py
 # fails if this stage does, and 300-test-codebase.yml scans the built image).
-COPY --chown=nextjs:nodejs prisma ./prisma
-COPY --from=migrator-deps --chown=nextjs:nodejs /app/node_modules ./node_modules
+#
+# No --chown (issue 367, as for the runner in issue 358): the migrations, the schema, the entrypoint, the Prisma CLI
+# and its engines stay owned by root and readable by everyone, so the migrator's user (uid 1001) can run them but
+# cannot change, replace or chmod them (an owner always can chmod its own files). `prisma migrate deploy` and
+# seed-local-admin.js write nothing here: they only read these files and talk to the database. The Image Scan job
+# of 300-test-codebase.yml checks the built image (uid 1001 owns nothing under /app and nothing there is group- or
+# world-writable) and runs `prisma migrate deploy` from it as uid 1001, read-only, against a throwaway PostgreSQL.
+COPY prisma ./prisma
+COPY --from=migrator-deps /app/node_modules ./node_modules
 
-# Small, reviewable entrypoint copied executable, replacing the inline sh -c.
+# Small, reviewable entrypoint copied executable, replacing the inline sh -c. Owned by root like the rest.
 COPY --chmod=755 prisma/migrate.sh ./prisma/migrate.sh
 
 # Prisma CLI checkpoint telemetry would try to write under $HOME, which the

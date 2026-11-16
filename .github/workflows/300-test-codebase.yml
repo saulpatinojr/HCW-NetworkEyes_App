@@ -634,6 +634,8 @@ jobs:
   #   1. The migrator holds the Prisma CLI, the client and its engines, and none of the build tooling (checked
   #      against the image, not the Dockerfile text), every package in it is the version and integrity hash
   #      package-lock.json names, and `prisma validate` runs inside it. The runner still holds no Prisma CLI.
+  #      In both images the app's user (uid 1001) owns nothing it runs (issues 358 and 367), and the migrator
+  #      applies every migration to a throwaway PostgreSQL, as uid 1001 with a read-only root file system.
   #   2. Trivy 0.76.1 (the same digest as scripts/ci/local-container-checks.sh; tests/unit/test_ci_hygiene.py keeps
   #      them equal) scans an exported tar of each image for fixable HIGH and CRITICAL vulnerabilities and for
   #      secrets, and fails the job on any. `--ignore-unfixed` is the policy of the Scout gate in 200 (only-fixed),
@@ -654,6 +656,11 @@ jobs:
       # Trivy 0.76.1 (released 2026-10-21). Never a tag alone: Trivy images were published under moving tags on
       # 2026-03-19 and 2026-03-22 (GHSA-69fq-xp46-6x23). Move this and scripts/ci/local-container-checks.sh together.
       TRIVY_IMAGE: ghcr.io/aquasecurity/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c
+      # The throwaway database the migrator's `prisma migrate deploy` is proven against (issue 367): PostgreSQL 16,
+      # the major version prisma/schema.prisma names for the deployed database, on Debian 13 trixie like every
+      # image here. Official image, 16.16-trixie, the multi-platform index digest that tag pointed to on 2026-11-16
+      # (built 2026-11-12). Dependabot does not read this line; move the tag and the digest together, by hand.
+      MIGRATE_TEST_POSTGRES_IMAGE: postgres:16.16-trixie@sha256:dd2bf3ce2dc83a81674cf7f217fcfd8a5009a4b325dda5b843bfee82a06cff6f
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -740,6 +747,77 @@ jobs:
             'test "$(stat -c %u app/.next/cache)" = 1001 && test -w app/.next/cache && test ! -w app/server.js && test ! -w node_modules/.prisma/client && test -r app/public/drawio/index.html && test -r app/server.js' \
             || { echo "::error::the web runner's cache must be the only place its user can write, and its files must stay readable"; failed=1; }
           exit "$failed"
+      # The migrator's files belong to root too (issue 367, apps/network-assessment-web/Dockerfile, migrator stage): the
+      # Prisma CLI, its engines, the migrations and prisma/migrate.sh. Run as the image's own user (1001), without
+      # --read-only so a writable path would show: uid 1001 must own nothing under /app, nothing there may be writable
+      # by its group or by everyone (symbolic links aside), and what migrate.sh runs must still be readable. Unlike the
+      # runner there is no exception: `prisma migrate deploy` and the seed write nothing to the image (the next step).
+      - name: The migrator's files belong to root and its user can write nothing in them
+        run: |
+          set -euo pipefail
+          sandbox=(--rm --network none --cap-drop ALL --security-opt no-new-privileges --entrypoint sh)
+          failed=0
+          found="$(docker run "${sandbox[@]}" network-assessment-scan-migrator:ci -c \
+            'find /app -xdev \( -user 1001 -o -group 1001 -o \( ! -type l -perm /022 \) \) -print 2>&1')" \
+            || { echo "::error::could not list the migrator's files"; failed=1; }
+          if [ -n "$found" ]; then
+            echo "::error::the migrator holds files its user owns or that are group- or world-writable:"
+            head -n 50 <<<"$found"
+            failed=1
+          fi
+          docker run "${sandbox[@]}" network-assessment-scan-migrator:ci -c \
+            'test "$(id -u)" = 1001 && test ! -w /app && test ! -w prisma && test ! -w prisma/migrations && test ! -w prisma/migrate.sh && test ! -w node_modules && test ! -w node_modules/.prisma/client && test ! -w node_modules/@prisma/engines && test -x prisma/migrate.sh && test -r prisma/schema.prisma && test -x node_modules/.bin/prisma' \
+            || { echo "::error::the migrator's user must be unable to write its files, and must still be able to read and run them"; failed=1; }
+          exit "$failed"
+      # `prisma migrate deploy` with root-owned files (issue 367): the image's own command (prisma/migrate.sh, which
+      # migrates and then runs the local-admin seed; the seed skips without LOCAL_ADMIN_PASSWORD) runs as the image's
+      # own user (1001, checked above) with a read-only root file system against a throwaway PostgreSQL. The two
+      # containers share an internal network: they reach each other and nothing else. The database trusts every
+      # connection on that network, so no password exists anywhere; it lives in memory and is deleted at the end.
+      # Then: every migration directory is recorded as applied, a second `migrate deploy` finds nothing pending, and
+      # the migrator's Prisma client (the one seed-local-admin.js uses) reads the migrated database.
+      - name: The migrator applies every migration to a throwaway database as uid 1001, read-only
+        run: |
+          set -euo pipefail
+          net=network-assessment-migrate-test
+          db=network-assessment-migrate-db
+          cleanup() {
+            docker rm -f "$db" > /dev/null 2>&1 || true
+            docker network rm "$net" > /dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          docker network create --internal "$net" > /dev/null
+          docker run -d --name "$db" --network "$net" --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --user 999:999 --tmpfs /var/lib/postgresql/data:uid=999,gid=999,mode=0700 \
+            --tmpfs /var/run/postgresql:uid=999,gid=999 --tmpfs /tmp:uid=999,gid=999 \
+            -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_DB=networkeyes "$MIGRATE_TEST_POSTGRES_IMAGE" > /dev/null
+          ready=0
+          for _ in $(seq 1 60); do
+            if docker exec "$db" pg_isready -q -h 127.0.0.1 -U postgres; then ready=1; break; fi
+            sleep 1
+          done
+          if [ "$ready" != 1 ]; then
+            echo "::error::the throwaway PostgreSQL did not start"
+            docker logs "$db"
+            exit 1
+          fi
+          migrator=(--rm --network "$net" --read-only --cap-drop ALL --security-opt no-new-privileges
+            -e DATABASE_URL="postgresql://postgres@${db}:5432/networkeyes?sslmode=disable")
+          docker run "${migrator[@]}" network-assessment-scan-migrator:ci \
+            || { echo "::error::prisma/migrate.sh failed in the migrator image"; exit 1; }
+          expected="$(find apps/network-assessment-web/prisma/migrations -mindepth 1 -maxdepth 1 -type d | wc -l)"
+          applied="$(docker exec "$db" psql -U postgres -d networkeyes -tAc \
+            'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL')"
+          echo "migrations in the repository: ${expected}, applied by the migrator: ${applied}"
+          if [ "$applied" != "$expected" ]; then
+            echo "::error::the migrator applied ${applied} of ${expected} migrations"
+            exit 1
+          fi
+          docker run "${migrator[@]}" --entrypoint node_modules/.bin/prisma network-assessment-scan-migrator:ci migrate deploy \
+            || { echo "::error::a second prisma migrate deploy failed"; exit 1; }
+          docker run "${migrator[@]}" --entrypoint node network-assessment-scan-migrator:ci -e \
+            'const { PrismaClient } = require("@prisma/client"); const db = new PrismaClient(); db.user.count().then((n) => { console.log(`the migrator client reads the migrated database: ${n} users`); return db.$disconnect(); }).catch((error) => { console.error(error.message); process.exit(1); });' \
+            || { echo "::error::the migrator's Prisma client could not read the migrated database"; exit 1; }
       - name: Export the images and download the Trivy database
         run: |
           set -euo pipefail
