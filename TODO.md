@@ -19,7 +19,7 @@ claimed anew). Rows checked since: T-728 and T-730 on 2026-10-24; T-721, T-722, 
 | [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-419 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements + appliance migration | T-501 – T-509 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
-| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-744 |
+| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-745 |
 
 ---
 
@@ -2794,3 +2794,36 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   wrong fingerprint failed the `migrator-deps` build. The full `builder`, `migrator` and `runner` targets were not
   built here (disk space); the pull request's `Image Scan (Trivy)` job builds the `migrator` and `runner` targets
   (and with them `deps`, `builder` and `migrator-deps`).
+
+### T-745 — The migrator's files belong to root, and `prisma migrate deploy` is proven with them (issue #367)
+- **Status:** Done 2026-11-16 (issue #367, found by the review of #366, which did the same for the runner in T-742 (1)).
+- **Why.** The `migrator` stage of `apps/network-assessment-web/Dockerfile` copied `prisma/` and `node_modules` with
+  `--chown=nextjs:nodejs`, so the migrator's user (uid 1001) owned the Prisma CLI, its engines, the migrations and the
+  `prisma/` folder, and, owning that folder, could replace the root-owned `prisma/migrate.sh` in it. Low severity (the
+  container runs once and exits, and code running in it already holds the database-owner connection string), but
+  nothing recorded a reason for it, so it was an oversight left by issue 358.
+- **What.** Both `COPY` lines lose `--chown`: every file in the migrator stays owned by root and readable by everyone.
+  `prisma migrate deploy` and `prisma/seed-local-admin.js` only read these files, so nothing else changed and there is
+  no writable exception (the runner keeps its one, `app/.next/cache`). The `Image Scan (Trivy)` job of
+  `300-test-codebase.yml` gains two steps (no new job, so no new required check): one runs the built migrator as
+  uid 1001 and fails if it owns anything under `/app`, if anything there is group- or world-writable, or if it can
+  write `prisma/`, `prisma/migrate.sh`, the migrations or the engines; the other starts a throwaway PostgreSQL 16
+  (`postgres:16.16-trixie`, pinned by digest in the job's `MIGRATE_TEST_POSTGRES_IMAGE`; Dependabot does not read it)
+  on an internal Docker network, runs the image's own command (`prisma/migrate.sh`) as uid 1001 with a read-only root
+  file system, checks that every migration directory is recorded as applied, runs `prisma migrate deploy` again
+  (nothing pending) and reads the migrated database with the migrator's Prisma client. `tests/unit/test_migrator_image.py`
+  fails on a `--chown` or `chown` in the migrator stage; `tests/unit/test_ci_hygiene.py` pins both steps.
+- **The `undici` note of the issue.** The issue said npm 11 marks `undici` as a development package, so
+  `npm audit --omit=dev` would not cover it. That was true of the lockfile #366 wrote (2026-11-08), but Dependabot's
+  rewrite of the same day (#373) dropped the flag, and on 2026-11-16 `package-lock.json` lists `undici` 8.12.3 without
+  `dev`, so `npm audit --omit=dev` covers it again. It is still only an optional peer of `openai` and a dependency of
+  `jsdom` (development), nothing in the app imports it, and the built runner holds no `undici` folder. The flag flips
+  with the npm that writes the lockfile; if the app ever imports `undici`, declare it in `dependencies` (as was done
+  for `react-is`) so the flag stops mattering.
+- **Checked here (2026-11-16):** both targets built locally (Docker, with the session's proxy certificate added to a
+  scratch copy of the Dockerfile only, so its downloads could pass; nothing of that copy is committed); the four check
+  steps of `Image Scan (Trivy)`, copied out of the workflow, passed against them (17 of 17 migrations applied, a second
+  run found nothing pending, the client read the database); the new ownership step failed (as it should) against the
+  migrator built from the old Dockerfile, listing 4,978 paths. Trivy itself could not run here (its database download
+  failed on the session's proxy certificate); the pull request's job runs it.
+

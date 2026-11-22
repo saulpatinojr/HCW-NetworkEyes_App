@@ -57,6 +57,28 @@ describe("postcss-selector-parser", () => {
   });
 });
 
+describe("effect", () => {
+  // @prisma/config 6.19.3 (the Prisma CLI's config loader, also in the migrator image) pins effect to exactly 3.21.0,
+  // which has a ReDoS in Schema.TemplateLiteral (CVE-2026-121707, fixed in 3.22.1; Trivy in the Image Scan job). No
+  // Prisma 6 release moves it, so the override in package.json does; this fails if the lockfile resolves an older one.
+  it("resolves to 3.22.1 or later", () => {
+    const lock = JSON.parse(
+      readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"),
+    );
+    const versions = Object.entries<{ version: string }>(lock.packages)
+      .filter(([path]) => path.endsWith("node_modules/effect"))
+      .map(([, entry]) => entry.version);
+    expect(versions.length).toBeGreaterThan(0);
+    for (const version of versions) {
+      const [major, minor, patch] = version.split(".").map(Number);
+      const ok =
+        major > 3 ||
+        (major === 3 && (minor > 22 || (minor === 22 && patch >= 1)));
+      expect(ok, `effect ${version} is below 3.22.1`).toBe(true);
+    }
+  });
+});
+
 describe("minimatch", () => {
   // minimatch 7.0.0 to 11.0.0 can spend excessive CPU on a crafted glob pattern (GHSA-g3hv-75wg-m249, moderate). Dependabot
   // could not update it (its only path downgraded eslint 10 to 4), so the "minimatch@^10" override lifts the copy that

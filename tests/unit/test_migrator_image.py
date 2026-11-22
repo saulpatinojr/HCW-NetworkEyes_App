@@ -11,9 +11,9 @@ What is pinned here:
 * the Dockerfile text: the migrator copies nothing from the builder and takes `node_modules` from its own
   `migrator-deps` stage, which installs from a lockfile with `npm ci --omit=dev --ignore-scripts`; the runner still
   takes only the generated Prisma client from the builder (so `prisma` moving to `dependencies` cannot enlarge it);
-  the numeric user and the exec-form `CMD`/`HEALTHCHECK` stay as they were, and the migrator's file ownership too;
+  the numeric user and the exec-form `CMD`/`HEALTHCHECK` stay as they were;
 * the runner's files stay owned by root (no `--chown`), and the only directory its user owns is `app/.next/cache`
-  (issue 358);
+  (issue 358); the migrator's files stay owned by root with no exception at all (issue 367);
 * the Prisma engine fingerprints (TODO.md T-744): the deps, builder and migrator-deps stages each run
   `scripts/check-prisma-engines.sh` against `prisma-engines.sha256` after Prisma has downloaded or copied its engines;
 * `package.json`: `prisma` is a production dependency (the migrator runs it) at the same range as `@prisma/client`;
@@ -139,17 +139,35 @@ def test_migrator_copies_nothing_from_the_builder() -> None:
         )
 
 
-def test_migrator_takes_node_modules_from_its_own_stage_with_the_same_ownership() -> None:
+def test_migrator_takes_node_modules_from_its_own_stage() -> None:
     node_modules = [(n, a) for n, a in copies("migrator") if "node_modules" in a]
     assert len(node_modules) == 1, node_modules
     number, arguments = node_modules[0]
     assert "--from=migrator-deps" in arguments, f"Dockerfile:{number} {arguments}"
-    assert "--chown=nextjs:nodejs" in arguments
-    prisma_dir = [a for _, a in copies("migrator") if re.search(r"\bprisma\s+\./prisma\s*$", a)]
-    assert prisma_dir and "--chown=nextjs:nodejs" in prisma_dir[0], copies("migrator")
+    assert [a for _, a in copies("migrator") if re.search(r"\bprisma\s+\./prisma\s*$", a)], copies(
+        "migrator"
+    )
     assert any(
         "--chmod=755 prisma/migrate.sh ./prisma/migrate.sh" in a for _, a in copies("migrator")
     )
+
+
+def test_migrator_files_stay_owned_by_root() -> None:
+    """Issue 367: the migrator's user must own none of the files it runs, as in the runner (issue 358).
+
+    It used to receive `prisma/` and `node_modules` with `--chown=nextjs:nodejs`, so uid 1001 owned the Prisma CLI,
+    its engines and the migrations, and, owning `prisma/`, could replace the root-owned `prisma/migrate.sh` beside
+    them. Nothing in the stage may hand a file to that user: no `--chown` on a COPY and no `chown` in a RUN (the
+    migrator, unlike the runner, writes nowhere at run time). The Image Scan job of 300-test-codebase.yml checks the
+    built image and runs `prisma migrate deploy` from it as uid 1001 against a throwaway database.
+    """
+    for number, arguments in copies("migrator"):
+        assert "--chown" not in arguments, (
+            f"Dockerfile:{number} the migrator copies with --chown: {arguments}"
+        )
+    for command in runs("migrator"):
+        assert not re.search(r"\bchown\b", command), command
+        assert not re.search(r"chmod\s+[^&]*(?:777|666|[go]\+w|a\+w)", command), command
 
 
 def test_migrator_deps_installs_production_only_from_a_lockfile_without_scripts() -> None:
