@@ -746,8 +746,8 @@ appliance) and disabling the Diagram page (the page is the product's editor).
   every security advisory: the workflow `380 · draw.io Editor Pin Check` runs weekly, compares `ARG DRAWIO_WEBAPP_VERSION`
   with the newest jgraph/drawio release and the advisories published since the pinned release, and opens or updates one
   issue titled "draw.io editor pin is out of date" (it closes it when the pin is current). Advisories:
-  https://github.com/jgraph/drawio/security/advisories. At 32.6.10 (bumped on 2026-11-16 from 32.6.9, issue #378; 32.6.9
-  came on 2026-11-04 from 32.6.1, issue #340) the published ones are outside the pin: the newest, GHSA-55cm-f4p8-xq88
+  https://github.com/jgraph/drawio/security/advisories. At 32.7.4 (bumped on 2026-11-23 from 32.6.10, issue #414; 32.6.10
+  came on 2026-11-16 from 32.6.9, issue #378, and 32.6.9 on 2026-11-04 from 32.6.1, issue #340) the published ones are outside the pin: the newest, GHSA-55cm-f4p8-xq88
   (moderate, a crafted diagram can freeze the editor tab through a regular expression in an SVG image's
   `editableCssRules` style), lists "<= 32.6.8" as affected and says it is fixed in 32.6.9;
   the two before it, GHSA-v2pv-rjf8-9w9v and GHSA-ff67-v9r9-6877, fixed in 31.4.6, are query-parameter exfiltration
