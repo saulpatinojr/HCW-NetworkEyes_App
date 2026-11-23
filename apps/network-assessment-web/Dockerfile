@@ -2,8 +2,8 @@
 # and the sha256 of its draw.war. Declared here, before the first FROM, so that the runner can record the version in
 # an image label and the weekly check (.github/workflows/380-drawio-pin-check.yml) reads one line. Change both
 # together; tests/security/test_drawio_self_hosted.py checks their shape.
-ARG DRAWIO_WEBAPP_VERSION=32.6.10
-ARG DRAWIO_WEBAPP_SHA256=a57b06b3b6a876a351dacfe65d027d9509319cd030e9bacf6ae04a034d66a38f
+ARG DRAWIO_WEBAPP_VERSION=32.7.4
+ARG DRAWIO_WEBAPP_SHA256=caf784637155f444e0b6fb7c154cae5dbad27cfc31cb16286054d43f996be42f
 
 # Every stage is node:26-trixie-slim (Debian 13, glibc), the same Debian release as the Python images, digest pinned
 # 2026-11-12 (Node 26.13.1, built 2026-11-11; the digest the tag pointed to that day). 26.13.1 is Node's security
