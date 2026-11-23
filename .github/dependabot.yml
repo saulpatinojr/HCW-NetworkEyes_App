@@ -122,7 +122,7 @@ updates:
       # Python minors are moved by hand, as Node majors are above. The move to 3.15 was done that way on 2026-11-12
       # (#358, TODO.md T-742 item 3 and T-743; saulpatinojr/HCW-HybridCloudWorks#1707): CI first, then the FROM lines.
       # Move 3.16 the same way: add it to the test matrix in 300-test-codebase.yml, check every locked package has a
-      # 3.16 wheel (PyYAML had none for 3.15), then move the FROM lines (the lab stage of the root Dockerfile asks
+      # 3.16 wheel (PyYAML had none for 3.15 until its 6.0.4 release), then move the FROM lines (the lab stage of the root Dockerfile asks
       # Python for its site-packages path, so nothing else names the minor). A major line (Python 4) is moved by hand
       # too. Patch updates (3.15.x) and digest bumps still come.
       - dependency-name: "python"
