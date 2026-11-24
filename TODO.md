@@ -19,7 +19,7 @@ claimed anew). Rows checked since: T-728 and T-730 on 2026-10-24; T-721, T-722, 
 | [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-419 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements + appliance migration | T-501 – T-509 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
-| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-746 |
+| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-747 |
 
 ---
 
@@ -2881,3 +2881,27 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   release's files and tag once published
   ([GitHub Docs](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/establish-provenance-and-integrity/prevent-release-changes)).
   `gh release create <tag> <files>` already uploads to a draft and then publishes, so this workflow is compatible.
+
+### T-747 — The Scout scanner is fetched ahead of the scan (issue #427)
+- **Status:** Workflow change done 2026-11-24; **open until the first build on `main` after it shows the line
+  `Using bundled binary` in each Docker Scout step, and until the upstream fault is fixed.**
+- **Why.** `docker/scout-action` downloads its scanner (a 187 MB file) each time it starts, without signing in to
+  GitHub, on an allowance of 60 requests an hour that the runner's network address shares with other people's jobs.
+  When the allowance is spent the download answers `403`, the job fails before anything is scanned and the commit's
+  images are not published
+  ([#427](https://github.com/saulpatinojr/HCW-NetworkEyes_App/issues/427), upstream
+  [docker/scout-action#116](https://github.com/docker/scout-action/issues/116)).
+- **What.** `scripts/ci/seed_scout_scanner.sh` runs before the first Scout step of `build-images`, `build-web` and
+  `rehearse-docker-login`. It fetches the file with the job's token, checks its sha256 against
+  `scripts/ci/scout_scanner_pins.txt` and puts it where the action looks first. The Scout steps are unchanged, so a
+  scan that cannot run still fails the job. `tests/security/test_scout_scanner_seed.py` holds it.
+- **Still to do.**
+  1. After the merge, open the run of `200 · Build Container Images` for the merge commit and check that each
+     `Docker Scout` step prints `Using bundled binary`. A yellow warning titled "Docker Scout scanner not fetched
+     ahead" means the fetch did not work and the old behaviour is still in force: record what it says here.
+  2. When Dependabot moves `docker/scout-action` to a commit that has no row in the pins file, add
+     `<commit> <release> <sha256>` in that pull request. The sha256 is shown beside
+     `docker-scout-action_linux_amd64` under "Assets" on the release's page; the release is the one the action's
+     `index.js` names at that commit (`const version = "v..."`). The row for v1.30.0 is already there.
+  3. When upstream passes a token to its own download (issue 116 closed and released), remove the step, the script,
+     the pins file and the test in one pull request.
