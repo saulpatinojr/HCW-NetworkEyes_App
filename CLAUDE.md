@@ -110,6 +110,15 @@ change under `Changed` in `CHANGELOG.md` (and in the release notes) where a cons
    commit (`git tag vX.Y.Z <sha>`, `git push origin vX.Y.Z`). The release gives all four images a version tag (every
    tag is checked before any is created) and the release notes list the tags and digests. Steps and failure cases: `TODO.md` T-728.
 
+8. **The engine wheel's provenance.** Each `engine-v*` release (`320-release-engine.yml`) attaches three files: the
+   wheel, the sdist and `network_assessment_azure_engine-<version>.intoto.jsonl`, a keyless build-provenance
+   attestation of the other two (owner decision 2026-11-23, `TODO.md` T-746). Only the `attest` job may sign
+   (`contents: read`, `id-token: write`, `attestations: write`, no checkout); the build job stays read-only, and
+   `release-upload` creates no release until the provenance names exactly the attached files and verifies. A consumer
+   verifies with `gh attestation verify --bundle` against the signer
+   `<owner>/<this repo>/.github/workflows/320-release-engine.yml`, so the renaming rule of item 5 applies here too.
+   `tests/security/test_publish_workflow_safety.py` (`TestEngineReleaseProvenance`) pins all of it.
+
 ## AI engine rules
 
 - Engine ids are `azure-openai`, `bedrock`, `anthropic`, `openai`. The selection
