@@ -17,6 +17,7 @@ push, which only a real run does.
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -989,3 +990,167 @@ class TestShaTagPrefixes:
         for key, prefix in RETIRED_SHA_PREFIXES.items():
             assert prefix not in built and f"prefix={prefix}" not in web_tags, key
             assert key not in {row["key"] for row in matrix}
+
+
+# --- 320-release-engine.yml: the engine wheel ships with build provenance (owner decision 2026-11-23) ---
+
+ENGINE_RELEASE = WORKFLOWS / "320-release-engine.yml"
+SUBJECTS_SCRIPT = REPO_ROOT / "scripts" / "ci" / "check_provenance_subjects.sh"
+#: actions/attest-build-provenance v4.2.2, the pin HCW-CloudAssessor_App's publish-core.yml carries.
+ATTEST_ACTION = "actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8"
+DOWNLOAD_ARTIFACT = "actions/download-artifact@"
+UPLOAD_ARTIFACT = "actions/upload-artifact@"
+
+
+def _uses(job: dict, prefix: str) -> list[dict]:
+    return [step for step in _steps(job) if str(step.get("uses", "")).startswith(prefix)]
+
+
+class TestEngineReleaseProvenance:
+    """Each ``engine-v*`` release attaches a provenance file beside the wheel and the sdist: a signed statement of
+    which workflow run built them, kept as ``network_assessment_azure_engine-<version>.intoto.jsonl``. The lab
+    build installs this wheel from the release page, so the file is a real check for a real consumer. These tests
+    pin who may sign (one job, which cannot write to the repository and runs no repository code), that every job
+    handles the same bytes (one artifact, built once), and that nothing is published before the provenance has
+    been checked against the files it is attached with."""
+
+    def setup_method(self):
+        self.doc = _load(ENGINE_RELEASE)
+        self.jobs = self.doc["jobs"]
+
+    def test_the_jobs_and_their_permissions_are_exactly_these(self):
+        assert self.doc["permissions"] == {"contents": "read"}, (
+            "the workflow default stays read-only"
+        )
+        assert {name: job["permissions"] for name, job in self.jobs.items()} == {
+            "build-test": {"contents": "read"},
+            "attest": {"contents": "read", "id-token": "write", "attestations": "write"},
+            "publish-pypi": {"contents": "read", "id-token": "write"},
+            "release-upload": {"contents": "write"},
+        }
+
+    def test_only_the_release_job_can_write_to_the_repository_and_it_cannot_sign(self):
+        writers = [n for n, j in self.jobs.items() if j["permissions"].get("contents") == "write"]
+        assert writers == ["release-upload"]
+        assert "id-token" not in self.jobs["release-upload"]["permissions"]
+        assert "attestations" not in self.jobs["release-upload"]["permissions"]
+
+    def test_the_only_trigger_is_an_engine_tag(self):
+        # PyYAML reads the key `on` as the boolean True.
+        triggers = self.doc.get("on", self.doc.get(True))
+        assert triggers == {"push": {"tags": ["engine-v*"]}}, (
+            "an attestation is a permanent public record; it is made for a real release only"
+        )
+
+    def test_the_build_job_holds_no_token_that_can_sign_or_write(self):
+        job = self.jobs["build-test"]
+        assert job["permissions"] == {"contents": "read"}
+        assert not _uses(job, "actions/attest"), "the job that runs the package's tests never signs"
+
+    def test_the_attest_action_is_used_once_at_the_reviewed_pin_and_only_in_the_attest_job(self):
+        text = ENGINE_RELEASE.read_text(encoding="utf-8")
+        assert text.count("actions/attest") == 1, "one attest step in the whole workflow"
+        (step,) = _uses(self.jobs["attest"], "actions/attest")
+        assert step["uses"] == ATTEST_ACTION
+        assert step["id"] == "attest"
+        assert step["with"] == {"subject-path": "dist/*"}, (
+            "it attests every built file and nothing else"
+        )
+        assert re.search(rf"{re.escape(ATTEST_ACTION)}\s+# v4\.2\.2\b", text), (
+            "the version sits beside the pin"
+        )
+
+    def test_the_attest_job_runs_no_code_from_the_repository_and_stores_no_key(self):
+        job = self.jobs["attest"]
+        assert job["needs"] == ["build-test"]
+        assert not _uses(job, "actions/checkout@"), (
+            "nothing from the repository runs with the signing identity"
+        )
+        allowed = (DOWNLOAD_ARTIFACT, ATTEST_ACTION, UPLOAD_ARTIFACT)
+        assert all(str(s["uses"]).startswith(allowed) for s in _steps(job) if "uses" in s)
+        text = ENGINE_RELEASE.read_text(encoding="utf-8")
+        assert "secrets." not in text, "keyless: the workflow reads no stored secret"
+        assert not re.search(r"cosign|gpg|minisign|--key\b", _code(text)), (
+            "no second signing tool, no key"
+        )
+
+    def test_every_job_takes_the_files_from_the_one_artifact_the_build_uploaded(self):
+        (upload,) = _uses(self.jobs["build-test"], UPLOAD_ARTIFACT)
+        assert upload["with"]["name"] == "engine-dist" and upload["with"]["path"] == "dist/"
+        builds = [
+            s
+            for job in self.jobs.values()
+            for s in _steps(job)
+            if "uv build" in str(s.get("run", ""))
+        ]
+        assert len(builds) == 1, "the files are built once; a second build would have other bytes"
+        for name in ("attest", "publish-pypi", "release-upload"):
+            downloads = [s["with"] for s in _uses(self.jobs[name], DOWNLOAD_ARTIFACT)]
+            assert {"name": "engine-dist", "path": "dist/"} in downloads, name
+            assert "build-test" in self.jobs[name]["needs"], name
+
+    def test_the_bundle_is_kept_as_one_intoto_jsonl_file_named_after_the_package_and_version(self):
+        job = self.jobs["attest"]
+        keep = _steps(job)[_index_of(job, "Keep the attestation as a file for the release")]
+        assert keep["env"] == {"BUNDLE": "${{ steps.attest.outputs.bundle-path }}"}
+        run = keep["run"]
+        assert "set -euo pipefail" in run
+        assert 'name="$(basename "${sdists[0]}" .tar.gz).intoto.jsonl"' in run
+        assert 'jq -c . "$BUNDLE" > "provenance/${name}"' in run, "one bundle per line (JSON lines)"
+        (upload,) = _uses(job, UPLOAD_ARTIFACT)
+        assert upload["with"]["name"] == "engine-provenance"
+        assert upload["with"]["path"] == "provenance/"
+        assert upload["with"]["if-no-files-found"] == "error"
+        steps = _steps(job)
+        assert steps.index(_uses(job, ATTEST_ACTION)[0]) < steps.index(keep) < steps.index(upload)
+
+    def test_the_release_waits_for_the_attestation_and_checks_it_before_it_publishes(self):
+        job = self.jobs["release-upload"]
+        assert job["needs"] == ["build-test", "attest"]
+        assert "if" not in job, "the release is never created without its provenance"
+        assert {"name": "engine-provenance", "path": "provenance/"} in [
+            s["with"] for s in _uses(job, DOWNLOAD_ARTIFACT)
+        ]
+        check = _index_of(job, "Check the provenance against the files about to be released")
+        create = _index_of(job, "gh release create")
+        assert check < create
+        assert "continue-on-error" not in _steps(job)[check]
+        run = _steps(job)[check]["run"]
+        assert "set -euo pipefail" in run
+        assert 'bash scripts/ci/check_provenance_subjects.sh "${bundles[0]}" dist/*' in run
+        verify = " ".join(run.replace("\\\n", " ").split())
+        assert (
+            'gh attestation verify "$file" --repo "$GITHUB_REPOSITORY" --bundle "${bundles[0]}" '
+            '--signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/320-release-engine.yml" '
+            '--source-ref "$GITHUB_REF"'
+        ) in verify, "the signature is checked for each file, bound to this workflow and this tag"
+        assert "for file in dist/*; do" in run
+
+    def test_the_release_attaches_the_wheel_the_sdist_and_the_provenance_in_one_command(self):
+        job = self.jobs["release-upload"]
+        create = _steps(job)[_index_of(job, "gh release create")]
+        assert create["run"] == (
+            'gh release create "$GITHUB_REF_NAME" --verify-tag --notes-from-tag dist/* provenance/*.intoto.jsonl'
+        ), (
+            "one command: gh uploads every file to a draft and then publishes, so no release lacks its provenance"
+        )
+        assert "gh release upload" not in ENGINE_RELEASE.read_text(encoding="utf-8")
+
+    def test_the_subject_check_is_a_tracked_executable_script_that_contacts_nothing(self):
+        text = SUBJECTS_SCRIPT.read_text(encoding="utf-8")
+        assert text.startswith("#!/usr/bin/env bash\n") and "set -euo pipefail" in text
+        assert not re.search(r"\b(curl|wget|gh|cosign|docker)\b", _code(text))
+        if os.name != "nt":
+            assert os.access(SUBJECTS_SCRIPT, os.X_OK)
+
+    def test_the_readme_gives_the_consumer_the_verify_command(self):
+        readme = " ".join((REPO_ROOT / "README.md").read_text(encoding="utf-8").split())
+        assert "### Verifying the engine wheel" in readme
+        assert (
+            "gh attestation verify" in readme and "--bundle" in readme and ".intoto.jsonl" in readme
+        )
+        assert "--repo saulpatinojr/HCW-NetworkEyes_App" in readme
+        assert (
+            "--signer-workflow saulpatinojr/HCW-NetworkEyes_App/.github/workflows/320-release-engine.yml"
+            in readme
+        )

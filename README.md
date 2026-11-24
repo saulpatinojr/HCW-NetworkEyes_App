@@ -157,6 +157,45 @@ release notes). `scripts/ci/verify_signed_digest.sh` does the same checks and al
 digests of each build are in the step summary of its `200-build-images.yml` run, and those of a release are in its release
 notes.
 
+### Verifying the engine wheel
+
+The engine is also published as a Python package: each `engine-v*` release on the
+[Releases page](https://github.com/saulpatinojr/HCW-NetworkEyes_App/releases) holds a wheel (a ready-built Python
+package), an sdist (the same package as a source archive, `.tar.gz`) and, from the first release after 2026-11-24, a
+provenance file, `network_assessment_azure_engine-<version>.intoto.jsonl`. Provenance is a signed statement of where
+a file was built: it names the wheel and the sdist by their sha256 fingerprints and says which workflow run, from which
+commit, built them. `320-release-engine.yml` makes it with GitHub's
+[artifact attestations](https://docs.github.com/en/actions/concepts/security/artifact-attestations). It is keyless: the
+signature comes from the workflow run's own short-lived identity, so there is no key to store or to trust. Releases up to
+`engine-v0.1.5` were made before this and have no provenance file.
+
+To check a wheel before you install it, download the three files of one release and verify each package against the
+provenance file with a current GitHub CLI (`gh`; these options were tried with 2.89.0). bash; set `VERSION` to the release
+you are checking:
+
+```bash
+VERSION=0.1.6
+REPO=saulpatinojr/HCW-NetworkEyes_App
+NAME=network_assessment_azure_engine-$VERSION
+gh release download "engine-v$VERSION" --repo "$REPO" --pattern "$NAME*"
+gh attestation verify "$NAME-py3-none-any.whl" --repo "$REPO" --bundle "$NAME.intoto.jsonl" --signer-workflow "$REPO/.github/workflows/320-release-engine.yml" --source-ref "refs/tags/engine-v$VERSION"
+gh attestation verify "$NAME.tar.gz" --repo "$REPO" --bundle "$NAME.intoto.jsonl" --signer-workflow "$REPO/.github/workflows/320-release-engine.yml" --source-ref "refs/tags/engine-v$VERSION"
+```
+
+The shortest form is `gh attestation verify <wheel> --repo saulpatinojr/HCW-NetworkEyes_App --bundle <file>.intoto.jsonl`;
+the two extra options also require that the signer was
+`--signer-workflow saulpatinojr/HCW-NetworkEyes_App/.github/workflows/320-release-engine.yml` and that the run was for
+that release's tag. Each `gh attestation verify` ends with exit code 0 when the file matches (in a terminal it also
+prints a line saying the verification succeeded); any other exit code means the file is not the one that workflow built,
+and it must not be installed. `--bundle` reads the provenance from the downloaded file instead of asking GitHub for it;
+`gh` still downloads the public Sigstore trust root to check the signature. Without `--bundle` the same command checks
+against the copy GitHub keeps for the repository. The command is described in the
+[GitHub CLI manual](https://cli.github.com/manual/gh_attestation_verify).
+
+Not run yet against a NetworkEyes release: no release carries the file until the next `engine-v*` tag. The workflow runs
+the same two commands on the files before it creates the release, so a release that exists has passed them. Renaming or
+moving the repository or the workflow file changes the signer, as it does for the images.
+
 ---
 
 ## Quick start

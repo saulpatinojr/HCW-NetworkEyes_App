@@ -19,7 +19,7 @@ claimed anew). Rows checked since: T-728 and T-730 on 2026-10-24; T-721, T-722, 
 | [Phase 4](#phase-4--technical-debt) | Technical debt | T-401 – T-419 |
 | [Phase 5](#phase-5--feature-enhancements) | Feature enhancements + appliance migration | T-501 – T-509 |
 | [Phase 6](#phase-6--documentation-improvements) | Documentation improvements | T-601 – T-608 |
-| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-745 |
+| [Phase 7](#phase-7--version-10-follow-ups) | Version 1.0 follow-ups — open rows of the v1.0 findings register | T-701 – T-746 |
 
 ---
 
@@ -2827,3 +2827,43 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   migrator built from the old Dockerfile, listing 4,978 paths. Trivy itself could not run here (its database download
   failed on the session's proxy certificate); the pull request's job runs it.
 
+### T-746 — The engine wheel ships with build provenance (owner decision 2026-11-23)
+- **Status:** Workflow change done 2026-11-24; **open until the first `engine-v*` release after it proves it.**
+- **Why.** Provenance is a signed statement of where a file was built. The images are signed in the registry by
+  `200-build-images.yml`, but the engine wheel had none, and `HCW-NetworkEyes_AddOn` installs that wheel from the
+  release page. It is also what the OpenSSF Scorecard check "Signed-Releases" looks for: a file whose name ends
+  `.intoto.jsonl` on each of the five newest releases that have files (it reads the name only; the design and the
+  scoring are in the decision record proposed in
+  [saulpatinojr/HCW-HybridCloudWorks#1799](https://github.com/saulpatinojr/HCW-HybridCloudWorks/pull/1799)).
+- **What.** `320-release-engine.yml` has a new `attest` job (keyless, `actions/attest-build-provenance` v4.2.2;
+  `contents: read`, `id-token: write`, `attestations: write`; no checkout), and `release-upload` attaches
+  `network_assessment_azure_engine-<version>.intoto.jsonl` after checking it against the files
+  (`scripts/ci/check_provenance_subjects.sh`, then `gh attestation verify` for each file). Every job downloads the
+  one `engine-dist` artifact the build job uploaded, so all of them handle the same bytes. Recorded under `Changed`
+  in [`CHANGELOG.md`](CHANGELOG.md); the consumer's command is in `README.md`, "Verifying the engine wheel".
+- **Consumers.** Each new engine release has a third file. The wheel and the sdist keep their names and addresses, so
+  a pin by URL and sha256 is unaffected. The lab build may verify the wheel in its `core-update.yml` before it opens
+  the bump pull request; that is its own change, noted in its `docs/whats-new-upstream.md`.
+- **Checked here (2026-11-24):** the subject check and both `gh attestation verify` forms were run against a real
+  bundle and wheel of the sibling `HCW-CloudAssessor_App` (release `v0.3.2`, its stored attestation saved as JSON
+  lines): exit code 0 for the real files, 1 for a changed file. Not run: the new job itself.
+- **Open, at the next engine release (the owner pushes the tag, as always):**
+  1. The run of `320 · Release Engine Package` for the tag is green, including `Attest the wheel and the sdist (keyless)`.
+  2. The release lists three files, one ending `.intoto.jsonl`. PowerShell:
+
+     ```powershell
+     gh api "repos/saulpatinojr/HCW-NetworkEyes_App/releases?per_page=1" | ConvertFrom-Json | ForEach-Object { $_.tag_name; $_.assets.name }
+     ```
+
+     Success looks like: the new tag, then the wheel, the `.tar.gz` and the `.intoto.jsonl` file.
+  3. The README's commands pass on the downloaded files (exit code 0).
+  If the `attest` job or the check step fails, no release is created and nothing reaches the release page; the tag
+  stays. For a passing fault (GitHub or Sigstore unreachable), re-run the failed jobs from the run's page. A run
+  always uses the workflow file of the tagged commit, so a mistake in the workflow itself is not fixed by a re-run:
+  fix it in a pull request and release the next version number instead (the old tag is left without a release).
+- **Not possible:** provenance for `engine-v0.1.0` to `engine-v0.1.5`. They were never attested, so the Scorecard
+  score rises one release at a time (2, 4, 6, 8, then 10 after the fifth release with the file).
+- **Separate owner decision, not taken here:** GitHub's "Enable release immutability" setting, which locks a
+  release's files and tag once published
+  ([GitHub Docs](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/establish-provenance-and-integrity/prevent-release-changes)).
+  `gh release create <tag> <files>` already uploads to a draft and then publishes, so this workflow is compatible.

@@ -11,6 +11,29 @@ name: "320 · Release Engine Package"
 # before the PyPI trusted publisher is configured. The GitHub Release upload
 # is the only job with write access to the repository.
 #
+# Build provenance (owner decision 2026-11-23). The `attest` job makes a signed
+# statement that says "these two files, with these sha256 fingerprints, were
+# built by this workflow, from this commit, in this run". It is keyless: the
+# signature comes from the run's own short-lived identity (OIDC, through
+# Sigstore), so no key or secret is stored anywhere. The statement goes to
+# GitHub's attestation store and is also kept as a file,
+# `network_assessment_azure_engine-<version>.intoto.jsonl`, that `release-upload`
+# attaches beside the wheel and the sdist. A consumer checks a downloaded
+# wheel against that file with `gh attestation verify --bundle` (README,
+# "Verifying the engine wheel").
+#
+# The bytes are the same in every job: `build-test` uploads `dist/` once as
+# the artifact `engine-dist`, and `attest`, `publish-pypi` and `release-upload`
+# each download that one artifact; nothing is built twice. `release-upload`
+# does not take that on trust: before it creates the release it checks that
+# the provenance file names exactly the files it is about to attach, by
+# sha256 (scripts/ci/check_provenance_subjects.sh), and that the signature
+# verifies for each of them. A failure there stops the release.
+#
+# There is no dry run: the only trigger is an `engine-v*` tag, and a tag
+# publishes. An attestation is also a permanent public record, so it is made
+# only for a real release.
+#
 # Every third-party action is pinned to a full commit SHA with its version
 # beside it; the pins are the ones this repository's other workflows already carry.
 
@@ -85,6 +108,52 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # Signs a statement about the two built files. This job runs no code from the
+  # repository (no checkout): it downloads the artifact, calls the pinned attest
+  # action and saves what the action returns. It cannot write to the repository.
+  attest:
+    name: Attest the wheel and the sdist (keyless)
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    needs: [build-test]
+    permissions:
+      contents: read
+      id-token: write      # the signing certificate for this run's identity
+      attestations: write  # store the attestation in GitHub's attestation store
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: engine-dist
+          path: dist/
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        id: attest
+        with:
+          subject-path: "dist/*"
+      # The action returns the path of a file holding the attestation as a Sigstore bundle
+      # (the signed statement, the certificate and the transparency-log entry). Written one
+      # bundle per line, that is the `.intoto.jsonl` file a consumer verifies against.
+      - name: Keep the attestation as a file for the release
+        env:
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          sdists=(dist/network_assessment_azure_engine-*.tar.gz)
+          if [ "${#sdists[@]}" -ne 1 ] || [ ! -f "${sdists[0]}" ]; then
+            echo "::error::expected exactly one sdist in dist/, found: ${sdists[*]}"
+            exit 1
+          fi
+          # network_assessment_azure_engine-<version>.intoto.jsonl, the name of the sdist without .tar.gz
+          name="$(basename "${sdists[0]}" .tar.gz).intoto.jsonl"
+          mkdir provenance
+          jq -c . "$BUNDLE" > "provenance/${name}"
+          test -s "provenance/${name}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: engine-provenance
+          path: provenance/
+          if-no-files-found: error
+          retention-days: 7
+
   publish-pypi:
     name: Publish to PyPI (trusted publishing)
     runs-on: ubuntu-26.04
@@ -112,7 +181,7 @@ jobs:
     name: Attach the artifacts to the GitHub Release
     runs-on: ubuntu-26.04
     timeout-minutes: 10
-    needs: [build-test]
+    needs: [build-test, attest]
     permissions:
       contents: write
     steps:
@@ -123,7 +192,33 @@ jobs:
         with:
           name: engine-dist
           path: dist/
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: engine-provenance
+          path: provenance/
+      # Two checks before anything is published. The first needs no network: the provenance
+      # file must name exactly the files in dist/, each with the sha256 it has here. The second
+      # checks the signature for each file, and that it was made by this workflow on this tag.
+      - name: Check the provenance against the files about to be released
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          bundles=(provenance/*.intoto.jsonl)
+          if [ "${#bundles[@]}" -ne 1 ] || [ ! -f "${bundles[0]}" ]; then
+            echo "::error::expected exactly one provenance file, found: ${bundles[*]}"
+            exit 1
+          fi
+          bash scripts/ci/check_provenance_subjects.sh "${bundles[0]}" dist/*
+          for file in dist/*; do
+            gh attestation verify "$file" \
+              --repo "$GITHUB_REPOSITORY" \
+              --bundle "${bundles[0]}" \
+              --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/320-release-engine.yml" \
+              --source-ref "$GITHUB_REF"
+            echo "verified: ${file}"
+          done
       - name: Create the release from the tag
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --verify-tag --notes-from-tag dist/*
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --notes-from-tag dist/* provenance/*.intoto.jsonl

@@ -9,7 +9,9 @@ call, because a pin cannot show that a jq filter, a path glob or a "not found" t
   nothing 200 builds from;
 * ``scripts/ci/verify_signed_digest.sh``: the signature, subject, builder and revision checks, with a stub
   ``cosign`` that records how it was called;
-* ``scripts/ci/release_digests.sh``: the other three images of the build, which the release notes list.
+* ``scripts/ci/release_digests.sh``: the other three images of the build, which the release notes list;
+* ``scripts/ci/check_provenance_subjects.sh``: the engine release's provenance file names exactly the files the
+  release attaches, each with the sha256 it has on disk.
 
 They need ``bash`` and ``jq``. GitHub's runners have both; a machine without them skips these tests, and
 ``test_ci_has_the_tools`` fails on CI if either is missing so a skip can never hide there.
@@ -1525,3 +1527,124 @@ class TestPromoteStep:
         result, creates, _ = self._run(tmp_path, digests=digests)
         assert result.returncode == 1 and creates == []
         assert "No valid digest for 'web'" in result.stderr + result.stdout
+
+
+# --- check_provenance_subjects.sh ---
+
+
+def _bundle_line(
+    subjects: dict[str, str], statement_type: str = "https://in-toto.io/Statement/v1"
+) -> str:
+    """One line of a provenance file, shaped like the Sigstore bundle the attest action writes: the statement is
+    base64 inside ``dsseEnvelope.payload``. Nothing here is signed; the script under test reads names and
+    fingerprints only (the signature is checked by ``gh attestation verify`` in the workflow)."""
+    statement = {
+        "_type": statement_type,
+        "subject": [{"name": n, "digest": {"sha256": d}} for n, d in subjects.items()],
+        "predicateType": "https://slsa.dev/provenance/v1",
+        "predicate": {},
+    }
+    payload = base64.b64encode(json.dumps(statement).encode()).decode()
+    return json.dumps(
+        {
+            "mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+            "dsseEnvelope": {"payload": payload, "payloadType": "application/vnd.in-toto+json"},
+        }
+    )
+
+
+@needs_tools
+class TestCheckProvenanceSubjects:
+    WHEEL = "network_assessment_azure_engine-9.9.9-py3-none-any.whl"
+    SDIST = "network_assessment_azure_engine-9.9.9.tar.gz"
+
+    def _files(self, tmp_path: Path) -> dict[str, Path]:
+        dist = tmp_path / "dist"
+        dist.mkdir()
+        files = {self.WHEEL: dist / self.WHEEL, self.SDIST: dist / self.SDIST}
+        files[self.WHEEL].write_bytes(b"made-up wheel bytes")
+        files[self.SDIST].write_bytes(b"made-up sdist bytes")
+        return files
+
+    @staticmethod
+    def _sha(path: Path) -> str:
+        import hashlib
+
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    def _check(self, tmp_path: Path, lines: list[str], *files: Path):
+        bundle = tmp_path / "engine.intoto.jsonl"
+        bundle.write_text("".join(line + "\n" for line in lines), encoding="utf-8", newline="\n")
+        return _run(
+            "check_provenance_subjects.sh",
+            str(bundle),
+            *(str(f) for f in files),
+            env=dict(os.environ),
+            cwd=tmp_path,
+        )
+
+    def test_provenance_that_names_both_files_with_their_fingerprints_passes(self, tmp_path):
+        files = self._files(tmp_path)
+        line = _bundle_line({name: self._sha(path) for name, path in files.items()})
+        result = self._check(tmp_path, [line], *files.values())
+        assert result.returncode == 0, result.stderr
+        for name, path in files.items():
+            assert f"{self._sha(path)}  {name}" in result.stdout
+
+    def test_one_statement_per_file_on_separate_lines_passes_too(self, tmp_path):
+        files = self._files(tmp_path)
+        lines = [_bundle_line({name: self._sha(path)}) for name, path in files.items()]
+        assert self._check(tmp_path, lines, *files.values()).returncode == 0
+
+    def test_a_file_changed_after_it_was_attested_is_refused(self, tmp_path):
+        files = self._files(tmp_path)
+        line = _bundle_line({name: self._sha(path) for name, path in files.items()})
+        files[self.WHEEL].write_bytes(b"other bytes under the same name")
+        result = self._check(tmp_path, [line], *files.values())
+        assert result.returncode == 1
+        assert "does not name exactly the files of this release" in result.stderr
+
+    def test_a_file_the_provenance_does_not_name_is_refused(self, tmp_path):
+        files = self._files(tmp_path)
+        line = _bundle_line({self.WHEEL: self._sha(files[self.WHEEL])})
+        assert self._check(tmp_path, [line], *files.values()).returncode == 1
+
+    def test_provenance_that_names_a_file_the_release_does_not_attach_is_refused(self, tmp_path):
+        files = self._files(tmp_path)
+        line = _bundle_line({name: self._sha(path) for name, path in files.items()})
+        assert self._check(tmp_path, [line], files[self.WHEEL]).returncode == 1
+
+    def test_the_right_fingerprint_under_another_name_is_refused(self, tmp_path):
+        files = self._files(tmp_path)
+        subjects = {name: self._sha(path) for name, path in files.items()}
+        subjects["renamed.whl"] = subjects.pop(self.WHEEL)
+        assert self._check(tmp_path, [_bundle_line(subjects)], *files.values()).returncode == 1
+
+    @pytest.mark.parametrize(
+        "content", ["", "not json\n", '{"dsseEnvelope": {"payload": "%%%"}}\n']
+    )
+    def test_a_provenance_file_that_cannot_be_read_is_status_2_not_a_pass(self, tmp_path, content):
+        files = self._files(tmp_path)
+        bundle = tmp_path / "engine.intoto.jsonl"
+        bundle.write_text(content, encoding="utf-8")
+        result = _run(
+            "check_provenance_subjects.sh",
+            str(bundle),
+            *(str(f) for f in files.values()),
+            env=dict(os.environ),
+            cwd=tmp_path,
+        )
+        assert result.returncode == 2, (result.stdout, result.stderr)
+
+    def test_a_line_that_is_not_an_in_toto_statement_names_nothing(self, tmp_path):
+        files = self._files(tmp_path)
+        line = _bundle_line(
+            {name: self._sha(path) for name, path in files.items()}, statement_type="something-else"
+        )
+        assert self._check(tmp_path, [line], *files.values()).returncode == 1
+
+    def test_a_missing_file_or_too_few_arguments_is_status_2(self, tmp_path):
+        files = self._files(tmp_path)
+        line = _bundle_line({self.WHEEL: self._sha(files[self.WHEEL])})
+        assert self._check(tmp_path, [line], tmp_path / "dist" / "absent.whl").returncode == 2
+        assert self._check(tmp_path, [line]).returncode == 2
