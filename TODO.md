@@ -2654,6 +2654,20 @@ and API), `build-web` and `tag-images` all successful. `320` runs only on an `en
   and build PyYAML from its hash-checked source archive with it (`--no-build-isolation-package pyyaml`), as plain
   Python (`PYYAML_FORCE_LIBYAML=0`; the builder stages have no C compiler and no code here imports `yaml.CLoader`).
   Remove both once a PyYAML release ships cp315 wheels.
+  **Done 2026-11-23: the source build is removed.** PyYAML 6.0.4 (on PyPI since 2026-11-20) ships a wheel (a
+  ready-built package file) for Python 3.15, so `pyproject.toml` asks for `pyyaml>=6.0.4`, `uv.lock` records 6.0.4
+  with its wheels, and the two Dockerfiles and the `Python Lockfile Consistency` job are back to the commands they
+  ran before 2026-11-12: every package installs as a hash-checked wheel, and the `build` group goes in afterwards,
+  only for this repository's own two packages. The `build` group itself stays; it predates this workaround (T-702).
+  The `pip install "pyyaml==6.0.4"` step of the `Repository Guardrails` job moved with the lock. The image file is
+  `pyyaml-6.0.4-cp315-cp315-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl`, sha256
+  `c57e4092…7d69963`, the same in `uv.lock` and in PyPI's own listing (<https://pypi.org/pypi/PyYAML/6.0.4/json>).
+  One thing differs from the source build: the wheel includes PyYAML's optional C extension (`yaml._yaml`, with
+  libyaml built into it; it needs only the C library the image already has), where the source build was plain
+  Python. The plain-Python build was chosen only because the builder stages have no C compiler, not because the C
+  extension was unwanted, and every image before 2026-11-12 (Python 3.14, PyYAML 6.0.3 from its wheel) shipped the
+  same extension. No code here names `CLoader`, `CSafeLoader` or `yaml.__with_libyaml__`; `yaml.safe_load` and
+  `yaml.safe_dump` use the Python loader either way, so behaviour does not change.
 - **(4) Done 2026-11-14: drop Python 3.14.** On 2026-11-14 the owner decided that every HCW Python repository
   requires Python 3.15.2, the latest stable 3.15 release. The owner first removed `Unit Tests (Python 3.14)` from the
   "Protect main" ruleset on its settings page (a pull request waits for a required check that never comes, and `390`
