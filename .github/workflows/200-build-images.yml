@@ -79,6 +79,8 @@ on:
       - packages/**  # the CLI and API Dockerfiles COPY the engine package from here (owner decision 2026-10-27)
       - scripts/drawio-headless.sh
       - scripts/ci/sign_image.sh
+      - scripts/ci/seed_scout_scanner.sh  # a change to how the scanner is fetched is proved by a real build
+      - scripts/ci/scout_scanner_pins.txt
       - pyproject.toml
       - uv.lock  # every Python image installs from it (TODO.md T-702)
       - .github/workflows/200-build-images.yml
@@ -245,6 +247,19 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # docker/scout-action downloads its scanner (a 187 MB file) when it starts, and asks GitHub for it WITHOUT a
+      # token, on an allowance of 60 requests an hour that this runner's network address shares with other people's
+      # jobs. When that allowance is spent the answer is "Unexpected HTTP response: 403" and the job fails before
+      # anything is scanned (issue #427, run 45321550784; upstream docker/scout-action issue 116). This step fetches
+      # the same file first, with this job's token, checks it against its recorded sha256 and puts it where the
+      # action looks before it downloads. It decides nothing about an image: if the file cannot be fetched it only
+      # warns and the Scout step below downloads as before, and that step still fails the job when it cannot scan.
+      # A file with the wrong sha256 stops the job. tests/security/test_scout_scanner_seed.py holds all of this.
+      - name: Fetch the Docker Scout scanner with this job's token
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/ci/seed_scout_scanner.sh
+
       # Scout by digest, not by a mutable tag: no tag exists yet for this build,
       # and buildx --push never loads the image into the runner's local Docker
       # daemon, so docker/scout-action could otherwise silently fall back to a
@@ -393,6 +408,13 @@ jobs:
           sbom: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Fetch the Scout scanner ahead of the Scout step, so a refused scanner download cannot fail the job by
+      # itself: see the comment on the same step of the CLI/API job (issue #427).
+      - name: Fetch the Docker Scout scanner with this job's token
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/ci/seed_scout_scanner.sh
 
       # Scout by digest — see the comment on the CLI/API Scout step
       # above: no tag exists yet, and a floating-tag reference could resolve
@@ -849,6 +871,13 @@ jobs:
           fi
           echo "Docker Hub accepted the login and the push, and returns ${DIGEST} for docker.io/${DOCKERHUB_NAMESPACE}/${IMAGE_REPOSITORY}."
           echo "The image is untagged and no tag resolves to it yet; the steps below sign it, verify it and give it one rehearsal tag."
+
+      # Fetch the Scout scanner ahead of the Scout step, so a refused scanner download cannot fail the job by
+      # itself: see the comment on the same step of the CLI/API job (issue #427).
+      - name: Fetch the Docker Scout scanner with this job's token
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/ci/seed_scout_scanner.sh
 
       # The same action, version and arguments as the real build jobs use on every digest they push.
       - name: Docker Scout analyses the rehearsal digest
