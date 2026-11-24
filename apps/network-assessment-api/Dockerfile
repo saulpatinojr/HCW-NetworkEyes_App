@@ -22,21 +22,17 @@ WORKDIR /build
 # pattern: `uv export --locked` fails on lock drift, `--require-hashes` pins
 # every wheel, the `build` group is the hash-checked build backend, and uv
 # never leaves the builder stage. Every wheel is a prebuilt cp315 (or abi3) manylinux
-# wheel (psycopg2-binary included), so no compiler or libpq-dev is needed, with one
-# exception: PyYAML 6.0.3 has no cp315 wheel yet (yaml/pyyaml#951, checked 2026-11-12)
-# and is built from its hash-checked source archive as plain Python, with the
-# hash-checked build group installed first; the root Dockerfile says why. Drop the
-# PyYAML flags once a PyYAML release ships cp315 wheels.
+# wheel (psycopg2-binary included, and PyYAML since 6.0.4), so no compiler or
+# libpq-dev is needed.
 COPY --from=uv /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
 # The engine package is a uv workspace member: its pyproject.toml must be present for
 # `uv export --locked` to resolve the workspace, before the source tree is copied.
 COPY packages/network-assessment-azure-engine/pyproject.toml packages/network-assessment-azure-engine/
-RUN uv export --locked --only-group build -o /tmp/build-requirements.txt \
- && uv pip install --system --no-cache --require-hashes --no-deps -r /tmp/build-requirements.txt \
- && uv export --locked --no-default-groups --no-emit-project --no-emit-workspace --extra api --extra aws -o /tmp/requirements.txt \
- && PYYAML_FORCE_LIBYAML=0 uv pip install --system --no-cache --require-hashes --no-deps --no-build-isolation-package pyyaml \
-      --prefix=/install -r /tmp/requirements.txt
+RUN uv export --locked --no-default-groups --no-emit-project --no-emit-workspace --extra api --extra aws -o /tmp/requirements.txt \
+ && uv pip install --system --no-cache --require-hashes --no-deps --prefix=/install -r /tmp/requirements.txt \
+ && uv export --locked --only-group build -o /tmp/build-requirements.txt \
+ && uv pip install --system --no-cache --require-hashes --no-deps -r /tmp/build-requirements.txt
 COPY packages/network-assessment-azure-engine/ packages/network-assessment-azure-engine/
 COPY network_assessment/ network_assessment/
 COPY apps/network-assessment-api/ apps/network-assessment-api/

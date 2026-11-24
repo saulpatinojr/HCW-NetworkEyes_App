@@ -58,16 +58,13 @@ COPY pyproject.toml uv.lock ./
 COPY packages/network-assessment-azure-engine/pyproject.toml packages/network-assessment-azure-engine/
 # The appliance build serves both clouds, so the [aws] extra rides along here; the
 # package itself declares boto3 only under that extra (change set K).
-# PyYAML 6.0.3, the newest release, has no wheel for Python 3.15 yet (yaml/pyyaml#951, checked 2026-11-12), so it is
-# built here from its hash-checked source archive. The build group goes in first so PyYAML is built with it
-# (`--no-build-isolation-package`) rather than with a build backend fetched unpinned, and PYYAML_FORCE_LIBYAML=0
-# builds the plain-Python version: this stage has no C compiler, and nothing here imports yaml.CLoader. Drop both
-# once a PyYAML release ships cp315 wheels. The lockfile job in 300-test-codebase.yml runs the same commands.
-RUN uv export --locked --only-group build -o /tmp/build-requirements.txt \
- && uv pip install --system --no-cache --require-hashes --no-deps -r /tmp/build-requirements.txt \
- && uv export --locked --no-default-groups --no-emit-project --no-emit-workspace --extra aws -o /tmp/requirements.txt \
- && PYYAML_FORCE_LIBYAML=0 uv pip install --system --no-cache --require-hashes --no-deps --no-build-isolation-package pyyaml \
-      --prefix=/install -r /tmp/requirements.txt
+# Every locked package installs as a prebuilt, hash-checked wheel, so nothing is compiled in this stage. PyYAML was
+# the one exception from 2026-11-12 to 2026-11-23 (6.0.3 had no Python 3.15 wheel and was built from source here);
+# 6.0.4 ships one, so that step is gone. The lockfile job in 300-test-codebase.yml runs the same commands.
+RUN uv export --locked --no-default-groups --no-emit-project --no-emit-workspace --extra aws -o /tmp/requirements.txt \
+ && uv pip install --system --no-cache --require-hashes --no-deps --prefix=/install -r /tmp/requirements.txt \
+ && uv export --locked --only-group build -o /tmp/build-requirements.txt \
+ && uv pip install --system --no-cache --require-hashes --no-deps -r /tmp/build-requirements.txt
 COPY packages/network-assessment-azure-engine/ packages/network-assessment-azure-engine/
 COPY network_assessment/ network_assessment/
 # The engine package first (a workspace member, excluded from the hash-checked export
